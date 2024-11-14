@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         BlueSky Navigator
-// @namespace    https://tonyc.org/
-// @version      2024-11-14
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
+// @version      2024-11-14
 // @author       @tonycpsu
-// @author       You
+// @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
-// @require https://code.jquery.com/jquery-3.6.0.min.js
+// @downloadURL  https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
+// @updateURL    https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @grant GM_setValue
 // @grant GM_getValue
 // ==/UserScript==

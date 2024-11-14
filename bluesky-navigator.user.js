@@ -247,7 +247,10 @@ class ItemHandler extends Handler {
         {
             window.scrollTo(0, 0)
         } else {
-            $(this.items[this.index])[0].scrollIntoView()
+          if (this.items[this.index])[0]
+            {
+                $(this.items[this.index])[0].scrollIntoView()
+            }
         }
     }
 

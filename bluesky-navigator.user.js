@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-14.2
+// @version      2024-11-16.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -118,7 +118,7 @@ class Handler {
     handle_input(event) {
         //console.log(`handle_input: ${this}, ${this.name}: ${event}`)
         //console.dir(event)
-        if (event.altKey) {
+        if (event.altKey && !event.metaKey) {
             if (event.code === "KeyH") {
                 $("a[aria-label='Home']")[0].click()
             }
@@ -279,6 +279,7 @@ class ItemHandler extends Handler {
         }
         //state.seen[post_id] = new Date().toISOString()
         cleanupState()
+        console.log(`state.seen: ${Object.keys(state.seen).length}`)
         GM_setValue(STATE_KEY, JSON.stringify(state))
         this.update_items()
     }
@@ -288,7 +289,7 @@ class ItemHandler extends Handler {
         var mark = false
         var old_index = this.index
         if (this.keyState.length == 0) {
-            if (["j", "k", "ArrowDown", "ArrowUp", "G"].indexOf(event.key) != -1)
+            if (["j", "k", "ArrowDown", "ArrowUp", "J", "G"].indexOf(event.key) != -1)
             {
                 if (["j", "ArrowDown"].indexOf(event.key) != -1) {
                     event.preventDefault()
@@ -298,7 +299,7 @@ class ItemHandler extends Handler {
                     }
                     mark = event.key == "j"
                 }
-                if (["k", "ArrowUp"].indexOf(event.key) != -1) {
+                else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
                     event.preventDefault()
                     if (this.index > 0)
                     {
@@ -309,6 +310,23 @@ class ItemHandler extends Handler {
                 else if (event.key == "G") {
                     // G = end
                     this.index = this.items.length-1
+                } else if (event.key == "J") {
+                    for (var i = this.index; i < this.items.length; i++)
+                    {
+                        //console.log(i)
+                        //var item = this.items[i]
+                        var post_id = this.post_id_for_item(this.items[i])
+                        if (! state.seen[post_id]) {
+                            break;
+                        }
+                        if(i < this.items.length -1)
+                        {
+                            i++;
+                        }
+                        old_index = i
+                        mark = true
+                        this.index = i
+                    }
                 }
                 moved = true
             } else if (event.key == "g")
@@ -343,22 +361,23 @@ class ItemHandler extends Handler {
         if(event.altKey || event.metaKey) {
             return
         }
+        var item = this.items[this.index]
         if(event.key == "o")
         {
             // o = open
             console.log("open")
-            $(this.items[this.index]).click()
+            $(item).click()
             //bindKeys(post_key_event)
         }
         else if(event.key == "O")
         {
             // O = open link
-            $(this.items[this.index]).find("a[role='link']").click()
+            $(item).find("a[role='link']").click()
         }
         else if(event.key == "i")
         {
             // i = open inner
-            var inner = $(this.items[this.index]).find("div[aria-label^='Post by']")
+            var inner = $(item).find("div[aria-label^='Post by']")
             console.log(inner)
             inner.click()
             //bindKeys(post_key_event)
@@ -366,16 +385,64 @@ class ItemHandler extends Handler {
         else if(event.key == "m")
         {
             // m = media?
-            var media = $(this.items[this.index]).find("img[src*='feed_thumbnail']")
+            var media = $(item).find("img[src*='feed_thumbnail']")
             if (media.length > 0)
             {
                 media[0].click()
             }
         }
-        else if(event.key == "r")
+      else if(event.key == "a") // FIXME: not working
+        {
+            // a = author
+            var PROFILE_SELECTOR = (item) => $(item).find("a[aria-label='View profile']").parent().parent().parent()
+            /*
+            console.dir($(item).find("a[aria-label='View profile']"))
+            $(item).find().trigger("mouseover");
+            $(item).find("a[aria-label='View profile']").trigger("hover");
+            */
+            // Get the element
+            //const $element = $(item).find(PROFILE_SELECTOR) // Replace with your element selector
+            const $element = PROFILE_SELECTOR(item)
+            $element.trigger("hover")
+            /*
+            // Get the element's bounding rectangle
+            const rect = $element[0].getBoundingClientRect();
+
+            console.log(rect)
+            // Calculate a point inside the element
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+
+            // Function to dispatch a mouse event
+            function dispatchMouseEvent(type, x, y) {
+                const event = new MouseEvent(type, {
+                    bubbles: true,
+                    cancelable: true,
+                    //view: window,
+                    clientX: x,
+                    clientY: y
+                });
+                $element[0].dispatchEvent(event);
+            }
+
+            // Trigger mouseenter
+            dispatchMouseEvent('mouseenter', x, y);
+
+            // Simulate mousemove to ensure hover is recognized
+            dispatchMouseEvent('mousemove', x+2, y+2);
+            dispatchMouseEvent('hover', x+2, y+2);
+
+            // Wait for a specified duration (e.g., 2 seconds)
+            setTimeout(() => {
+                // Trigger mouseleave
+                dispatchMouseEvent('mouseleave', x, y);
+            }, 5000); // 2000 ms = 2 seconds
+            */
+
+        } else if(event.key == "r")
         {
             // r = reply
-            var button = $(this.items[this.index]).find("button[aria-label^='Reply']")
+            var button = $(item).find("button[aria-label^='Reply']")
             button.focus()
             button.click()
         }
@@ -383,17 +450,17 @@ class ItemHandler extends Handler {
         {
             // l = like
             console.log("like")
-            $(this.items[this.index]).find("button[data-testid='likeBtn']").click()
+            $(item).find("button[data-testid='likeBtn']").click()
         }
         else if(event.key == "p")
         {
             // p = repost menu
-            $(this.items[this.index]).find("button[aria-label^='Repost']").click()
+            $(item).find("button[aria-label^='Repost']").click()
         }
         else if(event.key == "P")
         {
             // P = repost
-            $(this.items[this.index]).find("button[aria-label^='Repost']").click()
+            $(item).find("button[aria-label^='Repost']").click()
             setTimeout(function() {
                 $("div[aria-label^='Repost']").click()
             }, 1000)

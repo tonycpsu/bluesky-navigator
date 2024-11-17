@@ -225,32 +225,39 @@ class ItemHandler extends Handler {
         for (var i=0; i < this.items.length; i++)
         {
             post_id = this.post_id_for_item(this.items[i])
+            var item = this.items[i]
             if (i == this.index)
             {
-                $(this.items[i]).css(SELECTION_CSS)
+                $(item).css(SELECTION_CSS)
                 //$(this.items[i]).css("scroll-margin", `${offset}px`)
             }
             else
             {
-                $(this.items[i]).css(ITEM_CSS)
+                $(item).css(ITEM_CSS)
             }
             if (post_id != null && state.seen[post_id])
             {
-                $(this.items[i]).css(READ_CSS)
+                $(item).css(READ_CSS)
             }
             else
             {
-                $(this.items[i]).css(UNREAD_CSS)
+                $(item).css(UNREAD_CSS)
+            }
+
+            // FIXME: this is inefficient
+            var parent = $(item).parent().parent()
+            var children = $(parent).children()
+            console.log(`children: ${children.length}`)
+            if (children.length > 1)
+            {
+                $(item).css({"border": "5px 3px"})
             }
         }
         if (this.index == 0)
         {
             window.scrollTo(0, 0)
-        } else {
-          if (this.items[this.index])[0]
-            {
-                $(this.items[this.index])[0].scrollIntoView()
-            }
+        } else if (this.items[this.index]) {
+            $(this.items[this.index])[0].scrollIntoView()
         }
     }
 
@@ -467,6 +474,10 @@ class ItemHandler extends Handler {
         } else if (event.key == ".") {
             // toggle read/unread
             this.mark_read(this.index, null)
+        } else if(event.key == "h") {
+            // h = back?
+            //data-testid="profileHeaderBackBtn"
+            $("button[aria-label*='Back' i]").filter(":visible").click()
         } else {
             return false
         }
@@ -542,9 +553,6 @@ class PostItemHandler extends ItemHandler {
     handle_input(event) {
         if (super.handle_input(event)) {
             return
-        } else if(event.key == "h") {
-            // h = back?
-            $("button[aria-label*='back' i]").click()
         }
     }
 }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-16.1
+// @version      2024-11-17.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -19,6 +19,7 @@ const STATE_KEY = "bluesky_state"
 const FEED_ITEM_SELECTOR = "div[data-testid^='feedItem-by-']"
 const POST_ITEM_SELECTOR = "div[data-testid^='postThreadItem-by-']"
 const FEED_SELECTOR = "div.r-1ye8kvj"
+const PROFILE_SELECTOR = "a[aria-label='View profile']"
 const ITEM_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
 const SELECTION_CSS = {"border": "3px rgba(255, 0, 0, .3) solid"}
 const UNREAD_CSS = {"opacity": "100%", "background-color": "white"}
@@ -105,6 +106,10 @@ class Handler {
         this.unbindKeys()
     }
 
+    isActive() {
+        return true;
+    }
+
     bindKeys() {
         //console.log(`${this.name}: bind`)
         document.addEventListener('keydown', this.handle_input, true)
@@ -169,6 +174,10 @@ class ItemHandler extends Handler {
             this.observer.disconnect()
         }
         super.deactivate()
+    }
+
+    isActive() {
+        return false
     }
 
     onElementAdded() {
@@ -244,6 +253,7 @@ class ItemHandler extends Handler {
                 $(item).css(UNREAD_CSS)
             }
 
+            /*
             // FIXME: this is inefficient
             var parent = $(item).parent().parent()
             var children = $(parent).children()
@@ -252,6 +262,7 @@ class ItemHandler extends Handler {
             {
                 $(item).css({"border": "5px 3px"})
             }
+            */
         }
         if (this.index == 0)
         {
@@ -318,7 +329,8 @@ class ItemHandler extends Handler {
                     // G = end
                     this.index = this.items.length-1
                 } else if (event.key == "J") {
-                    for (var i = this.index; i < this.items.length; i++)
+                    /*
+                    for (var i = this.index+1; i < this.items.length; i++)
                     {
                         //console.log(i)
                         //var item = this.items[i]
@@ -334,6 +346,7 @@ class ItemHandler extends Handler {
                         mark = true
                         this.index = i
                     }
+                    */
                 }
                 moved = true
             } else if (event.key == "g")
@@ -398,74 +411,21 @@ class ItemHandler extends Handler {
                 media[0].click()
             }
         }
-      else if(event.key == "a") // FIXME: not working
-        {
-            // a = author
-            var PROFILE_SELECTOR = (item) => $(item).find("a[aria-label='View profile']").parent().parent().parent()
-            /*
-            console.dir($(item).find("a[aria-label='View profile']"))
-            $(item).find().trigger("mouseover");
-            $(item).find("a[aria-label='View profile']").trigger("hover");
-            */
-            // Get the element
-            //const $element = $(item).find(PROFILE_SELECTOR) // Replace with your element selector
-            const $element = PROFILE_SELECTOR(item)
-            $element.trigger("hover")
-            /*
-            // Get the element's bounding rectangle
-            const rect = $element[0].getBoundingClientRect();
-
-            console.log(rect)
-            // Calculate a point inside the element
-            const x = rect.left + rect.width / 2;
-            const y = rect.top + rect.height / 2;
-
-            // Function to dispatch a mouse event
-            function dispatchMouseEvent(type, x, y) {
-                const event = new MouseEvent(type, {
-                    bubbles: true,
-                    cancelable: true,
-                    //view: window,
-                    clientX: x,
-                    clientY: y
-                });
-                $element[0].dispatchEvent(event);
-            }
-
-            // Trigger mouseenter
-            dispatchMouseEvent('mouseenter', x, y);
-
-            // Simulate mousemove to ensure hover is recognized
-            dispatchMouseEvent('mousemove', x+2, y+2);
-            dispatchMouseEvent('hover', x+2, y+2);
-
-            // Wait for a specified duration (e.g., 2 seconds)
-            setTimeout(() => {
-                // Trigger mouseleave
-                dispatchMouseEvent('mouseleave', x, y);
-            }, 5000); // 2000 ms = 2 seconds
-            */
-
-        } else if(event.key == "r")
-        {
+        else if(event.key == "a") {
+            $(item).find(PROFILE_SELECTOR)[0].click()
+        } else if(event.key == "r") {
             // r = reply
             var button = $(item).find("button[aria-label^='Reply']")
             button.focus()
             button.click()
-        }
-        else if(event.key == "l")
-        {
+        } else if(event.key == "l") {
             // l = like
             console.log("like")
             $(item).find("button[data-testid='likeBtn']").click()
-        }
-        else if(event.key == "p")
-        {
+        } else if(event.key == "p") {
             // p = repost menu
             $(item).find("button[aria-label^='Repost']").click()
-        }
-        else if(event.key == "P")
-        {
+        } else if(event.key == "P") {
             // P = repost
             $(item).find("button[aria-label^='Repost']").click()
             setTimeout(function() {
@@ -477,7 +437,13 @@ class ItemHandler extends Handler {
         } else if(event.key == "h") {
             // h = back?
             //data-testid="profileHeaderBackBtn"
-            $("button[aria-label*='Back' i]").filter(":visible").click()
+            var back_button = $("button[aria-label^='Back' i]").filter(":visible")
+            if (back_button) {
+                back_button.click()
+            } else {
+                history.back(1)
+            }
+
         } else {
             return false
         }
@@ -497,6 +463,10 @@ class FeedItemHandler extends ItemHandler {
 
     deactivate() {
         super.deactivate()
+    }
+
+    isActive() {
+        return window.location.pathname == "/"
     }
 
     handle_input(event) {
@@ -550,6 +520,10 @@ class PostItemHandler extends ItemHandler {
         super.deactivate()
     }
 
+    isActive() {
+        return window.location.pathname.match(/\/post\//)
+    }
+
     handle_input(event) {
         if (super.handle_input(event)) {
             return
@@ -557,6 +531,41 @@ class PostItemHandler extends ItemHandler {
     }
 }
 
+class ProfileItemHandler extends ItemHandler {
+
+    constructor(name, selector) {
+        super(name, selector)
+    }
+
+    activate() {
+        this.index = 0
+        super.activate()
+    }
+
+    deactivate() {
+        super.deactivate()
+    }
+
+    isActive() {
+        return window.location.pathname.match(/\/profile\//)
+    }
+
+    handle_input(event) {
+        if (super.handle_input(event)) {
+            return
+        }
+        if(event.altKey || event.metaKey) {
+            return
+        }
+        if(event.key == "f") {
+            // f = follow
+            $("button[data-testid='followBtn']").click()
+        } else if(event.key == "F") {
+            // could make this a toggle but safer to make it a distinct shortcut
+            $("button[data-testid='unfollowBtn']").click()
+        }
+    }
+}
 
 (function() {
 
@@ -569,6 +578,7 @@ class PostItemHandler extends ItemHandler {
     var func = null
     var handlers = {
         feed: new FeedItemHandler("feed", FEED_ITEM_SELECTOR),
+        profile: new ProfileItemHandler("profile", FEED_ITEM_SELECTOR),
         post: new PostItemHandler("post", POST_ITEM_SELECTOR),
         input: new Handler("input")
     }
@@ -584,19 +594,23 @@ class PostItemHandler extends ItemHandler {
         console.log("undefined")
         state = {seen: {}}
     }
-
-
+/*
+    var urlContextMap = {
+        post: () => window.location.href.match(/\/post\//),
+        profile: () => window.location.href.match(/\/profile\//),
+        feed: () => true
+    }
+*/
     $(document).ready(function(e) {
         console.log("ready")
-        context = window.location.href.match(/\/post\//) ? "post": "feed"
 
         function setContext(ctx) {
             context = ctx
             console.log(`context : ${context}`)
-            for (const [k, v] of Object.entries(handlers) )
+            for (const [name, handler] of Object.entries(handlers) )
             {
-                console.log(k, v)
-                v.deactivate()
+                console.log(name, handler)
+                handler.deactivate()
             }
             if (handlers[context])
             {
@@ -608,9 +622,26 @@ class PostItemHandler extends ItemHandler {
         function setContextFromUrl()
         {
             current_url = window.location.href
-            setContext(current_url.match(/\/post\//) ? "post": "feed")
-        }
 
+            for (const [name, handler] of Object.entries(handlers) )
+            {
+                console.log("setContextFromUrl")
+                if (handler.isActive())
+                {
+                    setContext(name)
+                    break
+                }
+            }
+/*
+            for (const [context, fn] of Object.entries(urlContextMap) )
+            {
+                if (fn()) {
+                    setContext(context)
+                }
+            }
+*/
+        }
+        setContextFromUrl()
 
         function onFocus (e){
             var target = e.target

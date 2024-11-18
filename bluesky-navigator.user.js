@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-17.2
+// @version      2024-11-18.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -10,7 +10,9 @@
 // @updateURL    https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @grant GM_setValue
 // @grant GM_getValue
+// @grant GM_deleteValue
 // ==/UserScript==
+
 
 const HISTORY_MAX = 5000
 const URL_MONITOR_INTERVAL = 500
@@ -253,6 +255,7 @@ class ItemHandler extends Handler {
             {
                 $(item).css(ITEM_CSS)
             }
+
             if (post_id != null && state.seen[post_id])
             {
                 $(item).css(READ_CSS)
@@ -354,6 +357,7 @@ class ItemHandler extends Handler {
                     }
                     */
                 }
+                console.log("moved")
                 moved = true
             } else if (event.key == "g")
             {
@@ -375,9 +379,9 @@ class ItemHandler extends Handler {
             if (mark)
             {
                 this.mark_read(old_index, true)
-            } else {
-                this.update_items()
             }
+            this.update_items()
+
             return event.key
         }
         return false
@@ -444,7 +448,7 @@ class ItemHandler extends Handler {
             // h = back?
             //data-testid="profileHeaderBackBtn"
             var back_button = $("button[aria-label^='Back' i]").filter(":visible")
-            if (back_button) {
+            if (back_button.length) {
                 back_button.click()
             } else {
                 history.back(1)
@@ -547,7 +551,7 @@ class ProfileItemHandler extends ItemHandler {
     }
 
     isActive() {
-        return window.location.pathname.match(/\/profile\//)
+        return window.location.pathname.match(/^\/profile\//)
     }
 
     handle_input(event) {
@@ -576,19 +580,15 @@ class ProfileItemHandler extends ItemHandler {
     var context = null
     var num_items = {feed: 0, post: 0}
     var func = null
+    // FIXME: ordering of these is important since posts can be in profiles
     var handlers = {
         feed: new FeedItemHandler("feed", FEED_ITEM_SELECTOR),
-        profile: new ProfileItemHandler("profile", FEED_ITEM_SELECTOR),
         post: new PostItemHandler("post", POST_ITEM_SELECTOR),
+        profile: new ProfileItemHandler("profile", FEED_ITEM_SELECTOR),
         input: new Handler("input")
     }
 
-    var saved_state = JSON.parse(GM_getValue(STATE_KEY, undefined))
-    if (saved_state != undefined) {
-        state = saved_state
-    } else {
-        state = {seen: {}}
-    }
+    state = JSON.parse(GM_getValue(STATE_KEY, '{"seen": {}}'))
 
     $(document).ready(function(e) {
         console.log("ready")
@@ -619,7 +619,7 @@ class ProfileItemHandler extends ItemHandler {
             console.log(`context : ${context}`)
             for (const [name, handler] of Object.entries(handlers) )
             {
-                console.log(name, handler)
+                //console.log(name, handler)
                 handler.deactivate()
             }
             if (handlers[context])
@@ -635,7 +635,6 @@ class ProfileItemHandler extends ItemHandler {
 
             for (const [name, handler] of Object.entries(handlers) )
             {
-                console.log("setContextFromUrl")
                 if (handler.isActive())
                 {
                     setContext(name)

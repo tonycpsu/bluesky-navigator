@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-17.1
+// @version      2024-11-17.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -45,6 +45,15 @@ function keepMostRecentValues(obj, N) {
 function cleanupState() {
     state.seen = keepMostRecentValues(state.seen, HISTORY_MAX)
 }
+
+
+function saveState() {
+    console.log("saveState")
+    cleanupState()
+    console.log(`state.seen: ${Object.keys(state.seen).length}`)
+    GM_setValue(STATE_KEY, JSON.stringify(state))
+}
+
 
 function resetState() {
     state = {seen: {}}
@@ -296,9 +305,6 @@ class ItemHandler extends Handler {
             }
         }
         //state.seen[post_id] = new Date().toISOString()
-        cleanupState()
-        console.log(`state.seen: ${Object.keys(state.seen).length}`)
-        GM_setValue(STATE_KEY, JSON.stringify(state))
         this.update_items()
     }
 
@@ -493,14 +499,8 @@ class FeedItemHandler extends ItemHandler {
                return
             }
 
-            //console.log($("div[data-testid='homeScreenFeedTabs-selector'] div"))
             $("div[data-testid='homeScreenFeedTabs-selector'] > div > div")[parseInt(event.key)-1].click()
             this.load_items()
-            /*
-            setTimeout( (element) => {
-                this.load_items()
-            }, 5000)
-            */
         }
     }
 }
@@ -584,25 +584,35 @@ class ProfileItemHandler extends ItemHandler {
     }
 
     var saved_state = JSON.parse(GM_getValue(STATE_KEY, undefined))
-    if (saved_state != undefined)
-    {
-        console.log("defined: " + saved_state)
+    if (saved_state != undefined) {
         state = saved_state
-    }
-    else
-    {
-        console.log("undefined")
+    } else {
         state = {seen: {}}
     }
-/*
-    var urlContextMap = {
-        post: () => window.location.href.match(/\/post\//),
-        profile: () => window.location.href.match(/\/profile\//),
-        feed: () => true
-    }
-*/
+
     $(document).ready(function(e) {
         console.log("ready")
+
+        let idleTimeout;
+
+        function resetIdleTimer() {
+            clearTimeout(idleTimeout);
+            idleTimeout = setTimeout(saveState, 5000);
+        }
+
+        // Handle idle time
+        window.addEventListener("keydown", resetIdleTimer);
+        window.addEventListener("click", resetIdleTimer);
+
+        // Handle page close or refresh
+        window.addEventListener("beforeunload", (event) => {
+            saveState();
+            event.preventDefault();
+            event.returnValue = '';
+        });
+
+        // Initialize the timer
+        resetIdleTimer();
 
         function setContext(ctx) {
             context = ctx
@@ -632,20 +642,13 @@ class ProfileItemHandler extends ItemHandler {
                     break
                 }
             }
-/*
-            for (const [context, fn] of Object.entries(urlContextMap) )
-            {
-                if (fn()) {
-                    setContext(context)
-                }
-            }
-*/
         }
+
         setContextFromUrl()
 
         function onFocus (e){
             var target = e.target
-            if (typeof target.tagName === 'undefined') {console.log("undefined"); return false;}
+            if (typeof target.tagName === 'undefined') {return false;}
             var targetTagName = target.tagName.toLowerCase()
             console.log(`onFocus: ${targetTagName}`)
             switch (targetTagName){
@@ -672,7 +675,7 @@ class ProfileItemHandler extends ItemHandler {
 
         function onBlur (e){
             var target = e.target
-            if (typeof target.tagName === 'undefined') {console.log("undefined"); return false;}
+            if (typeof target.tagName === 'undefined') {return false;}
             var targetTagName = target.tagName.toLowerCase()
             console.log(`onBlur: ${targetTagName}`)
             switch (targetTagName){

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-19.1
+// @version      2024-11-19.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -22,6 +22,7 @@ const FEED_ITEM_SELECTOR = "div[data-testid^='feedItem-by-']"
 const POST_ITEM_SELECTOR = "div[data-testid^='postThreadItem-by-']"
 const FEED_SELECTOR = "div.r-1ye8kvj"
 const PROFILE_SELECTOR = "a[aria-label='View profile']"
+const LINK_SELECTOR = "a[target='_blank']"
 const ITEM_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
 const SELECTION_CSS = {"border": "3px rgba(255, 0, 0, .3) solid"}
 const UNREAD_CSS = {"opacity": "100%", "background-color": "white"}
@@ -316,7 +317,7 @@ class ItemHandler extends Handler {
         var mark = false
         var old_index = this.index
         if (this.keyState.length == 0) {
-            if (["j", "k", "ArrowDown", "ArrowUp", "J", "G"].indexOf(event.key) != -1)
+            if (["j", "k", "ArrowDown", "ArrowUp", "J", "G"].includes(event.key))
             {
                 if (["j", "ArrowDown"].indexOf(event.key) != -1) {
                     event.preventDefault()
@@ -391,8 +392,10 @@ class ItemHandler extends Handler {
         if(event.altKey || event.metaKey) {
             return
         }
+        console.log(event.key)
         var item = this.items[this.index]
-        if(event.key == "o")
+        //if(event.key == "o")
+        if (["o", "Enter"].includes(event.key))
         {
             // o = open
             console.log("open")
@@ -401,16 +404,18 @@ class ItemHandler extends Handler {
         }
         else if(event.key == "O")
         {
-            // O = open link
-            $(item).find("a[role='link']")[0].click()
-        }
-        else if(event.key == "i")
-        {
-            // i = open inner
+            // O = open inner post
             var inner = $(item).find("div[aria-label^='Post by']")
             console.log(inner)
             inner.click()
-            //bindKeys(post_key_event)
+        }
+        else if(event.key == "i")
+        {
+            // i = open link
+            if($(item).find(LINK_SELECTOR).length)
+            {
+                $(item).find(LINK_SELECTOR)[0].click()
+            }
         }
         else if(event.key == "m")
         {
@@ -439,7 +444,7 @@ class ItemHandler extends Handler {
             // P = repost
             $(item).find("button[aria-label^='Repost']").click()
             setTimeout(function() {
-                $("div[aria-label^='Repost']").click()
+                $("div[aria-label^='Repost'][role='menuitem']").click()
             }, 1000)
         } else if (event.key == ".") {
             // toggle read/unread

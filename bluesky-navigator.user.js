@@ -402,7 +402,7 @@ class ItemHandler extends Handler {
         else if(event.key == "O")
         {
             // O = open link
-            $(item).find("a[role='link']").click()
+            $(item).find("a[role='link']")[0].click()
         }
         else if(event.key == "i")
         {

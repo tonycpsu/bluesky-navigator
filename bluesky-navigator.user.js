@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-19.2
+// @version      2024-11-19.3
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -29,76 +29,152 @@ const UNREAD_CSS = {"opacity": "100%", "background-color": "white"}
 const READ_CSS = {"opacity": "75%", "background-color": "#f0f0f0"}
 
 var $ = window.jQuery
-var state = null
 
-function keepMostRecentValues(obj, N) {
-    // Convert the object into an array of [key, value] pairs
-    const entries = Object.entries(obj)
+class StateManager {
+    constructor(key, defaultState = {}, maxEntries = 5000) {
+        this.key = key;
+        this.state = this.loadState(defaultState);
+        this.listeners = [];
+        this.debounceTimeout = null;
+        this.maxEntries = maxEntries;
 
-    // Sort the entries based on the date values in descending order (most recent first)
-    entries.sort((a, b) => new Date(b[1]) - new Date(a[1]))
+        // Save state on page unload
+        window.addEventListener("beforeunload", () => this.saveStateImmediately());
+    }
 
-    // Keep only the most recent N entries
-    const updatedEntries = entries.slice(0, N)
-
-    // Convert the array back to an object
-    return Object.fromEntries(updatedEntries)
-}
-
-function cleanupState() {
-    state.seen = keepMostRecentValues(state.seen, HISTORY_MAX)
-}
-
-
-function saveState() {
-    console.log("saveState")
-    cleanupState()
-    console.log(`state.seen: ${Object.keys(state.seen).length}`)
-    GM_setValue(STATE_KEY, JSON.stringify(state))
-}
-
-
-function resetState() {
-    state = {seen: {}}
-    GM_setValue(STATE_KEY, JSON.stringify(state))
-}
-
-function waitForElement(selector, callback) {
-    // Check for existing elements immediately
-    const initialElements = $(selector)
-    if (initialElements.length > 0) {
-        for(var el in initialElements) {
-            //console.log(el)
-            callback(el)
+    /**
+     * Loads state from storage or initializes with the default state.
+     * @param {Object} defaultState - The default state object.
+     */
+    loadState(defaultState) {
+        try {
+            const savedState = JSON.parse(GM_getValue(this.key, "{}"));
+            return { ...defaultState, ...savedState };
+        } catch (error) {
+            console.error("Error loading state, using defaults:", error);
+            return defaultState;
         }
     }
 
-    // Create the MutationObserver to watch for future elements
-    const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-            mutation.addedNodes.forEach(function(node) {
-                const $node = $(node)
-                // Check if the added node or its descendants match the selector
-                if ($node.is(selector)) {
-                    callback($node) // Element itself matches the selector
-                } else {
-                    const $children = $node.find(selector)
-                    if ($children.length > 0) {
-                        $children.each( (i, el) => callback(el) )
-                    }
-                }
-            })
-        })
-    })
+    /**
+     * Saves the current state to storage with debouncing.
+     */
+    saveState() {
+        console.log("Saving state...");
+        clearTimeout(this.debounceTimeout);
 
-    // Start observing the document body for changes
-    observer.observe(document.body, {
-        childList: true, // Watch for added/removed nodes
-        subtree: true // Also watch all descendants
-    })
-    return observer
+        this.debounceTimeout = setTimeout(() => {
+            this.saveStateImmediately();
+        }, 1000); // Debounce to avoid frequent writes
+    }
+
+    /**
+     * Saves the current state to storage immediately.
+     * Useful for critical moments like page unload.
+     */
+    saveStateImmediately() {
+        console.log("Saving state immediately...");
+        this.cleanupState(); // Ensure state is pruned before saving
+        GM_setValue(this.key, JSON.stringify(this.state));
+        this.notifyListeners();
+    }
+
+    /**
+     * Keeps only the most recent N entries in the state.
+     */
+    cleanupState() {
+        if (this.state.seen) {
+            this.state.seen = this.keepMostRecentValues(this.state.seen, this.maxEntries);
+        }
+    }
+
+    /**
+     * Utility to keep only the most recent N entries in an object.
+     * Assumes values are ISO date strings for sorting.
+     * @param {Object} obj - The object to prune.
+     * @param {number} maxEntries - The maximum number of entries to retain.
+     */
+    keepMostRecentValues(obj, maxEntries) {
+        const entries = Object.entries(obj);
+
+        // Sort the entries by value (date) in descending order
+        entries.sort(([, dateA], [, dateB]) => new Date(dateB) - new Date(dateA));
+
+        // Keep only the most recent N entries
+        return Object.fromEntries(entries.slice(0, maxEntries));
+    }
+
+    /**
+     * Resets state to the default value.
+     * @param {Object} defaultState - The default state object.
+     */
+    resetState(defaultState = {}) {
+        this.state = defaultState;
+        this.saveState();
+    }
+
+    /**
+     * Updates the state with new values and saves.
+     * @param {Object} newState - An object containing the new state values.
+     */
+    updateState(newState) {
+        this.state = { ...this.state, ...newState };
+        this.saveState();
+    }
+
+    /**
+     * Registers a listener for state changes.
+     * @param {function} callback - The listener function to invoke on state change.
+     */
+    addListener(callback) {
+        if (typeof callback === "function") {
+            this.listeners.push(callback);
+        }
+    }
+
+    /**
+     * Notifies all registered listeners of a state change.
+     */
+    notifyListeners() {
+        this.listeners.forEach(callback => callback(this.state));
+    }
 }
 
+const DEFAULT_STATE = { seen: {} };
+const stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, 5000);
+
+/**
+ * Monitors the DOM for elements matching a selector and executes a callback when found.
+ * @param {string} selector - The CSS selector to monitor.
+ * @param {function} callback - The function to execute for each matched element.
+ * @returns {MutationObserver} - The observer instance, which can be disconnected when no longer needed.
+ */
+function waitForElement(selector, callback) {
+    // Immediately handle any existing elements
+    const processExistingElements = () => {
+        const elements = $(selector);
+        if (elements.length) {
+            elements.each((_, el) => callback($(el)));
+        }
+    };
+
+    // Process current elements once
+    processExistingElements();
+
+    // Set up a MutationObserver to monitor future additions
+    const observer = new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+            $(mutation.addedNodes)
+                .find(selector) // Find matching descendants
+                .addBack(selector) // Include the node itself
+                .each((_, el) => callback($(el))); // Process each matched element
+        });
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return observer;
+}
 
 class Handler {
 
@@ -107,7 +183,7 @@ class Handler {
         this.name = name
         this.index = 0
         this.items = []
-        this.handle_input = this.handle_input.bind(this)
+        this.handleInput = this.handleInput.bind(this)
     }
 
     activate() {
@@ -124,16 +200,16 @@ class Handler {
 
     bindKeys() {
         //console.log(`${this.name}: bind`)
-        document.addEventListener('keydown', this.handle_input, true)
+        document.addEventListener('keydown', this.handleInput, true)
     }
 
     unbindKeys() {
         //console.log(`${this.name}: unbind`)
-        document.removeEventListener('keydown', this.handle_input, true)
+        document.removeEventListener('keydown', this.handleInput, true)
     }
 
-    handle_input(event) {
-        //console.log(`handle_input: ${this}, ${this.name}: ${event}`)
+    handleInput(event) {
+        //console.log(`handleInput: ${this}, ${this.name}: ${event}`)
         //console.dir(event)
         if (event.altKey && !event.metaKey) {
             if (event.code === "KeyH") {
@@ -196,33 +272,33 @@ class ItemHandler extends Handler {
         clearTimeout(this.debounce_timeout)
 
         this.debounce_timeout = setTimeout(() => {
-            this.load_items()
+            this.loadItems()
         }, 500)
     }
 
-    handle_input(event) {
-        if (this.movement_key_event(event)) {
+    handleInput(event) {
+        if (this.handleMovementKey(event)) {
             return event.key
-        } else if (this.item_key_event(event)) {
+        } else if (this.handleItemKey(event)) {
             return event.key
         } else {
-            return super.handle_input(event)
+            return super.handleInput(event)
         }
         //console.log(`${this}, ${this.name}: ${event}`)
-        //super.handle_input(event)
+        //super.handleInput(event)
     }
 
-    load_items() {
+    loadItems() {
         var old_length = this.items.length
         this.items = $(this.selector).filter(":visible")
-        console.dir(`load_items: ${this.items.length}`)
+        console.dir(`loadItems: ${this.items.length}`)
         //console.dir(this.items[0])
-        //this.update_items()
-        this.update_items()
+        //this.updateItems()
+        this.updateItems()
         /*
         if (old_length == 0)
         {
-            this.update_items()
+            this.updateItems()
         }
         */
     }
@@ -235,12 +311,12 @@ class ItemHandler extends Handler {
         }
     }
 
-    set_index(index) {
+    setIndex(index) {
         this.index = index
-        this.update_items()
+        this.updateItems()
     }
 
-    update_items() {
+    updateItems() {
         var post_id
 
         for (var i=0; i < this.items.length; i++)
@@ -257,7 +333,7 @@ class ItemHandler extends Handler {
                 $(item).css(ITEM_CSS)
             }
 
-            if (post_id != null && state.seen[post_id])
+            if (post_id != null && stateManager.state.seen[post_id])
             {
                 $(item).css(READ_CSS)
             }
@@ -285,34 +361,27 @@ class ItemHandler extends Handler {
         }
     }
 
-    mark_read(index, read)
-    {
-        var post_id = this.post_id_for_item(this.items[index])
+    markItemRead(index, isRead) {
+        let postId = this.post_id_for_item(this.items[index])
 
-        if (!post_id) {
+        if (!postId) {
             return
         }
-        if (state.seen[post_id])
-        {
-            if (!read) {
-                delete(state.seen[post_id])
-            }
-            else
-            {
-                state.seen[post_id] = new Date().toISOString()
-            }
+
+        const currentTime = new Date().toISOString();
+        const seen = { ...stateManager.state.seen };
+
+        if (isRead || (isRead == null && !seen[postId]) ) {
+            seen[postId] = currentTime;
         } else {
-            if (read || read == null) {
-                state.seen[post_id] = new Date().toISOString()
-            } else {
-                delete(state.seen[post_id])
-            }
+            delete seen[postId];
         }
-        //state.seen[post_id] = new Date().toISOString()
-        this.update_items()
+
+        stateManager.updateState({ seen });
+        this.updateItems()
     }
 
-    movement_key_event(event) {
+    handleMovementKey(event) {
         var moved = false
         var mark = false
         var old_index = this.index
@@ -379,16 +448,16 @@ class ItemHandler extends Handler {
         {
             if (mark)
             {
-                this.mark_read(old_index, true)
+                this.markItemRead(old_index, true)
             }
-            this.update_items()
+            this.updateItems()
 
             return event.key
         }
         return false
     }
 
-    item_key_event(event) {
+    handleItemKey(event) {
         if(event.altKey || event.metaKey) {
             return
         }
@@ -448,7 +517,7 @@ class ItemHandler extends Handler {
             }, 1000)
         } else if (event.key == ".") {
             // toggle read/unread
-            this.mark_read(this.index, null)
+            this.markItemRead(this.index, null)
         } else if(event.key == "h") {
             // h = back?
             //data-testid="profileHeaderBackBtn"
@@ -484,8 +553,8 @@ class FeedItemHandler extends ItemHandler {
         return window.location.pathname == "/"
     }
 
-    handle_input(event) {
-        if (super.handle_input(event)) {
+    handleInput(event) {
+        if (super.handleInput(event)) {
             if (["j", "k", "J", "K"].indexOf(event.key) !== -1) {
                 if (["k", "K"].indexOf(event.key) !== -1) {
                     this.scroll_offset = 50
@@ -497,10 +566,10 @@ class FeedItemHandler extends ItemHandler {
             return
         } else if(event.key == "u") {
             this.index = 0
-            this.update_items()
+            this.updateItems()
             $(document).find("button[aria-label^='Load new']").click()
             setTimeout( () => {
-                this.load_items()
+                this.loadItems()
             }, 1000)
         } else if(!isNaN(parseInt(event.key)))
         {
@@ -509,7 +578,7 @@ class FeedItemHandler extends ItemHandler {
             }
 
             $("div[data-testid='homeScreenFeedTabs-selector'] > div > div")[parseInt(event.key)-1].click()
-            this.load_items()
+            this.loadItems()
         }
     }
 }
@@ -533,8 +602,8 @@ class PostItemHandler extends ItemHandler {
         return window.location.pathname.match(/\/post\//)
     }
 
-    handle_input(event) {
-        if (super.handle_input(event)) {
+    handleInput(event) {
+        if (super.handleInput(event)) {
             return
         }
     }
@@ -559,8 +628,8 @@ class ProfileItemHandler extends ItemHandler {
         return window.location.pathname.match(/^\/profile\//)
     }
 
-    handle_input(event) {
-        if (super.handle_input(event)) {
+    handleInput(event) {
+        if (super.handleInput(event)) {
             return
         }
         if(event.altKey || event.metaKey) {
@@ -593,31 +662,9 @@ class ProfileItemHandler extends ItemHandler {
         input: new Handler("input")
     }
 
-    state = JSON.parse(GM_getValue(STATE_KEY, '{"seen": {}}'))
-
     $(document).ready(function(e) {
         console.log("ready")
 
-        let idleTimeout;
-
-        function resetIdleTimer() {
-            clearTimeout(idleTimeout);
-            idleTimeout = setTimeout(saveState, 5000);
-        }
-
-        // Handle idle time
-        window.addEventListener("keydown", resetIdleTimer);
-        window.addEventListener("click", resetIdleTimer);
-
-        // Handle page close or refresh
-        window.addEventListener("beforeunload", (event) => {
-            saveState();
-            event.preventDefault();
-            event.returnValue = '';
-        });
-
-        // Initialize the timer
-        resetIdleTimer();
 
         function setContext(ctx) {
             context = ctx

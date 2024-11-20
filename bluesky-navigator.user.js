@@ -494,9 +494,6 @@ class ItemHandler extends Handler {
             {
                 media[0].click()
             }
-        }
-        else if(event.key == "a") {
-            $(item).find(PROFILE_SELECTOR)[0].click()
         } else if(event.key == "r") {
             // r = reply
             var button = $(item).find("button[aria-label^='Reply']")
@@ -556,9 +553,12 @@ class FeedItemHandler extends ItemHandler {
     }
 
     handleInput(event) {
+        var item = this.items[this.index]
         if (super.handleInput(event)) {
               $(this.selector).css("scroll-margin", this.SCROLL_MARGIN)
             return
+        } else if(event.key == "a") {
+            $(item).find(PROFILE_SELECTOR)[0].click()
         } else if(event.key == "u") {
             this.index = 0
             this.updateItems()
@@ -598,8 +598,14 @@ class PostItemHandler extends ItemHandler {
     }
 
     handleInput(event) {
+        var item = this.items[this.index]
         if (super.handleInput(event)) {
             return
+        } else if(event.key == "a") {
+            var handle = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1])
+            $(item).find("div").filter( (i, el) =>
+                $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == `@${handle}`
+            )[0].click()
         }
     }
 }

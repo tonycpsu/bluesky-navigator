@@ -490,9 +490,10 @@ class ItemHandler extends Handler {
     }
 
     handleItemKey(event) {
-        if(event.altKey || event.metaKey) {
+        if(this.isPopupVisible || event.altKey || event.metaKey) {
             return
         }
+
         console.log(event.key)
         var item = this.items[this.index]
         //if(event.key == "o")

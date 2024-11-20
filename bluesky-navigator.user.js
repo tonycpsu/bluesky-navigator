@@ -537,6 +537,8 @@ class ItemHandler extends Handler {
 
 class FeedItemHandler extends ItemHandler {
 
+    SCROLL_MARGIN = "50px"
+
     constructor(name, selector) {
         super(name, selector)
     }
@@ -555,14 +557,7 @@ class FeedItemHandler extends ItemHandler {
 
     handleInput(event) {
         if (super.handleInput(event)) {
-            if (["j", "k", "J", "K"].indexOf(event.key) !== -1) {
-                if (["k", "K"].indexOf(event.key) !== -1) {
-                    this.scroll_offset = 50
-                } else {
-                    this.scroll_offset = 0
-                }
-              }
-              $(this.selector).css("scroll-margin", `${this.scroll_offset}px`)
+              $(this.selector).css("scroll-margin", this.SCROLL_MARGIN)
             return
         } else if(event.key == "u") {
             this.index = 0

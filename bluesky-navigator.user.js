@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-20
+// @version      2024-11-20.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -144,37 +144,45 @@ const DEFAULT_STATE = { seen: {} };
 const stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, 5000);
 
 /**
- * Monitors the DOM for elements matching a selector and executes a callback when found.
+ * Monitors the DOM for elements matching a selector, and calls callbacks when they are added or removed.
  * @param {string} selector - The CSS selector to monitor.
- * @param {function} callback - The function to execute for each matched element.
+ * @param {function} onAdd - Callback to execute when the element is added.
+ * @param {function} onRemove - Callback to execute when the element is removed.
  * @returns {MutationObserver} - The observer instance, which can be disconnected when no longer needed.
  */
-function waitForElement(selector, callback) {
+function waitForElement(selector, onAdd, onRemove) {
     // Immediately handle any existing elements
     const processExistingElements = () => {
         const elements = $(selector);
         if (elements.length) {
-            elements.each((_, el) => callback($(el)));
+            elements.each((_, el) => onAdd($(el)));
         }
     };
 
     // Process current elements once
     processExistingElements();
 
-    // Set up a MutationObserver to monitor future additions
     const observer = new MutationObserver(mutations => {
         mutations.forEach(mutation => {
+            // Handle added nodes
             $(mutation.addedNodes)
-                .find(selector) // Find matching descendants
-                .addBack(selector) // Include the node itself
-                .each((_, el) => callback($(el))); // Process each matched element
+                .find(selector)
+                .addBack(selector)
+                .each((_, el) => onAdd($(el)));
+
+            // Handle removed nodes
+            $(mutation.removedNodes)
+                .find(selector)
+                .addBack(selector)
+                .each((_, el) => onRemove($(el)));
         });
     });
 
+    // Start observing the document body for changes
     observer.observe(document.body, { childList: true, subtree: true });
-
     return observer;
 }
+
 
 class Handler {
 
@@ -242,10 +250,15 @@ class Handler {
 
 class ItemHandler extends Handler {
 
+    POPUP_MENU_SELECTOR = "div[data-radix-popper-content-wrapper]"
+
     constructor(name, selector) {
         super(name)
         this.selector = selector
         this.debounce_timeout = null
+        this.isPopupVisible = false
+        this.onPopupAdd = this.onPopupAdd.bind(this)
+        this.onPopupRemove = this.onPopupRemove.bind(this)
     }
 
     activate() {
@@ -253,6 +266,7 @@ class ItemHandler extends Handler {
         this.observer = waitForElement(this.selector, (element) => {
             this.onElementAdded()
         })
+        this.popupObserver = waitForElement(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
         super.activate()
     }
 
@@ -261,12 +275,27 @@ class ItemHandler extends Handler {
         {
             this.observer.disconnect()
         }
+        if(this.popupObserver)
+        {
+            this.popupObserver.disconnect()
+        }
         super.deactivate()
     }
 
     isActive() {
         return false
     }
+
+    onPopupAdd() {
+        this.isPopupVisible = true;
+        console.log("Popup menu is visible:", this.isPopupVisible);
+    }
+
+    onPopupRemove() {
+        this.isPopupVisible = false;
+        console.log("Popup menu is dismissed:", this.isPopupVisible);
+    }
+
 
     onElementAdded() {
         clearTimeout(this.debounce_timeout)
@@ -385,6 +414,9 @@ class ItemHandler extends Handler {
         var moved = false
         var mark = false
         var old_index = this.index
+        if (this.isPopupVisible) {
+            return
+        }
         if (this.keyState.length == 0) {
             if (["j", "k", "ArrowDown", "ArrowUp", "J", "G"].includes(event.key))
             {

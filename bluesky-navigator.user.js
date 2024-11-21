@@ -632,14 +632,21 @@ class PostItemHandler extends ItemHandler {
 
     handleInput(event) {
         var item = this.items[this.index]
-        if (super.handleInput(event)) {
-            return
-        } else if(event.key == "a") {
+        if(event.key == "a") {
             var handle = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1])
             $(item).find("div").filter( (i, el) =>
                 $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == `@${handle}`
             )[0].click()
+        } else if(event.key == "o")
+        {
+            // o = open inner post
+            var inner = $(item).find("div[aria-label^='Post by']")
+            console.log(inner)
+            inner.click()
+        } else {
+          return super.handleInput(event)
         }
+
     }
 }
 

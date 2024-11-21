@@ -637,9 +637,9 @@ class PostItemHandler extends ItemHandler {
             $(item).find("div").filter( (i, el) =>
                 $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == `@${handle}`
             )[0].click()
-        } else if(event.key == "o")
+        else if (["o", "Enter"].includes(event.key))
         {
-            // o = open inner post
+            // o/Enter = open inner post
             var inner = $(item).find("div[aria-label^='Post by']")
             console.log(inner)
             inner.click()

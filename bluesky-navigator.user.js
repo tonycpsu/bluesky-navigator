@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-21.2
+// @version      2024-11-21.3
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -261,12 +261,13 @@ class ItemHandler extends Handler {
         this.isPopupVisible = false
         this.onPopupAdd = this.onPopupAdd.bind(this)
         this.onPopupRemove = this.onPopupRemove.bind(this)
+        this.onElementAdded = this.onElementAdded.bind(this)
     }
 
     activate() {
         this.keyState = []
         this.observer = waitForElement(this.selector, (element) => {
-            this.onElementAdded()
+            this.onElementAdded(element)
         })
         this.popupObserver = waitForElement(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
         super.activate()
@@ -298,8 +299,36 @@ class ItemHandler extends Handler {
         console.log("Popup menu is dismissed:", this.isPopupVisible);
     }
 
+    applyItemStyle(element, selected) {
+        //console.log(`applyItemStyle: ${$(element).parent().parent().index()-1}, ${this.index}`)
 
-    onElementAdded() {
+        // if ($(element).parent().parent().index()-1 == this.index)
+        if (selected)
+        {
+            $(element).css(SELECTION_CSS)
+        }
+        else
+        {
+            $(element).css(ITEM_CSS)
+        }
+
+        var post_id = this.post_id_for_item($(element))
+        //console.log(`post_id: ${post_id}`)
+        if (post_id != null && stateManager.state.seen[post_id])
+        {
+            $(element).css(READ_CSS)
+        }
+        else
+        {
+            $(element).css(UNREAD_CSS)
+        }
+
+    }
+
+    onElementAdded(element) {
+
+        this.applyItemStyle(element)
+
         clearTimeout(this.debounce_timeout)
 
         this.debounce_timeout = setTimeout(() => {
@@ -319,12 +348,13 @@ class ItemHandler extends Handler {
         //super.handleInput(event)
     }
 
-    loadItems() {
+    loadItems(el) {
         var old_length = this.items.length
         this.items = $(this.selector).filter(":visible")
-        console.dir(`loadItems: ${this.items.length}`)
+        console.log(`loadItems: ${this.items.length}`)
         //console.dir(this.items[0])
         //this.updateItems()
+        this.applyItemStyle(this.items[this.index], true)
         this.updateItems()
         /*
         if (old_length == 0)
@@ -350,40 +380,42 @@ class ItemHandler extends Handler {
     updateItems() {
         var post_id
 
-        for (var i=0; i < this.items.length; i++)
-        {
-            post_id = this.post_id_for_item(this.items[i])
-            var item = this.items[i]
-            if (i == this.index)
-            {
-                $(item).css(SELECTION_CSS)
-                //$(this.items[i]).css("scroll-margin", `${offset}px`)
-            }
-            else
-            {
-                $(item).css(ITEM_CSS)
-            }
+        // for (var i=0; i < this.items.length; i++)
+        // {
+        //     post_id = this.post_id_for_item(this.items[i])
+        //     var item = this.items[i]
+        //     if (i == this.index)
+        //     {
+        //         $(item).css(SELECTION_CSS)
+        //         //$(this.items[i]).css("scroll-margin", `${offset}px`)
+        //     }
+        //     else
+        //     {
+        //         $(item).css(ITEM_CSS)
+        //     }
 
-            if (post_id != null && stateManager.state.seen[post_id])
-            {
-                $(item).css(READ_CSS)
-            }
-            else
-            {
-                $(item).css(UNREAD_CSS)
-            }
+        //     if (post_id != null && stateManager.state.seen[post_id])
+        //     {
+        //         $(item).css(READ_CSS)
+        //     }
+        //     else
+        //     {
+        //         $(item).css(UNREAD_CSS)
+        //     }
 
-            /*
-            // FIXME: this is inefficient
-            var parent = $(item).parent().parent()
-            var children = $(parent).children()
-            console.log(`children: ${children.length}`)
-            if (children.length > 1)
-            {
-                $(item).css({"border": "5px 3px"})
-            }
-            */
-        }
+        //     /*
+        //     // FIXME: this is inefficient
+        //     var parent = $(item).parent().parent()
+        //     var children = $(parent).children()
+        //     console.log(`children: ${children.length}`)
+        //     if (children.length > 1)
+        //     {
+        //         $(item).css({"border": "5px 3px"})
+        //     }
+        //     */
+        // }
+
+
         if (this.index == 0)
         {
             console.log("scroll to top")
@@ -475,11 +507,13 @@ class ItemHandler extends Handler {
         }
         if (moved)
         {
-            console.log("moved")
+            console.log(`moved: ${old_index} -> ${this.index}`)
             if (mark)
             {
                 this.markItemRead(old_index, true)
             }
+            this.applyItemStyle(this.items[old_index], false)
+            this.applyItemStyle(this.items[this.index], true)
             this.updateItems()
 
             return event.key
@@ -591,6 +625,7 @@ class FeedItemHandler extends ItemHandler {
         } else if(event.key == "a") {
             $(item).find(PROFILE_SELECTOR)[0].click()
         } else if(event.key == "u") {
+            this.applyItemStyle(this.items[this.index], false)
             this.index = 0
             //this.updateItems()
             $(document).find("button[aria-label^='Load new']").click()

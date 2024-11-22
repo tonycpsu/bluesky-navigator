@@ -386,9 +386,13 @@ class ItemHandler extends Handler {
         }
         if (this.index == 0)
         {
+            console.log("scroll to top")
             window.scrollTo(0, 0)
         } else if (this.items[this.index]) {
+            console.log("scroll")
             $(this.items[this.index])[0].scrollIntoView()
+        } else {
+            console.log(this.index, this.items.length)
         }
     }
 
@@ -442,9 +446,9 @@ class ItemHandler extends Handler {
                     // G = end
                     this.index = this.items.length-1
                 } else if (event.key == "J") {
-                    for (var i = this.index+1; i < this.items.length; i++)
+                    var i
+                    for (i = this.index+1; i < this.items.length-1; i++)
                     {
-                        //console.log(i)
                         //var item = this.items[i]
                         var post_id = this.post_id_for_item(this.items[i])
                         if (! stateManager.state.seen[post_id]) {
@@ -454,7 +458,6 @@ class ItemHandler extends Handler {
                     this.index = i
                     mark = true
                 }
-                console.log("moved")
                 moved = true
             } else if (event.key == "g") {
                 this.keyState.push(event.key)
@@ -472,6 +475,7 @@ class ItemHandler extends Handler {
         }
         if (moved)
         {
+            console.log("moved")
             if (mark)
             {
                 this.markItemRead(old_index, true)
@@ -588,7 +592,7 @@ class FeedItemHandler extends ItemHandler {
             $(item).find(PROFILE_SELECTOR)[0].click()
         } else if(event.key == "u") {
             this.index = 0
-            this.updateItems()
+            //this.updateItems()
             $(document).find("button[aria-label^='Load new']").click()
             setTimeout( () => {
                 this.loadItems()

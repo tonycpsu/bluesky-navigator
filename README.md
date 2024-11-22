@@ -45,3 +45,13 @@ Keyboard Shortcuts
  | .           | mark post read/unread                              |
  | f           | follow author (profile view)                       |
  | F           | unfollow author (profile view)                     |
+ | 1...9       | switch between feeds on home page                  |
+ | Meta/Alt+h  | open home page                                     |
+ | Meta/Alt+s  | open search page                                   |
+ | Meta/Alt+n  | open notifications page                            |
+ | Meta/Alt+m  | open messages page                                 |
+ | Meta/Alt+f  | open feeds page                                    |
+ | Meta/Alt+h  | open lists page                                    |
+ | Meta/Alt+p  | open profile page                                  |
+ | Meta/Alt+,  | open settings page                                 |
+ 

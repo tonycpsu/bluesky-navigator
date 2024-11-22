@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-21.3
+// @version      2024-11-22.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -231,7 +231,7 @@ class Handler {
             else if (event.code === "KeyN") {
                 $("a[aria-label='Notifications']")[0].click()
             }
-            else if (event.code === "KeyC") {
+            else if (event.code === "KeyM") {
                 $("a[aria-label='Chat']")[0].click()
             }
             else if (event.code === "KeyF") {

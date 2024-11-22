@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-21.1
+// @version      2024-11-21.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -170,11 +170,13 @@ function waitForElement(selector, onAdd, onRemove) {
                 .addBack(selector)
                 .each((_, el) => onAdd($(el)));
 
-            // Handle removed nodes
-            $(mutation.removedNodes)
-                .find(selector)
-                .addBack(selector)
-                .each((_, el) => onRemove($(el)));
+            if (onRemove) {
+                // Handle removed nodes
+                $(mutation.removedNodes)
+                    .find(selector)
+                    .addBack(selector)
+                    .each((_, el) => onRemove($(el)));
+            }
         });
     });
 
@@ -440,29 +442,21 @@ class ItemHandler extends Handler {
                     // G = end
                     this.index = this.items.length-1
                 } else if (event.key == "J") {
-                    /*
                     for (var i = this.index+1; i < this.items.length; i++)
                     {
                         //console.log(i)
                         //var item = this.items[i]
                         var post_id = this.post_id_for_item(this.items[i])
-                        if (! state.seen[post_id]) {
+                        if (! stateManager.state.seen[post_id]) {
                             break;
                         }
-                        if(i < this.items.length -1)
-                        {
-                            i++;
-                        }
-                        old_index = i
-                        mark = true
-                        this.index = i
                     }
-                    */
+                    this.index = i
+                    mark = true
                 }
                 console.log("moved")
                 moved = true
-            } else if (event.key == "g")
-            {
+            } else if (event.key == "g") {
                 this.keyState.push(event.key)
             }
         } else if (this.keyState[0] == "g") {
@@ -631,14 +625,16 @@ class PostItemHandler extends ItemHandler {
     }
 
     handleInput(event) {
+        if(this.isPopupVisible || event.altKey || event.metaKey) {
+            return
+        }
         var item = this.items[this.index]
         if(event.key == "a") {
             var handle = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1])
             $(item).find("div").filter( (i, el) =>
                 $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == `@${handle}`
             )[0].click()
-        else if (["o", "Enter"].includes(event.key))
-        {
+        } else if (["o", "Enter"].includes(event.key)) {
             // o/Enter = open inner post
             var inner = $(item).find("div[aria-label^='Post by']")
             console.log(inner)

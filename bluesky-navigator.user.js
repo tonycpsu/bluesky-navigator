@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-22.1
+// @version      2024-11-22.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -24,7 +24,9 @@ const FEED_SELECTOR = "div.r-1ye8kvj"
 const PROFILE_SELECTOR = "a[aria-label='View profile']"
 const LINK_SELECTOR = "a[target='_blank']"
 const ITEM_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
-const SELECTION_CSS = {"border": "3px rgba(255, 0, 0, .3) solid"}
+const SELECTED_POST_CSS = {"border": "3px rgba(255, 0, 0, .3) solid"}
+const THREAD_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
+const SELECTED_THREAD_CSS = {"border": "3px rgba(0, 0, 128, .3) solid"}
 const UNREAD_CSS = {"opacity": "100%", "background-color": "white"}
 const READ_CSS = {"opacity": "75%", "background-color": "#f0f0f0"}
 
@@ -305,10 +307,12 @@ class ItemHandler extends Handler {
         // if ($(element).parent().parent().index()-1 == this.index)
         if (selected)
         {
-            $(element).css(SELECTION_CSS)
+            $(element).parent().parent().css(SELECTED_THREAD_CSS)
+            $(element).css(SELECTED_POST_CSS)
         }
         else
         {
+            $(element).parent().parent().css(THREAD_CSS)
             $(element).css(ITEM_CSS)
         }
 

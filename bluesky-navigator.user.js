@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-22.2
+// @version      2024-11-24.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -142,7 +142,7 @@ class StateManager {
     }
 }
 
-const DEFAULT_STATE = { seen: {} };
+const DEFAULT_STATE = { seen: {}, page: "home" };
 const stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, 5000);
 
 /**
@@ -152,6 +152,38 @@ const stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, 5000);
  * @param {function} onRemove - Callback to execute when the element is removed.
  * @returns {MutationObserver} - The observer instance, which can be disconnected when no longer needed.
  */
+function waitForElement2(selector, onAdd, onRemove) {
+    const observer = new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+            // Handle added nodes
+            mutation.addedNodes.forEach(node => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    $(node)
+                        .find(selector)
+                        .addBack(selector)
+                        .each((_, el) => onAdd($(el)));
+                }
+            });
+
+            // Handle removed nodes
+            if (onRemove) {
+                mutation.removedNodes.forEach(node => {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        $(node)
+                            .find(selector)
+                            .addBack(selector)
+                            .each((_, el) => onRemove($(el)));
+                    }
+                });
+            }
+        });
+    });
+
+    // Start observing the document body for changes
+    observer.observe(document.body, { childList: true, subtree: true });
+    return observer;
+}
+
 function waitForElement(selector, onAdd, onRemove) {
     // Immediately handle any existing elements
     const processExistingElements = () => {
@@ -188,14 +220,94 @@ function waitForElement(selector, onAdd, onRemove) {
 }
 
 
+
+function observeChanges(target, callback) {
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === "attributes") {
+                const attributeName = mutation.attributeName;
+                const oldValue = mutation.oldValue;
+                const newValue = mutation.target.getAttribute(attributeName);
+
+                // Only log changes if there's a difference
+                if (oldValue !== newValue) {
+                    callback(attributeName, oldValue, newValue, mutation.target);
+                }
+            }
+        });
+    });
+
+    observer.observe(target, {
+        attributes: true, // Observe attribute changes
+        attributeOldValue: true, // Capture old values of attributes
+        subtree: true, // Observe changes in child elements as well
+    });
+
+    return observer;
+}
+
+
+function onVisibilityChange(selector, callback) {
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            console.log(`mutation: ${mutation}`)
+            if (mutation.type === "attributes") {
+                const target = mutation.target;
+                const isVisible = $(target).is(":visible");
+                callback($(target), isVisible);
+            }
+        });
+    });
+
+    $(selector).each((_, el) => {
+        console.log(`observe: ${el}`)
+        observer.observe(el, {
+            attributes: true, // Observe attribute changes
+            attributeFilter: ["style", "class"], // Filter for relevant attributes
+            subtree: false // Do not observe children
+        });
+    });
+
+    return observer;
+}
+
+
+function observeVisibilityChange($element, callback) {
+    const target = $element[0]; // Get the DOM element from the jQuery object
+
+    const observer = new MutationObserver(() => {
+        // Check visibility using jQuery
+        const isVisible = $element.is(":visible");
+        callback(isVisible);
+    });
+
+    // Observe changes to attributes and child nodes
+    observer.observe(target, {
+        attributes: true,
+        childList: true,
+        subtree: false, // Only observe the target element
+    });
+
+    // Optional: Return a function to stop observing
+    return () => observer.disconnect();
+}
+
 class Handler {
 
     constructor(name) {
         //console.log(name)
         this.name = name
-        this.index = 0
+        this._index = 0
         this.items = []
         this.handleInput = this.handleInput.bind(this)
+    }
+
+    get index() {
+        return this._index
+    }
+
+    set index(value) {
+        this._index = value
     }
 
     activate() {
@@ -252,9 +364,15 @@ class Handler {
     }
 }
 
+
 class ItemHandler extends Handler {
 
-    POPUP_MENU_SELECTOR = "div[data-radix-popper-content-wrapper]"
+    // POPUP_MENU_SELECTOR = "div[data-radix-popper-content-wrapper]"
+    POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']"
+
+    // FIXME: this belongs in PostItemHandler
+    THREAD_PAGE_SELECTOR = "main > div > div > div"
+
 
     constructor(name, selector) {
         super(name)
@@ -264,6 +382,7 @@ class ItemHandler extends Handler {
         this.onPopupAdd = this.onPopupAdd.bind(this)
         this.onPopupRemove = this.onPopupRemove.bind(this)
         this.onElementAdded = this.onElementAdded.bind(this)
+        this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
     }
 
     activate() {
@@ -316,7 +435,7 @@ class ItemHandler extends Handler {
             $(element).css(ITEM_CSS)
         }
 
-        var post_id = this.post_id_for_item($(element))
+        var post_id = this.postIdForItem($(element))
         //console.log(`post_id: ${post_id}`)
         if (post_id != null && stateManager.state.seen[post_id])
         {
@@ -331,6 +450,7 @@ class ItemHandler extends Handler {
 
     onElementAdded(element) {
 
+        console.log(`element: ${element}`)
         this.applyItemStyle(element)
 
         clearTimeout(this.debounce_timeout)
@@ -354,12 +474,16 @@ class ItemHandler extends Handler {
 
     loadItems(el) {
         var old_length = this.items.length
+        var old_index = this.index
         this.items = $(this.selector).filter(":visible")
-        console.log(`loadItems: ${this.items.length}`)
+        console.log(`loadItems: ${this.items.length}, ${old_index}`)
         //console.dir(this.items[0])
         //this.updateItems()
         this.applyItemStyle(this.items[this.index], true)
         this.updateItems()
+        if(old_index <= this.items.length){
+
+        }
         /*
         if (old_length == 0)
         {
@@ -368,17 +492,17 @@ class ItemHandler extends Handler {
         */
     }
 
-    post_id_for_item(item) {
+    postIdFromUrl() {
+        //return $(document).find("meta[property='og:url']").attr("content").split("/")[6]
+        return window.location.href.split("/")[6]
+    }
+
+    postIdForItem(item) {
         try {
             return $(item).find("a[href*='/post/']").attr("href").split("/")[4]
         } catch (e) {
-            return null
+            return this.postIdFromUrl()
         }
-    }
-
-    setIndex(index) {
-        this.index = index
-        this.updateItems()
     }
 
     updateItems() {
@@ -386,7 +510,7 @@ class ItemHandler extends Handler {
 
         // for (var i=0; i < this.items.length; i++)
         // {
-        //     post_id = this.post_id_for_item(this.items[i])
+        //     post_id = this.postIdForItem(this.items[i])
         //     var item = this.items[i]
         //     if (i == this.index)
         //     {
@@ -433,8 +557,8 @@ class ItemHandler extends Handler {
     }
 
     markItemRead(index, isRead) {
-        let postId = this.post_id_for_item(this.items[index])
-
+        let postId = this.postIdForItem(this.items[index])
+        console.log(`postId: ${postId}`)
         if (!postId) {
             return
         }
@@ -447,9 +571,16 @@ class ItemHandler extends Handler {
         } else {
             delete seen[postId];
         }
-
         stateManager.updateState({ seen });
+        this.applyItemStyle(this.items[index], index == this.index)
         this.updateItems()
+    }
+
+    // FIXME: move to PostItemHanler
+    handleNewThreadPage(element) {
+        console.log(`new page: ${element}`)
+        console.log(this.items.length)
+        this.loadPageObserver.disconnect()
     }
 
     handleMovementKey(event) {
@@ -464,9 +595,20 @@ class ItemHandler extends Handler {
             {
                 if (["j", "ArrowDown"].indexOf(event.key) != -1) {
                     event.preventDefault()
-                    if (this.index < this.items.length - 1)
-                    {
+                    if (this.index < this.items.length - 1) {
                         this.index += 1
+                    } else {
+                        var next = $(this.items[this.index]).parent().parent().parent().next()
+                        console.log(next.text())
+                        if (next && $.trim(next.text()) == "Continue thread...") {
+                            console.log("click")
+                            this.loadPageObserver = waitForElement(
+                                this.THREAD_PAGE_SELECTOR,
+                                this.handleNewThreadPage
+                            );
+                            console.log(this.loadPageObserver)
+                            $(next).find("div").click()
+                        }
                     }
                     mark = event.key == "j"
                 }
@@ -486,7 +628,7 @@ class ItemHandler extends Handler {
                     for (i = this.index+1; i < this.items.length-1; i++)
                     {
                         //var item = this.items[i]
-                        var post_id = this.post_id_for_item(this.items[i])
+                        var post_id = this.postIdForItem(this.items[i])
                         if (! stateManager.state.seen[post_id]) {
                             break;
                         }
@@ -652,11 +794,23 @@ class PostItemHandler extends ItemHandler {
 
     constructor(name, selector) {
         super(name, selector)
+        //this.index = 0
+        this.indexMap = {}
+        this.handleInput = this.handleInput.bind(this)
+    }
+
+    get index() {
+        return this.indexMap?.[this.postId] ?? 0
+    }
+
+    set index(value) {
+        this.indexMap[this.postId] = value
     }
 
     activate() {
-        this.index = 0
         super.activate()
+        this.postId = this.postIdFromUrl()
+        console.log(`postId: ${this.postId} ${this.index}`)
     }
 
     deactivate() {
@@ -725,6 +879,30 @@ class ProfileItemHandler extends ItemHandler {
     }
 }
 
+const screenPredicateMap = {
+    search: (element) => element.find('div[data-testid="searchScreen"]').length,
+    notifications: (element) => element.find('div[data-testid="notificationsScreen"]').length,
+    chat: (element) => element.find('div:contains("Messages")').length,
+    feeds: (element) => element.find('div[data-testid="FeedsScreen"]').length,
+    lists: (element) => element.find('div[data-testid="listsScreen"]').length,
+    profile: (element) => element.find('div[data-testid="profileScreen"]').length,
+    settings: (element) => element.find('div[data-testid="userAvatarImage"]').length,
+    home: (element) => true,
+}
+
+function getScreenFromElement(element) {
+    for (const [page, predicate] of Object.entries(screenPredicateMap) ) {
+        if (predicate(element))
+        {
+            return page
+        }
+    }
+    console.log(element[0].outerHTML)
+    return "unknown"
+}
+
+
+
 (function() {
 
     var monitor_interval = null
@@ -742,11 +920,69 @@ class ProfileItemHandler extends ItemHandler {
         input: new Handler("input")
     }
 
+    const SCREEN_SELECTOR = "main > div > div > div"
+
     $(document).ready(function(e) {
         console.log("ready")
 
+        console.log(`saved page: ${stateManager.state.screen}`)
 
-        function setContext(ctx) {
+        waitForElement(SCREEN_SELECTOR, (element) => {
+            stateManager.state.screen = getScreenFromElement(element)
+            console.log(`screen: ${stateManager.state.screen}`)
+        })
+
+        /*
+
+        const SCREEN_SELECTOR = "main > div > div > div"
+        const HOME_SCREEN_SELECTOR = "main > div > div > div > div > div > div"
+        const OTHER_SCREEN_SELECTOR = 'div[data-testid$="Screen"]'
+        waitForElement(HOME_SCREEN_SELECTOR, (element) => {
+            console.dir(element)
+        })
+
+
+        waitForElement(HOME_SCREEN_SELECTOR, (element) => {
+            console.dir(element)
+            observeChanges(element[0], (attr, oldval, newval, target) => {
+                // console.log(target, attr, oldval, newval)
+                if (attr == "data-testid" && newval.endsWith("Screen")) {
+                    console.log(`${newval} added`)
+                }
+            });
+            //console.log(element.attr("data-testid"))
+            observeVisibilityChange($(element.parent().parent().parent()), (isVisible) => {
+                if (isVisible) {
+                    console.log(`${$(element).attr("data-testid")} visible`)
+                } else {
+                    console.log(`${$(element).attr("data-testid")} hidden`)
+                }
+            });
+        })
+
+        waitForElement(OTHER_SCREEN_SELECTOR, (element) => {
+            console.log(`${$(element).attr("data-testid")} added`)
+            observeVisibilityChange($(element), (isVisible) => {
+                if (isVisible) {
+                    console.log(`${$(element).attr("data-testid")} visible`)
+                } else {
+                    console.log(`${$(element).attr("data-testid")} hidden`)
+                }
+            });
+        })
+        */
+
+
+        // onVisibilityChange(SCREEN_SELECTOR_2, (element, isVisible) => {
+        //     console.log(`screen: ${element} ${isVisible}`)
+        //     if (isVisible) {
+        //         console.log(`${$(element).find("div > div > div").attr("data-testid").attr("data-testid")} visible`)
+        //     } else {
+        //         console.log(`${$(element).find("div > div > div").attr("data-testid").attr("data-testid")} hidden`)
+        //     }
+        // });
+
+         function setContext(ctx) {
             context = ctx
             console.log(`context : ${context}`)
             for (const [name, handler] of Object.entries(handlers) )

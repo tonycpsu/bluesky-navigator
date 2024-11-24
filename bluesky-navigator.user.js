@@ -901,6 +901,10 @@ function getScreenFromElement(element) {
     return "unknown"
 }
 
+function setScreen(screen) {
+    stateManager.state.screen = screen
+    console.log(`screen: ${stateManager.state.screen}`)
+}
 
 
 (function() {
@@ -923,68 +927,21 @@ function getScreenFromElement(element) {
     const SCREEN_SELECTOR = "main > div > div > div"
 
     $(document).ready(function(e) {
-        console.log("ready")
-
-        console.log(`saved page: ${stateManager.state.screen}`)
+        console.log(`saved screen: ${stateManager.state.screen}`)
 
         waitForElement(SCREEN_SELECTOR, (element) => {
-            stateManager.state.screen = getScreenFromElement(element)
-            console.log(`screen: ${stateManager.state.screen}`)
-        })
-
-        /*
-
-        const SCREEN_SELECTOR = "main > div > div > div"
-        const HOME_SCREEN_SELECTOR = "main > div > div > div > div > div > div"
-        const OTHER_SCREEN_SELECTOR = 'div[data-testid$="Screen"]'
-        waitForElement(HOME_SCREEN_SELECTOR, (element) => {
-            console.dir(element)
-        })
-
-
-        waitForElement(HOME_SCREEN_SELECTOR, (element) => {
-            console.dir(element)
-            observeChanges(element[0], (attr, oldval, newval, target) => {
-                // console.log(target, attr, oldval, newval)
-                if (attr == "data-testid" && newval.endsWith("Screen")) {
-                    console.log(`${newval} added`)
-                }
-            });
-            //console.log(element.attr("data-testid"))
-            observeVisibilityChange($(element.parent().parent().parent()), (isVisible) => {
-                if (isVisible) {
-                    console.log(`${$(element).attr("data-testid")} visible`)
-                } else {
-                    console.log(`${$(element).attr("data-testid")} hidden`)
-                }
-            });
-        })
-
-        waitForElement(OTHER_SCREEN_SELECTOR, (element) => {
-            console.log(`${$(element).attr("data-testid")} added`)
+            setScreen(getScreenFromElement(element))
             observeVisibilityChange($(element), (isVisible) => {
                 if (isVisible) {
-                    console.log(`${$(element).attr("data-testid")} visible`)
-                } else {
-                    console.log(`${$(element).attr("data-testid")} hidden`)
+                    setScreen(getScreenFromElement(element))
                 }
             });
+
         })
-        */
 
-
-        // onVisibilityChange(SCREEN_SELECTOR_2, (element, isVisible) => {
-        //     console.log(`screen: ${element} ${isVisible}`)
-        //     if (isVisible) {
-        //         console.log(`${$(element).find("div > div > div").attr("data-testid").attr("data-testid")} visible`)
-        //     } else {
-        //         console.log(`${$(element).find("div > div > div").attr("data-testid").attr("data-testid")} hidden`)
-        //     }
-        // });
-
-         function setContext(ctx) {
+        function setContext(ctx) {
             context = ctx
-            console.log(`context : ${context}`)
+            console.log(`context: ${context}`)
             for (const [name, handler] of Object.entries(handlers) )
             {
                 //console.log(name, handler)

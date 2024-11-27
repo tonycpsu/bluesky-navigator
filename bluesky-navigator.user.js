@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-26.2
+// @version      2024-11-27.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -24,10 +24,10 @@ const POST_ITEM_SELECTOR = "div[data-testid^='postThreadItem-by-']"
 const FEED_SELECTOR = "div.r-1ye8kvj"
 const PROFILE_SELECTOR = "a[aria-label='View profile']"
 const LINK_SELECTOR = "a[target='_blank']"
-const ITEM_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
-const SELECTED_POST_CSS = {"border": "3px rgba(255, 0, 0, .3) solid"}
-const THREAD_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
-const SELECTED_THREAD_CSS = {"border": "3px rgba(0, 0, 128, .3) solid"}
+//const ITEM_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
+// const SELECTED_POST_CSS = {"border": "3px rgba(255, 0, 0, .3) solid"}
+//const THREAD_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
+//const SELECTED_THREAD_CSS = {"border": "3px rgba(0, 0, 128, .3) solid"}
 const UNREAD_CSS = {"opacity": "100%", "background-color": "white"}
 const READ_CSS = {"opacity": "75%", "background-color": "#f0f0f0"}
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
@@ -433,6 +433,8 @@ class ItemHandler extends Handler {
         this.onPopupRemove = this.onPopupRemove.bind(this)
         this.onElementAdded = this.onElementAdded.bind(this)
         this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
+        this.onItemMouseOver = this.onItemMouseOver.bind(this)
+        this.onItemMouseOut = this.onItemMouseOut.bind(this)
     }
 
     activate() {
@@ -453,6 +455,9 @@ class ItemHandler extends Handler {
         {
             this.popupObserver.disconnect()
         }
+
+        $(this.selector).off("mouseover mouseout");
+
         super.deactivate()
     }
 
@@ -476,13 +481,24 @@ class ItemHandler extends Handler {
         // if ($(element).parent().parent().index()-1 == this.index)
         if (selected)
         {
-            $(element).parent().parent().css(SELECTED_THREAD_CSS)
-            $(element).css(SELECTED_POST_CSS)
+            //$(element).parent().parent().css(SELECTED_THREAD_CSS)
+            $(element).parent().parent().addClass("thread-selected")
+            $(element).parent().parent().removeClass("thread")
+            $(element).addClass("item-selected")
+            $(element).removeClass("item")
+
+            $(element).addClass("item-selected")
+            $(element).removeClass("item")
+            // $(element).css(SELECTED_POST_CSS)
         }
         else
         {
-            $(element).parent().parent().css(THREAD_CSS)
-            $(element).css(ITEM_CSS)
+            // $(element).parent().parent().css(THREAD_CSS)
+            $(element).parent().parent().addClass("thread")
+            $(element).parent().parent().removeClass("thread-selected")
+            $(element).addClass("item")
+            $(element).removeClass("item-selected")
+//            $(element).css(ITEM_CSS)
         }
 
         var post_id = this.postIdForItem($(element))
@@ -496,7 +512,7 @@ class ItemHandler extends Handler {
             $(element).css(UNREAD_CSS)
         }
         var handle = $.trim($(element).find(PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1)
-        console.log(handle)
+        // console.log(handle)
         if (stateManager.state.blocks.all.includes(handle)) {
             $(element).find(PROFILE_SELECTOR).css(CLEARSKY_BLOCKED_ALL_CSS)
         }
@@ -505,10 +521,23 @@ class ItemHandler extends Handler {
         }
     }
 
+    onItemMouseOver(event) {
+        var target = $(event.target).closest(this.selector)
+        this.index = this.getIndexFromItem(target)
+        console.log(this.index)
+        this.applyItemStyle(this.items[this.index], true)
+    }
+
+    onItemMouseOut(event) {
+        console.log("off")
+        this.applyItemStyle(this.items[this.index], false)
+    }
     onElementAdded(element) {
 
-        console.log(`element: ${element}`)
         this.applyItemStyle(element)
+
+        $(element).on("mouseover", this.onItemMouseOver)
+        $(element).on("mouseout", this.onItemMouseOut)
 
         clearTimeout(this.debounce_timeout)
 
@@ -786,6 +815,10 @@ class FeedItemHandler extends ItemHandler {
         return window.location.pathname == "/"
     }
 
+    getIndexFromItem(item) {
+        return $(item).parent().parent().index()-1
+    }
+
     handleInput(event) {
         var item = this.items[this.index]
         if (super.handleInput(event)) {
@@ -844,6 +877,10 @@ class PostItemHandler extends ItemHandler {
         return window.location.pathname.match(/\/post\//)
     }
 
+    getIndexFromItem(item) {
+        return $(item).parent().parent().parent().parent().index() - 3
+    }
+
     handleInput(event) {
         if(this.isPopupVisible || event.altKey || event.metaKey) {
             return
@@ -883,6 +920,10 @@ class ProfileItemHandler extends ItemHandler {
 
     isActive() {
         return window.location.pathname.match(/^\/profile\//)
+    }
+
+    getIndexFromItem(item) {
+        return $(item).parent().parent().index()-1
     }
 
     handleInput(event) {
@@ -975,6 +1016,33 @@ function setScreen(screen) {
 
     $(document).ready(function(e) {
         console.log(`saved screen: ${stateManager.state.screen}`)
+
+
+    // Define the reusable style
+    const stylesheet = `
+        .item {
+            border: 3px solid transparent;
+        }
+
+        .item-selected {
+            border: 3px rgba(255, 0, 0, .3) solid;
+        }
+
+        .thread {
+            border: 3px solid transparent;
+        }
+
+        .thread-selected {
+            border: 3px rgba(0, 0, 128, .3) solid;
+        }
+
+    `
+
+    // Inject the style into the page
+    const styleElement = document.createElement("style");
+    styleElement.type = "text/css";
+    styleElement.textContent = stylesheet;
+    document.head.appendChild(styleElement);
 
         waitForElement(SCREEN_SELECTOR, (element) => {
             setScreen(getScreenFromElement(element))

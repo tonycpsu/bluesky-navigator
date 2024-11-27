@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-24.1
+// @version      2024-11-26.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -11,6 +11,7 @@
 // @grant GM_setValue
 // @grant GM_getValue
 // @grant GM_deleteValue
+// @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 
@@ -29,6 +30,9 @@ const THREAD_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
 const SELECTED_THREAD_CSS = {"border": "3px rgba(0, 0, 128, .3) solid"}
 const UNREAD_CSS = {"opacity": "100%", "background-color": "white"}
 const READ_CSS = {"opacity": "75%", "background-color": "#f0f0f0"}
+const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
+const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"}
+
 
 var $ = window.jQuery
 
@@ -39,6 +43,11 @@ class StateManager {
         this.listeners = [];
         this.debounceTimeout = null;
         this.maxEntries = maxEntries;
+        this.handleBlockListResponse = this.handleBlockListResponse.bind(this)
+        if (! this.state.blocks) {
+            this.state.blocks = {"all": [], "recent": []}
+        }
+        this.updateBlockList()
 
         // Save state on page unload
         window.addEventListener("beforeunload", () => this.saveStateImmediately());
@@ -140,9 +149,50 @@ class StateManager {
     notifyListeners() {
         this.listeners.forEach(callback => callback(this.state));
     }
+
+    handleBlockListResponse(response, responseKey, stateKey) {
+        console.dir(responseKey, stateKey)
+        var jsonResponse = $.parseJSON(response.response)
+        console.dir(jsonResponse.data)
+
+        this.state.blocks[stateKey] = jsonResponse.data[responseKey].map(
+            (entry) => entry.Handle
+        )
+        console.dir(this.state.blocks)
+    }
+
+    updateBlockList() {
+        console.log("updateBlockList")
+        const blockConfig = {
+            all: {
+                url: "https://api.clearsky.services/api/v1/anon/lists/fun-facts",
+                responseKey: "blocked",
+            },
+            recent: {
+                url: "https://api.clearsky.services/api/v1/anon/lists/funer-facts",
+                responseKey: "blocked24",
+            },
+        }
+
+        // const URL_BLOCKS_ALL =
+        // const URL_BLOCKS_RECENT = "https://api.clearsky.services/api/v1/anon/lists/funer-facts"
+        for (const [stateKey, cfg] of Object.entries(blockConfig) ) {
+            console.log(stateKey, cfg)
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: cfg.url,
+                headers: {
+                    Accept: "application/json",
+                },
+                onload: (response) => this.handleBlockListResponse(response, cfg.responseKey, stateKey),
+            });
+
+        }
+
+    }
 }
 
-const DEFAULT_STATE = { seen: {}, page: "home" };
+const DEFAULT_STATE = { seen: {}, page: "home", "blocks": {"all": [], "recent": []} };
 const stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, 5000);
 
 /**
@@ -445,7 +495,14 @@ class ItemHandler extends Handler {
         {
             $(element).css(UNREAD_CSS)
         }
-
+        var handle = $.trim($(element).find(PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1)
+        console.log(handle)
+        if (stateManager.state.blocks.all.includes(handle)) {
+            $(element).find(PROFILE_SELECTOR).css(CLEARSKY_BLOCKED_ALL_CSS)
+        }
+        if (stateManager.state.blocks.recent.includes(handle)) {
+            $(element).find(PROFILE_SELECTOR).css(CLEARSKY_BLOCKED_RECENT_CSS)
+        }
     }
 
     onElementAdded(element) {
@@ -508,40 +565,6 @@ class ItemHandler extends Handler {
     updateItems() {
         var post_id
 
-        // for (var i=0; i < this.items.length; i++)
-        // {
-        //     post_id = this.postIdForItem(this.items[i])
-        //     var item = this.items[i]
-        //     if (i == this.index)
-        //     {
-        //         $(item).css(SELECTION_CSS)
-        //         //$(this.items[i]).css("scroll-margin", `${offset}px`)
-        //     }
-        //     else
-        //     {
-        //         $(item).css(ITEM_CSS)
-        //     }
-
-        //     if (post_id != null && stateManager.state.seen[post_id])
-        //     {
-        //         $(item).css(READ_CSS)
-        //     }
-        //     else
-        //     {
-        //         $(item).css(UNREAD_CSS)
-        //     }
-
-        //     /*
-        //     // FIXME: this is inefficient
-        //     var parent = $(item).parent().parent()
-        //     var children = $(parent).children()
-        //     console.log(`children: ${children.length}`)
-        //     if (children.length > 1)
-        //     {
-        //         $(item).css({"border": "5px 3px"})
-        //     }
-        //     */
-        // }
 
 
         if (this.index == 0)

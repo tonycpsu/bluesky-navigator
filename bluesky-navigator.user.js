@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-26.1
+// @version      2024-11-26.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -898,6 +898,30 @@ class ProfileItemHandler extends ItemHandler {
         } else if(event.key == "F") {
             // could make this a toggle but safer to make it a distinct shortcut
             $("button[data-testid='unfollowBtn']").click()
+        } else if(event.key == "A") {
+            // A = add to list
+            $("button[aria-label^='More options']").click()
+            setTimeout(function() {
+                $("div[data-testid='profileHeaderDropdownListAddRemoveBtn']").click()
+            }, 200)
+        } else if(event.key == "M") {
+            // M = mute
+            $("button[aria-label^='More options']").click()
+            setTimeout(function() {
+                $("div[data-testid='profileHeaderDropdownMuteBtn']").click()
+            }, 200)
+        } else if(event.key == "B") {
+            // B = block
+            $("button[aria-label^='More options']").click()
+            setTimeout(function() {
+                $("div[data-testid='profileHeaderDropdownBlockBtn']").click()
+            }, 200)
+        } else if(event.key == "R") {
+            // R = report
+            $("button[aria-label^='More options']").click()
+            setTimeout(function() {
+                $("div[data-testid='profileHeaderDropdownReportBtn']").click()
+            }, 200)
         }
     }
 }

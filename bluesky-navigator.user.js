@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-27.1
+// @version      2024-11-27.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -30,6 +30,7 @@ const LINK_SELECTOR = "a[target='_blank']"
 //const SELECTED_THREAD_CSS = {"border": "3px rgba(0, 0, 128, .3) solid"}
 const UNREAD_CSS = {"opacity": "100%", "background-color": "white"}
 const READ_CSS = {"opacity": "75%", "background-color": "#f0f0f0"}
+const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
 const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"}
 
@@ -45,7 +46,12 @@ class StateManager {
         this.maxEntries = maxEntries;
         this.handleBlockListResponse = this.handleBlockListResponse.bind(this)
         if (! this.state.blocks) {
-            this.state.blocks = {"all": [], "recent": []}
+            this.state.blocks = {
+                "all": {
+                    "updated": null, handles: []
+                },
+                    "updated": null, handles: []
+            }
         }
         this.updateBlockList()
 
@@ -151,14 +157,18 @@ class StateManager {
     }
 
     handleBlockListResponse(response, responseKey, stateKey) {
-        console.dir(responseKey, stateKey)
+        // console.dir(responseKey, stateKey)
         var jsonResponse = $.parseJSON(response.response)
-        console.dir(jsonResponse.data)
+        // console.dir(jsonResponse.data)
 
-        this.state.blocks[stateKey] = jsonResponse.data[responseKey].map(
-            (entry) => entry.Handle
-        )
-        console.dir(this.state.blocks)
+        try {
+            this.state.blocks[stateKey].handles = jsonResponse.data[responseKey].map(
+                (entry) => entry.Handle
+            )
+            this.state.blocks[stateKey].updated = Date.now()
+        } catch (error) {
+            console.warn("couldn't fetch block list")
+        }
     }
 
     updateBlockList() {
@@ -174,18 +184,22 @@ class StateManager {
             },
         }
 
-        // const URL_BLOCKS_ALL =
-        // const URL_BLOCKS_RECENT = "https://api.clearsky.services/api/v1/anon/lists/funer-facts"
         for (const [stateKey, cfg] of Object.entries(blockConfig) ) {
             console.log(stateKey, cfg)
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: cfg.url,
-                headers: {
-                    Accept: "application/json",
-                },
-                onload: (response) => this.handleBlockListResponse(response, cfg.responseKey, stateKey),
-            });
+            if (
+                this.state.blocks[stateKey].updated == null
+                    ||
+                Date.now() + CLEARSKY_LIST_REFRESH_INTERVAL > this.state.blocks[stateKey].updated
+            ) {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: cfg.url,
+                    headers: {
+                        Accept: "application/json",
+                    },
+                    onload: (response) => this.handleBlockListResponse(response, cfg.responseKey, stateKey),
+                });
+            }
 
         }
 
@@ -478,26 +492,25 @@ class ItemHandler extends Handler {
     applyItemStyle(element, selected) {
         //console.log(`applyItemStyle: ${$(element).parent().parent().index()-1}, ${this.index}`)
 
+        $(element).addClass("item")
+        $(element).parent().parent().addClass("thread")
         // if ($(element).parent().parent().index()-1 == this.index)
         if (selected)
         {
             //$(element).parent().parent().css(SELECTED_THREAD_CSS)
-            $(element).parent().parent().addClass("thread-selected")
-            $(element).parent().parent().removeClass("thread")
-            $(element).addClass("item-selected")
-            $(element).removeClass("item")
-
-            $(element).addClass("item-selected")
-            $(element).removeClass("item")
+            $(element).parent().parent().addClass("thread-selection-active")
+            $(element).parent().parent().removeClass("thread-selection-inactive")
+            $(element).addClass("item-selection-active")
+            $(element).removeClass("item-selection-inactive")
             // $(element).css(SELECTED_POST_CSS)
         }
         else
         {
             // $(element).parent().parent().css(THREAD_CSS)
-            $(element).parent().parent().addClass("thread")
-            $(element).parent().parent().removeClass("thread-selected")
-            $(element).addClass("item")
-            $(element).removeClass("item-selected")
+            $(element).parent().parent().removeClass("thread-selection-active")
+            $(element).parent().parent().addClass("thread-selection-inactive")
+            $(element).removeClass("item-selection-active")
+            $(element).addClass("item-selection-inactive")
 //            $(element).css(ITEM_CSS)
         }
 
@@ -529,7 +542,6 @@ class ItemHandler extends Handler {
     }
 
     onItemMouseOut(event) {
-        console.log("off")
         this.applyItemStyle(this.items[this.index], false)
     }
     onElementAdded(element) {
@@ -719,6 +731,11 @@ class ItemHandler extends Handler {
         return false
     }
 
+    getIndexFromItem(item) {
+        return $(".item").index(item)
+        //return $(item).parent().parent().index()-1
+    }
+
     handleItemKey(event) {
         if(this.isPopupVisible || event.altKey || event.metaKey) {
             return
@@ -815,10 +832,6 @@ class FeedItemHandler extends ItemHandler {
         return window.location.pathname == "/"
     }
 
-    getIndexFromItem(item) {
-        return $(item).parent().parent().index()-1
-    }
-
     handleInput(event) {
         var item = this.items[this.index]
         if (super.handleInput(event)) {
@@ -877,9 +890,9 @@ class PostItemHandler extends ItemHandler {
         return window.location.pathname.match(/\/post\//)
     }
 
-    getIndexFromItem(item) {
-        return $(item).parent().parent().parent().parent().index() - 3
-    }
+    // getIndexFromItem(item) {
+    //     return $(item).parent().parent().parent().parent().index() - 3
+    // }
 
     handleInput(event) {
         if(this.isPopupVisible || event.altKey || event.metaKey) {
@@ -920,10 +933,6 @@ class ProfileItemHandler extends ItemHandler {
 
     isActive() {
         return window.location.pathname.match(/^\/profile\//)
-    }
-
-    getIndexFromItem(item) {
-        return $(item).parent().parent().index()-1
     }
 
     handleInput(event) {
@@ -1021,18 +1030,26 @@ function setScreen(screen) {
     // Define the reusable style
     const stylesheet = `
         .item {
+            padding: 1px;
+        }
+
+        .item-selection-inactive {
             border: 3px solid transparent;
         }
 
-        .item-selected {
+        .item-selection-active {
             border: 3px rgba(255, 0, 0, .3) solid;
         }
 
         .thread {
+            padding: 1px;
+        }
+
+        .thread-selection-inactive {
             border: 3px solid transparent;
         }
 
-        .thread-selected {
+        .thread-selection-active {
             border: 3px rgba(0, 0, 128, .3) solid;
         }
 

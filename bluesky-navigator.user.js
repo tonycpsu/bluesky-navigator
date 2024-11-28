@@ -445,6 +445,7 @@ class ItemHandler extends Handler {
         this.debounceTimeout = null
         this.lastMousePosition = null
         this.isPopupVisible = false
+        this.ignoreMouseMovement = false
         this.onPopupAdd = this.onPopupAdd.bind(this)
         this.onPopupRemove = this.onPopupRemove.bind(this)
         this.onElementAdded = this.onElementAdded.bind(this)
@@ -473,9 +474,10 @@ class ItemHandler extends Handler {
         }
 
         $(this.selector).off("mouseover mouseleave");
-
         super.deactivate()
     }
+
+
 
     isActive() {
         return false
@@ -560,7 +562,7 @@ class ItemHandler extends Handler {
 
     onItemMouseOver(event) {
         var target = $(event.target).closest(this.selector)
-        if (! this.didMouseMove(event)) {
+        if (this.ignoreMouseMovement || ! this.didMouseMove(event)) {
             return
         }
         console.log("mouse moved")
@@ -571,7 +573,7 @@ class ItemHandler extends Handler {
     }
 
     onItemMouseLeave(event) {
-        if (! this.didMouseMove(event)) {
+        if (this.ignoreMouseMovement || ! this.didMouseMove(event)) {
             return
         }
         console.log("mouse left")
@@ -685,6 +687,9 @@ class ItemHandler extends Handler {
         if (this.isPopupVisible) {
             return
         }
+        // mouse movement may be triggered, so ignore it
+        this.ignoreMouseMovement = true
+
         if (this.keyState.length == 0) {
             if (["j", "k", "ArrowDown", "ArrowUp", "J", "G"].includes(event.key))
             {
@@ -758,10 +763,12 @@ class ItemHandler extends Handler {
             this.updateItems()
             // to avoid mouseover getting triggered by keyboard movement
             this.lastMousePosition = null
-
+            this.ignoreMouseMovement = false
             return event.key
+        } else {
+            this.ignoreMouseMovement = false
+            return null
         }
-        return false
     }
 
     getIndexFromItem(item) {

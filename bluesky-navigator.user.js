@@ -451,7 +451,7 @@ class ItemHandler extends Handler {
         this.onElementAdded = this.onElementAdded.bind(this)
         this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
         this.onItemMouseOver = this.onItemMouseOver.bind(this)
-        this.onItemMouseLeave = this.onItemMouseLeave.bind(this)
+        // this.onItemMouseLeave = this.onItemMouseLeave.bind(this)
     }
 
     activate() {
@@ -579,6 +579,7 @@ class ItemHandler extends Handler {
         console.log("mouse left")
         this.applyItemStyle(this.items[this.index], false)
     }
+
     onElementAdded(element) {
 
         this.applyItemStyle(element)

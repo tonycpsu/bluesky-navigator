@@ -30,6 +30,7 @@ Keyboard Shortcuts
  | ------------|----------------------------------------------------|
  | j / ↑       | move to next item                                  |
  | k / ↓       | move to previous item                              |
+ | J           | move to next unread item, or last item if all read |
  | gg          | move to first item                                 |
  | G           | move to last item                                  |
  | h           | go back to previous page                           | 

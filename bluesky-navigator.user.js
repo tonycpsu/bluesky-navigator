@@ -6,12 +6,15 @@
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
 // @require https://code.jquery.com/jquery-3.6.0.min.js
+// @require https://openuserjs.org/src/libs/sizzle/GM_config.js
 // @downloadURL  https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @updateURL    https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @grant GM_setValue
 // @grant GM_getValue
-// @grant GM_deleteValue
-// @grant        GM_xmlhttpRequest
+// @grant GM.getValue
+// @grant GM.setValue
+// @grant GM_xmlhttpRequest
+// @grant GM.xmlhttpRequest
 // ==/UserScript==
 
 
@@ -28,8 +31,6 @@ const LINK_SELECTOR = "a[target='_blank']"
 // const SELECTED_POST_CSS = {"border": "3px rgba(255, 0, 0, .3) solid"}
 //const THREAD_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
 //const SELECTED_THREAD_CSS = {"border": "3px rgba(0, 0, 128, .3) solid"}
-const UNREAD_CSS = {"opacity": "100%", "background-color": "white"}
-const READ_CSS = {"opacity": "75%", "background-color": "#f0f0f0"}
 const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
 const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"}
@@ -424,6 +425,9 @@ class Handler {
             else if (event.code === "Comma") {
                 $("a[aria-label='Settings']")[0].click()
             }
+            else if (event.code === "Period") {
+                stateManager.config.open()
+            }
         }
     }
 }
@@ -451,6 +455,7 @@ class ItemHandler extends Handler {
         this.onElementAdded = this.onElementAdded.bind(this)
         this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
         this.onItemMouseOver = this.onItemMouseOver.bind(this)
+        this.didMouseMove = this.didMouseMove.bind(this)
         // this.onItemMouseLeave = this.onItemMouseLeave.bind(this)
     }
 
@@ -522,11 +527,13 @@ class ItemHandler extends Handler {
         //console.log(`post_id: ${post_id}`)
         if (post_id != null && stateManager.state.seen[post_id])
         {
-            $(element).css(READ_CSS)
+            $(element).addClass("item-read")
+            $(element).removeClass("item-unread")
         }
         else
         {
-            $(element).css(UNREAD_CSS)
+            $(element).addClass("item-unread")
+            $(element).removeClass("item-read")
         }
         var handle = $.trim($(element).find(PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1)
         // console.log(handle)
@@ -585,7 +592,7 @@ class ItemHandler extends Handler {
         this.applyItemStyle(element)
 
         $(element).on("mouseover", this.onItemMouseOver)
-        $(element).on("mouseleave", this.onItemMouseLeave)
+        // $(element).on("mouseleave", this.onItemMouseLeave)
 
         clearTimeout(this.debounceTimeout)
 
@@ -1064,22 +1071,29 @@ function setScreen(screen) {
 
     const SCREEN_SELECTOR = "main > div > div > div"
 
-    $(document).ready(function(e) {
-        console.log(`saved screen: ${stateManager.state.screen}`)
+    function onConfigInit()
+    {
+        // Define the reusable style
+        const stylesheet = `
 
-
-    // Define the reusable style
-    const stylesheet = `
         .item {
-            padding: 1px;
-        }
-
-        .item-selection-inactive {
-            border: 3px solid transparent;
+            ${stateManager.config.get("posts")}
         }
 
         .item-selection-active {
-            border: 3px rgba(255, 0, 0, .3) solid;
+            ${stateManager.config.get("selectionActive")}
+        }
+
+        .item-selection-inactive {
+            ${stateManager.config.get("selectionInactive")}
+        }
+
+        .item-unread {
+            ${stateManager.config.get("unreadPosts")}
+        }
+
+        .item-read {
+            ${stateManager.config.get("readPosts")}
         }
 
         .thread {
@@ -1093,14 +1107,13 @@ function setScreen(screen) {
         .thread-selection-active {
             border: 3px rgba(0, 0, 128, .3) solid;
         }
+`
 
-    `
-
-    // Inject the style into the page
-    const styleElement = document.createElement("style");
-    styleElement.type = "text/css";
-    styleElement.textContent = stylesheet;
-    document.head.appendChild(styleElement);
+        // Inject the style into the page
+        const styleElement = document.createElement("style");
+        styleElement.type = "text/css";
+        styleElement.textContent = stylesheet;
+        document.head.appendChild(styleElement);
 
         waitForElement(SCREEN_SELECTOR, (element) => {
             setScreen(getScreenFromElement(element))
@@ -1209,6 +1222,49 @@ function setScreen(screen) {
         }
 
         startMonitor()
-    })
+    }
 
-})()
+
+    $(document).ready(function(e) {
+        console.log(`saved screen: ${stateManager.state.screen}`)
+
+        stateManager.config = new GM_config({
+            id: 'GM_config',
+            title: 'Bluesky Navigator: Configuration',
+            fields: {
+                'styleSection': {
+                    'section': [GM_config.create('Styles'), 'CSS styles applied to items'],
+                    'type': 'hidden',
+                },
+                'posts': {
+                    'label': 'All Posts',
+                    'type': 'textarea',
+                    'default': 'padding 1px;'
+                },
+                'unreadPosts': {
+                    'label': 'Unread Posts',
+                    'type': 'textarea',
+                    'default': 'opacity: 100%; background-color: white;'
+                },
+                'readPosts': {
+                    'label': 'Read Posts',
+                    'type': 'textarea',
+                    'default': 'opacity: 75%; background-color: #f0f0f0;'
+                },
+                'selectionActive': {
+                    'label': 'Selected Post',
+                    'type': 'textarea',
+                    'default': 'border: 3px rgba(255, 0, 0, .3) solid;'
+                },
+                'selectionInactive': {
+                    'label': 'Unselected Post',
+                    'type': 'textarea',
+                    'default': 'border: 3px solid transparent;'
+                },
+            },
+            'events': {
+                'init': onConfigInit
+            },
+            'css':  ".config_var textarea { width: 100%; }",
+        });
+})})()

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-27.2
+// @version      2024-11-28.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -437,18 +437,20 @@ class ItemHandler extends Handler {
     // FIXME: this belongs in PostItemHandler
     THREAD_PAGE_SELECTOR = "main > div > div > div"
 
+    MOUSE_MOVEMENT_THRESHOLD = 10
 
     constructor(name, selector) {
         super(name)
         this.selector = selector
-        this.debounce_timeout = null
+        this.debounceTimeout = null
+        this.lastMousePosition = null
         this.isPopupVisible = false
         this.onPopupAdd = this.onPopupAdd.bind(this)
         this.onPopupRemove = this.onPopupRemove.bind(this)
         this.onElementAdded = this.onElementAdded.bind(this)
         this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
         this.onItemMouseOver = this.onItemMouseOver.bind(this)
-        this.onItemMouseOut = this.onItemMouseOut.bind(this)
+        this.onItemMouseLeave = this.onItemMouseLeave.bind(this)
     }
 
     activate() {
@@ -470,7 +472,7 @@ class ItemHandler extends Handler {
             this.popupObserver.disconnect()
         }
 
-        $(this.selector).off("mouseover mouseout");
+        $(this.selector).off("mouseover mouseleave");
 
         super.deactivate()
     }
@@ -534,14 +536,45 @@ class ItemHandler extends Handler {
         }
     }
 
+    didMouseMove(event) {
+        const currentPosition = { x: event.pageX, y: event.pageY };
+
+        if (this.lastMousePosition) {
+            // Calculate the distance moved
+            const distanceMoved = Math.sqrt(
+                Math.pow(currentPosition.x - this.lastMousePosition.x, 2) +
+                    Math.pow(currentPosition.y - this.lastMousePosition.y, 2)
+            );
+            this.lastMousePosition = currentPosition;
+
+            if (distanceMoved >= this.MOUSE_MOVEMENT_THRESHOLD) {
+                console.log("> threshold")
+                return true
+            }
+        } else {
+            // Set the initial mouse position
+            this.lastMousePosition = currentPosition;
+        }
+        return false
+    }
+
     onItemMouseOver(event) {
         var target = $(event.target).closest(this.selector)
+        if (! this.didMouseMove(event)) {
+            return
+        }
+        console.log("mouse moved")
+        this.applyItemStyle(this.items[this.index], false)
         this.index = this.getIndexFromItem(target)
         console.log(this.index)
         this.applyItemStyle(this.items[this.index], true)
     }
 
-    onItemMouseOut(event) {
+    onItemMouseLeave(event) {
+        if (! this.didMouseMove(event)) {
+            return
+        }
+        console.log("mouse left")
         this.applyItemStyle(this.items[this.index], false)
     }
     onElementAdded(element) {
@@ -549,11 +582,11 @@ class ItemHandler extends Handler {
         this.applyItemStyle(element)
 
         $(element).on("mouseover", this.onItemMouseOver)
-        $(element).on("mouseout", this.onItemMouseOut)
+        $(element).on("mouseleave", this.onItemMouseLeave)
 
-        clearTimeout(this.debounce_timeout)
+        clearTimeout(this.debounceTimeout)
 
-        this.debounce_timeout = setTimeout(() => {
+        this.debounceTimeout = setTimeout(() => {
             this.loadItems()
         }, 500)
     }
@@ -605,8 +638,6 @@ class ItemHandler extends Handler {
 
     updateItems() {
         var post_id
-
-
 
         if (this.index == 0)
         {
@@ -725,6 +756,8 @@ class ItemHandler extends Handler {
             this.applyItemStyle(this.items[old_index], false)
             this.applyItemStyle(this.items[this.index], true)
             this.updateItems()
+            // to avoid mouseover getting triggered by keyboard movement
+            this.lastMousePosition = null
 
             return event.key
         }

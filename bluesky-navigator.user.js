@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-28.6
+// @version      2024-11-28.7
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -18,13 +18,12 @@
 // ==/UserScript==
 
 
-const HISTORY_MAX = 5000
+const DEFAULT_HISTORY_MAX = 5000
+const DEFAULT_STATE_SAVE_TIMEOUT = 5000
 const URL_MONITOR_INTERVAL = 500
-const TRANSFORM_MONITOR_INTERVAL = 500
 const STATE_KEY = "bluesky_state"
 const FEED_ITEM_SELECTOR = "div[data-testid^='feedItem-by-']"
 const POST_ITEM_SELECTOR = "div[data-testid^='postThreadItem-by-']"
-const FEED_SELECTOR = "div.r-1ye8kvj"
 const PROFILE_SELECTOR = "a[aria-label='View profile']"
 const LINK_SELECTOR = "a[target='_blank']"
 //const ITEM_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
@@ -35,11 +34,63 @@ const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
 const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"}
 
+const DEFAULT_STATE = { seen: {}, page: "home", "blocks": {"all": [], "recent": []} };
 
-var $ = window.jQuery
+const CONFIG_FIELDS = {
+    'styleSection': {
+        'section': [GM_config.create('Styles'), 'CSS styles applied to items'],
+        'type': 'hidden',
+    },
+    'posts': {
+        'label': 'All Posts',
+        'type': 'textarea',
+        'default': 'padding 1px;'
+    },
+    'unreadPosts': {
+        'label': 'Unread Posts',
+        'type': 'textarea',
+        'default': 'opacity: 100%; background-color: white;'
+    },
+    'readPosts': {
+        'label': 'Read Posts',
+        'type': 'textarea',
+        'default': 'opacity: 75%; background-color: #f0f0f0;'
+    },
+    'selectionActive': {
+        'label': 'Selected Post',
+        'type': 'textarea',
+        'default': 'border: 3px rgba(255, 0, 0, .3) solid !important;'
+    },
+    'selectionInactive': {
+        'label': 'Unselected Post',
+        'type': 'textarea',
+        'default': 'border: 3px solid transparent;'
+    },
+    'preferencesSection': {
+        'section': [GM_config.create('Miscellaneous'), 'Other settings'],
+        'type': 'hidden',
+    },
+    'stateSaveTimeout': {
+        'label': 'State Save Timeout',
+        'type': 'int',
+        'title': 'Number of milliseconds of idle time before saving state',
+        'default': DEFAULT_STATE_SAVE_TIMEOUT
+    },
+    'historyMax': {
+        'label': 'History Max Size',
+        'type': 'int',
+        'title': 'Maximum number of posts to remember for saving read state',
+        'default': DEFAULT_HISTORY_MAX
+    },
+
+}
+
+let $ = window.jQuery
+let stateManager
+let config
 
 class StateManager {
-    constructor(key, defaultState = {}, maxEntries = 5000) {
+    constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
         this.key = key;
         this.state = this.loadState(defaultState);
         this.listeners = [];
@@ -80,12 +131,12 @@ class StateManager {
      * Saves the current state to storage with debouncing.
      */
     saveState() {
-        console.log("Saving state...");
         clearTimeout(this.debounceTimeout);
 
         this.debounceTimeout = setTimeout(() => {
+            console.log("Saving state...");
             this.saveStateImmediately();
-        }, 1000); // Debounce to avoid frequent writes
+        }, config.get("stateSaveTimeout")); // Debounce to avoid frequent writes
     }
 
     /**
@@ -208,9 +259,6 @@ class StateManager {
 
     }
 }
-
-const DEFAULT_STATE = { seen: {}, page: "home", "blocks": {"all": [], "recent": []} };
-const stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, 5000);
 
 /**
  * Monitors the DOM for elements matching a selector, and calls callbacks when they are added or removed.
@@ -428,7 +476,7 @@ class Handler {
                 $("a[aria-label='Settings']")[0].click()
             }
             else if (event.code === "Period") {
-                stateManager.config.open()
+                config.open()
             }
         }
     }
@@ -1068,27 +1116,29 @@ function setScreen(screen) {
 
     function onConfigInit()
     {
+        stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
+
         // Define the reusable style
         const stylesheet = `
 
         .item {
-            ${stateManager.config.get("posts")}
+            ${config.get("posts")}
         }
 
         .item-selection-active {
-            ${stateManager.config.get("selectionActive")}
+            ${config.get("selectionActive")}
         }
 
         .item-selection-inactive {
-            ${stateManager.config.get("selectionInactive")}
+            ${config.get("selectionInactive")}
         }
 
         .item-unread {
-            ${stateManager.config.get("unreadPosts")}
+            ${config.get("unreadPosts")}
         }
 
         .item-read {
-            ${stateManager.config.get("readPosts")}
+            ${config.get("readPosts")}
         }
 
         .thread {
@@ -1223,44 +1273,11 @@ function setScreen(screen) {
         startMonitor()
     }
 
-
     $(document).ready(function(e) {
-        console.log(`saved screen: ${stateManager.state.screen}`)
-
-        stateManager.config = new GM_config({
+        config = new GM_config({
             id: 'GM_config',
             title: 'Bluesky Navigator: Configuration',
-            fields: {
-                'styleSection': {
-                    'section': [GM_config.create('Styles'), 'CSS styles applied to items'],
-                    'type': 'hidden',
-                },
-                'posts': {
-                    'label': 'All Posts',
-                    'type': 'textarea',
-                    'default': 'padding 1px;'
-                },
-                'unreadPosts': {
-                    'label': 'Unread Posts',
-                    'type': 'textarea',
-                    'default': 'opacity: 100%; background-color: white;'
-                },
-                'readPosts': {
-                    'label': 'Read Posts',
-                    'type': 'textarea',
-                    'default': 'opacity: 75%; background-color: #f0f0f0;'
-                },
-                'selectionActive': {
-                    'label': 'Selected Post',
-                    'type': 'textarea',
-                    'default': 'border: 3px rgba(255, 0, 0, .3) solid !important;'
-                },
-                'selectionInactive': {
-                    'label': 'Unselected Post',
-                    'type': 'textarea',
-                    'default': 'border: 3px solid transparent;'
-                },
-            },
+            fields: CONFIG_FIELDS,
             'events': {
                 'init': onConfigInit
             },

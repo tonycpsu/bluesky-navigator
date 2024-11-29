@@ -7,6 +7,9 @@
 // @match        https://bsky.app/*
 // @require https://code.jquery.com/jquery-3.6.0.min.js
 // @require https://openuserjs.org/src/libs/sizzle/GM_config.js
+// @require      https:www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js
+// @require      https:www.gstatic.com/firebasejs/11.0.2/firebase-firestore-compat.js
+// @require      https:www.gstatic.com/firebasejs/11.0.2/firebase-auth-compat.js
 // @downloadURL  https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @updateURL    https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @grant GM_setValue
@@ -61,6 +64,26 @@ const CONFIG_FIELDS = {
         'label': 'Unselected Post',
         'type': 'textarea',
         'default': 'border: 3px solid transparent;'
+    },
+    'stateSyncSection': {
+        'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage'],
+        'type': 'hidden',
+    },
+    'stateSyncEnabled':  {
+        'label': 'Enable State Sync',
+        'title': 'If checked, synchronize state to/from the cloud',
+        'type': 'checkbox',
+        'default': false
+    },
+    'stateSyncConfig': {
+        'label': 'State Sync Configuration (JSON)',
+        'title': 'JSON object containing state information',
+        'type': 'textarea',
+    },
+    'stateSyncToken': {
+        'label': 'State Sync Token',
+        'title': 'JWT token for authenticating to state sync cloud service',
+        'type': 'textarea',
     },
     'miscellaneousSection': {
         'section': [GM_config.create('Miscellaneous'), 'Other settings'],
@@ -1136,9 +1159,86 @@ function setScreen(screen) {
 
     const SCREEN_SELECTOR = "main > div > div > div"
 
+    function firebaseInit(firebaseConfig) {
+        // Initialize Firebase
+
+        const app = firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        const token = config.get("stateSyncToken");
+        if (!token) {
+            console.error("must set state sync token in preferences")
+            return
+        }
+
+        // Authenticate the user
+        auth.signInWithCustomToken(token)
+            .then(() => {
+                console.log("Authenticated with UID:", auth.currentUser.uid);
+
+                function saveState(collection, document, data) {
+                    console.log("Attempting to save:", collection, document, data);
+                    db.collection(collection)
+                      .doc(document)
+                      .set(data, { merge: true }) // Merges with existing data instead of overwriting
+                      .then(() => {
+                          console.log("State saved successfully!");
+                      })
+                      .catch((error) => {
+                          console.error("Failed to save state:", error);
+                      });
+                }
+
+                function loadState(collection, document, callback) {
+                    console.log("Attempting to load:", collection, document);
+                    db.collection(collection)
+                      .doc(document)
+                      .get()
+                      .then((doc) => {
+                          if (doc.exists) {
+                              console.log("Data loaded:", doc.data());
+                              callback(doc.data());
+                          } else {
+                              console.log("No such document!");
+                              callback(null);
+                          }
+                      })
+                      .catch((error) => {
+                          console.error("Failed to load state:", error);
+                      });
+                }
+
+                // Save state for a user
+                saveState("userscript-state", auth.currentUser.uid, { exampleKey: "exampleValue" });
+
+                // Load state for a user
+                loadState("userscript-state", auth.currentUser.uid, (data) => {
+                    if (data) {
+                        console.log("Loaded user data:", data);
+                    } else {
+                        console.log("No data found for the user.");
+                    }
+                });
+            });
+    }
+
     function onConfigInit()
     {
         stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
+
+        // Your web app's Firebase configuration
+
+
+        if (config.get("stateSyncEnabled")) {
+            try {
+                const firebaseConfig = $.parseJSON(config.get("stateSyncConfig"))
+                firebaseInit(firebaseConfig)
+            } catch (e) {
+                console.error(`could not load firebase config: ${e}`)
+            }
+
+        }
 
         // Define the reusable style
         const stylesheet = `

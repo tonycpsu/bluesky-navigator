@@ -24,7 +24,7 @@
 const DEFAULT_HISTORY_MAX = 5000
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000
 const URL_MONITOR_INTERVAL = 500
-const STATE_KEY = "bluesky_state"
+const STATE_KEY = "bluesky-navigator-state"
 const FEED_ITEM_SELECTOR = "div[data-testid^='feedItem-by-']"
 const POST_ITEM_SELECTOR = "div[data-testid^='postThreadItem-by-']"
 const PROFILE_SELECTOR = "a[aria-label='View profile']"
@@ -120,41 +120,152 @@ let $ = window.jQuery
 let stateManager
 let config
 
+class FirebaseContext {
+    constructor(config, token, collection) {
+        this.config = config;
+        this.token = token
+        this.collection = collection;
+    }
+
+    async init() {
+        try {
+            this.app = firebase.initializeApp(this.config);
+            this.auth = firebase.auth();
+            this.db = firebase.firestore();
+
+            this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+            // Authenticate the user
+            await this.auth.signInWithCustomToken(this.token);
+            console.log("Authenticated with UID:", this.auth.currentUser.uid);
+        } catch (error) {
+            console.error("Firebase initialization failed:", error);
+            throw error;
+        }
+    }
+
+    async loadDocument(document) {
+        console.log("Attempting to load:", this.collection, document);
+        try {
+            const doc = await this.db.collection(this.collection).doc(document).get();
+            if (doc.exists) {
+                console.log("Data loaded:", doc.data());
+                return doc.data();
+            } else {
+                console.log("No such document!");
+                return null;
+            }
+        } catch (error) {
+            console.error("Failed to load state:", error);
+            throw error;
+        }
+    }
+
+    async saveDocument(document, data) {
+        console.log("Attempting to save:", this.collection, document, data);
+        try {
+            await this.db.collection(this.collection).doc(document).set(data, { merge: true });
+            console.log("State saved successfully!");
+        } catch (error) {
+            console.error("Failed to save state:", error);
+            throw error;
+        }
+    }
+
+    async loadUserDocument() {
+        if (!this.auth.currentUser) {
+            throw new Error("User not authenticated.");
+        }
+        return this.loadDocument(this.auth.currentUser.uid);
+    }
+
+    async saveUserDocument(data) {
+        if (!this.auth.currentUser) {
+            throw new Error("User not authenticated.");
+        }
+        return this.saveDocument(this.auth.currentUser.uid, data);
+    }
+}
+
+
 class StateManager {
-    constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
+
+    static FIREBASE_STATE_COLLECTION = "userscript-state";
+
+    constructor(key, defaultState, maxEntries, firebaseContext) {
         this.key = key;
-        this.state = this.loadState(defaultState);
+        this.defaultState = defaultState;
+        this.maxEntries = maxEntries;
+        this.state = {};
         this.listeners = [];
         this.debounceTimeout = null;
-        this.maxEntries = maxEntries;
-        this.handleBlockListResponse = this.handleBlockListResponse.bind(this)
-        if (! this.state.blocks) {
-            this.state.blocks = {
-                "all": {
-                    "updated": null, handles: []
-                },
-                "recent": {
-                    "updated": null, handles: []
-                }
-            }
-        }
-        this.updateBlockList()
+        this.firebaseContext = firebaseContext;
+    }
+    static create(key, defaultState = {}, maxEntries = 100) {
+        return StateManager.initFirebase()
+                           .catch((error) => {
+                               console.warn("Firebase initialization failed, falling back to local state:", error);
+                               return null; // No Firebase context
+                           })
+                           .then((firebaseContext) => {
+                               const instance = new StateManager(key, defaultState, maxEntries, firebaseContext);
+                               return instance.init().then(() => instance);
+                           });
+    }
 
-        // Save state on page unload
-        window.addEventListener("beforeunload", () => this.saveStateImmediately());
+    static initFirebase() {
+        if (!config.get("stateSyncEnabled")) {
+            return Promise.resolve(null); // If state sync is disabled, resolve with null
+        }
+
+        const firebaseConfig = JSON.parse(config.get("stateSyncConfig"));
+        if (!firebaseConfig) {
+            return Promise.reject("State sync config must be set in preferences.");
+        }
+
+        const firebaseToken = config.get("stateSyncToken");
+        if (!firebaseToken) {
+            return Promise.reject("State sync token must be set in preferences.");
+        }
+
+        const firebaseContext = new FirebaseContext(
+            firebaseConfig,
+            firebaseToken,
+            this.FIREBASE_STATE_COLLECTION
+        );
+
+        return firebaseContext.init().then(() => firebaseContext);
+    }
+
+    init() {
+        this.state = this.loadState(this.defaultState);
+
+        if (this.firebaseContext) {
+            return this.firebaseContext
+                .loadUserDocument()
+                .then((remoteState) => {
+                    if (remoteState) {
+                        this.state = { ...this.state, ...remoteState };
+                        console.log("State initialized from Firebase:", this.state);
+                    }
+                })
+                .catch((error) => {
+                    console.error("Failed to load remote state:", error);
+                });
+        }
+
+        return Promise.resolve(); // No Firebase context, resolve immediately
     }
 
     /**
      * Loads state from storage or initializes with the default state.
-     * @param {Object} defaultState - The default state object.
      */
-    loadState(defaultState) {
+    loadState() {
         try {
             const savedState = JSON.parse(GM_getValue(this.key, "{}"));
-            return { ...defaultState, ...savedState };
+            return { ...this.defaultState, ...savedState };
         } catch (error) {
             console.error("Error loading state, using defaults:", error);
-            return defaultState;
+            return this.defaultState;
         }
     }
 
@@ -173,10 +284,23 @@ class StateManager {
      * Saves the current state to storage immediately.
      * Useful for critical moments like page unload.
      */
-    saveStateImmediately() {
-        console.log("Saving state ...");
-        this.cleanupState(); // Ensure state is pruned before saving
+    async saveStateImmediately() {
+        console.log("Saving state...");
+        this.cleanupState();
+
+        // Save to local storage
         GM_setValue(this.key, JSON.stringify(this.state));
+
+        // Save to Firebase
+        if (this.firebaseContext) {
+            try {
+                await this.firebaseContext.saveUserDocument(this.state);
+                console.log("State saved to Firebase.");
+            } catch (error) {
+                console.error("Failed to save state to Firebase:", error);
+            }
+        }
+
         console.log("...saved");
         this.notifyListeners();
     }
@@ -1159,87 +1283,20 @@ function setScreen(screen) {
 
     const SCREEN_SELECTOR = "main > div > div > div"
 
-    function firebaseInit(firebaseConfig) {
-        // Initialize Firebase
-
-        const app = firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-
-        const token = config.get("stateSyncToken");
-        if (!token) {
-            console.error("must set state sync token in preferences")
-            return
-        }
-
-        // Authenticate the user
-        auth.signInWithCustomToken(token)
-            .then(() => {
-                console.log("Authenticated with UID:", auth.currentUser.uid);
-
-                function saveState(collection, document, data) {
-                    console.log("Attempting to save:", collection, document, data);
-                    db.collection(collection)
-                      .doc(document)
-                      .set(data, { merge: true }) // Merges with existing data instead of overwriting
-                      .then(() => {
-                          console.log("State saved successfully!");
-                      })
-                      .catch((error) => {
-                          console.error("Failed to save state:", error);
-                      });
-                }
-
-                function loadState(collection, document, callback) {
-                    console.log("Attempting to load:", collection, document);
-                    db.collection(collection)
-                      .doc(document)
-                      .get()
-                      .then((doc) => {
-                          if (doc.exists) {
-                              console.log("Data loaded:", doc.data());
-                              callback(doc.data());
-                          } else {
-                              console.log("No such document!");
-                              callback(null);
-                          }
-                      })
-                      .catch((error) => {
-                          console.error("Failed to load state:", error);
-                      });
-                }
-
-                // Save state for a user
-                saveState("userscript-state", auth.currentUser.uid, { exampleKey: "exampleValue" });
-
-                // Load state for a user
-                loadState("userscript-state", auth.currentUser.uid, (data) => {
-                    if (data) {
-                        console.log("Loaded user data:", data);
-                    } else {
-                        console.log("No data found for the user.");
-                    }
-                });
-            });
+    function onConfigInit() {
+        StateManager.create(STATE_KEY, DEFAULT_STATE, config.get("historyMax"))
+                    .then((initializedStateManager) => {
+                        stateManager = initializedStateManager; // Assign the fully initialized instance
+                        console.log("State initialized");
+                        console.dir(stateManager.state); // Access the fully initialized state
+                        onStateInit(); // Now safe to call
+                    })
+                    .catch((error) => {
+                        console.error("Failed to initialize StateManager:", error);
+                    });
     }
 
-    function onConfigInit()
-    {
-        stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
-
-        // Your web app's Firebase configuration
-
-
-        if (config.get("stateSyncEnabled")) {
-            try {
-                const firebaseConfig = $.parseJSON(config.get("stateSyncConfig"))
-                firebaseInit(firebaseConfig)
-            } catch (e) {
-                console.error(`could not load firebase config: ${e}`)
-            }
-
-        }
-
+    function onStateInit() {
         // Define the reusable style
         const stylesheet = `
 

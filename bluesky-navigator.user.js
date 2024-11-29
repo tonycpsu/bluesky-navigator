@@ -1498,6 +1498,18 @@ function setScreen(screen) {
                 'init': onConfigInit,
                 'save': () => config.close()
             },
-            'css':  ".config_var textarea { width: 100%; }",
+            'css':  `
+.config_var textarea {
+    width: 100%;
+}
+
+#GM_config_stateSyncConfig_var textarea {
+    height: 10em;
+}
+
+#GM_config_stateSyncToken_var textarea {
+    height: 5em;
+}
+`,
         });
 })})()

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-28.4
+// @version      2024-11-28.5
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1105,7 +1105,7 @@ function setScreen(screen) {
         }
 
         .thread-selection-active {
-            border: 3px rgba(0, 0, 128, .3) solid !important;
+            border: 3px rgba(0, 0, 128, .3) solid;
         }
 `
 
@@ -1258,7 +1258,7 @@ function setScreen(screen) {
                 'selectionActive': {
                     'label': 'Selected Post',
                     'type': 'textarea',
-                    'default': 'border: 3px rgba(255, 0, 0, .3) solid;'
+                    'default': 'border: 3px rgba(255, 0, 0, .3) solid !important;'
                 },
                 'selectionInactive': {
                     'label': 'Unselected Post',

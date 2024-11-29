@@ -134,7 +134,6 @@ class StateManager {
         clearTimeout(this.debounceTimeout);
 
         this.debounceTimeout = setTimeout(() => {
-            console.log("Saving state...");
             this.saveStateImmediately();
         }, config.get("stateSaveTimeout")); // Debounce to avoid frequent writes
     }
@@ -144,9 +143,10 @@ class StateManager {
      * Useful for critical moments like page unload.
      */
     saveStateImmediately() {
-        console.log("Saving state immediately...");
+        console.log("Saving state ...");
         this.cleanupState(); // Ensure state is pruned before saving
         GM_setValue(this.key, JSON.stringify(this.state));
+        console.log("...saved");
         this.notifyListeners();
     }
 
@@ -226,7 +226,7 @@ class StateManager {
     }
 
     updateBlockList() {
-        console.log("updateBlockList")
+        // console.log("updateBlockList")
         const blockConfig = {
             all: {
                 url: "https://api.clearsky.services/api/v1/anon/lists/fun-facts",
@@ -239,7 +239,7 @@ class StateManager {
         }
 
         for (const [stateKey, cfg] of Object.entries(blockConfig) ) {
-            console.log(stateKey, cfg)
+            // console.log(stateKey, cfg)
             if (
                 this.state.blocks[stateKey].updated == null
                     ||
@@ -365,7 +365,7 @@ function observeChanges(target, callback) {
 function onVisibilityChange(selector, callback) {
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
-            console.log(`mutation: ${mutation}`)
+            // console.log(`mutation: ${mutation}`)
             if (mutation.type === "attributes") {
                 const target = mutation.target;
                 const isVisible = $(target).is(":visible");
@@ -375,7 +375,7 @@ function onVisibilityChange(selector, callback) {
     });
 
     $(selector).each((_, el) => {
-        console.log(`observe: ${el}`)
+        // console.log(`observe: ${el}`)
         observer.observe(el, {
             attributes: true, // Observe attribute changes
             attributeFilter: ["style", "class"], // Filter for relevant attributes
@@ -508,7 +508,6 @@ class ItemHandler extends Handler {
         this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
         this.onItemMouseOver = this.onItemMouseOver.bind(this)
         this.didMouseMove = this.didMouseMove.bind(this)
-        // this.onItemMouseLeave = this.onItemMouseLeave.bind(this)
     }
 
     activate() {
@@ -609,7 +608,6 @@ class ItemHandler extends Handler {
             this.lastMousePosition = currentPosition;
 
             if (distanceMoved >= this.MOUSE_MOVEMENT_THRESHOLD) {
-                console.log("> threshold")
                 return true
             }
         } else {
@@ -624,19 +622,10 @@ class ItemHandler extends Handler {
         if (this.ignoreMouseMovement || ! this.didMouseMove(event)) {
             return
         }
-        console.log("mouse moved")
         this.applyItemStyle(this.items[this.index], false)
         this.index = this.getIndexFromItem(target)
         console.log(this.index)
         this.applyItemStyle(this.items[this.index], true)
-    }
-
-    onItemMouseLeave(event) {
-        if (this.ignoreMouseMovement || ! this.didMouseMove(event)) {
-            return
-        }
-        console.log("mouse left")
-        this.applyItemStyle(this.items[this.index], false)
     }
 
     onElementAdded(element) {
@@ -669,7 +658,7 @@ class ItemHandler extends Handler {
         var old_length = this.items.length
         var old_index = this.index
         this.items = $(this.selector).filter(":visible")
-        console.log(`loadItems: ${this.items.length}, ${old_index}`)
+        // console.log(`loadItems: ${this.items.length}, ${old_index}`)
         //console.dir(this.items[0])
         //this.updateItems()
         this.applyItemStyle(this.items[this.index], true)
@@ -703,10 +692,8 @@ class ItemHandler extends Handler {
 
         if (this.index == 0)
         {
-            console.log("scroll to top")
             window.scrollTo(0, 0)
         } else if (this.items[this.index]) {
-            console.log("scroll")
             $(this.items[this.index])[0].scrollIntoView()
         } else {
             console.log(this.index, this.items.length)
@@ -715,7 +702,7 @@ class ItemHandler extends Handler {
 
     markItemRead(index, isRead) {
         let postId = this.postIdForItem(this.items[index])
-        console.log(`postId: ${postId}`)
+        // console.log(`postId: ${postId}`)
         if (!postId) {
             return
         }
@@ -813,7 +800,6 @@ class ItemHandler extends Handler {
         }
         if (moved)
         {
-            console.log(`moved: ${old_index} -> ${this.index}`)
             $(this.selector).css("scroll-margin", this.SCROLL_MARGIN)
             if (mark)
             {
@@ -842,13 +828,12 @@ class ItemHandler extends Handler {
             return
         }
 
-        console.log(event.key)
+        // console.log(event.key)
         var item = this.items[this.index]
         //if(event.key == "o")
         if (["o", "Enter"].includes(event.key))
         {
             // o = open
-            console.log("open")
             $(item).click()
             //bindKeys(post_key_event)
         }
@@ -856,7 +841,6 @@ class ItemHandler extends Handler {
         {
             // O = open inner post
             var inner = $(item).find("div[aria-label^='Post by']")
-            console.log(inner)
             inner.click()
         }
         else if(event.key == "i")
@@ -882,7 +866,6 @@ class ItemHandler extends Handler {
             button.click()
         } else if(event.key == "l") {
             // l = like
-            console.log("like")
             $(item).find("button[data-testid='likeBtn']").click()
         } else if(event.key == "p") {
             // p = repost menu
@@ -970,7 +953,7 @@ class PostItemHandler extends ItemHandler {
     activate() {
         super.activate()
         this.postId = this.postIdFromUrl()
-        console.log(`postId: ${this.postId} ${this.index}`)
+        // console.log(`postId: ${this.postId} ${this.index}`)
     }
 
     deactivate() {
@@ -998,7 +981,6 @@ class PostItemHandler extends ItemHandler {
         } else if (["o", "Enter"].includes(event.key)) {
             // o/Enter = open inner post
             var inner = $(item).find("div[aria-label^='Post by']")
-            console.log(inner)
             inner.click()
         } else {
           return super.handleInput(event)
@@ -1085,13 +1067,13 @@ function getScreenFromElement(element) {
             return page
         }
     }
-    console.log(element[0].outerHTML)
+    // console.log(element[0].outerHTML)
     return "unknown"
 }
 
 function setScreen(screen) {
     stateManager.state.screen = screen
-    console.log(`screen: ${stateManager.state.screen}`)
+    // console.log(`screen: ${stateManager.state.screen}`)
 }
 
 
@@ -1215,10 +1197,8 @@ function setScreen(screen) {
                     let maybeTiptap = $(target).closest(".tiptap")
                     if(maybeTiptap)
                     {
-                        console.log(`tiptap: ${maybeTiptap}`)
                         waitForElement(maybeTiptap, () => null, () => onBlur({"target": maybeTiptap[0]}))
                         setContext("input")
-                        // maybeTiptap.closest(".tiptap").on("remove", () => onBlur(maybeTiptap))
                     }
                     else
                     {
@@ -1227,8 +1207,6 @@ function setScreen(screen) {
                     break
                 default:
                     setContextFromUrl()
-                    //console.log("default: " + targetTagName)
-                    //document.addEventListener('keypress', func, true)
             }
         }
 
@@ -1246,16 +1224,12 @@ function setScreen(screen) {
                 case 'div':
                     if($(target).closest(".tiptap"))
                     {
-                        //console.log("add keypress")
-                        //document.addEventListener('keypress', func, true)
                         setContextFromUrl()
                     }
                     break
                 default:
                     setContext("input")
                     break
-                    //setContext("input")
-                    //console.log("default: " + targetTagName)
             }
         }
 

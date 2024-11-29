@@ -123,7 +123,7 @@ let config
 class FirebaseContext {
     constructor(config, token, collection) {
         this.config = config;
-        this.token = token
+        this.token = token;
         this.collection = collection;
     }
 
@@ -133,40 +133,39 @@ class FirebaseContext {
             this.auth = firebase.auth();
             this.db = firebase.firestore();
 
-            this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-            // Authenticate the user
+            await this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
             await this.auth.signInWithCustomToken(this.token);
             console.log("Authenticated with UID:", this.auth.currentUser.uid);
         } catch (error) {
             console.error("Firebase initialization failed:", error);
-            throw error;
+            throw error; // Propagate the error for handling in StateManager
         }
     }
 
     async loadDocument(document) {
-        console.log("Attempting to load:", this.collection, document);
         try {
+            console.log("Attempting to load:", this.collection, document);
             const doc = await this.db.collection(this.collection).doc(document).get();
             if (doc.exists) {
                 console.log("Data loaded:", doc.data());
                 return doc.data();
             } else {
-                console.log("No such document!");
+                console.warn("No such document!");
                 return null;
             }
         } catch (error) {
-            console.error("Failed to load state:", error);
+            console.error("Failed to load document:", error);
             throw error;
         }
     }
 
     async saveDocument(document, data) {
-        console.log("Attempting to save:", this.collection, document, data);
         try {
+            console.log("Attempting to save:", this.collection, document, data);
             await this.db.collection(this.collection).doc(document).set(data, { merge: true });
             console.log("State saved successfully!");
         } catch (error) {
-            console.error("Failed to save state:", error);
+            console.error("Failed to save document:", error);
             throw error;
         }
     }
@@ -186,10 +185,9 @@ class FirebaseContext {
     }
 }
 
-
 class StateManager {
 
-    static FIREBASE_STATE_COLLECTION = "userscript-state";
+     static FIREBASE_STATE_COLLECTION = "userscript-state";
 
     constructor(key, defaultState, maxEntries, firebaseContext) {
         this.key = key;
@@ -200,21 +198,22 @@ class StateManager {
         this.debounceTimeout = null;
         this.firebaseContext = firebaseContext;
     }
+
     static create(key, defaultState = {}, maxEntries = 100) {
         return StateManager.initFirebase()
-                           .catch((error) => {
-                               console.warn("Firebase initialization failed, falling back to local state:", error);
-                               return null; // No Firebase context
-                           })
-                           .then((firebaseContext) => {
-                               const instance = new StateManager(key, defaultState, maxEntries, firebaseContext);
-                               return instance.init().then(() => instance);
-                           });
+            .catch((error) => {
+                console.warn("Firebase initialization failed, falling back to local state:", error);
+                return null; // Use local state if Firebase fails
+            })
+            .then((firebaseContext) => {
+                const instance = new StateManager(key, defaultState, maxEntries, firebaseContext);
+                return instance.init().then(() => instance);
+            });
     }
 
     static initFirebase() {
         if (!config.get("stateSyncEnabled")) {
-            return Promise.resolve(null); // If state sync is disabled, resolve with null
+            return Promise.resolve(null); // Skip Firebase if disabled
         }
 
         const firebaseConfig = JSON.parse(config.get("stateSyncConfig"));
@@ -230,30 +229,48 @@ class StateManager {
         const firebaseContext = new FirebaseContext(
             firebaseConfig,
             firebaseToken,
-            this.FIREBASE_STATE_COLLECTION
+            StateManager.FIREBASE_STATE_COLLECTION
         );
 
         return firebaseContext.init().then(() => firebaseContext);
     }
 
-    init() {
-        this.state = this.loadState(this.defaultState);
+    async init() {
+        this.state = this.loadLocalState(this.defaultState);
 
         if (this.firebaseContext) {
-            return this.firebaseContext
-                .loadUserDocument()
-                .then((remoteState) => {
-                    if (remoteState) {
-                        this.state = { ...this.state, ...remoteState };
-                        console.log("State initialized from Firebase:", this.state);
-                    }
-                })
-                .catch((error) => {
-                    console.error("Failed to load remote state:", error);
-                });
+            try {
+                const remoteState = await this.firebaseContext.loadUserDocument();
+                if (remoteState) {
+                    this.state = { ...this.state, ...remoteState }; // Merge local and remote states
+                    this.saveLocalState(); // Update local state with merged result
+                    console.log("State initialized from Firebase:", this.state);
+                }
+            } catch (error) {
+                console.warn("Failed to load remote state, using local state only:", error);
+            }
         }
 
-        return Promise.resolve(); // No Firebase context, resolve immediately
+        this.notifyListeners();
+    }
+
+    loadLocalState(defaultState) {
+        try {
+            const savedState = JSON.parse(GM_getValue(this.key, "{}"));
+            return { ...defaultState, ...savedState };
+        } catch (error) {
+            console.error("Error loading local state, using default:", error);
+            return defaultState;
+        }
+    }
+
+    saveLocalState() {
+        try {
+            GM_setValue(this.key, JSON.stringify(this.state));
+            console.log("Local state saved successfully.");
+        } catch (error) {
+            console.error("Failed to save local state:", error);
+        }
     }
 
     /**
@@ -280,28 +297,24 @@ class StateManager {
         }, config.get("stateSaveTimeout")); // Debounce to avoid frequent writes
     }
 
-    /**
-     * Saves the current state to storage immediately.
-     * Useful for critical moments like page unload.
-     */
     async saveStateImmediately() {
         console.log("Saving state...");
         this.cleanupState();
 
-        // Save to local storage
-        GM_setValue(this.key, JSON.stringify(this.state));
+        // Always save to local storage
+        this.saveLocalState();
 
-        // Save to Firebase
+        // Try saving to Firebase if available
         if (this.firebaseContext) {
             try {
                 await this.firebaseContext.saveUserDocument(this.state);
                 console.log("State saved to Firebase.");
             } catch (error) {
-                console.error("Failed to save state to Firebase:", error);
+                console.warn("Failed to save state to Firebase, saved locally only:", error);
             }
         }
 
-        console.log("...saved");
+        console.log("State saved.");
         this.notifyListeners();
     }
 
@@ -671,14 +684,14 @@ class ItemHandler extends Handler {
 
     activate() {
         this.keyState = []
-        this.observer = waitForElement(this.selector, (element) => {
-            this.onElementAdded(element)
-        })
         this.popupObserver = waitForElement(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
         this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
             root: null, // Observing within the viewport
             threshold: Array.from({ length: 101 }, (_, i) => i / 100),
         });
+        this.observer = waitForElement(this.selector, (element) => {
+            this.onElementAdded(element)
+        })
         super.activate()
     }
 

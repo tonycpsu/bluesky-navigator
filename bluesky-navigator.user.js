@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-28.1
+// @version      2024-11-28.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -441,6 +441,8 @@ class ItemHandler extends Handler {
     // FIXME: this belongs in PostItemHandler
     THREAD_PAGE_SELECTOR = "main > div > div > div"
 
+    SCROLL_MARGIN = "50px"
+
     MOUSE_MOVEMENT_THRESHOLD = 10
 
     constructor(name, selector) {
@@ -762,6 +764,7 @@ class ItemHandler extends Handler {
         if (moved)
         {
             console.log(`moved: ${old_index} -> ${this.index}`)
+            $(this.selector).css("scroll-margin", this.SCROLL_MARGIN)
             if (mark)
             {
                 this.markItemRead(old_index, true)
@@ -862,8 +865,6 @@ class ItemHandler extends Handler {
 
 class FeedItemHandler extends ItemHandler {
 
-    SCROLL_MARGIN = "50px"
-
     constructor(name, selector) {
         super(name, selector)
     }
@@ -882,10 +883,7 @@ class FeedItemHandler extends ItemHandler {
 
     handleInput(event) {
         var item = this.items[this.index]
-        if (super.handleInput(event)) {
-              $(this.selector).css("scroll-margin", this.SCROLL_MARGIN)
-            return
-        } else if(event.key == "a") {
+        if(event.key == "a") {
             $(item).find(PROFILE_SELECTOR)[0].click()
         } else if(event.key == "u") {
             this.applyItemStyle(this.items[this.index], false)
@@ -903,6 +901,8 @@ class FeedItemHandler extends ItemHandler {
 
             $("div[data-testid='homeScreenFeedTabs-selector'] > div > div")[parseInt(event.key)-1].click()
             this.loadItems()
+        } else {
+            super.handleInput(event)
         }
     }
 }
@@ -1167,9 +1167,13 @@ function setScreen(screen) {
                     setContext("input")
                     break
                 case 'div':
-                    if($(target).hasClass("tiptap"))
+                    let maybeTiptap = $(target).closest(".tiptap")
+                    if(maybeTiptap)
                     {
+                        console.log(`tiptap: ${maybeTiptap}`)
+                        waitForElement(maybeTiptap, () => null, () => onBlur({"target": maybeTiptap[0]}))
                         setContext("input")
+                        // maybeTiptap.closest(".tiptap").on("remove", () => onBlur(maybeTiptap))
                     }
                     else
                     {
@@ -1195,7 +1199,7 @@ function setScreen(screen) {
                     //document.addEventListener('keypress', func, true)
                     break
                 case 'div':
-                    if($(target).hasClass("tiptap"))
+                    if($(target).closest(".tiptap"))
                     {
                         //console.log("add keypress")
                         //document.addEventListener('keypress', func, true)

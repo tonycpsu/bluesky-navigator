@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-28.7
+// @version      2024-11-28.8
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -72,16 +72,22 @@ const CONFIG_FIELDS = {
     },
     'stateSaveTimeout': {
         'label': 'State Save Timeout',
-        'type': 'int',
         'title': 'Number of milliseconds of idle time before saving state',
+        'type': 'int',
         'default': DEFAULT_STATE_SAVE_TIMEOUT
     },
     'historyMax': {
         'label': 'History Max Size',
-        'type': 'int',
         'title': 'Maximum number of posts to remember for saving read state',
+        'type': 'int',
         'default': DEFAULT_HISTORY_MAX
     },
+    'savePostState':  {
+        'label': 'Save Post State',
+        'title': 'If true, read/unread state is kept for post items in addition to feed items',
+        'type': 'checkbox',
+        'default': false
+    }
 
 }
 
@@ -701,8 +707,10 @@ class ItemHandler extends Handler {
     }
 
     markItemRead(index, isRead) {
+        if (this.name == "post" && !config.get("savePostState")){
+            return
+        }
         let postId = this.postIdForItem(this.items[index])
-        // console.log(`postId: ${postId}`)
         if (!postId) {
             return
         }
@@ -969,6 +977,10 @@ class PostItemHandler extends ItemHandler {
     // }
 
     handleInput(event) {
+        if (super.handleInput(event)) {
+            return
+        }
+
         if(this.isPopupVisible || event.altKey || event.metaKey) {
             return
         }
@@ -982,8 +994,6 @@ class PostItemHandler extends ItemHandler {
             // o/Enter = open inner post
             var inner = $(item).find("div[aria-label^='Post by']")
             inner.click()
-        } else {
-          return super.handleInput(event)
         }
 
     }

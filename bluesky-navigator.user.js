@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-29.1
+// @version      2024-11-29.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1174,7 +1174,39 @@ function setScreen(screen) {
         .thread-selection-active {
             border: 3px rgba(0, 0, 128, .3) solid;
         }
+
+        .preferences-icon-overlay {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 30px;
+            height: 30px;
+            background-color: #cccccc;
+            border-radius: 50%;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        .preferences-icon-overlay span {
+            color: white;
+            font-size: 16px;
+        }
 `
+
+        const preferencesIconDiv = `
+    <div class="preferences-icon-overlay">
+      <span>⚙️</i>
+    </div>
+  `;
+        $("body").append(preferencesIconDiv);
+
+        // Add event listeners using jQuery
+        $(".preferences-icon-overlay").on("click", function () {
+            config.open()
+        });
 
         // Inject the style into the page
         const styleElement = document.createElement("style");
@@ -1293,7 +1325,8 @@ function setScreen(screen) {
             title: 'Bluesky Navigator: Configuration',
             fields: CONFIG_FIELDS,
             'events': {
-                'init': onConfigInit
+                'init': onConfigInit,
+                'save': () => config.close()
             },
             'css':  ".config_var textarea { width: 100%; }",
         });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-28.8
+// @version      2024-11-29.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -26,10 +26,6 @@ const FEED_ITEM_SELECTOR = "div[data-testid^='feedItem-by-']"
 const POST_ITEM_SELECTOR = "div[data-testid^='postThreadItem-by-']"
 const PROFILE_SELECTOR = "a[aria-label='View profile']"
 const LINK_SELECTOR = "a[target='_blank']"
-//const ITEM_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
-// const SELECTED_POST_CSS = {"border": "3px rgba(255, 0, 0, .3) solid"}
-//const THREAD_CSS = {"border": "0px"} // , "scroll-margin-top": "50px"}
-//const SELECTED_THREAD_CSS = {"border": "3px rgba(0, 0, 128, .3) solid"}
 const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
 const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"}
@@ -66,9 +62,21 @@ const CONFIG_FIELDS = {
         'type': 'textarea',
         'default': 'border: 3px solid transparent;'
     },
-    'preferencesSection': {
+    'miscellaneousSection': {
         'section': [GM_config.create('Miscellaneous'), 'Other settings'],
         'type': 'hidden',
+    },
+    'markReadOnScroll':  {
+        'label': 'Mark Read on Scroll',
+        'title': 'If checked, items will be marked read while scrolling',
+        'type': 'checkbox',
+        'default': false
+    },
+    'savePostState':  {
+        'label': 'Save Post State',
+        'title': 'If checked, read/unread state is kept for post items in addition to feed items',
+        'type': 'checkbox',
+        'default': false
     },
     'stateSaveTimeout': {
         'label': 'State Save Timeout',
@@ -82,12 +90,6 @@ const CONFIG_FIELDS = {
         'type': 'int',
         'default': DEFAULT_HISTORY_MAX
     },
-    'savePostState':  {
-        'label': 'Save Post State',
-        'title': 'If true, read/unread state is kept for post items in addition to feed items',
-        'type': 'checkbox',
-        'default': false
-    }
 
 }
 
@@ -488,7 +490,6 @@ class Handler {
     }
 }
 
-
 class ItemHandler extends Handler {
 
     // POPUP_MENU_SELECTOR = "div[data-radix-popper-content-wrapper]"
@@ -510,10 +511,15 @@ class ItemHandler extends Handler {
         this.ignoreMouseMovement = false
         this.onPopupAdd = this.onPopupAdd.bind(this)
         this.onPopupRemove = this.onPopupRemove.bind(this)
+        this.onIntersection = this.onIntersection.bind(this)
         this.onElementAdded = this.onElementAdded.bind(this)
         this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
         this.onItemMouseOver = this.onItemMouseOver.bind(this)
         this.didMouseMove = this.didMouseMove.bind(this)
+    }
+
+    isActive() {
+        return false
     }
 
     activate() {
@@ -522,6 +528,10 @@ class ItemHandler extends Handler {
             this.onElementAdded(element)
         })
         this.popupObserver = waitForElement(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
+        this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
+            root: null, // Observing within the viewport
+            threshold: Array.from({ length: 101 }, (_, i) => i / 100),
+        });
         super.activate()
     }
 
@@ -534,25 +544,51 @@ class ItemHandler extends Handler {
         {
             this.popupObserver.disconnect()
         }
+        if(this.intersectionObserver)
+        {
+            this.popupObserver.disconnect()
+        }
 
         $(this.selector).off("mouseover mouseleave");
         super.deactivate()
     }
 
+    onElementAdded(element) {
 
+        if(config.get("markReadOnScroll")) {
+            this.intersectionObserver.observe(element[0]);
+        }
 
-    isActive() {
-        return false
+        this.applyItemStyle(element)
+
+        $(element).on("mouseover", this.onItemMouseOver)
+        // $(element).on("mouseleave", this.onItemMouseLeave)
+
+        clearTimeout(this.debounceTimeout)
+
+        this.debounceTimeout = setTimeout(() => {
+            this.loadItems()
+        }, 500)
+    }
+
+    onIntersection(entries) {
+        // console.dir(entries)
+        entries.forEach((entry) => {
+            const target = entry.target;
+
+            if (entry.boundingClientRect.top <= 0 && entry.isIntersecting) {
+                var index = this.getIndexFromItem(target)
+                this.markItemRead(index, true)
+            }
+        });
     }
 
     onPopupAdd() {
         this.isPopupVisible = true;
-        console.log("Popup menu is visible:", this.isPopupVisible);
     }
 
     onPopupRemove() {
         this.isPopupVisible = false;
-        console.log("Popup menu is dismissed:", this.isPopupVisible);
     }
 
     applyItemStyle(element, selected) {
@@ -634,20 +670,6 @@ class ItemHandler extends Handler {
         this.applyItemStyle(this.items[this.index], true)
     }
 
-    onElementAdded(element) {
-
-        this.applyItemStyle(element)
-
-        $(element).on("mouseover", this.onItemMouseOver)
-        // $(element).on("mouseleave", this.onItemMouseLeave)
-
-        clearTimeout(this.debounceTimeout)
-
-        this.debounceTimeout = setTimeout(() => {
-            this.loadItems()
-        }, 500)
-    }
-
     handleInput(event) {
         if (this.handleMovementKey(event)) {
             return event.key
@@ -706,6 +728,13 @@ class ItemHandler extends Handler {
         }
     }
 
+    setIndex(index) {
+        let oldIndex = this.index
+        this.applyItemStyle(this.items[oldIndex], false)
+        this.index = index
+        this.applyItemStyle(this.items[this.index], true)
+    }
+
     markItemRead(index, isRead) {
         if (this.name == "post" && !config.get("savePostState")){
             return
@@ -725,7 +754,7 @@ class ItemHandler extends Handler {
         }
         stateManager.updateState({ seen });
         this.applyItemStyle(this.items[index], index == this.index)
-        this.updateItems()
+        // this.updateItems()
     }
 
     // FIXME: move to PostItemHanler
@@ -751,7 +780,8 @@ class ItemHandler extends Handler {
                 if (["j", "ArrowDown"].indexOf(event.key) != -1) {
                     event.preventDefault()
                     if (this.index < this.items.length - 1) {
-                        this.index += 1
+                        // this.index += 1
+                        this.setIndex(this.index + 1)
                     } else {
                         var next = $(this.items[this.index]).parent().parent().parent().next()
                         console.log(next.text())
@@ -771,13 +801,13 @@ class ItemHandler extends Handler {
                     event.preventDefault()
                     if (this.index > 0)
                     {
-                        this.index -= 1
+                        this.setIndex(this.index - 1)
                     }
                     mark = event.key == "k"
                 }
                 else if (event.key == "G") {
                     // G = end
-                    this.index = this.items.length-1
+                    this.setIndex(this.items.length-1)
                 } else if (event.key == "J") {
                     var i
                     for (i = this.index+1; i < this.items.length-1; i++)
@@ -788,7 +818,7 @@ class ItemHandler extends Handler {
                             break;
                         }
                     }
-                    this.index = i
+                    this.setIndex(i)
                     mark = true
                 }
                 moved = true
@@ -800,7 +830,7 @@ class ItemHandler extends Handler {
                 // gg = home
                 if (this.index < this.items.length - 1)
                 {
-                    this.index = 0
+                    this.setIndex(0)
                 }
                 moved = true
             }
@@ -929,7 +959,7 @@ class FeedItemHandler extends ItemHandler {
             $(item).find(PROFILE_SELECTOR)[0].click()
         } else if(event.key == "u") {
             this.applyItemStyle(this.items[this.index], false)
-            this.index = 0
+            this.setIndex(0)
             //this.updateItems()
             $(document).find("button[aria-label^='Load new']").click()
             setTimeout( () => {
@@ -1006,7 +1036,7 @@ class ProfileItemHandler extends ItemHandler {
     }
 
     activate() {
-        this.index = 0
+        this.setIndex(0)
         super.activate()
     }
 

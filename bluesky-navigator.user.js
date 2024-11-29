@@ -51,7 +51,9 @@ class StateManager {
                 "all": {
                     "updated": null, handles: []
                 },
+                "recent": {
                     "updated": null, handles: []
+                }
             }
         }
         this.updateBlockList()

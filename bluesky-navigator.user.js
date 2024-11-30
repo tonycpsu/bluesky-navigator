@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-29.9
+// @version      2024-11-29.11
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -80,10 +80,15 @@ const CONFIG_FIELDS = {
         'title': 'JSON object containing state information',
         'type': 'textarea',
     },
-    'stateSyncToken': {
-        'label': 'State Sync Token',
-        'title': 'JWT token for authenticating to state sync cloud service',
-        'type': 'textarea',
+    'stateSyncUsername': {
+        'label': 'State Sync Username',
+        'title': 'Username for state sync',
+        'type': 'text',
+    },
+    'stateSyncPassword': {
+        'label': 'State Sync Password',
+        'title': 'Password for state sync',
+        'type': 'text',
     },
     'miscellaneousSection': {
         'section': [GM_config.create('Miscellaneous'), 'Other settings'],
@@ -121,23 +126,35 @@ let stateManager
 let config
 
 class FirebaseContext {
-    constructor(config, token, collection) {
+    constructor(config, collection) {
         this.config = config;
-        this.token = token;
         this.collection = collection;
     }
 
     async init() {
         console.log("FirebaseContext.init")
         try {
+            const email = config.get("stateSyncUsername")
+            const password = config.get("stateSyncPassword")
+
+            if (! (email && password)) {
+                throw new Error("must set username and password")
+            }
+
             this.app = firebase.initializeApp(this.config);
-            this.auth = firebase.auth();
+            this.auth = firebase.auth(this.app);
             this.db = firebase.firestore();
 
-            console.log(this.token)
-            // await this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-            await this.auth.signInWithCustomToken(this.token);
-            console.log("Authenticated with UID:", this.auth.currentUser.uid);
+            try {
+                await this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+            } catch (error) {
+                console.warn("Failed to set local persistence, using session persistence as fallback:", error);
+                await this.auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+            }
+
+            const userCredential = await this.auth.signInWithEmailAndPassword(email, password);
+            const user = userCredential.user;
+            console.log(user)
         } catch (error) {
             console.error("Firebase initialization failed:", error);
             throw error; // Propagate the error for handling in StateManager
@@ -148,6 +165,7 @@ class FirebaseContext {
         try {
             console.log("Attempting to load:", this.collection, document);
             const doc = await this.db.collection(this.collection).doc(document).get();
+            console.dir(doc)
             if (doc.exists) {
                 console.log("Data loaded:", doc.data());
                 return doc.data();
@@ -223,14 +241,13 @@ class StateManager {
             return Promise.reject("State sync config must be set in preferences.");
         }
 
-        const firebaseToken = config.get("stateSyncToken");
-        if (!firebaseToken) {
-            return Promise.reject("State sync token must be set in preferences.");
-        }
+        // const firebaseToken = config.get("stateSyncToken");
+        // if (!firebaseToken) {
+        //     return Promise.reject("State sync token must be set in preferences.");
+        // }
 
         const firebaseContext = new FirebaseContext(
             firebaseConfig,
-            firebaseToken,
             StateManager.FIREBASE_STATE_COLLECTION
         );
 
@@ -1522,9 +1539,5 @@ function loadNavigator() {
 }
 
 $(document).ready(function(e) {
-    console.log("waiting")
-    setTimeout(() => {
-        console.log("loading")
-        loadNavigator()
-    }, 5000)
+    loadNavigator()
 })

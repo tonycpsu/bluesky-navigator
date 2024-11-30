@@ -145,7 +145,9 @@ class FirebaseContext {
             this.auth = firebase.auth(this.app);
             this.db = firebase.firestore();
 
+            console.log("logging in")
             const userCredential = await this.auth.signInWithEmailAndPassword(email, password);
+            console.log(userCredential)
             const user = userCredential.user;
             console.log(user)
         } catch (error) {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-30.02
+// @version      2024-11-30.03
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -151,9 +151,9 @@ class FirebaseContext {
             } catch (error) {
                 console.error("Error during sign-in:", error);
             }
-            console.log(userCredential)
-            const user = userCredential.user;
-            console.log(user)
+            // console.log(userCredential)
+            // const user = userCredential.user;
+            // console.log(user)
         } catch (error) {
             console.error("Firebase initialization failed:", error);
             throw error; // Propagate the error for handling in StateManager

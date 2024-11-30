@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-30.03
+// @version      2024-11-30.04
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -225,6 +225,7 @@ class StateManager {
                 return null; // Use local state if Firebase fails
             })
             .then((firebaseContext) => {
+                console.log("got firebaseContext")
                 const instance = new StateManager(key, defaultState, maxEntries, firebaseContext);
                 return instance.init().then(() => instance);
             });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-29.6
+// @version      2024-11-29.7
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -128,6 +128,7 @@ class FirebaseContext {
     }
 
     async init() {
+        console.log("FirebaseContext.init")
         try {
             this.app = firebase.initializeApp(this.config);
             this.auth = firebase.auth();

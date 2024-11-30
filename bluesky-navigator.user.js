@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-30.10
+// @version      2024-11-30.11
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -147,9 +147,7 @@ class FirebaseContext {
 
             try {
                 console.log("logging in")
-                // await this.auth.signInWithEmailAndPassword(email, password);
-                // await this.auth.signInAnonymously()
-                await this.auth.signInWithCustomToken("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJodHRwczovL2lkZW50aXR5dG9vbGtpdC5nb29nbGVhcGlzLmNvbS9nb29nbGUuaWRlbnRpdHkuaWRlbnRpdHl0b29sa2l0LnYxLklkZW50aXR5VG9vbGtpdCIsImlhdCI6MTczMjk0NjM0OCwiZXhwIjoxNzMyOTQ5OTQ4LCJpc3MiOiJibHVlc2t5LW5hdmlnYXRvci1zdGF0ZS1zdmNAYmx1ZXNreS1uYXZpZ2F0b3Itc3RhdGUuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJzdWIiOiJibHVlc2t5LW5hdmlnYXRvci1zdGF0ZS1zdmNAYmx1ZXNreS1uYXZpZ2F0b3Itc3RhdGUuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJ1aWQiOiJibHVlc2t5LW5hdmlnYXRvci1zdGF0ZSIsImNsYWltcyI6eyJyb2xlIjoidXNlciJ9fQ.OI28I4DjwUN5HXLX7yqg-hdS_YrOfXOUjElIXH8hOzCjmW8fhpCKitfA_-qdlG-4Ok6FTwVeqgh44FjBu6K2h8l0322W7n4UuyiL9HMJWEFxk-GKxi3l6tGvTtATNthBQjTO4US_74qJHKK2CJtIDwTvcjmWfJSW_eNXAY6l4jZ4xpE3WvZYrcyFZIYJlXMbi4S-B8F-gbghRyHhZnT0c8z082NfJ1tp5EWR85CIcjKZwGcK4LOcgu0X4ahaiUyLo3cVK_cDxov3rD8FiYBUPKPr6rsKZph6gmLlq4W2_hbrUEXTi7XCvcP5qQGXEy1ECHgJYjgegqysU1kPxWmkEg");
+                await this.auth.signInWithEmailAndPassword(email, password);
 
             } catch (error) {
                 console.error("Error during sign-in:", error);

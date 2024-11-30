@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-29.12
+// @version      2024-11-29.13
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -145,26 +145,7 @@ class FirebaseContext {
             this.auth = firebase.auth(this.app);
             this.db = firebase.firestore();
 
-            function isIndexedDBAvailable() {
-                try {
-                    return !!window.indexedDB;
-                } catch (e) {
-                    return false;
-                }
-            }
-
-            if (isIndexedDBAvailable()) {
-                try {
-                    await this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-                } catch (error) {
-                    console.warn("Failed to set local persistence, using session persistence as fallback:", error);
-                    await this.auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
-                }
-            } else {
-                console.warn("IndexedDB not available, falling back to session persistence.");
-                await this.auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
-            }
-
+            await this.auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
             const userCredential = await this.auth.signInWithEmailAndPassword(email, password);
             const user = userCredential.user;
             console.log(user)

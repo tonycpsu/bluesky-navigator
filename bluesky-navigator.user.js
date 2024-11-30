@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-29.5
+// @version      2024-11-29.6
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1294,8 +1294,6 @@ function loadNavigator() {
         input: new Handler("input")
     }
 
-    console.log("loadNavigator")
-
     const SCREEN_SELECTOR = "main > div > div > div"
 
     config = new GM_config({
@@ -1324,6 +1322,8 @@ function loadNavigator() {
 
 
     function onConfigInit() {
+        console.log("onConfigInit")
+
         StateManager.create(STATE_KEY, DEFAULT_STATE, config.get("historyMax"))
                     .then((initializedStateManager) => {
                         stateManager = initializedStateManager; // Assign the fully initialized instance
@@ -1337,6 +1337,7 @@ function loadNavigator() {
     }
 
     function onStateInit() {
+        console.log("onStateInit")
         // Define the reusable style
         const stylesheet = `
 

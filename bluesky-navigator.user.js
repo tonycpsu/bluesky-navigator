@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-29.4
+// @version      2024-11-29.5
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1293,6 +1293,8 @@ function loadNavigator() {
         profile: new ProfileItemHandler("profile", FEED_ITEM_SELECTOR),
         input: new Handler("input")
     }
+
+    console.log("loadNavigator")
 
     const SCREEN_SELECTOR = "main > div > div > div"
 

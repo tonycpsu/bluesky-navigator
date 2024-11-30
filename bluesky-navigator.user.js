@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-29.3
+// @version      2024-11-29.4
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1277,7 +1277,7 @@ function setScreen(screen) {
 }
 
 
-(function() {
+function loadNavigator() {
 
     var monitor_interval = null
     var current_url = null
@@ -1295,6 +1295,31 @@ function setScreen(screen) {
     }
 
     const SCREEN_SELECTOR = "main > div > div > div"
+
+    config = new GM_config({
+        id: 'GM_config',
+        title: 'Bluesky Navigator: Configuration',
+        fields: CONFIG_FIELDS,
+        'events': {
+            'init': onConfigInit,
+            'save': () => config.close()
+        },
+        'css':  `
+.config_var textarea {
+    width: 100%;
+}
+
+#GM_config_stateSyncConfig_var textarea {
+    height: 10em;
+}
+
+#GM_config_stateSyncToken_var textarea {
+    height: 5em;
+}
+`,
+    });
+
+
 
     function onConfigInit() {
         StateManager.create(STATE_KEY, DEFAULT_STATE, config.get("historyMax"))
@@ -1489,27 +1514,12 @@ function setScreen(screen) {
         startMonitor()
     }
 
-    $(document).ready(function(e) {
-        config = new GM_config({
-            id: 'GM_config',
-            title: 'Bluesky Navigator: Configuration',
-            fields: CONFIG_FIELDS,
-            'events': {
-                'init': onConfigInit,
-                'save': () => config.close()
-            },
-            'css':  `
-.config_var textarea {
-    width: 100%;
 }
 
-#GM_config_stateSyncConfig_var textarea {
-    height: 10em;
-}
-
-#GM_config_stateSyncToken_var textarea {
-    height: 5em;
-}
-`,
-        });
-})})()
+$(document).ready(function(e) {
+    console.log("waiting")
+    setTimeout(() => {
+        console.log("loading")
+        loadNavigator()
+    }, 5000)
+})

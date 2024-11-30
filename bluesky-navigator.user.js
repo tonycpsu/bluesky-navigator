@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-30.05
+// @version      2024-11-30.06
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -146,9 +146,11 @@ class FirebaseContext {
             this.db = firebase.firestore();
 
             console.log("logging in")
+            await this.auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+
             try {
-                // await this.auth.signInWithEmailAndPassword(email, password);
-                await this.auth.signInAnonymously()
+                await this.auth.signInWithEmailAndPassword(email, password);
+                // await this.auth.signInAnonymously()
             } catch (error) {
                 console.error("Error during sign-in:", error);
             }

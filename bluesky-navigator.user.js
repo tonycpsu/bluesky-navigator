@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-20.9
+// @version      2024-12-20.10
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -156,7 +156,7 @@ class StateManager {
                 const remoteState = await this.loadRemoteState();
                 console.dir(remoteState);
 
-                if (!this.state || (remoteState && this.state.lastUpdated < remoteState?.lastUpdated)) {
+                if (!this.state || !this.state.lastUpdated || (remoteState && this.state.lastUpdated < remoteState?.lastUpdated)) {
                     console.log(`Remote state is newer: ${this.state?.lastUpdated} < ${remoteState?.lastUpdated}`);
                     this.state = remoteState;
                 } else {

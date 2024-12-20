@@ -1,15 +1,12 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-30.11
+// @version      2024-11-29.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
 // @require https://code.jquery.com/jquery-3.6.0.min.js
 // @require https://openuserjs.org/src/libs/sizzle/GM_config.js
-// @require      https:www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js
-// @require      https:www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js
-// @require      https:www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js
 // @downloadURL  https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @updateURL    https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @grant GM_setValue
@@ -24,7 +21,7 @@
 const DEFAULT_HISTORY_MAX = 5000
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000
 const URL_MONITOR_INTERVAL = 500
-const STATE_KEY = "bluesky-navigator-state"
+const STATE_KEY = "bluesky_state"
 const FEED_ITEM_SELECTOR = "div[data-testid^='feedItem-by-']"
 const POST_ITEM_SELECTOR = "div[data-testid^='postThreadItem-by-']"
 const PROFILE_SELECTOR = "a[aria-label='View profile']"
@@ -65,31 +62,6 @@ const CONFIG_FIELDS = {
         'type': 'textarea',
         'default': 'border: 3px solid transparent;'
     },
-    'stateSyncSection': {
-        'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage'],
-        'type': 'hidden',
-    },
-    'stateSyncEnabled':  {
-        'label': 'Enable State Sync',
-        'title': 'If checked, synchronize state to/from the cloud',
-        'type': 'checkbox',
-        'default': false
-    },
-    'stateSyncConfig': {
-        'label': 'State Sync Configuration (JSON)',
-        'title': 'JSON object containing state information',
-        'type': 'textarea',
-    },
-    'stateSyncUsername': {
-        'label': 'State Sync Username',
-        'title': 'Username for state sync',
-        'type': 'text',
-    },
-    'stateSyncPassword': {
-        'label': 'State Sync Password',
-        'title': 'Password for state sync',
-        'type': 'text',
-    },
     'miscellaneousSection': {
         'section': [GM_config.create('Miscellaneous'), 'Other settings'],
         'type': 'hidden',
@@ -125,184 +97,41 @@ let $ = window.jQuery
 let stateManager
 let config
 
-class FirebaseContext {
-    constructor(config, collection) {
-        this.config = config;
-        this.collection = collection;
-    }
-
-    async init() {
-        console.log("FirebaseContext.init")
-        try {
-            const email = config.get("stateSyncUsername")
-            const password = config.get("stateSyncPassword")
-
-            if (! (email && password)) {
-                throw new Error("must set username and password")
-            }
-
-            this.app = firebase.initializeApp(this.config);
-            this.auth = firebase.auth(this.app);
-            this.db = firebase.firestore();
-
-            try {
-                console.log("logging in")
-                await this.auth.signInWithEmailAndPassword(email, password);
-
-            } catch (error) {
-                console.error("Error during sign-in:", error);
-            }
-            // console.log(userCredential)
-            // const user = userCredential.user;
-            // console.log(user)
-        } catch (error) {
-            console.error("Firebase initialization failed:", error);
-            throw error; // Propagate the error for handling in StateManager
-        }
-    }
-
-    async loadDocument(document) {
-        try {
-            console.log("Attempting to load:", this.collection, document);
-            const doc = await this.db.collection(this.collection).doc(document).get();
-            console.dir(doc)
-            if (doc.exists) {
-                console.log("Data loaded:", doc.data());
-                return doc.data();
-            } else {
-                console.warn("No such document!");
-                return null;
-            }
-        } catch (error) {
-            console.error("Failed to load document:", error);
-            throw error;
-        }
-    }
-
-    async saveDocument(document, data) {
-        try {
-            console.log("Attempting to save:", this.collection, document, data);
-            await this.db.collection(this.collection).doc(document).set(data, { merge: true });
-            console.log("State saved successfully!");
-        } catch (error) {
-            console.error("Failed to save document:", error);
-            throw error;
-        }
-    }
-
-    async loadUserDocument() {
-        if (!this.auth.currentUser) {
-            throw new Error("User not authenticated.");
-        }
-        return this.loadDocument(this.auth.currentUser.uid);
-    }
-
-    async saveUserDocument(data) {
-        if (!this.auth.currentUser) {
-            throw new Error("User not authenticated.");
-        }
-        return this.saveDocument(this.auth.currentUser.uid, data);
-    }
-}
-
 class StateManager {
-
-     static FIREBASE_STATE_COLLECTION = "userscript-state";
-
-    constructor(key, defaultState, maxEntries, firebaseContext) {
+    constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
         this.key = key;
-        this.defaultState = defaultState;
-        this.maxEntries = maxEntries;
-        this.state = {};
+        this.state = this.loadState(defaultState);
         this.listeners = [];
         this.debounceTimeout = null;
-        this.firebaseContext = firebaseContext;
-    }
-
-    static create(key, defaultState = {}, maxEntries = 100) {
-        return StateManager.initFirebase()
-            .catch((error) => {
-                console.warn("Firebase initialization failed, falling back to local state:", error);
-                return null; // Use local state if Firebase fails
-            })
-            .then((firebaseContext) => {
-                console.log("got firebaseContext")
-                const instance = new StateManager(key, defaultState, maxEntries, firebaseContext);
-                return instance.init().then(() => instance);
-            });
-    }
-
-    static initFirebase() {
-        if (!config.get("stateSyncEnabled")) {
-            return Promise.resolve(null); // Skip Firebase if disabled
-        }
-
-        const firebaseConfig = JSON.parse(config.get("stateSyncConfig"));
-        if (!firebaseConfig) {
-            return Promise.reject("State sync config must be set in preferences.");
-        }
-
-        // const firebaseToken = config.get("stateSyncToken");
-        // if (!firebaseToken) {
-        //     return Promise.reject("State sync token must be set in preferences.");
-        // }
-
-        const firebaseContext = new FirebaseContext(
-            firebaseConfig,
-            StateManager.FIREBASE_STATE_COLLECTION
-        );
-
-        return firebaseContext.init().then(() => firebaseContext);
-    }
-
-    async init() {
-        this.state = this.loadLocalState(this.defaultState);
-
-        if (this.firebaseContext) {
-            try {
-                const remoteState = await this.firebaseContext.loadUserDocument();
-                if (remoteState) {
-                    this.state = { ...this.state, ...remoteState }; // Merge local and remote states
-                    this.saveLocalState(); // Update local state with merged result
-                    console.log("State initialized from Firebase:", this.state);
+        this.maxEntries = maxEntries;
+        this.handleBlockListResponse = this.handleBlockListResponse.bind(this)
+        if (! this.state.blocks) {
+            this.state.blocks = {
+                "all": {
+                    "updated": null, handles: []
+                },
+                "recent": {
+                    "updated": null, handles: []
                 }
-            } catch (error) {
-                console.warn("Failed to load remote state, using local state only:", error);
             }
         }
+        this.updateBlockList()
 
-        this.notifyListeners();
-    }
-
-    loadLocalState(defaultState) {
-        try {
-            const savedState = JSON.parse(GM_getValue(this.key, "{}"));
-            return { ...defaultState, ...savedState };
-        } catch (error) {
-            console.error("Error loading local state, using default:", error);
-            return defaultState;
-        }
-    }
-
-    saveLocalState() {
-        try {
-            GM_setValue(this.key, JSON.stringify(this.state));
-            console.log("Local state saved successfully.");
-        } catch (error) {
-            console.error("Failed to save local state:", error);
-        }
+        // Save state on page unload
+        window.addEventListener("beforeunload", () => this.saveStateImmediately());
     }
 
     /**
      * Loads state from storage or initializes with the default state.
+     * @param {Object} defaultState - The default state object.
      */
-    loadState() {
+    loadState(defaultState) {
         try {
             const savedState = JSON.parse(GM_getValue(this.key, "{}"));
-            return { ...this.defaultState, ...savedState };
+            return { ...defaultState, ...savedState };
         } catch (error) {
             console.error("Error loading state, using defaults:", error);
-            return this.defaultState;
+            return defaultState;
         }
     }
 
@@ -317,24 +146,15 @@ class StateManager {
         }, config.get("stateSaveTimeout")); // Debounce to avoid frequent writes
     }
 
-    async saveStateImmediately() {
-        console.log("Saving state...");
-        this.cleanupState();
-
-        // Always save to local storage
-        this.saveLocalState();
-
-        // Try saving to Firebase if available
-        if (this.firebaseContext) {
-            try {
-                await this.firebaseContext.saveUserDocument(this.state);
-                console.log("State saved to Firebase.");
-            } catch (error) {
-                console.warn("Failed to save state to Firebase, saved locally only:", error);
-            }
-        }
-
-        console.log("State saved.");
+    /**
+     * Saves the current state to storage immediately.
+     * Useful for critical moments like page unload.
+     */
+    saveStateImmediately() {
+        console.log("Saving state ...");
+        this.cleanupState(); // Ensure state is pruned before saving
+        GM_setValue(this.key, JSON.stringify(this.state));
+        console.log("...saved");
         this.notifyListeners();
     }
 
@@ -704,14 +524,14 @@ class ItemHandler extends Handler {
 
     activate() {
         this.keyState = []
+        this.observer = waitForElement(this.selector, (element) => {
+            this.onElementAdded(element)
+        })
         this.popupObserver = waitForElement(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
         this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
             root: null, // Observing within the viewport
             threshold: Array.from({ length: 101 }, (_, i) => i / 100),
         });
-        this.observer = waitForElement(this.selector, (element) => {
-            this.onElementAdded(element)
-        })
         super.activate()
     }
 
@@ -1297,7 +1117,7 @@ function setScreen(screen) {
 }
 
 
-function loadNavigator() {
+(function() {
 
     var monitor_interval = null
     var current_url = null
@@ -1316,48 +1136,10 @@ function loadNavigator() {
 
     const SCREEN_SELECTOR = "main > div > div > div"
 
-    config = new GM_config({
-        id: 'GM_config',
-        title: 'Bluesky Navigator: Configuration',
-        fields: CONFIG_FIELDS,
-        'events': {
-            'init': onConfigInit,
-            'save': () => config.close()
-        },
-        'css':  `
-.config_var textarea {
-    width: 100%;
-}
+    function onConfigInit()
+    {
+        stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
 
-#GM_config_stateSyncConfig_var textarea {
-    height: 10em;
-}
-
-#GM_config_stateSyncToken_var textarea {
-    height: 5em;
-}
-`,
-    });
-
-
-
-    function onConfigInit() {
-        console.log("onConfigInit")
-
-        StateManager.create(STATE_KEY, DEFAULT_STATE, config.get("historyMax"))
-                    .then((initializedStateManager) => {
-                        stateManager = initializedStateManager; // Assign the fully initialized instance
-                        console.log("State initialized");
-                        console.dir(stateManager.state); // Access the fully initialized state
-                        onStateInit(); // Now safe to call
-                    })
-                    .catch((error) => {
-                        console.error("Failed to initialize StateManager:", error);
-                    });
-    }
-
-    function onStateInit() {
-        console.log("onStateInit")
         // Define the reusable style
         const stylesheet = `
 
@@ -1537,9 +1319,15 @@ function loadNavigator() {
         startMonitor()
     }
 
-}
-
-$(document).ready(function(e) {
-    console.log(navigator.userAgent)
-    loadNavigator()
-})
+    $(document).ready(function(e) {
+        config = new GM_config({
+            id: 'GM_config',
+            title: 'Bluesky Navigator: Configuration',
+            fields: CONFIG_FIELDS,
+            'events': {
+                'init': onConfigInit,
+                'save': () => config.close()
+            },
+            'css':  ".config_var textarea { width: 100%; }",
+        });
+})})()

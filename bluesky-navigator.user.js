@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-20.3
+// @version      2024-12-20.4
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -30,7 +30,7 @@ const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
 const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"}
 
-const DEFAULT_STATE = { seen: {}, page: "home", "blocks": {"all": [], "recent": []} };
+const DEFAULT_STATE = { seen: {}, updated: null, page: "home", "blocks": {"all": [], "recent": []} };
 
 const CONFIG_FIELDS = {
     'styleSection': {
@@ -142,7 +142,11 @@ class StateManager {
      */
     loadState(defaultState) {
         if (config.get("stateSyncEnabled")) {
-            this.loadRemoteState();
+            const remoteState = this.loadRemoteState();
+            if (!this.state || (remoteState && remoteState.updated > this.state.updated)) {
+                console.log("remote state is newer")
+                this.state = remoteState;
+            }
         }
 
         try {
@@ -194,10 +198,11 @@ class StateManager {
             data: query,
             onload: function(response) {
                 const result = JSON.parse(response.responseText)
-                console.dir(result)
-                this.state = result[1]["result"][0]["data"]
-                GM_setValue(this.key, JSON.stringify(this.state));
-                console.log("loaded:", this.state);
+                try {
+                    return result[1]["result"][0]["data"]
+                } catch (error) {
+                    return null;
+                }
             },
             onerror: function(error) {
                 console.error("Error writing data:", error);
@@ -207,7 +212,13 @@ class StateManager {
 
     saveRemoteState() {
         const {url, namespace, database, username, password} = JSON.parse(config.get("stateSyncConfig"))
-        const query = `USE NS ${namespace} DB ${database}; UPSERT state SET id='current', data = '${JSON.stringify(stateManager.state)}', created_at = time::now();`
+        const query = `USE NS ${namespace} DB ${database}; UPSERT state SET id='current', data = '${JSON.stringify(this.state)}', created_at = time::now();`
+
+        const remoteState = this.loadRemoteState();
+        if (remoteState && remoteState.updated > this.state.updated) {
+            console.log("not saving because remote state is newer")
+            return
+        }
 
         GM_xmlhttpRequest({
             method: "POST",

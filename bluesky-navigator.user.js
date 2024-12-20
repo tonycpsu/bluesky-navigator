@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-20.8
+// @version      2024-12-20.9
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -30,7 +30,7 @@ const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
 const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"}
 
-const DEFAULT_STATE = { seen: {}, updated: null, page: "home", "blocks": {"all": [], "recent": []} };
+const DEFAULT_STATE = { seen: {}, lastUpdated: null, page: "home", "blocks": {"all": [], "recent": []} };
 
 const CONFIG_FIELDS = {
     'styleSection': {
@@ -115,41 +115,55 @@ let config
 class StateManager {
     constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
         this.key = key;
-        this.state = this.loadState(defaultState);
         this.listeners = [];
         this.debounceTimeout = null;
         this.maxEntries = maxEntries;
-        this.handleBlockListResponse = this.handleBlockListResponse.bind(this)
-        if (! this.state.blocks) {
-            this.state.blocks = {
-                "all": {
-                    "updated": null, handles: []
-                },
-                "recent": {
-                    "updated": null, handles: []
-                }
-            }
-        }
-        this.updateBlockList()
+        this.state = {};
+        this.handleBlockListResponse = this.handleBlockListResponse.bind(this);
 
-        // Save state on page unload
         window.addEventListener("beforeunload", () => this.saveStateImmediately());
+    }
+
+    static async create(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
+        const instance = new StateManager(key, defaultState, maxEntries);
+        await instance.initializeState(defaultState);
+        return instance;
+    }
+
+    async initializeState(defaultState) {
+        this.state = await this.loadState(defaultState);
+        this.ensureBlockState();
+        this.updateBlockList();
+    }
+
+    ensureBlockState() {
+        if (!this.state.blocks) {
+            this.state.blocks = {
+                all: { updated: null, handles: [] },
+                recent: { updated: null, handles: [] },
+            };
+        }
     }
 
     /**
      * Loads state from storage or initializes with the default state.
-     * @param {Object} defaultState - The default state object.
      */
-    loadState(defaultState) {
+    async loadState(defaultState) {
         try {
             const savedState = JSON.parse(GM_getValue(this.key, "{}"));
 
             if (config.get("stateSyncEnabled")) {
-                const remoteState = this.loadRemoteState();
-                if (!this.state || (remoteState && remoteState.updated > this.state.updated)) {
-                    console.log("remote state is newer")
+                const remoteState = await this.loadRemoteState();
+                console.dir(remoteState);
+
+                if (!this.state || (remoteState && this.state.lastUpdated < remoteState?.lastUpdated)) {
+                    console.log(`Remote state is newer: ${this.state?.lastUpdated} < ${remoteState?.lastUpdated}`);
                     this.state = remoteState;
+                } else {
+                    console.log(`Local state is newer: ${this.state?.lastUpdated} >= ${remoteState?.lastUpdated}`);
                 }
+                $(".preferences-icon-overlay > p").text(`${this.state?.lastUpdated}, ${remoteState?.lastUpdated}` )
+
             }
 
             return { ...defaultState, ...savedState };
@@ -157,7 +171,43 @@ class StateManager {
             console.error("Error loading state, using defaults:", error);
             return defaultState;
         }
+    }
 
+    /**
+     * Loads remote state asynchronously
+     */
+    async loadRemoteState() {
+        const { url, namespace, database, username, password } = JSON.parse(config.get("stateSyncConfig"));
+        const query = `USE NS ${namespace} DB ${database}; SELECT * FROM state:current;`;
+
+        console.log("Loading remote state...");
+
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "POST",
+                url: url,
+                headers: {
+                    "Accept": "application/json",
+                    "Authorization": "Basic " + btoa(`${username}:${password}`)
+                },
+                data: query,
+                onload: (response) => {
+                    try {
+                        console.dir(response);
+                        const result = JSON.parse(response.responseText);
+                        console.dir(result);
+                        resolve(JSON.parse(result[1]?.result[0]?.data) || null);
+                    } catch (error) {
+                        console.error("Error parsing remote state:", error);
+                        resolve(null);
+                    }
+                },
+                onerror: (error) => {
+                    console.error("Error loading remote state:", error);
+                    reject(error);
+                }
+            });
+        });
     }
 
     /**
@@ -180,63 +230,52 @@ class StateManager {
         this.cleanupState(); // Ensure state is pruned before saving
         GM_setValue(this.key, JSON.stringify(this.state));
         console.log("...saved");
+
         if (config.get("stateSyncEnabled")) {
-            this.saveRemoteState();
+            this.saveRemoteState();  // Save remotely if enabled
         }
+
         this.notifyListeners();
     }
 
-    loadRemoteState() {
-        const {url, namespace, database, username, password} = JSON.parse(config.get("stateSyncConfig"))
-        const query = `USE NS ${namespace} DB ${database}; SELECT * FROM state:current;`
+    /**
+     * Saves the current state to remote storage if it's newer.
+     */
+    async saveRemoteState() {
+        const { url, namespace, database, username, password } = JSON.parse(config.get("stateSyncConfig"));
+        const query = `USE NS ${namespace} DB ${database}; UPSERT state SET id='current', data = '${JSON.stringify(this.state)}', created_at = time::now();`;
 
-        GM_xmlhttpRequest({
-            method: "POST",
-            url: url,
-            headers: {
-                "Accept": "application/json",
-                "Authorization": "Basic " + btoa(`${username}:${password}`)
-            },
-            data: query,
-            onload: function(response) {
-                const result = JSON.parse(response.responseText)
-                try {
-                    return result[1]["result"][0]["data"]
-                } catch (error) {
-                    return null;
-                }
-            },
-            onerror: function(error) {
-                console.error("Error writing data:", error);
+        try {
+            const remoteState = await this.loadRemoteState();
+
+            if (remoteState && remoteState.lastUpdated > this.state.lastUpdated) {
+                console.log("Not saving because remote state is newer");
+                return;
             }
-        });
-    }
 
-    saveRemoteState() {
-        const {url, namespace, database, username, password} = JSON.parse(config.get("stateSyncConfig"))
-        const query = `USE NS ${namespace} DB ${database}; UPSERT state SET id='current', data = '${JSON.stringify(this.state)}', created_at = time::now();`
-
-        const remoteState = this.loadRemoteState();
-        if (remoteState && remoteState.updated > this.state.updated) {
-            console.log("not saving because remote state is newer")
-            return
+            console.log("Saving remote state...");
+            await new Promise((resolve, reject) => {
+                GM_xmlhttpRequest({
+                    method: "POST",
+                    url: url,
+                    headers: {
+                        "Accept": "application/json",
+                        "Authorization": "Basic " + btoa(`${username}:${password}`)
+                    },
+                    data: query,
+                    onload: (response) => {
+                        console.log("Remote state saved successfully:", response.responseText);
+                        resolve(response);
+                    },
+                    onerror: (error) => {
+                        console.error("Error saving remote state:", error);
+                        reject(error);
+                    }
+                });
+            });
+        } catch (error) {
+            console.error("Failed to save remote state:", error);
         }
-
-        GM_xmlhttpRequest({
-            method: "POST",
-            url: url,
-            headers: {
-                "Accept": "application/json",
-                "Authorization": "Basic " + btoa(`${username}:${password}`)
-            },
-            data: query,
-            onload: function(response) {
-                console.log("Data written successfully:", response.responseText);
-            },
-            onerror: function(error) {
-                console.error("Error writing data:", error);
-            }
-        });
     }
 
     /**
@@ -833,7 +872,7 @@ class ItemHandler extends Handler {
         } else {
             delete seen[postId];
         }
-        stateManager.updateState({ seen });
+        stateManager.updateState({ seen, lastUpdated: currentTime });
         this.applyItemStyle(this.items[index], index == this.index)
         // this.updateItems()
     }
@@ -1219,7 +1258,30 @@ function setScreen(screen) {
 
     function onConfigInit()
     {
-        stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
+        const preferencesIconDiv = `
+    <div class="preferences-icon-overlay">
+      <span>⚙️</span>
+      <p>test</p>
+    </div>
+  `;
+        $("body").append(preferencesIconDiv);
+
+
+        // stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
+        StateManager.create(STATE_KEY, DEFAULT_STATE, config.get("historyMax"))
+                    .then((initializedStateManager) => {
+                        stateManager = initializedStateManager; // Assign the fully initialized instance
+                        console.log("State initialized");
+                        console.dir(stateManager.state); // Access the fully initialized state
+                        onStateInit(); // Now safe to call
+                    })
+                    .catch((error) => {
+                        console.error("Failed to initialize StateManager:", error);
+                    });
+    }
+
+
+    function onStateInit() {
 
         // Define the reusable style
         const stylesheet = `
@@ -1276,13 +1338,6 @@ function setScreen(screen) {
             font-size: 16px;
         }
 `
-
-        const preferencesIconDiv = `
-    <div class="preferences-icon-overlay">
-      <span>⚙️</i>
-    </div>
-  `;
-        $("body").append(preferencesIconDiv);
 
         // Add event listeners using jQuery
         $(".preferences-icon-overlay").on("click", function () {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-20.1
+// @version      2024-12-20.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -194,7 +194,7 @@ class StateManager {
             data: query,
             onload: function(response) {
                 console.log("loaded:", response.responseText);
-                this.state = JSON.parse(response.responseText)
+                this.state = JSON.parse(response.responseText)[0]
             },
             onerror: function(error) {
                 console.error("Error writing data:", error);

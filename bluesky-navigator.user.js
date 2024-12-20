@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-11-29.2
+// @version      2024-12-20.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -61,6 +61,21 @@ const CONFIG_FIELDS = {
         'label': 'Unselected Post',
         'type': 'textarea',
         'default': 'border: 3px solid transparent;'
+    },
+    'stateSyncSection': {
+        'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage'],
+        'type': 'hidden',
+    },
+    'stateSyncEnabled':  {
+        'label': 'Enable State Sync',
+        'title': 'If checked, synchronize state to/from the cloud',
+        'type': 'checkbox',
+        'default': false
+    },
+    'stateSyncConfig': {
+        'label': 'State Sync Configuration (JSON)',
+        'title': 'JSON object containing state information',
+        'type': 'textarea',
     },
     'miscellaneousSection': {
         'section': [GM_config.create('Miscellaneous'), 'Other settings'],
@@ -126,6 +141,10 @@ class StateManager {
      * @param {Object} defaultState - The default state object.
      */
     loadState(defaultState) {
+        if (config.get("stateSyncEnabled")) {
+            this.loadRemoteState();
+        }
+
         try {
             const savedState = JSON.parse(GM_getValue(this.key, "{}"));
             return { ...defaultState, ...savedState };
@@ -155,7 +174,53 @@ class StateManager {
         this.cleanupState(); // Ensure state is pruned before saving
         GM_setValue(this.key, JSON.stringify(this.state));
         console.log("...saved");
+        if (config.get("stateSyncEnabled")) {
+            this.saveRemoteState();
+        }
         this.notifyListeners();
+    }
+
+    loadRemoteState() {
+        const {url, namespace, database, username, password} = JSON.parse(config.get("stateSyncConfig"))
+        const query = `USE NS ${namespace} DB ${database}; SELECT * FROM state:current;`
+
+        GM_xmlhttpRequest({
+            method: "POST",
+            url: url,
+            headers: {
+                "Accept": "application/json",
+                "Authorization": "Basic " + btoa(`${username}:${password}`)
+            },
+            data: query,
+            onload: function(response) {
+                console.log("loaded:", response.responseText);
+                this.state = JSON.parse(response.responseText)
+            },
+            onerror: function(error) {
+                console.error("Error writing data:", error);
+            }
+        });
+    }
+
+    saveRemoteState() {
+        const {url, namespace, database, username, password} = JSON.parse(config.get("stateSyncConfig"))
+        const query = `USE NS ${namespace} DB ${database}; UPSERT state SET id='current', data = '${JSON.stringify(stateManager.state)}', created_at = time::now();`
+
+        GM_xmlhttpRequest({
+            method: "POST",
+            url: url,
+            headers: {
+                "Accept": "application/json",
+                "Authorization": "Basic " + btoa(`${username}:${password}`)
+            },
+            data: query,
+            onload: function(response) {
+                console.log("Data written successfully:", response.responseText);
+            },
+            onerror: function(error) {
+                console.error("Error writing data:", error);
+            }
+        });
     }
 
     /**
@@ -1320,6 +1385,7 @@ function setScreen(screen) {
     }
 
     $(document).ready(function(e) {
+
         config = new GM_config({
             id: 'GM_config',
             title: 'Bluesky Navigator: Configuration',

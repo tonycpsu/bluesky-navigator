@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-20.4
+// @version      2024-12-20.5
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -141,14 +141,6 @@ class StateManager {
      * @param {Object} defaultState - The default state object.
      */
     loadState(defaultState) {
-        if (config.get("stateSyncEnabled")) {
-            const remoteState = this.loadRemoteState();
-            if (!this.state || (remoteState && remoteState.updated > this.state.updated)) {
-                console.log("remote state is newer")
-                this.state = remoteState;
-            }
-        }
-
         try {
             const savedState = JSON.parse(GM_getValue(this.key, "{}"));
             return { ...defaultState, ...savedState };
@@ -156,6 +148,17 @@ class StateManager {
             console.error("Error loading state, using defaults:", error);
             return defaultState;
         }
+
+        if (config.get("stateSyncEnabled")) {
+            const remoteState = this.loadRemoteState();
+            if (!this.state || (remoteState && remoteState.updated > this.state.updated)) {
+                console.log("remote state is newer")
+                this.state = remoteState;
+            } else {
+                console.log("local state is newer")
+            }
+        }
+
     }
 
     /**

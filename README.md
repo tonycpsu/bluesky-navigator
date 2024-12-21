@@ -55,4 +55,5 @@ Keyboard Shortcuts
  | Meta/Alt+h  | open lists page                                    |
  | Meta/Alt+p  | open profile page                                  |
  | Meta/Alt+,  | open settings page                                 |
+ | Meta/Alt+.  | open Bluesky Navigator config panel                |
  

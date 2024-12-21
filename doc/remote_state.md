@@ -7,7 +7,9 @@ and potentially between multiple browsers.
 Right now, [SurrealDB](https://surrealdb.com/) is the only supported cloud
 service.
 
-### Surreal Cloud
+## Cloud Setup
+
+### Option 1: Surreal Cloud
 
 The easiest way to get setup is via [Surreal
 Cloud](https://surrealist.app/cloud), which is (as of this writing) offering
@@ -31,7 +33,7 @@ free cloud-hosted SurrealDB instances. Steps to get connected are as follows:
    `https://{hostmame}`, e.g.
    `https://instance-name-029ujemablqrs4d0un2jktj7e4.aws-use1.surreal.cloud`.
 
-### SurrealDB Self-Hosted
+### Option 2: SurrealDB Self-Hosted
 
 If you don't want to be dependent on a third-party cloud service, you can host
 SurrealDB on your own hosting infrastructure. This option takes a bit of work to

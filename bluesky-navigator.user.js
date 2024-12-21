@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-21.7
+// @version      2024-12-21.8
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -140,7 +140,6 @@ class StateManager {
         this.maxEntries = maxEntries;
         this.state = {};
         this.handleBlockListResponse = this.handleBlockListResponse.bind(this);
-
         window.addEventListener("beforeunload", () => this.saveStateImmediately());
     }
 
@@ -193,6 +192,17 @@ class StateManager {
         }
     }
 
+    setSyncStatus(status) {
+        ["ready", "pending", "success", "failure"].forEach(
+            (s) => {
+                $(".preferences-icon-overlay").removeClass(`preferences-icon-overlay-sync-${s}`)
+            }
+        )
+        $(".preferences-icon-overlay").addClass(`preferences-icon-overlay-sync-${status}`)
+        if (status == "success") {
+            setTimeout( () => this.setSyncStatus("ready"), 3000);
+        }
+    }
     /**
      * Loads remote state asynchronously
      */
@@ -201,7 +211,7 @@ class StateManager {
         const query = `USE NS ${namespace} DB ${database}; SELECT * FROM state:current;`;
 
         console.log("Loading remote state...");
-
+        this.setSyncStatus("pending")
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
                 method: "POST",
@@ -217,14 +227,17 @@ class StateManager {
                     try {
                         const result = JSON.parse(response.responseText);
                         // console.dir(result);
+                        this.setSyncStatus("success")
                         resolve(JSON.parse(result[1]?.result[0]?.data) || null);
                     } catch (error) {
                         console.error("Error parsing remote state:", error);
+                        this.setSyncStatus("failure")
                         resolve(null);
                     }
                 },
                 onerror: (error) => {
                     console.error("Error loading remote state:", error);
+                    this.setSyncStatus("failure")
                     reject(error);
                 }
             });
@@ -274,6 +287,7 @@ class StateManager {
                 return;
             }
             console.log("Saving remote state...");
+            this.setSyncStatus("pending")
             await new Promise((resolve, reject) => {
                 GM_xmlhttpRequest({
                     method: "POST",
@@ -285,11 +299,13 @@ class StateManager {
                     data: query,
                     onload: (response) => {
                         // console.dir(response)
+                        this.setSyncStatus("success")
                         console.log("Remote state saved successfully:", response.responseText);
                         resolve(response);
                     },
                     onerror: (error) => {
                         console.error("Error saving remote state:", error);
+                        this.setSyncStatus("failure")
                         reject(error);
                     }
                 });
@@ -1374,6 +1390,29 @@ function setScreen(screen) {
             align-items: center;
             cursor: pointer;
             z-index: 1000;
+        }
+
+
+       .preferences-icon-overlay-sync-ready {
+            background-color: #d5f5e3;
+        }
+
+        .preferences-icon-overlay-sync-pending {
+            background-color: #f9e79f;
+            transition:2.5s;
+            -o-transform:rotate(720deg);
+            -ms-transform:rotate(720deg);
+            -moz-transform:rotate(720deg);
+            -webkit-transform:rotate(720deg);
+            transform:rotate(720deg);
+        }
+
+        .preferences-icon-overlay-sync-success {
+            background-color: #2ecc71;
+        }
+
+        .preferences-icon-overlay-sync-failure {
+            background-color: #ec7063 ;
         }
 
         @media only screen and not (max-width: 640px) {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-21.11
+// @version      2024-12-21.12
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -172,17 +172,22 @@ class StateManager {
             const savedState = JSON.parse(GM_getValue(this.key, "{}"));
 
             if (config.get("stateSyncEnabled")) {
-                const remoteState = await this.loadRemoteState();
+                const remoteState = await this.loadRemoteState(this.state.lastUpdated);
                 console.dir(remoteState);
+                return remoteState ? { ...defaultState, ...remoteState } :  { ...defaultState, ...savedState };
 
-                if (!this.state || !this.state.lastUpdated || (remoteState && this.state.lastUpdated < remoteState?.lastUpdated)) {
-                    console.log(`Remote state is newer: ${this.state?.lastUpdated} < ${remoteState?.lastUpdated}`);
-                    // this.updateState(remoteState)
-                    return { ...defaultState, ...remoteState };
-                } else {
-                    console.log(`Local state is newer: ${this.state?.lastUpdated} >= ${remoteState?.lastUpdated}`);
-                    return { ...defaultState, ...savedState };
-                }
+                // if(remoteState) {
+
+                // }
+
+                // if (!this.state || !this.state.lastUpdated || (remoteState && this.state.lastUpdated < remoteState?.lastUpdated)) {
+                //     console.log(`Remote state is newer: ${this.state?.lastUpdated} < ${remoteState?.lastUpdated}`);
+                //     // this.updateState(remoteState)
+                //     return { ...defaultState, ...remoteState };
+                // } else {
+                //     console.log(`Local state is newer: ${this.state?.lastUpdated} >= ${remoteState?.lastUpdated}`);
+                //     return { ...defaultState, ...savedState };
+                // }
 
             }
 
@@ -208,15 +213,16 @@ class StateManager {
             setTimeout( () => this.setSyncStatus("ready"), 3000);
         }
     }
-    /**
-     * Loads remote state asynchronously
-     */
-    async loadRemoteState() {
-        const { url, namespace="bluesky_navigator", database="state", username, password } = JSON.parse(config.get("stateSyncConfig"));
-        const query = `USE NS ${namespace} DB ${database}; SELECT * FROM state:current;`;
 
-        console.log("Loading remote state...");
-        this.setSyncStatus("pending")
+    /**
+     * Executes a query against the remote database.
+     * @param {string} query - The query string to execute.
+     * @param {string} successStatus - The status to set on successful execution (e.g., "success").
+     * @returns {Promise<Object>} - Resolves with the parsed result of the query.
+     */
+    async executeRemoteQuery(query, successStatus = "success") {
+        const { url, namespace = "bluesky_navigator", database = "state", username, password } = JSON.parse(config.get("stateSyncConfig"));
+
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
                 method: "POST",
@@ -225,36 +231,58 @@ class StateManager {
                     "Accept": "application/json",
                     "Authorization": "Basic " + btoa(`${username}:${password}`)
                 },
-                data: query,
+                data: `USE NS ${namespace} DB ${database}; ${query}`,
                 onload: (response) => {
                     try {
-                        if (response.status != 200) {
-                            throw new Error(response.statusText)
+                        if (response.status !== 200) {
+                            throw new Error(response.statusText);
                         }
-                        const result = JSON.parse(response.responseText);
-                        this.setSyncStatus("success")
-                        const stateObj = result[1]?.result[0]
-                        if (stateObj) {
-                            delete stateObj["id"]
-                        } else {
-                            stateObj = null
-                        }
-                        resolve(stateObj);
+                        const result = JSON.parse(response.responseText)[1]?.result[0];
+                        this.setSyncStatus(successStatus);
+                        resolve(result);
                     } catch (error) {
-                        // console.dir(error)
-                        console.error("Error parsing remote state:", error.message);
-                        this.setSyncStatus("failure", error.message)
-                        resolve(null);
+                        console.error("Error executing query:", error.message);
+                        this.setSyncStatus("failure", error.message);
+                        reject(error);
                     }
                 },
                 onerror: (error) => {
-                    console.dir(error)
-                    console.error("Error loading remote state:", error.message);
-                    this.setSyncStatus("failure", error.message)
+                    console.error("Network error executing query:", error.message);
+                    this.setSyncStatus("failure", error.message);
                     reject(error);
                 }
             });
         });
+    }
+
+    async getRemoteStateUpdated() {
+        const sinceResult = await this.executeRemoteQuery(`SELECT lastUpdated FROM state:current;`)
+        const lastUpdated = sinceResult["lastUpdated"]
+        return sinceResult["lastUpdated"]
+    }
+
+    async loadRemoteState(since) {
+        // const query = `SELECT * FROM state:current;`;
+
+        try {
+            console.log("Loading remote state...");
+            this.setSyncStatus("pending");
+            const lastUpdated = await this.getRemoteStateUpdated()
+            if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated) ) {
+                console.log(`Remote state is newer: ${since} < ${lastUpdated}`);
+                const result = await this.executeRemoteQuery('SELECT * FROM state:current;');
+                const stateObj = result || {};
+                delete stateObj.id;
+                console.log("Remote state loaded successfully.");
+                return stateObj;
+            } else {
+                console.log(`Local state is newer: ${since} >= ${lastUpdated}`);
+                return null;
+            }
+        } catch (error) {
+            console.error("Failed to load remote state:", error);
+            return {};
+        }
     }
 
     /**
@@ -279,7 +307,7 @@ class StateManager {
         console.log("...saved");
 
         if (config.get("stateSyncEnabled")) {
-            this.saveRemoteState();  // Save remotely if enabled
+            this.saveRemoteState(this.state.lastUpdated);  // Save remotely if enabled
         }
 
         this.notifyListeners();
@@ -288,43 +316,20 @@ class StateManager {
     /**
      * Saves the current state to remote storage if it's newer.
      */
-    async saveRemoteState() {
+    async saveRemoteState(since) {
         const { url, namespace="bluesky_navigator", database="state", username, password } = JSON.parse(config.get("stateSyncConfig"));
-        // const query = `USE NS ${namespace} DB ${database}; UPSERT state SET id='current', data = '${JSON.stringify(this.state)}', created_at = time::now();`;
-        console.dir(this.state)
-        const query = `USE NS ${namespace} DB ${database}; UPSERT state:current MERGE {${JSON.stringify(this.state).slice(1,-1)}, created_at: time::now()}`;
-        console.log(query)
+        // console.dir(this.state)
         try {
-            const remoteState = await this.loadRemoteState();
-
-            if (remoteState && remoteState.lastUpdated > this.state.lastUpdated) {
+            const lastUpdated = await this.getRemoteStateUpdated()
+            if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated) ) {
                 console.log("Not saving because remote state is newer");
                 return;
             }
             console.log("Saving remote state...");
             this.setSyncStatus("pending")
-            await new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: "POST",
-                    url: `${url.replace(/\/$/, "")}/sql`,
-                    headers: {
-                        "Accept": "application/json",
-                        "Authorization": "Basic " + btoa(`${username}:${password}`)
-                    },
-                    data: query,
-                    onload: (response) => {
-                        // console.dir(response)
-                        this.setSyncStatus("success")
-                        console.log("Remote state saved successfully:", response.responseText);
-                        resolve(response);
-                    },
-                    onerror: (error) => {
-                        console.error("Error saving remote state:", error);
-                        this.setSyncStatus("failure", error.message)
-                        reject(error);
-                    }
-                });
-            });
+            const result = await this.executeRemoteQuery(
+                `UPSERT state:current MERGE {${JSON.stringify(this.state).slice(1,-1)}, created_at: time::now()}`
+            );
         } catch (error) {
             console.error("Failed to save remote state:", error);
         }

@@ -197,7 +197,7 @@ class StateManager {
      * Loads remote state asynchronously
      */
     async loadRemoteState() {
-        const { url, namespace, database, username, password } = JSON.parse(config.get("stateSyncConfig"));
+        const { url, namespace="bluesky_navigator", database="state", username, password } = JSON.parse(config.get("stateSyncConfig"));
         const query = `USE NS ${namespace} DB ${database}; SELECT * FROM state:current;`;
 
         console.log("Loading remote state...");
@@ -212,6 +212,8 @@ class StateManager {
                 },
                 data: query,
                 onload: (response) => {
+                    // console.dir(response)
+                    // console.log(response.responseText)
                     try {
                         const result = JSON.parse(response.responseText);
                         // console.dir(result);
@@ -261,7 +263,7 @@ class StateManager {
      * Saves the current state to remote storage if it's newer.
      */
     async saveRemoteState() {
-        const { url, namespace, database, username, password } = JSON.parse(config.get("stateSyncConfig"));
+        const { url, namespace="bluesky_navigator", database="state", username, password } = JSON.parse(config.get("stateSyncConfig"));
         const query = `USE NS ${namespace} DB ${database}; UPSERT state SET id='current', data = '${JSON.stringify(this.state)}', created_at = time::now();`;
 
         try {

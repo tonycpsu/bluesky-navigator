@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-21.4
+// @version      2024-12-21.5
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -45,12 +45,32 @@ const CONFIG_FIELDS = {
     'unreadPosts': {
         'label': 'Unread Posts',
         'type': 'textarea',
-        'default': 'opacity: 100%; background-color: white;'
+        'default': 'opacity: 100%;'
+    },
+    'unreadPostsLightMode': {
+        'label': 'Unread Posts (Light Mode)',
+        'type': 'textarea',
+        'default': 'background-color: white;'
+    },
+    'unreadPostsDarkMode': {
+        'label': 'Unread Posts (Dark Mode)',
+        'type': 'textarea',
+        'default': 'background-color: #202020;'
     },
     'readPosts': {
         'label': 'Read Posts',
         'type': 'textarea',
-        'default': 'opacity: 75%; background-color: #f0f0f0;'
+        'default': 'opacity: 75%;'
+    },
+    'readPostsLightMode': {
+        'label': 'Read Posts (Light Mode)',
+        'type': 'textarea',
+        'default': 'background-color: #f0f0f0;'
+    },
+    'readPostsDarkMode': {
+        'label': 'Read Posts (Dark Mode)',
+        'type': 'textarea',
+        'default': 'background-color: black;'
     },
     'selectionActive': {
         'label': 'Selected Post',
@@ -1298,12 +1318,29 @@ function setScreen(screen) {
             ${config.get("selectionInactive")}
         }
 
-        .item-unread {
-            ${config.get("unreadPosts")}
+        @media (prefers-color-scheme:light){
+            .item-unread {
+                ${config.get("unreadPosts")};
+                ${config.get("unreadPostsLightMode")};
+            }
+
+            .item-read {
+                ${config.get("readPosts")};
+                ${config.get("readPostsLightMode")};
+            }
+
         }
 
-        .item-read {
-            ${config.get("readPosts")}
+        @media (prefers-color-scheme:dark){
+            .item-unread {
+                ${config.get("unreadPosts")};
+                ${config.get("unreadPostsDarkMode")};
+            }
+
+            .item-read {
+                ${config.get("readPosts")};
+                ${config.get("readPostsDarkMode")};
+            }
         }
 
         .thread {

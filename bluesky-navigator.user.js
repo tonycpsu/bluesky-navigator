@@ -1363,8 +1363,6 @@ function setScreen(screen) {
 
         .preferences-icon-overlay {
             position: fixed;
-            bottom: 20px;
-            left: 20px;
             width: 30px;
             height: 30px;
             background-color: #cccccc;
@@ -1375,6 +1373,23 @@ function setScreen(screen) {
             align-items: center;
             cursor: pointer;
             z-index: 1000;
+        }
+
+        @media only screen and not (max-width: 640px) {
+            .preferences-icon-overlay {
+                bottom: 20px;
+                left: 20px;
+            }
+        }
+
+        @media only screen and (max-width: 640px) {
+            .preferences-icon-overlay {
+                bottom: 5px;
+                right: 5px;
+                transform: scale(0.5);
+                transform-origin: center;
+
+            }
         }
         .preferences-icon-overlay span {
             color: white;

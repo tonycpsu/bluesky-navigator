@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-21.6
+// @version      2024-12-21.7
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -205,7 +205,7 @@ class StateManager {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
                 method: "POST",
-                url: url,
+                url: `${url.replace(/\/$/, "")}/sql`,
                 headers: {
                     "Accept": "application/json",
                     "Authorization": "Basic " + btoa(`${username}:${password}`)
@@ -213,7 +213,6 @@ class StateManager {
                 data: query,
                 onload: (response) => {
                     try {
-                        // console.dir(response);
                         const result = JSON.parse(response.responseText);
                         // console.dir(result);
                         resolve(JSON.parse(result[1]?.result[0]?.data) || null);
@@ -272,18 +271,18 @@ class StateManager {
                 console.log("Not saving because remote state is newer");
                 return;
             }
-
             console.log("Saving remote state...");
             await new Promise((resolve, reject) => {
                 GM_xmlhttpRequest({
                     method: "POST",
-                    url: url,
+                    url: `${url.replace(/\/$/, "")}/sql`,
                     headers: {
                         "Accept": "application/json",
                         "Authorization": "Basic " + btoa(`${username}:${password}`)
                     },
                     data: query,
                     onload: (response) => {
+                        // console.dir(response)
                         console.log("Remote state saved successfully:", response.responseText);
                         resolve(response);
                     },

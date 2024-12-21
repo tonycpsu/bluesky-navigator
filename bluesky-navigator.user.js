@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-21.5
+// @version      2024-12-21.6
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -664,14 +664,14 @@ class ItemHandler extends Handler {
 
     activate() {
         this.keyState = []
-        this.observer = waitForElement(this.selector, (element) => {
-            this.onElementAdded(element)
-        })
         this.popupObserver = waitForElement(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
         this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
             root: null, // Observing within the viewport
             threshold: Array.from({ length: 101 }, (_, i) => i / 100),
         });
+        this.observer = waitForElement(this.selector, (element) => {
+            this.onElementAdded(element)
+        })
         super.activate()
     }
 
@@ -686,7 +686,7 @@ class ItemHandler extends Handler {
         }
         if(this.intersectionObserver)
         {
-            this.popupObserver.disconnect()
+            this.intersectionObserver.disconnect()
         }
 
         $(this.selector).off("mouseover mouseleave");
@@ -883,6 +883,11 @@ class ItemHandler extends Handler {
         if (!postId) {
             return
         }
+        this.markPostRead(postId, isRead)
+        this.applyItemStyle(this.items[index], index == this.index)
+    }
+
+    markPostRead(postId, isRead) {
 
         const currentTime = new Date().toISOString();
         const seen = { ...stateManager.state.seen };
@@ -893,7 +898,6 @@ class ItemHandler extends Handler {
             delete seen[postId];
         }
         stateManager.updateState({ seen, lastUpdated: currentTime });
-        this.applyItemStyle(this.items[index], index == this.index)
         // this.updateItems()
     }
 
@@ -1132,6 +1136,8 @@ class PostItemHandler extends ItemHandler {
     activate() {
         super.activate()
         this.postId = this.postIdFromUrl()
+        this.markPostRead(this.postId, null)
+
         // console.log(`postId: ${this.postId} ${this.index}`)
     }
 

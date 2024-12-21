@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-21.10
+// @version      2024-12-21.11
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -173,7 +173,7 @@ class StateManager {
 
             if (config.get("stateSyncEnabled")) {
                 const remoteState = await this.loadRemoteState();
-                // console.dir(remoteState);
+                console.dir(remoteState);
 
                 if (!this.state || !this.state.lastUpdated || (remoteState && this.state.lastUpdated < remoteState?.lastUpdated)) {
                     console.log(`Remote state is newer: ${this.state?.lastUpdated} < ${remoteState?.lastUpdated}`);
@@ -233,7 +233,13 @@ class StateManager {
                         }
                         const result = JSON.parse(response.responseText);
                         this.setSyncStatus("success")
-                        resolve(JSON.parse(result[1]?.result[0]?.data) || null);
+                        const stateObj = result[1]?.result[0]
+                        if (stateObj) {
+                            delete stateObj["id"]
+                        } else {
+                            stateObj = null
+                        }
+                        resolve(stateObj);
                     } catch (error) {
                         // console.dir(error)
                         console.error("Error parsing remote state:", error.message);
@@ -284,8 +290,10 @@ class StateManager {
      */
     async saveRemoteState() {
         const { url, namespace="bluesky_navigator", database="state", username, password } = JSON.parse(config.get("stateSyncConfig"));
-        const query = `USE NS ${namespace} DB ${database}; UPSERT state SET id='current', data = '${JSON.stringify(this.state)}', created_at = time::now();`;
-
+        // const query = `USE NS ${namespace} DB ${database}; UPSERT state SET id='current', data = '${JSON.stringify(this.state)}', created_at = time::now();`;
+        console.dir(this.state)
+        const query = `USE NS ${namespace} DB ${database}; UPSERT state:current MERGE {${JSON.stringify(this.state).slice(1,-1)}, created_at: time::now()}`;
+        console.log(query)
         try {
             const remoteState = await this.loadRemoteState();
 
@@ -830,7 +838,7 @@ class ItemHandler extends Handler {
         }
         this.applyItemStyle(this.items[this.index], false)
         this.index = this.getIndexFromItem(target)
-        console.log(this.index)
+        // console.log(this.index)
         this.applyItemStyle(this.items[this.index], true)
     }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-20.10
+// @version      2024-12-21.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -154,19 +154,20 @@ class StateManager {
 
             if (config.get("stateSyncEnabled")) {
                 const remoteState = await this.loadRemoteState();
-                console.dir(remoteState);
+                // console.dir(remoteState);
 
+                // $(".preferences-icon-overlay > p").text(`${this.state?.lastUpdated}, ${remoteState?.lastUpdated}` )
                 if (!this.state || !this.state.lastUpdated || (remoteState && this.state.lastUpdated < remoteState?.lastUpdated)) {
                     console.log(`Remote state is newer: ${this.state?.lastUpdated} < ${remoteState?.lastUpdated}`);
-                    this.state = remoteState;
+                    // this.updateState(remoteState)
+                    return { ...defaultState, ...remoteState };
                 } else {
                     console.log(`Local state is newer: ${this.state?.lastUpdated} >= ${remoteState?.lastUpdated}`);
+                    return { ...defaultState, ...savedState };
                 }
-                $(".preferences-icon-overlay > p").text(`${this.state?.lastUpdated}, ${remoteState?.lastUpdated}` )
 
             }
 
-            return { ...defaultState, ...savedState };
         } catch (error) {
             console.error("Error loading state, using defaults:", error);
             return defaultState;
@@ -193,9 +194,9 @@ class StateManager {
                 data: query,
                 onload: (response) => {
                     try {
-                        console.dir(response);
+                        // console.dir(response);
                         const result = JSON.parse(response.responseText);
-                        console.dir(result);
+                        // console.dir(result);
                         resolve(JSON.parse(result[1]?.result[0]?.data) || null);
                     } catch (error) {
                         console.error("Error parsing remote state:", error);
@@ -942,6 +943,7 @@ class ItemHandler extends Handler {
                     mark = true
                 }
                 moved = true
+                console.log(this.postIdForItem(this.items[this.index]))
             } else if (event.key == "g") {
                 this.keyState.push(event.key)
             }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-21.8
+// @version      2024-12-21.9
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -192,13 +192,18 @@ class StateManager {
         }
     }
 
-    setSyncStatus(status) {
-        ["ready", "pending", "success", "failure"].forEach(
-            (s) => {
-                $(".preferences-icon-overlay").removeClass(`preferences-icon-overlay-sync-${s}`)
-            }
-        )
-        $(".preferences-icon-overlay").addClass(`preferences-icon-overlay-sync-${status}`)
+    setSyncStatus(status, title) {
+        const overlay = $(".preferences-icon-overlay")
+        if(!overlay) {
+            console.log("no overlay")
+            return
+        }
+        $(overlay).attr("title", `sync: ${status} ${title || ''}`)
+        for (const s of ["ready", "pending", "success", "failure"]) {
+            $(overlay).removeClass(`preferences-icon-overlay-sync-${s}`)
+        }
+
+        $(overlay).addClass(`preferences-icon-overlay-sync-${status}`)
         if (status == "success") {
             setTimeout( () => this.setSyncStatus("ready"), 3000);
         }
@@ -222,22 +227,24 @@ class StateManager {
                 },
                 data: query,
                 onload: (response) => {
-                    // console.dir(response)
-                    // console.log(response.responseText)
                     try {
+                        if (response.status != 200) {
+                            throw new Error(response.statusText)
+                        }
                         const result = JSON.parse(response.responseText);
-                        // console.dir(result);
                         this.setSyncStatus("success")
                         resolve(JSON.parse(result[1]?.result[0]?.data) || null);
                     } catch (error) {
-                        console.error("Error parsing remote state:", error);
-                        this.setSyncStatus("failure")
+                        // console.dir(error)
+                        console.error("Error parsing remote state:", error.message);
+                        this.setSyncStatus("failure", error.message)
                         resolve(null);
                     }
                 },
                 onerror: (error) => {
-                    console.error("Error loading remote state:", error);
-                    this.setSyncStatus("failure")
+                    console.dir(error)
+                    console.error("Error loading remote state:", error.message);
+                    this.setSyncStatus("failure", error.message)
                     reject(error);
                 }
             });
@@ -305,7 +312,7 @@ class StateManager {
                     },
                     onerror: (error) => {
                         console.error("Error saving remote state:", error);
-                        this.setSyncStatus("failure")
+                        this.setSyncStatus("failure", error.message)
                         reject(error);
                     }
                 });

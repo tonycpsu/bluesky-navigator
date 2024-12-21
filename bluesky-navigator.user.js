@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-21.2
+// @version      2024-12-21.3
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -156,7 +156,6 @@ class StateManager {
                 const remoteState = await this.loadRemoteState();
                 // console.dir(remoteState);
 
-                // $(".preferences-icon-overlay > p").text(`${this.state?.lastUpdated}, ${remoteState?.lastUpdated}` )
                 if (!this.state || !this.state.lastUpdated || (remoteState && this.state.lastUpdated < remoteState?.lastUpdated)) {
                     console.log(`Remote state is newer: ${this.state?.lastUpdated} < ${remoteState?.lastUpdated}`);
                     // this.updateState(remoteState)
@@ -1263,7 +1262,6 @@ function setScreen(screen) {
         const preferencesIconDiv = `
     <div class="preferences-icon-overlay">
       <span>⚙️</span>
-      <p>test</p>
     </div>
   `;
         $("body").append(preferencesIconDiv);

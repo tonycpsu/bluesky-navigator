@@ -17,10 +17,11 @@ Features
 
 - navigate between posts with Vim-like keyboard shortcuts (`j`/`k` for
   next/previous, `gg` / `G` to go to top/bottom of page)
-- visual indicator for post read/unread status
 - keyboard shortcuts for post actions, e.g. like, reply, repost
 - keyboard shortcuts to switch between feeds
 - keyboard shortcuts to switch between home, search, notifications, chat, etc.
+- visual indicator for post read/unread status
+- sync read/unread state between multiple browsers via cloud service(s)
 
 
 Keyboard Shortcuts
@@ -56,4 +57,14 @@ Keyboard Shortcuts
  | Meta/Alt+p  | open profile page                                  |
  | Meta/Alt+,  | open settings page                                 |
  | Meta/Alt+.  | open Bluesky Navigator config panel                |
- 
+
+
+Remote State Sync (beta)
+------------------------
+
+By default, read/unread state is kept in browser local storage using the
+[GM_setvalue
+function](https://www.tampermonkey.net/documentation.php?locale=en#api:GM_setValue).
+To support persisting this state and potentially syncing between multiple
+browsers, you can set up a cloud service to store the state using the
+instructions [here](doc/remote_state.md).

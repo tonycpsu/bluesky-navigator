@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-21.13
+// @version      2024-12-21.14
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -83,7 +83,7 @@ const CONFIG_FIELDS = {
         'default': 'border: 3px solid transparent;'
     },
     'stateSyncSection': {
-        'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage'],
+        'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],
         'type': 'hidden',
     },
     'stateSyncEnabled':  {
@@ -1576,15 +1576,35 @@ function setScreen(screen) {
 
     $(document).ready(function(e) {
 
+        // Create the title link
+
+        const configTitleDiv = `
+    <div class="config-title">
+      <h1><a href="https://github.com/tonycpsu/bluesky-navigator" target="_blank">Bluesky Navigator</a></h1>
+      <h2>Configuration</h2>
+    </div>
+  `;
+
+        // let title = document.createElement('a');
+        // title.textContent = 'Bluesky Navigator: Configuration';
+        // title.href = 'https://github.com/tonycpsu/bluesky-navigator';
+
         config = new GM_config({
             id: 'GM_config',
-            title: 'Bluesky Navigator: Configuration',
+            title: configTitleDiv,
             fields: CONFIG_FIELDS,
             'events': {
                 'init': onConfigInit,
                 'save': () => config.close()
             },
             'css':  `
+h1 {
+    font-size: 18pt;
+}
+
+h2 {
+    font-size: 14pt;
+}
 .config_var textarea {
     width: 100%;
     height: 1.5em;

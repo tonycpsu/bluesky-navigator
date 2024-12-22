@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-21.14
+// @version      2024-12-22.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -81,6 +81,11 @@ const CONFIG_FIELDS = {
         'label': 'Unselected Post',
         'type': 'textarea',
         'default': 'border: 3px solid transparent;'
+    },
+    'threadMargin': {
+        'label': 'Thread Margin',
+        'type': 'textarea',
+        'default': '20px'
     },
     'stateSyncSection': {
         'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],
@@ -772,22 +777,55 @@ class ItemHandler extends Handler {
         //console.log(`applyItemStyle: ${$(element).parent().parent().index()-1}, ${this.index}`)
 
         $(element).addClass("item")
-        $(element).parent().parent().addClass("thread")
-        // if ($(element).parent().parent().index()-1 == this.index)
+
+        // FIXME: this doesn't seem to work anymore for threads.
+        // $(element).parent().parent().addClass("thread")
+
+        // Looks like the `r-lchren` class can now be used to detect if item is
+        // part of a thread, but will that be stable?
+        const threadIndicator = $(element).find("div.r-lchren")
+        const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
+
+        if (threadIndicator.length) {
+            var parent = threadIndicator.parents().has(avatarDiv).first();
+            var children = parent.find("*");
+            $(element).parent().parent().addClass("thread")
+            if (selected) {
+                $(element).parent().parent().addClass("thread-selection-active")
+                $(element).parent().parent().removeClass("thread-selection-inactive")
+            } else {
+                $(element).parent().parent().removeClass("thread-selection-active")
+                $(element).parent().parent().addClass("thread-selection-inactive")
+            }
+            if (threadIndicator.length == 1) {
+                var parent = threadIndicator.parents().has(avatarDiv).first();
+                var children = parent.find("*");
+                // console.log(element, children.index(threadIndicator), children.index(avatarDiv))
+                // first and last posts have 1 indicator, middle posts have 2
+                if (children.index(threadIndicator) < children.index(avatarDiv)) {
+                    $(element).parent().parent().addClass("thread-last")
+                } else {
+                    $(element).parent().parent().addClass("thread-first")
+                }
+            } else {
+                $(element).parent().parent().addClass("thread-middle")
+            }
+
+            // console.log(element, threadIndicator.css("flex-grow"), threadIndicator.css("margin-top"), threadIndicator.css("margin-bottom"))
+        }
+
         if (selected)
         {
-            //$(element).parent().parent().css(SELECTED_THREAD_CSS)
-            $(element).parent().parent().addClass("thread-selection-active")
-            $(element).parent().parent().removeClass("thread-selection-inactive")
+            // $(element).parent().parent().addClass("thread-selection-active")
+            // $(element).parent().parent().removeClass("thread-selection-inactive")
             $(element).addClass("item-selection-active")
             $(element).removeClass("item-selection-inactive")
             // $(element).css(SELECTED_POST_CSS)
         }
         else
         {
-            // $(element).parent().parent().css(THREAD_CSS)
-            $(element).parent().parent().removeClass("thread-selection-active")
-            $(element).parent().parent().addClass("thread-selection-inactive")
+            // $(element).parent().parent().removeClass("thread-selection-active")
+            // $(element).parent().parent().addClass("thread-selection-inactive")
             $(element).removeClass("item-selection-active")
             $(element).addClass("item-selection-inactive")
 //            $(element).css(ITEM_CSS)
@@ -859,7 +897,7 @@ class ItemHandler extends Handler {
         //super.handleInput(event)
     }
 
-    loadItems(el) {
+    loadItems() {
         var old_length = this.items.length
         var old_index = this.index
         this.items = $(this.selector).filter(":visible")
@@ -867,16 +905,31 @@ class ItemHandler extends Handler {
         //console.dir(this.items[0])
         //this.updateItems()
         this.applyItemStyle(this.items[this.index], true)
-        this.updateItems()
-        if(old_index <= this.items.length){
+        $("div.r-1mhb1uw").each(
+            (i, el) => {
+                const ancestor = $(el).parent().parent().parent().parent()
+                // $(ancestor).addClass(["thread"])
+                $(el).parent().parent().parent().addClass("item-selection-inactive")
+                if($(ancestor).prev().find("div.item-unread").length) {
+                    $(el).parent().parent().parent().addClass("item-unread")
+                    $(el).parent().parent().parent().removeClass("item-read")
+                } else {
+                    $(el).parent().parent().parent().addClass("item-read")
+                    $(el).parent().parent().parent().removeClass("item-unread")
+                }
+            }
+        )
 
-        }
-        /*
-        if (old_length == 0)
-        {
-            this.updateItems()
-        }
-        */
+        // $(this.selector).find("div").filter( (i, el) =>
+        //     $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == 'View full thread'
+        // ).each(
+        //     (el) => {
+        //         console.log(el)
+        //         el.parent().parent().parent().addClass("thread", "thread-selection-inactive")
+        //     }
+        // )
+
+        this.updateItems()
     }
 
     postIdFromUrl() {
@@ -1387,16 +1440,19 @@ function setScreen(screen) {
             }
         }
 
-        .thread {
-            padding: 1px;
+
+        .thread-first {
+            border-bottom: none;
         }
 
-        .thread-selection-inactive {
-            border: 3px solid transparent;
+        .thread-first {
+            margin-top: ${config.get("threadMargin")};
+            border-bottom: none;
         }
 
-        .thread-selection-active {
-            border: 3px rgba(0, 0, 128, .3) solid;
+        .thread-last {
+            margin-bottom: ${config.get("threadMargin")};
+            border-top: none;
         }
 
         .preferences-icon-overlay {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-23.2
+// @version      2024-12-23.3
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -88,7 +88,7 @@ const CONFIG_FIELDS = {
         'default': '4'
     },
     'threadIndicatorColor': {
-        'label': 'Thread Indicato Color',
+        'label': 'Thread Indicator Color',
         'type': 'textarea',
         'default': 'rgb(212, 219, 226)'
     },
@@ -205,7 +205,7 @@ class StateManager {
                 // }
 
             } else {
-/                return { ...defaultState, ...savedState };
+                return { ...defaultState, ...savedState };
             }
 
         } catch (error) {

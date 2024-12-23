@@ -5,7 +5,7 @@
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
-// @require https://code.jquery.com/jquery-3.6.0.min.js
+// @require https://code.jquery.com/jquery-3.7.1.min.js
 // @require https://openuserjs.org/src/libs/sizzle/GM_config.js
 // @downloadURL  https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @updateURL    https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
@@ -22,7 +22,7 @@ const DEFAULT_HISTORY_MAX = 5000
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000
 const URL_MONITOR_INTERVAL = 500
 const STATE_KEY = "bluesky_state"
-const FEED_ITEM_SELECTOR = "div[data-testid^='feedItem-by-']"
+const FEED_ITEM_SELECTOR = "div[data-testid^='feedItem-by-']:not(.foo div[data-testid^='feedItem-by-'])"
 const POST_ITEM_SELECTOR = "div[data-testid^='postThreadItem-by-']"
 const PROFILE_SELECTOR = "a[aria-label='View profile']"
 const LINK_SELECTOR = "a[target='_blank']"
@@ -874,7 +874,26 @@ class ItemHandler extends Handler {
         var old_length = this.items.length
         var old_index = this.index
         this.items = $(this.selector).filter(":visible")
-        this.items = $(this.items.toArray().reverse())
+        const classes = ["thread-first", "thread-middle", "thread-last"];
+        let set = [];
+        this.deactivate()
+        this.items.each(function (i, item) {
+            const threadDiv = $(item).parent().parent()
+            // Check if the div contains any of the target classes
+            if (classes.some(cls => $(threadDiv).hasClass(cls))) {
+                console.log("threadDiv:")
+                console.dir(threadDiv)
+                set.push(threadDiv[0]); // Collect the div
+                if ($(threadDiv).hasClass("thread-last")) {
+                    // Wrap the collected set in a new div
+                    console.log(set)
+                    $(set).wrapAll('<div class="foo"/>');
+                    set = []; // Reset the set
+                }
+            }
+        });
+        this.activate()
+        // this.items = $(this.items.toArray().reverse())
         this.applyItemStyle(this.items[this.index], true)
         $("div.r-1mhb1uw").each(
             (i, el) => {
@@ -1506,10 +1525,18 @@ function setScreen(screen) {
             background-color: ${config.get("threadIndicatorColor")} !important;
         }
 
+        /*
         div[data-testid="followingFeedPage-feed-flatlist"] > div > div {
             display: flex;
             flex-direction: column-reverse; /* Reverse the vertical order */
         }
+
+        div[data-testid="followingFeedPage-feed-flatlist"] div.foo {
+            display: flex;
+            flex-direction: column-reverse; /* Reverse the vertical order */
+        }
+        */
+
 `
 
         // Add event listeners using jQuery
@@ -1653,16 +1680,16 @@ function setScreen(screen) {
                 // Create the "real" IntersectionObserver instance
                 this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
                     // Decide when to override behavior
-                    console.dir("proxy")
-                    console.dir(entries)
+                    // console.dir("proxy")
+                    // console.dir(entries)
                     if (this.shouldOverride(entries, observer)) {
-                        console.log("Custom behavior triggered!");
+                        // console.log("Custom behavior triggered!");
                         // Custom behavior
                         this.overrideBehavior(entries, observer);
                     } else {
                         // Call the original callback
-                        console.log("calling original callback!");
-                        console.log(entries);
+                        // console.log("calling original callback!");
+                        // console.log(entries);
                         callback(entries, observer);
                     }
                 }, options);
@@ -1686,22 +1713,22 @@ function setScreen(screen) {
             // Custom override behavior
             overrideBehavior(entries, observer) {
                 // Example: Do nothing or log the entries
-                console.log("Overridden entries:", entries);
+                // console.log("Overridden entries:", entries);
             }
 
             // Proxy all methods to the real IntersectionObserver
             observe(target) {
-                console.log("Observing:", target);
+                // console.log("Observing:", target);
                 this.realObserver.observe(target);
             }
 
             unobserve(target) {
-                console.log("Unobserving:", target);
+                // console.log("Unobserving:", target);
                 this.realObserver.unobserve(target);
             }
 
             disconnect() {
-                console.log("Disconnecting observer");
+                // console.log("Disconnecting observer");
                 this.realObserver.disconnect();
             }
 

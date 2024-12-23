@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-22.1
+// @version      2024-12-22.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -81,6 +81,16 @@ const CONFIG_FIELDS = {
         'label': 'Unselected Post',
         'type': 'textarea',
         'default': 'border: 3px solid transparent;'
+    },
+    'threadIndicatorWidth': {
+        'label': 'Thread Indicator Width in pixels',
+        'type': 'integer',
+        'default': '4'
+    },
+    'threadIndicatorColor': {
+        'label': 'Thread Indicato Color',
+        'type': 'textarea',
+        'default': 'rgb(212, 219, 226)'
     },
     'threadMargin': {
         'label': 'Thread Margin',
@@ -893,17 +903,12 @@ class ItemHandler extends Handler {
         } else {
             return super.handleInput(event)
         }
-        //console.log(`${this}, ${this.name}: ${event}`)
-        //super.handleInput(event)
     }
 
     loadItems() {
         var old_length = this.items.length
         var old_index = this.index
         this.items = $(this.selector).filter(":visible")
-        // console.log(`loadItems: ${this.items.length}, ${old_index}`)
-        //console.dir(this.items[0])
-        //this.updateItems()
         this.applyItemStyle(this.items[this.index], true)
         $("div.r-1mhb1uw").each(
             (i, el) => {
@@ -919,16 +924,13 @@ class ItemHandler extends Handler {
                 }
             }
         )
-
-        // $(this.selector).find("div").filter( (i, el) =>
-        //     $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == 'View full thread'
-        // ).each(
-        //     (el) => {
-        //         console.log(el)
-        //         el.parent().parent().parent().addClass("thread", "thread-selection-inactive")
-        //     }
-        // )
-
+        $("div.r-1mhb1uw svg").each(
+            (i, el) => {
+                console.dir(el)
+                $(el).find("line").attr("stroke", config.get("threadIndicatorColor"))
+                $(el).find("circle").attr("fill", config.get("threadIndicatorColor"))
+            }
+        )
         this.updateItems()
     }
 
@@ -1512,6 +1514,13 @@ function setScreen(screen) {
             color: white;
             font-size: 16px;
         }
+
+        div.r-m5arl1 {
+            width: ${config.get("threadIndicatorWidth")}px;
+            background-color: ${config.get("threadIndicatorColor")} !important;
+        }
+
+
 `
 
         // Add event listeners using jQuery

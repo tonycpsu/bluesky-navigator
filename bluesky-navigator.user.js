@@ -146,6 +146,8 @@ const CONFIG_FIELDS = {
 let $ = window.jQuery
 let stateManager
 let config
+let enableLoadMoreItems = false;
+let loadMoreItemsCallback
 
 class StateManager {
     constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
@@ -460,45 +462,6 @@ class StateManager {
     }
 }
 
-/**
- * Monitors the DOM for elements matching a selector, and calls callbacks when they are added or removed.
- * @param {string} selector - The CSS selector to monitor.
- * @param {function} onAdd - Callback to execute when the element is added.
- * @param {function} onRemove - Callback to execute when the element is removed.
- * @returns {MutationObserver} - The observer instance, which can be disconnected when no longer needed.
- */
-function waitForElement2(selector, onAdd, onRemove) {
-    const observer = new MutationObserver(mutations => {
-        mutations.forEach(mutation => {
-            // Handle added nodes
-            mutation.addedNodes.forEach(node => {
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    $(node)
-                        .find(selector)
-                        .addBack(selector)
-                        .each((_, el) => onAdd($(el)));
-                }
-            });
-
-            // Handle removed nodes
-            if (onRemove) {
-                mutation.removedNodes.forEach(node => {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        $(node)
-                            .find(selector)
-                            .addBack(selector)
-                            .each((_, el) => onRemove($(el)));
-                    }
-                });
-            }
-        });
-    });
-
-    // Start observing the document body for changes
-    observer.observe(document.body, { childList: true, subtree: true });
-    return observer;
-}
-
 function waitForElement(selector, onAdd, onRemove) {
     // Immediately handle any existing elements
     const processExistingElements = () => {
@@ -722,7 +685,9 @@ class ItemHandler extends Handler {
             threshold: Array.from({ length: 101 }, (_, i) => i / 100),
         });
         this.observer = waitForElement(this.selector, (element) => {
+            // this.observer.disconnect()
             this.onElementAdded(element)
+            // this.observer.observe(this.selector)
         })
         super.activate()
     }
@@ -909,6 +874,7 @@ class ItemHandler extends Handler {
         var old_length = this.items.length
         var old_index = this.index
         this.items = $(this.selector).filter(":visible")
+        this.items = $(this.items.toArray().reverse())
         this.applyItemStyle(this.items[this.index], true)
         $("div.r-1mhb1uw").each(
             (i, el) => {
@@ -926,7 +892,6 @@ class ItemHandler extends Handler {
         )
         $("div.r-1mhb1uw svg").each(
             (i, el) => {
-                console.dir(el)
                 $(el).find("line").attr("stroke", config.get("threadIndicatorColor"))
                 $(el).find("circle").attr("fill", config.get("threadIndicatorColor"))
             }
@@ -950,6 +915,11 @@ class ItemHandler extends Handler {
     updateItems() {
         var post_id
 
+
+        // const container = $('div[data-testid="followingFeedPage-feed-flatlist"] > div > div')
+        // var items = container.children('div');
+        // container.append(items.get().reverse());
+
         if (this.index == 0)
         {
             window.scrollTo(0, 0)
@@ -958,6 +928,7 @@ class ItemHandler extends Handler {
         } else {
             console.log(this.index, this.items.length)
         }
+
     }
 
     setIndex(index) {
@@ -1203,6 +1174,21 @@ class FeedItemHandler extends ItemHandler {
             setTimeout( () => {
                 this.loadItems()
             }, 1000)
+        } else if (event.key == "U") {
+            var el = this.items[this.index];
+            loadMoreItemsCallback(
+                [
+                    {
+                        time: performance.now(),
+                        target: el,
+                        isIntersecting: true,
+                        intersectionRatio: 1,
+                        boundingClientRect: el.getBoundingClientRect(),
+                        intersectionRect: el.getBoundingClientRect(),
+                        rootBounds: document.documentElement.getBoundingClientRect(),
+                    }
+                ]
+            )
         } else {
             super.handleInput(event)
         }
@@ -1520,7 +1506,10 @@ function setScreen(screen) {
             background-color: ${config.get("threadIndicatorColor")} !important;
         }
 
-
+        div[data-testid="followingFeedPage-feed-flatlist"] > div > div {
+            display: flex;
+            flex-direction: column-reverse; /* Reverse the vertical order */
+        }
 `
 
         // Add event listeners using jQuery
@@ -1650,9 +1639,80 @@ function setScreen(screen) {
     </div>
   `;
 
-        // let title = document.createElement('a');
-        // title.textContent = 'Bluesky Navigator: Configuration';
-        // title.href = 'https://github.com/tonycpsu/bluesky-navigator';
+        const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
+
+        // Create a proxy class
+        class ProxyIntersectionObserver {
+            constructor(callback, options) {
+                // Store the callback and options
+                this.callback = callback;
+                this.options = options;
+                this.enabled = true
+                loadMoreItemsCallback = this.callback;
+
+                // Create the "real" IntersectionObserver instance
+                this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
+                    // Decide when to override behavior
+                    console.dir("proxy")
+                    console.dir(entries)
+                    if (this.shouldOverride(entries, observer)) {
+                        console.log("Custom behavior triggered!");
+                        // Custom behavior
+                        this.overrideBehavior(entries, observer);
+                    } else {
+                        // Call the original callback
+                        console.log("calling original callback!");
+                        console.log(entries);
+                        callback(entries, observer);
+                    }
+                }, options);
+            }
+
+            enable() {
+                this.enabled = true
+            }
+
+            disable() {
+                this.enabled = false
+            }
+
+            // Custom logic to decide when to override
+            shouldOverride(entries, observer) {
+                return !enableLoadMoreItems;
+                // Example: Override if any target's boundingClientRect is fully visible
+                return entries.some(entry => entry.isIntersecting);
+            }
+
+            // Custom override behavior
+            overrideBehavior(entries, observer) {
+                // Example: Do nothing or log the entries
+                console.log("Overridden entries:", entries);
+            }
+
+            // Proxy all methods to the real IntersectionObserver
+            observe(target) {
+                console.log("Observing:", target);
+                this.realObserver.observe(target);
+            }
+
+            unobserve(target) {
+                console.log("Unobserving:", target);
+                this.realObserver.unobserve(target);
+            }
+
+            disconnect() {
+                console.log("Disconnecting observer");
+                this.realObserver.disconnect();
+            }
+
+            takeRecords() {
+                return this.realObserver.takeRecords();
+            }
+        }
+
+        // Replace the global IntersectionObserver with the proxy
+        unsafeWindow.IntersectionObserver = ProxyIntersectionObserver;
+
 
         config = new GM_config({
             id: 'GM_config',

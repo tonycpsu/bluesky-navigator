@@ -686,6 +686,7 @@ class ItemHandler extends Handler {
         this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
         this.onItemMouseOver = this.onItemMouseOver.bind(this)
         this.didMouseMove = this.didMouseMove.bind(this)
+        this.loading = false;
     }
 
     isActive() {
@@ -920,6 +921,7 @@ class ItemHandler extends Handler {
         } else if (this.handleItemKey(event)) {
             return event.key
         } else if (event.key == "U") {
+            console.log("Update")
             this.loadMoreItems();
         } else {
             return super.handleInput(event)
@@ -934,8 +936,9 @@ class ItemHandler extends Handler {
         const classes = ["thread-first", "thread-middle", "thread-last"];
         let set = [];
         this.deactivate()
-
-        $(this.selector).filter(":visible").each(function (i, item) {
+        const newItems = $(this.selector).not("div.foo *")
+        const newItemsOrig = newItems.get()
+        newItems.filter(":visible").each(function (i, item) {
             const threadDiv = $(item).parent().parent()
             // Check if the div contains any of the target classes
             if (classes.some(cls => $(threadDiv).hasClass(cls))) {
@@ -959,7 +962,9 @@ class ItemHandler extends Handler {
             console.log(parent)
             // const footer = parent.find('div[style*="height: 32px"]').first()
 
-            parent.prepend(parent.children().slice(0, -2).get().reverse());
+            console.dir(newItems)
+            parent.prepend(parent.children().not("div.bar").slice(0, -2).get().reverse());
+
             // parent.children().each(
             //     (i, child) => {
             //         console.log(child)
@@ -997,12 +1002,15 @@ class ItemHandler extends Handler {
                 $(el).find("circle").attr("fill", config.get("threadIndicatorColor"))
             }
         )
+        $(this.selector).closest("div.foo").addClass("bar")
+        console.log("set loading false")
         this.loading = false;
         this.updateItems()
     }
 
     loadMoreItems() {
         if(this.loading) {
+            console.log("already loading, returning")
             return;
         }
         this.loading = true;
@@ -1270,7 +1278,6 @@ class FeedItemHandler extends ItemHandler {
 
     constructor(name, selector) {
         super(name, selector)
-        this.loading = false;
     }
 
     activate() {
@@ -1752,6 +1759,7 @@ function setScreen(screen) {
                 this.options = options;
                 this.enabled = true
                 loadMoreItemsCallback = this.callback;
+                console.log(`callback: ${loadMoreItemsCallback}`)
 
                 // Create the "real" IntersectionObserver instance
                 this.realObserver = new OriginalIntersectionObserver((entries, observer) => {

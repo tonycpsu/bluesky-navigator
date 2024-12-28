@@ -21,13 +21,17 @@ const DEFAULT_HISTORY_MAX = 5000
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000
 const URL_MONITOR_INTERVAL = 500
 const STATE_KEY = "bluesky_state"
-const FEED_ITEM_SELECTOR = "div[data-testid^='feedItem-by-']:not(.foo div[data-testid^='feedItem-by-'])"
+const FEED_ITEM_SELECTOR = "div[data-testid^='feedItem-by-']"
 const POST_ITEM_SELECTOR = "div[data-testid^='postThreadItem-by-']"
 const PROFILE_SELECTOR = "a[aria-label='View profile']"
 const LINK_SELECTOR = "a[target='_blank']"
 const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
 const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"}
+const ITEM_SCROLL_MARGIN = "50px"
+
+const range = (start, stop, step = 1) =>
+  Array.from({ length: Math.ceil((stop - start) / step) }, (_, i) => start + i * step);
 
 const DEFAULT_STATE = { seen: {}, lastUpdated: null, page: "home", "blocks": {"all": [], "recent": []} };
 
@@ -35,6 +39,12 @@ const CONFIG_FIELDS = {
     'styleSection': {
         'section': [GM_config.create('Display Preferences'), 'Customize how items are displayed'],
         'type': 'hidden',
+    },
+    'feedOrder': {
+        'label': 'Feed order',
+        'type': 'select',
+        'options': ['Reverse chronological', 'Forward chronological'],
+        'default': 'Reverse chronological'
     },
     'posts': {
         'label': 'All Posts',
@@ -101,12 +111,6 @@ const CONFIG_FIELDS = {
         'title': 'A format string specifying how post timestamps are displayed',
         'type': 'textarea',
         'default': "'$age' '('yyyy-MM-dd hh:mmaaa')'"
-    },
-    'feedOrder': {
-        'label': 'Feed order',
-        'type': 'select',
-        'options': ['Reverse chronological', 'Forward chronological'],
-        'default': 'Reverse chronological'
     },
     'stateSyncSection': {
         'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],
@@ -666,8 +670,6 @@ class ItemHandler extends Handler {
     // FIXME: this belongs in PostItemHandler
     THREAD_PAGE_SELECTOR = "main > div > div > div"
 
-    SCROLL_MARGIN = "50px"
-
     MOUSE_MOVEMENT_THRESHOLD = 10
 
     constructor(name, selector) {
@@ -697,7 +699,16 @@ class ItemHandler extends Handler {
             root: null, // Observing within the viewport
             threshold: Array.from({ length: 101 }, (_, i) => i / 100),
         });
-        this.observer = waitForElement(this.selector, (element) => {
+
+        this.footerIntersectionObserver = new IntersectionObserver(this.onFooterIntersection, {
+            root: null, // Observing within the viewport
+            // threshold: [1]
+            threshold: Array.from({ length: 101 }, (_, i) => i / 100)
+        });
+
+        const safe_selector = `${this.selector}:not(.foo ${this.selector})`
+
+        this.observer = waitForElement(safe_selector, (element) => {
             // this.observer.disconnect()
             this.onElementAdded(element)
             // this.observer.observe(this.selector)
@@ -717,6 +728,10 @@ class ItemHandler extends Handler {
         if(this.intersectionObserver)
         {
             this.intersectionObserver.disconnect()
+        }
+        if(this.footerIntersectionObserver)
+        {
+            this.footerIntersectionObserver.disconnect()
         }
 
         $(this.selector).off("mouseover mouseleave");
@@ -753,6 +768,15 @@ class ItemHandler extends Handler {
         });
     }
 
+    onFooterIntersection(entries) {
+        entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+                console.log("footer")
+                console.dir(entries)
+            }
+        });
+    }
+
     onPopupAdd() {
         this.isPopupVisible = true;
     }
@@ -771,6 +795,9 @@ class ItemHandler extends Handler {
             postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text())
         }
         const postTimeString = postTimestampElement.attr("aria-label")
+        if (!postTimeString) {
+            console.dir(element)
+        }
         const userFormat = config.get("postTimestampFormat"); // Example user format
         const postTimestamp = new Date(postTimeString.replace(' at', ''));
         const formattedDate = dateFns.format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
@@ -892,6 +919,8 @@ class ItemHandler extends Handler {
             return event.key
         } else if (this.handleItemKey(event)) {
             return event.key
+        } else if (event.key == "U") {
+            this.loadMoreItems();
         } else {
             return super.handleInput(event)
         }
@@ -900,24 +929,13 @@ class ItemHandler extends Handler {
     loadItems() {
         var old_length = this.items.length
         var old_index = this.index
-        this.items = $(this.selector).filter(":visible")
+        const reversed = config.get('feedOrder') == 'Forward chronological'
         console.log(config.get('feedOrder'))
         const classes = ["thread-first", "thread-middle", "thread-last"];
         let set = [];
         this.deactivate()
 
-        if (config.get('feedOrder') == 'Forward chronological') {
-            console.log("reversing")
-            this.items = $(this.items.toArray().reverse())
-            const parent = this.items.first().parent().parent().parent()
-            // console.dir(this.items[0])
-            parent.append(parent.children().get().reverse());
-            // console.dir(this.items[0])
-            // this.items.first().parent().parent().parent().empty()
-            // this.items.first().parent().parent().parent().append(this.items)
-        }
-
-        this.items.each(function (i, item) {
+        $(this.selector).filter(":visible").each(function (i, item) {
             const threadDiv = $(item).parent().parent()
             // Check if the div contains any of the target classes
             if (classes.some(cls => $(threadDiv).hasClass(cls))) {
@@ -932,7 +950,32 @@ class ItemHandler extends Handler {
                 }
             }
         });
+
+        if (reversed) {
+            console.log("reversing")
+            // const parent = this.items.first().parent().parent().parent()
+            const parent = $(this.selector).first().closest(".foo").parent()
+            console.log("parent")
+            console.log(parent)
+            // const footer = parent.find('div[style*="height: 32px"]').first()
+
+            parent.prepend(parent.children().slice(0, -2).get().reverse());
+            // parent.children().each(
+            //     (i, child) => {
+            //         console.log(child)
+            //         $(child).append($(child).children().get().reverse())
+            //     }
+            // )
+            // this.items = $(this.items.toArray().reverse())
+
+            // this.items = $(this.items.toArray().reverse())
+        }
+
+        this.items = $(this.selector).filter(":visible")
         this.activate()
+        this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
+
+        console.log(this.items)
         this.applyItemStyle(this.items[this.index], true)
         $("div.r-1mhb1uw").each(
             (i, el) => {
@@ -954,7 +997,29 @@ class ItemHandler extends Handler {
                 $(el).find("circle").attr("fill", config.get("threadIndicatorColor"))
             }
         )
+        this.loading = false;
         this.updateItems()
+    }
+
+    loadMoreItems() {
+        if(this.loading) {
+            return;
+        }
+        this.loading = true;
+        var el = this.items[this.index];
+        loadMoreItemsCallback(
+            [
+                {
+                    time: performance.now(),
+                    target: el,
+                    isIntersecting: true,
+                    intersectionRatio: 1,
+                    boundingClientRect: el.getBoundingClientRect(),
+                    intersectionRect: el.getBoundingClientRect(),
+                    rootBounds: document.documentElement.getBoundingClientRect(),
+                }
+            ]
+        )
     }
 
     postIdFromUrl() {
@@ -1105,7 +1170,6 @@ class ItemHandler extends Handler {
         }
         if (moved)
         {
-            $(this.selector).css("scroll-margin", this.SCROLL_MARGIN)
             if (mark)
             {
                 this.markItemRead(old_index, true)
@@ -1206,6 +1270,7 @@ class FeedItemHandler extends ItemHandler {
 
     constructor(name, selector) {
         super(name, selector)
+        this.loading = false;
     }
 
     activate() {
@@ -1232,21 +1297,6 @@ class FeedItemHandler extends ItemHandler {
             setTimeout( () => {
                 this.loadItems()
             }, 1000)
-        } else if (event.key == "U") {
-            var el = this.items[this.index];
-            loadMoreItemsCallback(
-                [
-                    {
-                        time: performance.now(),
-                        target: el,
-                        isIntersecting: true,
-                        intersectionRatio: 1,
-                        boundingClientRect: el.getBoundingClientRect(),
-                        intersectionRect: el.getBoundingClientRect(),
-                        rootBounds: document.documentElement.getBoundingClientRect(),
-                    }
-                ]
-            )
         } else {
             super.handleInput(event)
         }
@@ -1451,6 +1501,7 @@ function setScreen(screen) {
 
         .item {
             ${config.get("posts")}
+            scroll-margin: ${ITEM_SCROLL_MARGIN};
         }
 
         .item-selection-active {
@@ -1562,23 +1613,6 @@ function setScreen(screen) {
         div.r-m5arl1 {
             width: ${config.get("threadIndicatorWidth")}px;
             background-color: ${config.get("threadIndicatorColor")} !important;
-        }
-
-        // FIXME
-        ${
-            //config.get("feedOrder") == "Forward chronological"
-            false
-            ? `
-        div[data-testid="followingFeedPage-feed-flatlist"] > div > div {
-            display: flex;
-            flex-direction: column-reverse; /* Reverse the vertical order */
-        }
-        div[data-testid="followingFeedPage-feed-flatlist"] div.foo {
-            display: flex;
-            flex-direction: column-reverse; /* Reverse the vertical order */
-        }
-        `
-        : ``
         }
 
 `
@@ -1700,9 +1734,7 @@ function setScreen(screen) {
     }
 
     $(document).ready(function(e) {
-
         // Create the title link
-
         const configTitleDiv = `
     <div class="config-title">
       <h1><a href="https://github.com/tonycpsu/bluesky-navigator" target="_blank">Bluesky Navigator</a></h1>

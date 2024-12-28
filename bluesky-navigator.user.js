@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-27.2
+// @version      2024-12-27.3
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -100,7 +100,7 @@ const CONFIG_FIELDS = {
         'label': 'Post timestamp format',
         'title': 'A format string specifying how post timestamps are displayed',
         'type': 'textarea',
-        'default': "'$age' '('yyyy-MM-dd HH:mm:ss')'"
+        'default': "'$age' '('yyyy-MM-dd hh:mmaaa')'"
     },
     'stateSyncSection': {
         'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],

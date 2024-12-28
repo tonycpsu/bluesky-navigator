@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-22.2
+// @version      2024-12-27.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -88,14 +88,14 @@ const CONFIG_FIELDS = {
         'default': '4'
     },
     'threadIndicatorColor': {
-        'label': 'Thread Indicato Color',
+        'label': 'Thread Indicator Color',
         'type': 'textarea',
         'default': 'rgb(212, 219, 226)'
     },
     'threadMargin': {
         'label': 'Thread Margin',
         'type': 'textarea',
-        'default': '20px'
+        'default': '10px'
     },
     'stateSyncSection': {
         'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],
@@ -206,6 +206,8 @@ class StateManager {
                 //     return { ...defaultState, ...savedState };
                 // }
 
+            } else {
+                return { ...defaultState, ...savedState };
             }
 
         } catch (error) {
@@ -761,17 +763,19 @@ class ItemHandler extends Handler {
         const threadIndicator = $(element).find("div.r-lchren")
         const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
 
+        $(element).parent().parent().addClass("thread")
+
+        if (selected) {
+            $(element).parent().parent().addClass("thread-selection-active")
+            $(element).parent().parent().removeClass("thread-selection-inactive")
+        } else {
+            $(element).parent().parent().removeClass("thread-selection-active")
+            $(element).parent().parent().addClass("thread-selection-inactive")
+        }
+
         if (threadIndicator.length) {
             var parent = threadIndicator.parents().has(avatarDiv).first();
             var children = parent.find("*");
-            $(element).parent().parent().addClass("thread")
-            if (selected) {
-                $(element).parent().parent().addClass("thread-selection-active")
-                $(element).parent().parent().removeClass("thread-selection-inactive")
-            } else {
-                $(element).parent().parent().removeClass("thread-selection-active")
-                $(element).parent().parent().addClass("thread-selection-inactive")
-            }
             if (threadIndicator.length == 1) {
                 var parent = threadIndicator.parents().has(avatarDiv).first();
                 var children = parent.find("*");
@@ -787,6 +791,8 @@ class ItemHandler extends Handler {
             }
 
             // console.log(element, threadIndicator.css("flex-grow"), threadIndicator.css("margin-top"), threadIndicator.css("margin-bottom"))
+        } else {
+            $(element).parent().parent().addClass(["thread-first", "thread-middle", "thread-last"])
         }
 
         if (selected)

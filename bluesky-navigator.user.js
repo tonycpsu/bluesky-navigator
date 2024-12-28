@@ -102,6 +102,12 @@ const CONFIG_FIELDS = {
         'type': 'textarea',
         'default': "'$age' '('yyyy-MM-dd hh:mmaaa')'"
     },
+    'feedOrder': {
+        'label': 'Feed order',
+        'type': 'select',
+        'options': ['Reverse chronological', 'Forward chronological'],
+        'default': 'Reverse chronological'
+    },
     'stateSyncSection': {
         'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],
         'type': 'hidden',
@@ -895,26 +901,38 @@ class ItemHandler extends Handler {
         var old_length = this.items.length
         var old_index = this.index
         this.items = $(this.selector).filter(":visible")
+        console.log(config.get('feedOrder'))
         const classes = ["thread-first", "thread-middle", "thread-last"];
         let set = [];
         this.deactivate()
+
+        if (config.get('feedOrder') == 'Forward chronological') {
+            console.log("reversing")
+            this.items = $(this.items.toArray().reverse())
+            const parent = this.items.first().parent().parent().parent()
+            // console.dir(this.items[0])
+            parent.append(parent.children().get().reverse());
+            // console.dir(this.items[0])
+            // this.items.first().parent().parent().parent().empty()
+            // this.items.first().parent().parent().parent().append(this.items)
+        }
+
         this.items.each(function (i, item) {
             const threadDiv = $(item).parent().parent()
             // Check if the div contains any of the target classes
             if (classes.some(cls => $(threadDiv).hasClass(cls))) {
-                console.log("threadDiv:")
-                console.dir(threadDiv)
+                // console.log("threadDiv:")
+                // console.dir(threadDiv)
                 set.push(threadDiv[0]); // Collect the div
                 if ($(threadDiv).hasClass("thread-last")) {
                     // Wrap the collected set in a new div
-                    console.log(set)
+                    // console.log(set)
                     $(set).wrapAll('<div class="foo"/>');
                     set = []; // Reset the set
                 }
             }
         });
         this.activate()
-        // this.items = $(this.items.toArray().reverse())
         this.applyItemStyle(this.items[this.index], true)
         $("div.r-1mhb1uw").each(
             (i, el) => {
@@ -1546,17 +1564,22 @@ function setScreen(screen) {
             background-color: ${config.get("threadIndicatorColor")} !important;
         }
 
-        /*
+        // FIXME
+        ${
+            //config.get("feedOrder") == "Forward chronological"
+            false
+            ? `
         div[data-testid="followingFeedPage-feed-flatlist"] > div > div {
             display: flex;
             flex-direction: column-reverse; /* Reverse the vertical order */
         }
-
         div[data-testid="followingFeedPage-feed-flatlist"] div.foo {
             display: flex;
             flex-direction: column-reverse; /* Reverse the vertical order */
         }
-        */
+        `
+        : ``
+        }
 
 `
 

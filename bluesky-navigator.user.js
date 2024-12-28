@@ -954,8 +954,10 @@ class ItemHandler extends Handler {
             }
         });
 
+        const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent()
         if (reversed) {
             console.log("reversing")
+            activeTabDiv.html(`↓ ${activeTabDiv.html()}`)
             // const parent = this.items.first().parent().parent().parent()
             const parent = $(this.selector).first().closest(".foo").parent()
             console.log("parent")
@@ -974,6 +976,8 @@ class ItemHandler extends Handler {
             // this.items = $(this.items.toArray().reverse())
 
             // this.items = $(this.items.toArray().reverse())
+        } else {
+            activeTabDiv.html(`↑ ${activeTabDiv.html()}`)
         }
 
         this.items = $(this.selector).filter(":visible")

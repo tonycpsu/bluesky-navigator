@@ -21,6 +21,7 @@ Features
 - keyboard shortcuts to switch between feeds
 - keyboard shortcuts to switch between home, search, notifications, chat, etc.
 - visual indicator for post read/unread status
+- configurable formatting of post timestamps
 - sync read/unread state between multiple browsers via cloud service(s)
 
 

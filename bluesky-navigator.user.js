@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2024-12-27.1
+// @version      2024-12-27.3
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
 // @require https://code.jquery.com/jquery-3.7.1.min.js
 // @require https://openuserjs.org/src/libs/sizzle/GM_config.js
+// @require https://cdn.jsdelivr.net/npm/date-fns@4.1.0/cdn.min.js
 // @downloadURL  https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @updateURL    https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @grant GM_setValue
@@ -16,8 +17,6 @@
 // @grant GM_xmlhttpRequest
 // @grant GM.xmlhttpRequest
 // ==/UserScript==
-
-
 const DEFAULT_HISTORY_MAX = 5000
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000
 const URL_MONITOR_INTERVAL = 500
@@ -34,7 +33,7 @@ const DEFAULT_STATE = { seen: {}, lastUpdated: null, page: "home", "blocks": {"a
 
 const CONFIG_FIELDS = {
     'styleSection': {
-        'section': [GM_config.create('Styles'), 'CSS styles applied to items'],
+        'section': [GM_config.create('Display Preferences'), 'Customize how items are displayed'],
         'type': 'hidden',
     },
     'posts': {
@@ -96,6 +95,12 @@ const CONFIG_FIELDS = {
         'label': 'Thread Margin',
         'type': 'textarea',
         'default': '10px'
+    },
+    'postTimestampFormat': {
+        'label': 'Post timestamp format',
+        'title': 'A format string specifying how post timestamps are displayed',
+        'type': 'textarea',
+        'default': "'$age' '('yyyy-MM-dd hh:mmaaa')'"
     },
     'stateSyncSection': {
         'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],
@@ -754,6 +759,16 @@ class ItemHandler extends Handler {
         //console.log(`applyItemStyle: ${$(element).parent().parent().index()-1}, ${this.index}`)
 
         $(element).addClass("item")
+
+        const postTimestampElement = $(element).find('a[href^="/profile/"][aria-label*=" at "]').first()
+        if (!postTimestampElement.attr("data-bsky-navigator-age")) {
+            postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text())
+        }
+        const postTimeString = postTimestampElement.attr("aria-label")
+        const userFormat = config.get("postTimestampFormat"); // Example user format
+        const postTimestamp = new Date(postTimeString.replace(' at', ''));
+        const formattedDate = dateFns.format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
+        postTimestampElement.text(formattedDate)
 
         // FIXME: this doesn't seem to work anymore for threads.
         // $(element).parent().parent().addClass("thread")

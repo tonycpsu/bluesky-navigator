@@ -163,6 +163,7 @@ let stateManager
 let config
 let enableLoadMoreItems = false;
 let loadMoreItemsCallback
+let itemIndex = 0;
 
 class StateManager {
     constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
@@ -682,7 +683,7 @@ class ItemHandler extends Handler {
         this.onPopupAdd = this.onPopupAdd.bind(this)
         this.onPopupRemove = this.onPopupRemove.bind(this)
         this.onIntersection = this.onIntersection.bind(this)
-        this.onElementAdded = this.onElementAdded.bind(this)
+        this.onItemAdded = this.onItemAdded.bind(this)
         this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
         this.onItemMouseOver = this.onItemMouseOver.bind(this)
         this.didMouseMove = this.didMouseMove.bind(this)
@@ -711,7 +712,7 @@ class ItemHandler extends Handler {
 
         this.observer = waitForElement(safe_selector, (element) => {
             // this.observer.disconnect()
-            this.onElementAdded(element)
+            this.onItemAdded(element)
             // this.observer.observe(this.selector)
         })
         super.activate()
@@ -739,11 +740,13 @@ class ItemHandler extends Handler {
         super.deactivate()
     }
 
-    onElementAdded(element) {
+    onItemAdded(element) {
 
         if(config.get("markReadOnScroll")) {
             this.intersectionObserver.observe(element[0]);
         }
+
+        element.attr("data-bsky-navigator-index", itemIndex++);
 
         this.applyItemStyle(element)
 
@@ -923,6 +926,16 @@ class ItemHandler extends Handler {
         } else if (event.key == "U") {
             console.log("Update")
             this.loadMoreItems();
+        } else if (event.key == ":") {
+            (
+                config.get('feedOrder') == 'Forward chronological'
+                    ?
+                    config.set('feedOrder', 'Reverse chronological')
+                    :
+                    config.set('feedOrder', 'Forward chronological')
+            )
+            $(this.selector).closest("div.foo").removeClass("bar")
+            this.loadItems();
         } else {
             return super.handleInput(event)
         }
@@ -955,29 +968,34 @@ class ItemHandler extends Handler {
         });
 
         const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent()
-        if (reversed) {
-            console.log("reversing")
-            activeTabDiv.html(`↓ ${activeTabDiv.html()}`)
-            // const parent = this.items.first().parent().parent().parent()
-            const parent = $(this.selector).first().closest(".foo").parent()
-            console.log("parent")
-            console.log(parent)
-            // const footer = parent.find('div[style*="height: 32px"]').first()
+        const parent = $(this.selector).first().closest(".foo").parent()
 
-            console.dir(newItems)
-            parent.prepend(parent.children().not("div.bar").slice(0, -2).get().reverse());
+        parent.prepend(
+            parent.children().not("div.bar").slice(0, -2).get().sort(
+                (a, b) => {
+                    return (
+                        reversed
+                            ? parseInt($(a).find(".item").first().data("bsky-navigator-index")) > parseInt($(b).find(".item").first().data("bsky-navigator-index"))
+                            : parseInt($(a).find(".item").first().data("bsky-navigator-index")) < parseInt($(b).find(".item").first().data("bsky-navigator-index"))
+                    )
+                }
+            )
+        )
 
-            // parent.children().each(
-            //     (i, child) => {
-            //         console.log(child)
-            //         $(child).append($(child).children().get().reverse())
-            //     }
-            // )
-            // this.items = $(this.items.toArray().reverse())
+        // if (reversed) {
+        //     console.log("reversing")
+        //     const parent = $(this.selector).first().closest(".foo").parent()
 
-            // this.items = $(this.items.toArray().reverse())
+        //     parent.prepend(parent.children().not("div.bar").slice(0, -2).get().reverse());
+        //     // this.items = $(this.items.toArray().reverse())
+        // }
+
+        const sortIndicator = reversed ? '↑' :  '↓';
+        const sortIndicatorSpan = activeTabDiv.find('span.sortIndicator')
+        if(sortIndicatorSpan.length) {
+            sortIndicatorSpan.text(sortIndicator)
         } else {
-            activeTabDiv.html(`↑ ${activeTabDiv.html()}`)
+            activeTabDiv.html(`<span class="sortIndicator">${sortIndicator}</span> ${activeTabDiv.html()}`)
         }
 
         this.items = $(this.selector).filter(":visible")

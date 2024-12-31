@@ -21,10 +21,12 @@ const DEFAULT_HISTORY_MAX = 5000
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000
 const URL_MONITOR_INTERVAL = 500
 const STATE_KEY = "bluesky_state"
-const FEED_ITEM_SELECTOR = "div[data-testid^='feedItem-by-']"
-const POST_ITEM_SELECTOR = "div[data-testid^='postThreadItem-by-']"
-const PROFILE_SELECTOR = "a[aria-label='View profile']"
-const LINK_SELECTOR = "a[target='_blank']"
+// const FEED_ITEM_SELECTOR = 'div[data-testid$="feed-flatlist"] div[tabindex="0"][role="link"]'
+// const FEED_ITEM_SELECTOR = 'div[data-testid$="feed-flatlist"] div'
+const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)'
+const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]'
+const PROFILE_SELECTOR = 'a[aria-label="View profile"]'
+const LINK_SELECTOR = 'a[target="_blank"]'
 const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
 const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"}
@@ -484,6 +486,7 @@ function waitForElement(selector, onAdd, onRemove) {
     // Immediately handle any existing elements
     const processExistingElements = () => {
         const elements = $(selector);
+        // debugger;
         if (elements.length) {
             elements.each((_, el) => onAdd($(el)));
         }
@@ -708,9 +711,11 @@ class ItemHandler extends Handler {
             threshold: Array.from({ length: 101 }, (_, i) => i / 100)
         });
 
-        const safe_selector = `${this.selector}:not(.foo ${this.selector})`
-
-        this.observer = waitForElement(safe_selector, (element) => {
+        const safeSelector = `${this.selector}:not(.foo ${this.selector})`
+        // debugger;
+        this.observer = waitForElement(safeSelector, (element) => {
+            // debugger;
+        // this.observer = waitForElement(this.selector, (element) => {
             // this.observer.disconnect()
             this.onItemAdded(element)
             // this.observer.observe(this.selector)
@@ -742,11 +747,12 @@ class ItemHandler extends Handler {
 
     onItemAdded(element) {
 
-        if(config.get("markReadOnScroll")) {
-            this.intersectionObserver.observe(element[0]);
-        }
-
-        element.attr("data-bsky-navigator-index", itemIndex++);
+        console.log(element)
+        // debugger
+        // return
+        // if(config.get("markReadOnScroll")) {
+        //     this.intersectionObserver.observe(element[0]);
+        // }
 
         this.applyItemStyle(element)
 
@@ -799,13 +805,12 @@ class ItemHandler extends Handler {
             postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text())
         }
         const postTimeString = postTimestampElement.attr("aria-label")
-        if (!postTimeString) {
-            console.dir(element)
+        if (postTimeString) {
+            const userFormat = config.get("postTimestampFormat"); // Example user format
+            const postTimestamp = new Date(postTimeString.replace(' at', ''));
+            const formattedDate = dateFns.format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
+            postTimestampElement.text(formattedDate)
         }
-        const userFormat = config.get("postTimestampFormat"); // Example user format
-        const postTimestamp = new Date(postTimeString.replace(' at', ''));
-        const formattedDate = dateFns.format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
-        postTimestampElement.text(formattedDate)
 
         // FIXME: this doesn't seem to work anymore for threads.
         // $(element).parent().parent().addClass("thread")
@@ -945,13 +950,26 @@ class ItemHandler extends Handler {
         var old_length = this.items.length
         var old_index = this.index
         const reversed = config.get('feedOrder') == 'Forward chronological'
-        console.log(config.get('feedOrder'))
+
+        const sortIndicator = reversed ? '↑' :  '↓';
+
+        const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent()
+        const sortIndicatorSpan = activeTabDiv.find('span.sortIndicator')
+        if(sortIndicatorSpan.length) {
+            sortIndicatorSpan.text(sortIndicator)
+        } else {
+            activeTabDiv.html(`<span class="sortIndicator">${sortIndicator}</span> ${activeTabDiv.html()}`)
+        }
+
         const classes = ["thread-first", "thread-middle", "thread-last"];
         let set = [];
+
         this.deactivate()
         const newItems = $(this.selector).not("div.foo *")
         const newItemsOrig = newItems.get()
         newItems.filter(":visible").each(function (i, item) {
+            console.log(item)
+            $(item).attr("data-bsky-navigator-index", itemIndex++);
             const threadDiv = $(item).parent().parent()
             // Check if the div contains any of the target classes
             if (classes.some(cls => $(threadDiv).hasClass(cls))) {
@@ -967,7 +985,6 @@ class ItemHandler extends Handler {
             }
         });
 
-        const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent()
         const parent = $(this.selector).first().closest(".foo").parent()
 
         parent.prepend(
@@ -982,21 +999,6 @@ class ItemHandler extends Handler {
             )
         )
 
-        // if (reversed) {
-        //     console.log("reversing")
-        //     const parent = $(this.selector).first().closest(".foo").parent()
-
-        //     parent.prepend(parent.children().not("div.bar").slice(0, -2).get().reverse());
-        //     // this.items = $(this.items.toArray().reverse())
-        // }
-
-        const sortIndicator = reversed ? '↑' :  '↓';
-        const sortIndicatorSpan = activeTabDiv.find('span.sortIndicator')
-        if(sortIndicatorSpan.length) {
-            sortIndicatorSpan.text(sortIndicator)
-        } else {
-            activeTabDiv.html(`<span class="sortIndicator">${sortIndicator}</span> ${activeTabDiv.html()}`)
-        }
 
         this.items = $(this.selector).filter(":visible")
         this.activate()

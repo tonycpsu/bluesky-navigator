@@ -22,7 +22,7 @@ const DEFAULT_STATE_SAVE_TIMEOUT = 5000
 const URL_MONITOR_INTERVAL = 500
 const STATE_KEY = "bluesky_state"
 const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)'
-const POST_ITEM_SELECTOR = FEED_ITEM_SELECTOR
+const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]'
 const PROFILE_SELECTOR = 'a[aria-label="View profile"]'
 const LINK_SELECTOR = 'a[target="_blank"]'
 const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24

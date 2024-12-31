@@ -798,13 +798,14 @@ class ItemHandler extends Handler {
 
         $(element).addClass("item")
 
-        const postTimestampElement = $(element).find('a[href^="/profile/"][aria-label*=" at "]').first()
+        const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first()
         if (!postTimestampElement.attr("data-bsky-navigator-age")) {
             postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text())
         }
         const postTimeString = postTimestampElement.attr("aria-label")
         if (postTimeString) {
             const userFormat = config.get("postTimestampFormat"); // Example user format
+            // console.log(postTimeString)
             const postTimestamp = new Date(postTimeString.replace(' at', ''));
             const formattedDate = dateFns.format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
             postTimestampElement.text(formattedDate)

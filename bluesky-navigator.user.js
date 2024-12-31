@@ -21,10 +21,8 @@ const DEFAULT_HISTORY_MAX = 5000
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000
 const URL_MONITOR_INTERVAL = 500
 const STATE_KEY = "bluesky_state"
-// const FEED_ITEM_SELECTOR = 'div[data-testid$="feed-flatlist"] div[tabindex="0"][role="link"]'
-// const FEED_ITEM_SELECTOR = 'div[data-testid$="feed-flatlist"] div'
 const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)'
-const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]'
+const POST_ITEM_SELECTOR = FEED_ITEM_SELECTOR
 const PROFILE_SELECTOR = 'a[aria-label="View profile"]'
 const LINK_SELECTOR = 'a[target="_blank"]'
 const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24
@@ -812,15 +810,16 @@ class ItemHandler extends Handler {
             postTimestampElement.text(formattedDate)
         }
 
-        // FIXME: this doesn't seem to work anymore for threads.
-        // $(element).parent().parent().addClass("thread")
-
-        // Looks like the `r-lchren` class can now be used to detect if item is
-        // part of a thread, but will that be stable?
-        const threadIndicator = $(element).find("div.r-lchren")
+        // FIXME: This method of finding threads is likely to be unstable.
+        const threadIndicator = $(element).find("div.r-lchren, div.r-1mhb1uw > svg")
+        console.log(threadIndicator.length)
         const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
 
         $(element).parent().parent().addClass("thread")
+        // if(parseInt($(element).data("bsky-navigator-index")) >= "37")
+        //     {
+        //         // debugger;
+        //     }
 
         if (selected) {
             $(element).parent().parent().addClass("thread-selection-active")
@@ -966,9 +965,11 @@ class ItemHandler extends Handler {
 
         this.deactivate()
         const newItems = $(this.selector).not("div.foo *")
+        console.log(newItems.length)
         const newItemsOrig = newItems.get()
         newItems.filter(":visible").each(function (i, item) {
-            console.log(item)
+            // debugger;
+            // console.log(item)
             $(item).attr("data-bsky-navigator-index", itemIndex++);
             const threadDiv = $(item).parent().parent()
             // Check if the div contains any of the target classes

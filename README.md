@@ -20,7 +20,8 @@ Features
 - keyboard shortcuts for post actions, e.g. like, reply, repost
 - keyboard shortcuts to switch between feeds
 - keyboard shortcuts to switch between home, search, notifications, chat, etc.
-- optionally reverse sorting of feeds to browse them in chronological order 
+- optionally reverse sorting of feeds to browse them in chronological order
+  (currently only works on "Following" feed)
 - visual indicator for post read/unread status
 - configurable formatting of post timestamps
 - sync read/unread state between multiple browsers via cloud service(s)

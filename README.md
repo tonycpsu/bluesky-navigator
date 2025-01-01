@@ -46,6 +46,7 @@ Keyboard Shortcuts
  | p           | open repost menu                                   |
  | P           | repost                                             |
  | .           | mark post read/unread                              |
+ | :           | toggle between forward/reverse order (feed view)   |
  | f           | follow author (profile view)                       |
  | F           | unfollow author (profile view)                     |
  | 1...9       | switch between feeds on home page                  |

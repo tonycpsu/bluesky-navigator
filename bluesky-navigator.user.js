@@ -33,18 +33,19 @@ const ITEM_SCROLL_MARGIN = "50px"
 const range = (start, stop, step = 1) =>
   Array.from({ length: Math.ceil((stop - start) / step) }, (_, i) => start + i * step);
 
-const DEFAULT_STATE = { seen: {}, lastUpdated: null, page: "home", "blocks": {"all": [], "recent": []} };
+const DEFAULT_STATE = {
+    seen: {},
+    lastUpdated: null,
+    page: "home",
+    "blocks": {"all": [], "recent": []},
+    feedSortReverse: false
+
+};
 
 const CONFIG_FIELDS = {
     'styleSection': {
         'section': [GM_config.create('Display Preferences'), 'Customize how items are displayed'],
         'type': 'hidden',
-    },
-    'feedOrder': {
-        'label': 'Feed order',
-        'type': 'select',
-        'options': ['Reverse chronological', 'Forward chronological'],
-        'default': 'Reverse chronological'
     },
     'posts': {
         'label': 'All Posts',
@@ -410,6 +411,8 @@ class StateManager {
      */
     updateState(newState) {
         this.state = { ...this.state, ...newState };
+        const currentTime = new Date().toISOString();
+        this.state.lastUpdated = new Date().toISOString();
         this.saveState();
     }
 
@@ -484,7 +487,6 @@ function waitForElement(selector, onAdd, onRemove) {
     // Immediately handle any existing elements
     const processExistingElements = () => {
         const elements = $(selector);
-        // debugger;
         if (elements.length) {
             elements.each((_, el) => onAdd($(el)));
         }
@@ -709,14 +711,9 @@ class ItemHandler extends Handler {
             threshold: Array.from({ length: 101 }, (_, i) => i / 100)
         });
 
-        const safeSelector = `${this.selector}:not(.foo ${this.selector})`
-        // debugger;
+        const safeSelector = `${this.selector}:not(.thread-container ${this.selector})`
         this.observer = waitForElement(safeSelector, (element) => {
-            // debugger;
-        // this.observer = waitForElement(this.selector, (element) => {
-            // this.observer.disconnect()
             this.onItemAdded(element)
-            // this.observer.observe(this.selector)
         })
         super.activate()
     }
@@ -745,12 +742,7 @@ class ItemHandler extends Handler {
 
     onItemAdded(element) {
 
-        console.log(element)
-        // debugger
-        // return
-        // if(config.get("markReadOnScroll")) {
-        //     this.intersectionObserver.observe(element[0]);
-        // }
+        // console.log(element)
 
         this.applyItemStyle(element)
 
@@ -813,14 +805,9 @@ class ItemHandler extends Handler {
 
         // FIXME: This method of finding threads is likely to be unstable.
         const threadIndicator = $(element).find("div.r-lchren, div.r-1mhb1uw > svg")
-        console.log(threadIndicator.length)
         const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
 
         $(element).parent().parent().addClass("thread")
-        // if(parseInt($(element).data("bsky-navigator-index")) >= "37")
-        //     {
-        //         // debugger;
-        //     }
 
         if (selected) {
             $(element).parent().parent().addClass("thread-selection-active")
@@ -923,6 +910,7 @@ class ItemHandler extends Handler {
         this.applyItemStyle(this.items[this.index], true)
     }
 
+
     handleInput(event) {
         if (this.handleMovementKey(event)) {
             return event.key
@@ -931,76 +919,42 @@ class ItemHandler extends Handler {
         } else if (event.key == "U") {
             console.log("Update")
             this.loadMoreItems();
-        } else if (event.key == ":") {
-            (
-                config.get('feedOrder') == 'Forward chronological'
-                    ?
-                    config.set('feedOrder', 'Reverse chronological')
-                    :
-                    config.set('feedOrder', 'Forward chronological')
-            )
-            $(this.selector).closest("div.foo").removeClass("bar")
-            this.loadItems();
         } else {
             return super.handleInput(event)
         }
     }
 
+    sortItems() {
+        return;
+    }
+
     loadItems() {
         var old_length = this.items.length
         var old_index = this.index
-        const reversed = config.get('feedOrder') == 'Forward chronological'
-
-        const sortIndicator = reversed ? '↑' :  '↓';
-
-        const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent()
-        const sortIndicatorSpan = activeTabDiv.find('span.sortIndicator')
-        if(sortIndicatorSpan.length) {
-            sortIndicatorSpan.text(sortIndicator)
-        } else {
-            activeTabDiv.html(`<span class="sortIndicator">${sortIndicator}</span> ${activeTabDiv.html()}`)
-        }
 
         const classes = ["thread-first", "thread-middle", "thread-last"];
         let set = [];
 
         this.deactivate()
-        const newItems = $(this.selector).not("div.foo *")
-        console.log(newItems.length)
+        const newItems = $(this.selector).not("div.thread-container *")
+        // console.log(newItems.length)
         const newItemsOrig = newItems.get()
         newItems.filter(":visible").each(function (i, item) {
-            // debugger;
-            // console.log(item)
             $(item).attr("data-bsky-navigator-index", itemIndex++);
             const threadDiv = $(item).parent().parent()
             // Check if the div contains any of the target classes
             if (classes.some(cls => $(threadDiv).hasClass(cls))) {
-                // console.log("threadDiv:")
-                // console.dir(threadDiv)
                 set.push(threadDiv[0]); // Collect the div
                 if ($(threadDiv).hasClass("thread-last")) {
                     // Wrap the collected set in a new div
                     // console.log(set)
-                    $(set).wrapAll('<div class="foo"/>');
+                    $(set).wrapAll('<div class="thread-container"/>');
                     set = []; // Reset the set
                 }
             }
         });
 
-        const parent = $(this.selector).first().closest(".foo").parent()
-
-        parent.prepend(
-            parent.children().not("div.bar").slice(0, -2).get().sort(
-                (a, b) => {
-                    return (
-                        reversed
-                            ? parseInt($(a).find(".item").first().data("bsky-navigator-index")) > parseInt($(b).find(".item").first().data("bsky-navigator-index"))
-                            : parseInt($(a).find(".item").first().data("bsky-navigator-index")) < parseInt($(b).find(".item").first().data("bsky-navigator-index"))
-                    )
-                }
-            )
-        )
-
+        this.sortItems();
 
         this.items = $(this.selector).filter(":visible")
         this.activate()
@@ -1028,15 +982,15 @@ class ItemHandler extends Handler {
                 $(el).find("circle").attr("fill", config.get("threadIndicatorColor"))
             }
         )
-        $(this.selector).closest("div.foo").addClass("bar")
-        console.log("set loading false")
+        $(this.selector).closest("div.thread-container").addClass("bsky-navigator-seen")
+        // console.log("set loading false")
         this.loading = false;
         this.updateItems()
     }
 
     loadMoreItems() {
         if(this.loading) {
-            console.log("already loading, returning")
+            // console.log("already loading, returning")
             return;
         }
         this.loading = true;
@@ -1083,7 +1037,7 @@ class ItemHandler extends Handler {
         } else if (this.items[this.index]) {
             $(this.items[this.index])[0].scrollIntoView()
         } else {
-            console.log(this.index, this.items.length)
+            // console.log(this.index, this.items.length)
         }
 
     }
@@ -1149,7 +1103,7 @@ class ItemHandler extends Handler {
                         this.setIndex(this.index + 1)
                     } else {
                         var next = $(this.items[this.index]).parent().parent().parent().next()
-                        console.log(next.text())
+                        // console.log(next.text())
                         if (next && $.trim(next.text()) == "Continue thread...") {
                             console.log("click")
                             this.loadPageObserver = waitForElement(
@@ -1318,6 +1272,40 @@ class FeedItemHandler extends ItemHandler {
         return window.location.pathname == "/"
     }
 
+    toggleSortOrder() {
+        stateManager.updateState({feedSortReverse: !stateManager.state.feedSortReverse})
+        $(this.selector).closest("div.thread-container").removeClass("bsky-navigator-seen")
+        this.loadItems();
+    }
+
+    sortItems() {
+        const reversed = stateManager.state.feedSortReverse
+        const sortIndicator = reversed ? '↑' :  '↓';
+        const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent()
+        const sortIndicatorSpan = activeTabDiv.find('span.sortIndicator')
+
+        if(sortIndicatorSpan.length) {
+            sortIndicatorSpan.text(sortIndicator)
+        } else {
+            activeTabDiv.html(`<span class="sortIndicator">${sortIndicator}</span> ${activeTabDiv.html()}`)
+        }
+
+        const parent = $(this.selector).first().closest(".thread-container").parent()
+
+        console.log(reversed)
+        parent.prepend(
+            parent.children().not("div.bsky-navigator-seen").slice(0, -2).get().sort(
+                (a, b) => {
+                    return (
+                        reversed
+                            ? parseInt($(a).find(".item").first().data("bsky-navigator-index")) < parseInt($(b).find(".item").first().data("bsky-navigator-index"))
+                            : parseInt($(a).find(".item").first().data("bsky-navigator-index")) > parseInt($(b).find(".item").first().data("bsky-navigator-index"))
+                    )
+                }
+            )
+        )
+    }
+
     handleInput(event) {
         var item = this.items[this.index]
         if(event.key == "a") {
@@ -1330,6 +1318,8 @@ class FeedItemHandler extends ItemHandler {
             setTimeout( () => {
                 this.loadItems()
             }, 1000)
+        } else if (event.key == ":") {
+            this.toggleSortOrder();
         } else {
             super.handleInput(event)
         }
@@ -1700,8 +1690,6 @@ function setScreen(screen) {
             }
         }
 
-        setContextFromUrl()
-
         function onFocus (e){
             var target = e.target
             if (typeof target.tagName === 'undefined') {return false;}
@@ -1764,6 +1752,10 @@ function setScreen(screen) {
         }
 
         startMonitor()
+        console.log("foo")
+        setContextFromUrl()
+
+
     }
 
     $(document).ready(function(e) {

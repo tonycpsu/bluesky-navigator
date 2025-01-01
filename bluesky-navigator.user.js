@@ -1283,6 +1283,7 @@ class FeedItemHandler extends ItemHandler {
 
     constructor(name, selector) {
         super(name, selector)
+        this.toggleSortOrder = this.toggleSortOrder.bind(this)
     }
 
     activate() {
@@ -1306,13 +1307,21 @@ class FeedItemHandler extends ItemHandler {
     sortItems() {
         const reversed = stateManager.state.feedSortReverse
         const sortIndicator = reversed ? '↑' :  '↓';
-        const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent()
-        const sortIndicatorSpan = activeTabDiv.find('span.sortIndicator')
+        const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent().parent().parent()
+        const sortIndicatorSpan = activeTabDiv.parent().find('span.sortIndicatorText')
+
+        // $(activeTabDiv).parent().off("click")
+        // $(activeTabDiv).parent().parent().off("click")
+        // $(activeTabDiv).parent().parent().parent().off("click")
 
         if(sortIndicatorSpan.length) {
             sortIndicatorSpan.text(sortIndicator)
         } else {
-            activeTabDiv.html(`<span class="sortIndicator">${sortIndicator}</span> ${activeTabDiv.html()}`)
+            activeTabDiv.parent().prepend(`<div class="sortIndicator css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span class="sortIndicatorText">${sortIndicator}</span></div>`)
+            $('div.sortIndicator').on("click", (event) => {
+                event.preventDefault();
+                this.toggleSortOrder();
+            });
         }
 
         const parent = $(this.selector).first().closest(".thread-container").parent()

@@ -128,6 +128,12 @@ const CONFIG_FIELDS = {
         'title': 'JSON object containing state information',
         'type': 'textarea',
     },
+    'stateSyncTimeout': {
+        'label': 'State Sync Timeout',
+        'title': 'Number of milliseconds of idle time before syncing state',
+        'type': 'int',
+        'default': 5000
+    },
     'miscellaneousSection': {
         'section': [GM_config.create('Miscellaneous'), 'Other settings'],
         'type': 'hidden',
@@ -146,9 +152,9 @@ const CONFIG_FIELDS = {
     },
     'stateSaveTimeout': {
         'label': 'State Save Timeout',
-        'title': 'Number of milliseconds of idle time before saving state',
+        'title': 'Number of milliseconds of idle time before saving state locally',
         'type': 'int',
-        'default': DEFAULT_STATE_SAVE_TIMEOUT
+        'default': 1000
     },
     'historyMax': {
         'label': 'History Max Size',
@@ -173,6 +179,9 @@ class StateManager {
         this.debounceTimeout = null;
         this.maxEntries = maxEntries;
         this.state = {};
+        this.isLocalStateDirty = false; // Tracks whether local state has changed
+        this.localSaveTimeout = null; // Timer for local state save
+        this.remoteSyncTimeout = null; // Timer for remote state sync
         this.handleBlockListResponse = this.handleBlockListResponse.bind(this);
         window.addEventListener("beforeunload", () => this.saveStateImmediately());
     }
@@ -195,41 +204,6 @@ class StateManager {
                 all: { updated: null, handles: [] },
                 recent: { updated: null, handles: [] },
             };
-        }
-    }
-
-    /**
-     * Loads state from storage or initializes with the default state.
-     */
-    async loadState(defaultState) {
-        try {
-            const savedState = JSON.parse(GM_getValue(this.key, "{}"));
-
-            if (config.get("stateSyncEnabled")) {
-                const remoteState = await this.loadRemoteState(this.state.lastUpdated);
-                console.dir(remoteState);
-                return remoteState ? { ...defaultState, ...remoteState } :  { ...defaultState, ...savedState };
-
-                // if(remoteState) {
-
-                // }
-
-                // if (!this.state || !this.state.lastUpdated || (remoteState && this.state.lastUpdated < remoteState?.lastUpdated)) {
-                //     console.log(`Remote state is newer: ${this.state?.lastUpdated} < ${remoteState?.lastUpdated}`);
-                //     // this.updateState(remoteState)
-                //     return { ...defaultState, ...remoteState };
-                // } else {
-                //     console.log(`Local state is newer: ${this.state?.lastUpdated} >= ${remoteState?.lastUpdated}`);
-                //     return { ...defaultState, ...savedState };
-                // }
-
-            } else {
-                return { ...defaultState, ...savedState };
-            }
-
-        } catch (error) {
-            console.error("Error loading state, using defaults:", error);
-            return defaultState;
         }
     }
 
@@ -297,6 +271,27 @@ class StateManager {
         return sinceResult["lastUpdated"]
     }
 
+    /**
+     * Loads state from storage or initializes with the default state.
+     */
+    async loadState(defaultState) {
+        try {
+            const savedState = JSON.parse(GM_getValue(this.key, "{}"));
+
+            if (config.get("stateSyncEnabled")) {
+                const remoteState = await this.loadRemoteState(this.state.lastUpdated);
+                console.dir(remoteState);
+                return remoteState ? { ...defaultState, ...remoteState } :  { ...defaultState, ...savedState };
+            } else {
+                return { ...defaultState, ...savedState };
+            }
+
+        } catch (error) {
+            console.error("Error loading state, using defaults:", error);
+            return defaultState;
+        }
+    }
+
     async loadRemoteState(since) {
         // const query = `SELECT * FROM state:current;`;
 
@@ -321,53 +316,95 @@ class StateManager {
         }
     }
 
-    /**
-     * Saves the current state to storage with debouncing.
-     */
-    saveState() {
-        clearTimeout(this.debounceTimeout);
 
-        this.debounceTimeout = setTimeout(() => {
-            this.saveStateImmediately();
-        }, config.get("stateSaveTimeout")); // Debounce to avoid frequent writes
+    /**
+     * Updates the state and schedules a chained local and remote save.
+     */
+    updateState(newState) {
+        this.state = { ...this.state, ...newState };
+        this.state.lastUpdated = new Date().toISOString();
+        this.isLocalStateDirty = true; // Mark local state as dirty
+        this.scheduleLocalSave(); // Schedule local save
     }
 
     /**
-     * Saves the current state to storage immediately.
-     * Useful for critical moments like page unload.
+     * Schedules a local state save after a 1-second delay.
+     * Triggers remote sync only if local state is saved.
      */
-    saveStateImmediately() {
-        console.log("Saving state ...");
+    scheduleLocalSave() {
+        clearTimeout(this.localSaveTimeout);
+        this.localSaveTimeout = setTimeout(() => {
+            const shouldSyncRemote = this.isLocalStateDirty; // Capture the current state of the flag
+            this.saveLocalState().then(() => {
+                if (shouldSyncRemote) { // Use the captured flag to decide if remote sync is needed
+                    this.scheduleRemoteSync();
+                }
+            });
+        }, config.get("stateSaveTimeout")); // Save local state after 1 second
+    }
+
+    /**
+     * Saves the local state and resolves a promise.
+     * @returns {Promise<void>}
+     */
+    async saveLocalState() {
+        console.log("Saving local state...");
         this.cleanupState(); // Ensure state is pruned before saving
         GM_setValue(this.key, JSON.stringify(this.state));
-        console.log("...saved");
-
-        if (config.get("stateSyncEnabled")) {
-            this.saveRemoteState(this.state.lastUpdated);  // Save remotely if enabled
-        }
-
+        console.log("Local state saved.");
+        this.isLocalStateDirty = false; // Reset dirty flag
         this.notifyListeners();
     }
 
     /**
-     * Saves the current state to remote storage if it's newer.
+     * Schedules a remote state synchronization after a longer delay.
+     */
+    scheduleRemoteSync() {
+        if (!config.get("stateSyncEnabled")) {
+            console.log("sync disabled")
+            return;
+        }
+
+        clearTimeout(this.remoteSyncTimeout);
+        this.remoteSyncTimeout = setTimeout(() => {
+            this.saveRemoteState(this.state.lastUpdated);
+        }, config.get("stateSyncTimeout")); // Default to 5 seconds delay
+    }
+
+    /**
+     * Saves the remote state if needed.
      */
     async saveRemoteState(since) {
-        const { url, namespace="bluesky_navigator", database="state", username, password } = JSON.parse(config.get("stateSyncConfig"));
-        // console.dir(this.state)
+        const { url, namespace = "bluesky_navigator", database = "state", username, password } =
+            JSON.parse(config.get("stateSyncConfig"));
+
         try {
-            const lastUpdated = await this.getRemoteStateUpdated()
-            if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated) ) {
-                console.log("Not saving because remote state is newer");
+            const lastUpdated = await this.getRemoteStateUpdated();
+            if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
+                console.log("Not saving because remote state is newer.");
                 return;
             }
+
             console.log("Saving remote state...");
-            this.setSyncStatus("pending")
-            const result = await this.executeRemoteQuery(
-                `UPSERT state:current MERGE {${JSON.stringify(this.state).slice(1,-1)}, created_at: time::now()}`
+            this.setSyncStatus("pending");
+            await this.executeRemoteQuery(
+                `UPSERT state:current MERGE {${JSON.stringify(this.state).slice(1, -1)}, created_at: time::now()}`,
+                "success"
             );
         } catch (error) {
             console.error("Failed to save remote state:", error);
+        }
+    }
+
+    /**
+     * Immediately saves both local and remote states.
+     */
+    saveStateImmediately(saveLocal = true, saveRemote = false) {
+        if (saveLocal) {
+            this.saveLocalState();
+        }
+        if (saveRemote) {
+            this.saveRemoteState(this.state.lastUpdated);
         }
     }
 
@@ -402,18 +439,6 @@ class StateManager {
      */
     resetState(defaultState = {}) {
         this.state = defaultState;
-        this.saveState();
-    }
-
-    /**
-     * Updates the state with new values and saves.
-     * @param {Object} newState - An object containing the new state values.
-     */
-    updateState(newState) {
-        this.state = { ...this.state, ...newState };
-        const currentTime = new Date().toISOString();
-        this.state.lastUpdated = new Date().toISOString();
-        this.saveState();
     }
 
     /**

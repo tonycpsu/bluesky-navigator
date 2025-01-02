@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BlueSky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-01.3
+// @version      2025-12-02.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1307,13 +1307,11 @@ class FeedItemHandler extends ItemHandler {
     sortItems() {
         const reversed = stateManager.state.feedSortReverse
         // const sortIndicator = reversed ? '↑' :  '↓';
-        const sortIndicatorUrl = reversed ? "https://www.svgrepo.com/show/345161/sort-numeric-up-alt.svg" : "https://www.svgrepo.com/show/345160/sort-numeric-up.svg"
+        const sortIndicatorUrl = reversed ? "https://www.svgrepo.com/show/506582/sort-numeric-up.svg" : "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg"
         const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent().parent().parent()
         const sortIndicatorImage = activeTabDiv.parent().find('img.sortIndicatorImage')
 
-        // $(activeTabDiv).parent().off("click")
-        // $(activeTabDiv).parent().parent().off("click")
-        // $(activeTabDiv).parent().parent().parent().off("click")
+        console.log(reversed)
 
         if(sortIndicatorImage.length) {
             sortIndicatorImage.attr("src", sortIndicatorUrl)
@@ -1325,19 +1323,17 @@ class FeedItemHandler extends ItemHandler {
             });
         }
 
-        const parent = $(this.selector).first().closest(".thread-container").parent()
-
-        parent.prepend(
-            parent.children().not("div.bsky-navigator-seen").slice(1, -2).get().sort(
-                (a, b) => {
-                    return (
-                        reversed
-                            ? parseInt($(b).find(".item").first().data("bsky-navigator-index")) - parseInt($(a).find(".item").first().data("bsky-navigator-index"))
-                            : parseInt($(a).find(".item").first().data("bsky-navigator-index")) - parseInt($(b).find(".item").first().data("bsky-navigator-index"))
-                    )
-                }
-            )
+        const newItems = parent.children().not("div.bsky-navigator-seen").get().sort(
+            (a, b) => {
+                return (
+                    reversed
+                        ? parseInt($(b).find(".item").first().data("bsky-navigator-index")) - parseInt($(a).find(".item").first().data("bsky-navigator-index"))
+                        : parseInt($(a).find(".item").first().data("bsky-navigator-index")) - parseInt($(b).find(".item").first().data("bsky-navigator-index"))
+                )
+            }
         )
+        parent.prepend(newItems)
+
     }
 
     handleInput(event) {
@@ -1791,7 +1787,6 @@ function setScreen(screen) {
         }
 
         startMonitor()
-        console.log("foo")
         setContextFromUrl()
 
 

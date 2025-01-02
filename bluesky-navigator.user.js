@@ -985,7 +985,7 @@ class ItemHandler extends Handler {
         this.activate()
         this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
 
-        console.log(this.items)
+        // console.log(this.items)
         this.applyItemStyle(this.items[this.index], true)
         $("div.r-1mhb1uw").each(
             (i, el) => {
@@ -1306,18 +1306,19 @@ class FeedItemHandler extends ItemHandler {
 
     sortItems() {
         const reversed = stateManager.state.feedSortReverse
-        const sortIndicator = reversed ? '↑' :  '↓';
+        // const sortIndicator = reversed ? '↑' :  '↓';
+        const sortIndicatorUrl = reversed ? "https://www.svgrepo.com/show/345161/sort-numeric-up-alt.svg" : "https://www.svgrepo.com/show/345160/sort-numeric-up.svg"
         const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent().parent().parent()
-        const sortIndicatorSpan = activeTabDiv.parent().find('span.sortIndicatorText')
+        const sortIndicatorImage = activeTabDiv.parent().find('img.sortIndicatorImage')
 
         // $(activeTabDiv).parent().off("click")
         // $(activeTabDiv).parent().parent().off("click")
         // $(activeTabDiv).parent().parent().parent().off("click")
 
-        if(sortIndicatorSpan.length) {
-            sortIndicatorSpan.text(sortIndicator)
+        if(sortIndicatorImage.length) {
+            sortIndicatorImage.attr("src", sortIndicatorUrl)
         } else {
-            activeTabDiv.parent().prepend(`<div class="sortIndicator css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span class="sortIndicatorText">${sortIndicator}</span></div>`)
+            activeTabDiv.parent().prepend(`<div class="sortIndicator css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span class="sortIndicatorText"><img class="sortIndicatorImage" src="${sortIndicatorUrl}"/></div>`)
             $('div.sortIndicator').on("click", (event) => {
                 event.preventDefault();
                 this.toggleSortOrder();
@@ -1326,14 +1327,13 @@ class FeedItemHandler extends ItemHandler {
 
         const parent = $(this.selector).first().closest(".thread-container").parent()
 
-        console.log(reversed)
         parent.prepend(
-            parent.children().not("div.bsky-navigator-seen").slice(0, -2).get().sort(
+            parent.children().not("div.bsky-navigator-seen").slice(1, -2).get().sort(
                 (a, b) => {
                     return (
                         reversed
-                            ? parseInt($(a).find(".item").first().data("bsky-navigator-index")) < parseInt($(b).find(".item").first().data("bsky-navigator-index"))
-                            : parseInt($(a).find(".item").first().data("bsky-navigator-index")) > parseInt($(b).find(".item").first().data("bsky-navigator-index"))
+                            ? parseInt($(b).find(".item").first().data("bsky-navigator-index")) - parseInt($(a).find(".item").first().data("bsky-navigator-index"))
+                            : parseInt($(a).find(".item").first().data("bsky-navigator-index")) - parseInt($(b).find(".item").first().data("bsky-navigator-index"))
                     )
                 }
             )
@@ -1670,6 +1670,11 @@ function setScreen(screen) {
         div.r-m5arl1 {
             width: ${config.get("threadIndicatorWidth")}px;
             background-color: ${config.get("threadIndicatorColor")} !important;
+        }
+
+        img.sortIndicatorImage {
+            width: 24px;
+            height: 24px;
         }
 
 `

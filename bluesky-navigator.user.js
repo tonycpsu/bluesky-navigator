@@ -985,11 +985,13 @@ class ItemHandler extends Handler {
         });
 
         this.sortItems();
+        this.filterItems();
 
         this.items = $(this.selector).filter(":visible")
-        this.filterItems();
         this.activate()
-        this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
+        if(this.items.length > 0) {
+            this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
+        }
 
         // console.log(this.items)
         this.applyItemStyle(this.items[this.index], true)
@@ -1013,11 +1015,12 @@ class ItemHandler extends Handler {
                 $(el).find("circle").attr("fill", config.get("threadIndicatorColor"))
             }
         )
+
         $(this.selector).closest("div.thread-container").addClass("bsky-navigator-seen")
         // console.log("set loading false")
         this.loading = false;
-        this.updateItems()
         $(this.items).css("opacity", "100%")
+        this.updateItems()
     }
 
     loadMoreItems() {
@@ -1026,7 +1029,7 @@ class ItemHandler extends Handler {
             return;
         }
         this.loading = true;
-        var el = this.items[this.index];
+        var el = this.items.length ? this.items[this.index] : $(this.selector).first()[0];
         loadMoreItemsCallback(
             [
                 {
@@ -1108,6 +1111,15 @@ class ItemHandler extends Handler {
         // this.updateItems()
     }
 
+    markVisibleRead() {
+        $(this.items).each(
+            (i, item) => {
+                this.markItemRead(i, true);
+            }
+        )
+    }
+
+
     // FIXME: move to PostItemHanler
     handleNewThreadPage(element) {
         console.log(`new page: ${element}`)
@@ -1160,16 +1172,7 @@ class ItemHandler extends Handler {
                     // G = end
                     this.setIndex(this.items.length-1)
                 } else if (event.key == "J") {
-                    var i
-                    for (i = this.index+1; i < this.items.length-1; i++)
-                    {
-                        //var item = this.items[i]
-                        var post_id = this.postIdForItem(this.items[i])
-                        if (! stateManager.state.seen[post_id]) {
-                            break;
-                        }
-                    }
-                    this.setIndex(i)
+                    this.jumpToNextUnseenItem();
                     mark = true
                 }
                 moved = true
@@ -1205,6 +1208,20 @@ class ItemHandler extends Handler {
             this.ignoreMouseMovement = false
             return null
         }
+    }
+
+    jumpToNextUnseenItem() {
+        var i
+        for (i = this.index+1; i < this.items.length-1; i++)
+        {
+            //var item = this.items[i]
+            var post_id = this.postIdForItem(this.items[i])
+            if (! stateManager.state.seen[post_id]) {
+                break;
+            }
+        }
+        this.setIndex(i)
+        this.updateItems();
     }
 
     getIndexFromItem(item) {
@@ -1268,6 +1285,9 @@ class ItemHandler extends Handler {
         } else if (event.key == ".") {
             // toggle read/unread
             this.markItemRead(this.index, null)
+        } else if (event.key == "A") {
+            // mark all visible items read
+            this.markVisibleRead();
         } else if(event.key == "h") {
             // h = back?
             //data-testid="profileHeaderBackBtn"
@@ -1319,12 +1339,40 @@ class FeedItemHandler extends ItemHandler {
 
     filterItems() {
         const hideRead = stateManager.state.feedHideRead;
+        const filterIndicatorUrl = hideRead ? "https://www.svgrepo.com/show/347147/mail-unread.svg" : "https://www.svgrepo.com/show/347140/mail.svg"
+        // const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent().parent().parent()
+        const indicatorContainer = $('div[data-testid="HomeScreen"] > div > div > div:first')
+        const filterIndicatorImage = indicatorContainer.parent().find('img.filterIndicatorImage')
 
-        console.log(hideRead);
-        if (hideRead) {
-            this.items = $(this.selector).filter(":visible").filter(
-                (item) => ! $(item).hasClass("item-read")
-            )
+        const parent = $(this.selector).first().closest(".thread-container").parent()
+        const unseenThreads = parent.children().not("div.bsky-navigator-seen")
+
+        if(filterIndicatorImage.length) {
+            filterIndicatorImage.attr("src", filterIndicatorUrl)
+        } else {
+            indicatorContainer.prepend(`<div class="filterIndicator css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img class="filterIndicatorImage" src="${filterIndicatorUrl}"/></div>`)
+            $('div.filterIndicator').on("click", (event) => {
+                event.preventDefault();
+                this.toggleHideRead();
+            });
+        }
+
+        $(unseenThreads).map(
+            (i, thread) => {
+                if ($(thread).find(".item").length == $(thread).find(".item-read").length) {
+                    $(thread).css("display", hideRead ? "none": "block", "!important");
+                }
+                $(thread).find(".item-read").map(
+                    (i, item) => {
+                        // console.log(item)
+                        $(item).css("display", hideRead ? "none": "block", "!important");
+                    }
+                )
+            }
+        )
+        if(hideRead && $(this.items[this.index]).hasClass("item-read")) {
+            console.log("jumping")
+            this.jumpToNextUnseenItem();
         }
     }
 
@@ -1332,15 +1380,14 @@ class FeedItemHandler extends ItemHandler {
         const reversed = stateManager.state.feedSortReverse
         // const sortIndicator = reversed ? '↑' :  '↓';
         const sortIndicatorUrl = reversed ? "https://www.svgrepo.com/show/506582/sort-numeric-up.svg" : "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg"
-        const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent().parent().parent()
-        const sortIndicatorImage = activeTabDiv.parent().find('img.sortIndicatorImage')
-
-        console.log(reversed)
+        // const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent().parent().parent()
+        const indicatorContainer = $('div[data-testid="HomeScreen"] > div > div > div > div:first')
+        const sortIndicatorImage = indicatorContainer.parent().find('img.sortIndicatorImage')
 
         if(sortIndicatorImage.length) {
             sortIndicatorImage.attr("src", sortIndicatorUrl)
         } else {
-            activeTabDiv.parent().prepend(`<div class="sortIndicator css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span class="sortIndicatorText"><img class="sortIndicatorImage" src="${sortIndicatorUrl}"/></div>`)
+            indicatorContainer.parent().prepend(`<div class="sortIndicator css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img class="sortIndicatorImage" src="${sortIndicatorUrl}"/></div>`)
             $('div.sortIndicator').on("click", (event) => {
                 event.preventDefault();
                 this.toggleSortOrder();
@@ -1475,8 +1522,8 @@ class ProfileItemHandler extends ItemHandler {
         } else if(event.key == "F") {
             // could make this a toggle but safer to make it a distinct shortcut
             $("button[data-testid='unfollowBtn']").click()
-        } else if(event.key == "A") {
-            // A = add to list
+        } else if(event.key == "L") {
+            // L = add to list
             $("button[aria-label^='More options']").click()
             setTimeout(function() {
                 $("div[data-testid='profileHeaderDropdownListAddRemoveBtn']").click()
@@ -1699,10 +1746,29 @@ function setScreen(screen) {
             background-color: ${config.get("threadIndicatorColor")} !important;
         }
 
+        div.sortIndicator {
+            margin: 0px;
+            padding: 0px;
+            flex: 0.1 0.1 0%;
+        }
+
         img.sortIndicatorImage {
             width: 24px;
             height: 24px;
         }
+
+        div.filterIndicator {
+            margin: 0px;
+            padding: 0px;
+            display: block !important;
+            flex: 0.1 0.1 0%;
+        }
+
+        img.filterIndicatorImage {
+            width: 24px;
+            height: 24px;
+        }
+
 
 `
 

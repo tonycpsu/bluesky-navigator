@@ -38,8 +38,8 @@ const DEFAULT_STATE = {
     lastUpdated: null,
     page: "home",
     "blocks": {"all": [], "recent": []},
-    feedSortReverse: false
-
+    feedSortReverse: false,
+    feedHideRead: false
 };
 
 const CONFIG_FIELDS = {
@@ -949,6 +949,10 @@ class ItemHandler extends Handler {
         }
     }
 
+    filterItems() {
+        return;
+    }
+
     sortItems() {
         return;
     }
@@ -983,6 +987,7 @@ class ItemHandler extends Handler {
         this.sortItems();
 
         this.items = $(this.selector).filter(":visible")
+        this.filterItems();
         this.activate()
         this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
 
@@ -1306,6 +1311,23 @@ class FeedItemHandler extends ItemHandler {
         this.loadItems();
     }
 
+    toggleHideRead() {
+        stateManager.updateState({feedHideRead: !stateManager.state.feedHideRead})
+        $(this.selector).closest("div.thread-container").removeClass("bsky-navigator-seen")
+        this.loadItems();
+    }
+
+    filterItems() {
+        const hideRead = stateManager.state.feedHideRead;
+
+        console.log(hideRead);
+        if (hideRead) {
+            this.items = $(this.selector).filter(":visible").filter(
+                (item) => ! $(item).hasClass("item-read")
+            )
+        }
+    }
+
     sortItems() {
         const reversed = stateManager.state.feedSortReverse
         // const sortIndicator = reversed ? '↑' :  '↓';
@@ -1353,6 +1375,8 @@ class FeedItemHandler extends ItemHandler {
             }, 1000)
         } else if (event.key == ":") {
             this.toggleSortOrder();
+        } else if (event.key == '"') {
+            this.toggleHideRead();
         } else {
             super.handleInput(event)
         }

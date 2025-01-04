@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-04.3
+// @version      2025-12-04.4
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1317,6 +1317,17 @@ class ItemHandler extends Handler {
 
 class FeedItemHandler extends ItemHandler {
 
+    INDICATOR_IMAGES = {
+        filter: [
+            "https://www.svgrepo.com/show/347140/mail.svg",
+            "https://www.svgrepo.com/show/347147/mail-unread.svg"
+        ],
+        sort: [
+            "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg",
+            "https://www.svgrepo.com/show/506582/sort-numeric-up.svg"
+        ]
+    }
+
     constructor(name, selector) {
         super(name, selector)
         this.toggleSortOrder = this.toggleSortOrder.bind(this)
@@ -1324,6 +1335,33 @@ class FeedItemHandler extends ItemHandler {
 
     activate() {
         super.activate()
+
+        waitForElement('div[data-testid="HomeScreen"] > div > div > div:first', (indicatorContainer) => {
+
+            this.indicatorContainer = indicatorContainer;
+
+            const logoDiv = $(this.indicatorContainer).find('div[style^="flex: 1 1 0%;"]')
+
+            if (!this.sortIndicator) {
+                this.sortIndicator = $(logoDiv).before(`<div id="sortIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`)
+                // add dummy button space to keep bsky logo centered
+                this.indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
+                $('#sortIndicator').on("click", (event) => {
+                    event.preventDefault();
+                    this.toggleSortOrder();
+                });
+            }
+
+            if (!this.filterIndicator) {
+                this.filterIndicator = $(logoDiv).before(`<div id="filterIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`)
+                // add dummy button space to keep bsky logo centered
+                this.indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
+                $('#filterIndicator').on("click", (event) => {
+                    event.preventDefault();
+                    this.toggleHideRead();
+                });
+            }
+        })
     }
 
     deactivate() {
@@ -1348,31 +1386,10 @@ class FeedItemHandler extends ItemHandler {
 
     filterItems() {
         const hideRead = stateManager.state.feedHideRead;
-        const filterIndicatorUrl = hideRead ? "https://www.svgrepo.com/show/347147/mail-unread.svg" : "https://www.svgrepo.com/show/347140/mail.svg"
-        // const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent().parent().parent()
-        const indicatorContainer = $('div[data-testid="HomeScreen"] > div > div > div:first')
-        const filterIndicatorImage = indicatorContainer.parent().find('#filterIndicatorImage')
+        $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+!hideRead])
 
         const parent = $(this.selector).first().closest(".thread").parent()
         const unseenThreads = parent.children().not("div.bsky-navigator-seen")
-
-        if(filterIndicatorImage.length) {
-            filterIndicatorImage.attr("src", filterIndicatorUrl)
-        } else {
-            const indicatorDiv = `<div id="filterIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="filterIndicatorImage" class="indicator-image" src="${filterIndicatorUrl}"/></div>`
-            if (indicatorContainer.find('button[aria-label="Open drawer menu"]').length) {
-                const sibling = indicatorContainer.find('button[aria-label="Open drawer menu"]').parent().parent()
-                sibling.after(indicatorDiv)
-            } else {
-                indicatorContainer.prepend(indicatorDiv)
-            }
-            // add dummy button space to keep bsky logo centered
-            indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
-            $('#filterIndicator').on("click", (event) => {
-                event.preventDefault();
-                this.toggleHideRead();
-            });
-        }
 
         $(unseenThreads).map(
             (i, thread) => {
@@ -1395,32 +1412,10 @@ class FeedItemHandler extends ItemHandler {
 
     sortItems() {
         const reversed = stateManager.state.feedSortReverse
+        $("#sortIndicatorImage").attr("src", this.INDICATOR_IMAGES.sort[+reversed])
         // const sortIndicator = reversed ? '↑' :  '↓';
-        const sortIndicatorUrl = reversed ? "https://www.svgrepo.com/show/506582/sort-numeric-up.svg" : "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg"
-        // const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent().parent().parent()
-        const indicatorContainer = $('div[data-testid="HomeScreen"] > div > div > div:first')
-        const sortIndicatorImage = indicatorContainer.parent().find('#sortIndicatorImage')
-
-        if(sortIndicatorImage.length) {
-            sortIndicatorImage.attr("src", sortIndicatorUrl)
-        } else {
-            const indicatorDiv = `<div id="sortIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${sortIndicatorUrl}"/></div>`
-            if (indicatorContainer.find('button[aria-label="Open drawer menu"]').length) {
-                const sibling = indicatorContainer.find('button[aria-label="Open drawer menu"]').parent().parent()
-                sibling.after(indicatorDiv)
-            } else {
-                indicatorContainer.prepend(indicatorDiv)
-            }
-            // add dummy button space to keep bsky logo centered
-            indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
-            $('#sortIndicator').on("click", (event) => {
-                event.preventDefault();
-                this.toggleSortOrder();
-            });
-        }
 
         const parent = $(this.selector).closest(".thread").first().parent()
-
         const newItems = parent.children().not("div.bsky-navigator-seen").get().sort(
             (a, b) => {
                 const threadIndexA = parseInt($(a).closest(".thread").data("bsky-navigator-thread-index"));

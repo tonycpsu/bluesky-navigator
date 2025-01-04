@@ -712,6 +712,7 @@ class ItemHandler extends Handler {
         this.onPopupAdd = this.onPopupAdd.bind(this)
         this.onPopupRemove = this.onPopupRemove.bind(this)
         this.onIntersection = this.onIntersection.bind(this)
+        this.onFooterIntersection = this.onFooterIntersection.bind(this)
         this.onItemAdded = this.onItemAdded.bind(this)
         this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
         this.onItemMouseOver = this.onItemMouseOver.bind(this)
@@ -772,7 +773,6 @@ class ItemHandler extends Handler {
 
         this.applyItemStyle(element)
 
-        $(element).on("mouseover", this.onItemMouseOver)
         // $(element).on("mouseleave", this.onItemMouseLeave)
 
         clearTimeout(this.debounceTimeout)
@@ -783,11 +783,9 @@ class ItemHandler extends Handler {
     }
 
     onIntersection(entries) {
-        // console.dir(entries)
         entries.forEach((entry) => {
-            const target = entry.target;
-
             if (entry.boundingClientRect.top <= 0 && entry.isIntersecting) {
+                const target = entry.target;
                 var index = this.getIndexFromItem(target)
                 this.markItemRead(index, true)
             }
@@ -798,7 +796,10 @@ class ItemHandler extends Handler {
         entries.forEach((entry) => {
             if (entry.isIntersecting) {
                 console.log("footer")
-                console.dir(entries)
+                const target = entry.target;
+                this.setIndex(this.getIndexFromItem(target))
+                // this.index = this.getIndexFromItem(target)
+                this.loadMoreItems();
             }
         });
     }
@@ -930,10 +931,11 @@ class ItemHandler extends Handler {
         if (this.ignoreMouseMovement || ! this.didMouseMove(event)) {
             return
         }
-        this.applyItemStyle(this.items[this.index], false)
-        this.index = this.getIndexFromItem(target)
+        this.setIndex(this.getIndexFromItem(target))
+        // this.applyItemStyle(this.items[this.index], false)
+        // this.index = this.getIndexFromItem(target)
         // console.log(this.index)
-        this.applyItemStyle(this.items[this.index], true)
+        // this.applyItemStyle(this.items[this.index], true)
     }
 
 
@@ -972,6 +974,7 @@ class ItemHandler extends Handler {
         const newItemsOrig = newItems.get()
         newItems.filter(":visible").each(function (i, item) {
             $(item).attr("data-bsky-navigator-item-index", itemIndex++);
+            // console.log(item);
             $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
 
             const threadDiv = $(item).parent().parent()
@@ -992,6 +995,7 @@ class ItemHandler extends Handler {
         if(config.get("markReadOnScroll")) {
             $(this.items).each(
                 (i, item) => {
+                    console.log(item)
                     this.intersectionObserver.observe($(item)[0]);
                 }
             )
@@ -1024,9 +1028,11 @@ class ItemHandler extends Handler {
                 $(el).find("circle").attr("fill", config.get("threadIndicatorColor"))
             }
         )
+        $(this.selector).on("mouseover", this.onItemMouseOver)
 
         $(this.selector).closest("div.thread").addClass("bsky-navigator-seen")
         // console.log("set loading false")
+        $(this.selector).closest("div.thread").removeClass("loading-indicator");
         this.loading = false;
         $(this.items).css("opacity", "100%")
         this.updateItems()
@@ -1039,6 +1045,7 @@ class ItemHandler extends Handler {
         }
         this.loading = true;
         var el = this.items.length ? this.items[this.index] : $(this.selector).first()[0];
+        $(el).closest("div.thread").addClass("loading-indicator");
         loadMoreItemsCallback(
             [
                 {
@@ -1360,6 +1367,22 @@ class FeedItemHandler extends ItemHandler {
                     event.preventDefault();
                     this.toggleHideRead();
                 });
+            }
+
+            if (!this.searchField) {
+                this.searchField = $(logoDiv).before(`<input id="bskyNavigatorSearch"/>`)
+                // Debounced event handler
+                // const debouncedFetch = debounce(function () {
+                //     fetchSuggestions($input.val());
+                // }, 300); // Adjust delay (300ms) as needed
+
+                // // Attach event listener
+                // $input.on("input", debouncedFetch);
+                // $('#sortIndicator').on("kepyress", (event) => {
+                //     event.preventDefault();
+                //     this.toggleSortOrder();
+                // });
+
             }
         })
     }
@@ -1785,6 +1808,27 @@ function setScreen(screen) {
         .indicator-image {
             width: 24px;
             height: 24px;
+        }
+
+        #bskyNavigatorSearch {
+            width: 20%;
+        }
+
+        @keyframes oscillateBorder {
+            0% {
+                border-bottom-color: rgba(0, 128, 0, 1);
+            }
+            50% {
+                border-bottom-color: rgba(0, 128, 0, 0.3);
+            }
+            100% {
+                border-bottom-color: rgba(0, 128, 0, 1);
+            }
+        }
+
+        div.loading-indicator {
+            border-bottom: 10px solid;
+            animation: oscillateBorder 0.5s infinite;
         }
 
 `

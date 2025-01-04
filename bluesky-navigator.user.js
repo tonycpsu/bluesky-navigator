@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-04.4
+// @version      2025-12-04.5
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1386,7 +1386,7 @@ class FeedItemHandler extends ItemHandler {
 
     filterItems() {
         const hideRead = stateManager.state.feedHideRead;
-        $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+!hideRead])
+        $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+hideRead])
 
         const parent = $(this.selector).first().closest(".thread").parent()
         const unseenThreads = parent.children().not("div.bsky-navigator-seen")

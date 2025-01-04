@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-03.3
+// @version      2025-12-03.4
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -737,7 +737,7 @@ class ItemHandler extends Handler {
             threshold: Array.from({ length: 101 }, (_, i) => i / 100)
         });
 
-        const safeSelector = `${this.selector}:not(div.item)`
+        const safeSelector = `${this.selector}:not(.thread ${this.selector})`
         this.observer = waitForElement(safeSelector, (element) => {
             this.onItemAdded(element)
         })
@@ -768,7 +768,7 @@ class ItemHandler extends Handler {
 
     onItemAdded(element) {
 
-        console.log(element);
+        // console.log(element)
 
         this.applyItemStyle(element)
 
@@ -783,6 +783,7 @@ class ItemHandler extends Handler {
     }
 
     onIntersection(entries) {
+        // console.dir(entries)
         entries.forEach((entry) => {
             const target = entry.target;
 
@@ -966,7 +967,7 @@ class ItemHandler extends Handler {
 
         this.deactivate()
         $(this.items).css("opacity", "0%")
-        const newItems = $(this.selector).not("div.thread *")
+        const newItems = $(this.selector).not("div[data-bsky-navigator-item-index]")
         // console.log(newItems.length)
         const newItemsOrig = newItems.get()
         newItems.filter(":visible").each(function (i, item) {
@@ -1478,6 +1479,9 @@ class PostItemHandler extends ItemHandler {
         return window.location.pathname.match(/\/post\//)
     }
 
+    // getIndexFromItem(item) {
+    //     return $(item).parent().parent().parent().parent().index() - 3
+    // }
 
     handleInput(event) {
         if (super.handleInput(event)) {

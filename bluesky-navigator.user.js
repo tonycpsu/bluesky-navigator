@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-03.4
+// @version      2025-12-04.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1351,7 +1351,7 @@ class FeedItemHandler extends ItemHandler {
         const filterIndicatorUrl = hideRead ? "https://www.svgrepo.com/show/347147/mail-unread.svg" : "https://www.svgrepo.com/show/347140/mail.svg"
         // const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent().parent().parent()
         const indicatorContainer = $('div[data-testid="HomeScreen"] > div > div > div:first')
-        const filterIndicatorImage = indicatorContainer.parent().find('img.filterIndicatorImage')
+        const filterIndicatorImage = indicatorContainer.parent().find('#filterIndicatorImage')
 
         const parent = $(this.selector).first().closest(".thread").parent()
         const unseenThreads = parent.children().not("div.bsky-navigator-seen")
@@ -1359,8 +1359,16 @@ class FeedItemHandler extends ItemHandler {
         if(filterIndicatorImage.length) {
             filterIndicatorImage.attr("src", filterIndicatorUrl)
         } else {
-            indicatorContainer.prepend(`<div class="filterIndicator css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img class="filterIndicatorImage" src="${filterIndicatorUrl}"/></div>`)
-            $('div.filterIndicator').on("click", (event) => {
+            const indicatorDiv = `<div id="filterIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="filterIndicatorImage" class="indicator-image" src="${filterIndicatorUrl}"/></div>`
+            if (indicatorContainer.find('button[aria-label="Open drawer menu"]').length) {
+                const sibling = indicatorContainer.find('button[aria-label="Open drawer menu"]').parent().parent()
+                sibling.after(indicatorDiv)
+            } else {
+                indicatorContainer.prepend(indicatorDiv)
+            }
+            // add dummy button space to keep bsky logo centered
+            indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
+            $('#filterIndicator').on("click", (event) => {
                 event.preventDefault();
                 this.toggleHideRead();
             });
@@ -1390,14 +1398,22 @@ class FeedItemHandler extends ItemHandler {
         // const sortIndicator = reversed ? '↑' :  '↓';
         const sortIndicatorUrl = reversed ? "https://www.svgrepo.com/show/506582/sort-numeric-up.svg" : "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg"
         // const activeTabDiv = $('div[style="background-color: rgb(16, 131, 254);"]').parent().parent().parent()
-        const indicatorContainer = $('div[data-testid="HomeScreen"] > div > div > div > div:first')
-        const sortIndicatorImage = indicatorContainer.parent().find('img.sortIndicatorImage')
+        const indicatorContainer = $('div[data-testid="HomeScreen"] > div > div > div:first')
+        const sortIndicatorImage = indicatorContainer.parent().find('#sortIndicatorImage')
 
         if(sortIndicatorImage.length) {
             sortIndicatorImage.attr("src", sortIndicatorUrl)
         } else {
-            indicatorContainer.parent().prepend(`<div class="sortIndicator css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img class="sortIndicatorImage" src="${sortIndicatorUrl}"/></div>`)
-            $('div.sortIndicator').on("click", (event) => {
+            const indicatorDiv = `<div id="sortIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${sortIndicatorUrl}"/></div>`
+            if (indicatorContainer.find('button[aria-label="Open drawer menu"]').length) {
+                const sibling = indicatorContainer.find('button[aria-label="Open drawer menu"]').parent().parent()
+                sibling.after(indicatorDiv)
+            } else {
+                indicatorContainer.prepend(indicatorDiv)
+            }
+            // add dummy button space to keep bsky logo centered
+            indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
+            $('#sortIndicator').on("click", (event) => {
                 event.preventDefault();
                 this.toggleSortOrder();
             });
@@ -1762,29 +1778,11 @@ function setScreen(screen) {
             background-color: ${config.get("threadIndicatorColor")} !important;
         }
 
-        div.sortIndicator {
+        .indicator-div {
             margin: 0px;
             padding: 0px;
             flex: 0.1 0.1 0%;
         }
-
-        img.sortIndicatorImage {
-            width: 24px;
-            height: 24px;
-        }
-
-        div.filterIndicator {
-            margin: 0px;
-            padding: 0px;
-            display: block !important;
-            flex: 0.1 0.1 0%;
-        }
-
-        img.filterIndicatorImage {
-            width: 24px;
-            height: 24px;
-        }
-
 
 `
 

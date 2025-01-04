@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-04.6
+// @version      2025-12-04.7
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1002,7 +1002,7 @@ class ItemHandler extends Handler {
         }
 
         this.activate()
-        if(this.items.length > 0) {
+        if(!stateManager.state.feedSortReverse && this.items.length > 0) {
             this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
         }
 
@@ -1032,10 +1032,10 @@ class ItemHandler extends Handler {
 
         $(this.selector).closest("div.thread").addClass("bsky-navigator-seen")
         // console.log("set loading false")
-        $(this.selector).closest("div.thread").removeClass("loading-indicator");
+        $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
         this.loading = false;
         $(this.items).css("opacity", "100%")
-        this.updateItems()
+        this.updateItems();
     }
 
     loadMoreItems() {
@@ -1044,17 +1044,26 @@ class ItemHandler extends Handler {
             return;
         }
         this.loading = true;
-        var el = this.items.length ? this.items[this.index] : $(this.selector).first()[0];
-        $(el).closest("div.thread").addClass("loading-indicator");
+        const reversed = stateManager.state.feedSortReverse;
+        const index = reversed ? 0 : this.items.length-1;
+        this.setIndex(index);
+        this.updateItems();
+        var indicatorElement = (
+            this.items.length
+                ? this.items[index]
+            : $(this.selector).eq(index)[0]
+        );
+        var loadElement = this.items.length ? this.items[this.items.length-1] : $(this.selector).first()[0];
+        $(indicatorElement).closest("div.thread").addClass(stateManager.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse");
         loadMoreItemsCallback(
             [
                 {
                     time: performance.now(),
-                    target: el,
+                    target: indicatorElement,
                     isIntersecting: true,
                     intersectionRatio: 1,
-                    boundingClientRect: el.getBoundingClientRect(),
-                    intersectionRect: el.getBoundingClientRect(),
+                    boundingClientRect: indicatorElement.getBoundingClientRect(),
+                    intersectionRect: indicatorElement.getBoundingClientRect(),
                     rootBounds: document.documentElement.getBoundingClientRect(),
                 }
             ]
@@ -1464,7 +1473,7 @@ class FeedItemHandler extends ItemHandler {
             $(item).find(PROFILE_SELECTOR)[0].click()
         } else if(event.key == "u") {
             this.applyItemStyle(this.items[this.index], false)
-            this.setIndex(0)
+            // this.setIndex(0)
             //this.updateItems()
             $(document).find("button[aria-label^='Load new']").click()
             setTimeout( () => {
@@ -1814,7 +1823,7 @@ function setScreen(screen) {
             width: 20%;
         }
 
-        @keyframes oscillateBorder {
+        @keyframes oscillateBorderBottom {
             0% {
                 border-bottom-color: rgba(0, 128, 0, 1);
             }
@@ -1826,9 +1835,26 @@ function setScreen(screen) {
             }
         }
 
-        div.loading-indicator {
+        @keyframes oscillateBorderTop {
+            0% {
+                border-top-color: rgba(0, 128, 0, 1);
+            }
+            50% {
+                border-top-color: rgba(0, 128, 0, 0.3);
+            }
+            100% {
+                border-top-color: rgba(0, 128, 0, 1);
+            }
+        }
+
+        div.loading-indicator-reverse {
             border-bottom: 10px solid;
-            animation: oscillateBorder 0.5s infinite;
+            animation: oscillateBorderBottom 0.5s infinite;
+        }
+
+        div.loading-indicator-forward {
+            border-top: 10px solid;
+            animation: oscillateBorderTop 0.5s infinite;
         }
 
 `

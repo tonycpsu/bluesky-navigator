@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-03.1
+// @version      2025-12-03.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -171,6 +171,7 @@ let config
 let enableLoadMoreItems = false;
 let loadMoreItemsCallback
 let itemIndex = 0;
+let threadIndex = 0;
 
 class StateManager {
     constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
@@ -736,7 +737,7 @@ class ItemHandler extends Handler {
             threshold: Array.from({ length: 101 }, (_, i) => i / 100)
         });
 
-        const safeSelector = `${this.selector}:not(.thread-container ${this.selector})`
+        const safeSelector = `${this.selector}:not(.thread ${this.selector})`
         this.observer = waitForElement(safeSelector, (element) => {
             this.onItemAdded(element)
         })
@@ -970,16 +971,15 @@ class ItemHandler extends Handler {
         // console.log(newItems.length)
         const newItemsOrig = newItems.get()
         newItems.filter(":visible").each(function (i, item) {
-            $(item).attr("data-bsky-navigator-index", itemIndex++);
+            $(item).attr("data-bsky-navigator-item-index", itemIndex++);
+            $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
+
             const threadDiv = $(item).parent().parent()
             // Check if the div contains any of the target classes
             if (classes.some(cls => $(threadDiv).hasClass(cls))) {
                 set.push(threadDiv[0]); // Collect the div
                 if ($(threadDiv).hasClass("thread-last")) {
-                    // Wrap the collected set in a new div
-                    // console.log(set)
-                    $(set).wrapAll('<div class="thread-container"/>');
-                    set = []; // Reset the set
+                    threadIndex++;
                 }
             }
         });
@@ -1016,7 +1016,7 @@ class ItemHandler extends Handler {
             }
         )
 
-        $(this.selector).closest("div.thread-container").addClass("bsky-navigator-seen")
+        $(this.selector).closest("div.thread").addClass("bsky-navigator-seen")
         // console.log("set loading false")
         this.loading = false;
         $(this.items).css("opacity", "100%")
@@ -1327,13 +1327,13 @@ class FeedItemHandler extends ItemHandler {
 
     toggleSortOrder() {
         stateManager.updateState({feedSortReverse: !stateManager.state.feedSortReverse})
-        $(this.selector).closest("div.thread-container").removeClass("bsky-navigator-seen")
+        $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen")
         this.loadItems();
     }
 
     toggleHideRead() {
         stateManager.updateState({feedHideRead: !stateManager.state.feedHideRead})
-        $(this.selector).closest("div.thread-container").removeClass("bsky-navigator-seen")
+        $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen")
         this.loadItems();
     }
 
@@ -1344,7 +1344,7 @@ class FeedItemHandler extends ItemHandler {
         const indicatorContainer = $('div[data-testid="HomeScreen"] > div > div > div:first')
         const filterIndicatorImage = indicatorContainer.parent().find('img.filterIndicatorImage')
 
-        const parent = $(this.selector).first().closest(".thread-container").parent()
+        const parent = $(this.selector).first().closest(".thread").parent()
         const unseenThreads = parent.children().not("div.bsky-navigator-seen")
 
         if(filterIndicatorImage.length) {
@@ -1394,15 +1394,22 @@ class FeedItemHandler extends ItemHandler {
             });
         }
 
-        const parent = $(this.selector).first().closest(".thread-container").parent()
+        const parent = $(this.selector).closest(".thread").first().parent()
 
         const newItems = parent.children().not("div.bsky-navigator-seen").get().sort(
             (a, b) => {
-                return (
-                    reversed
-                        ? parseInt($(b).find(".item").first().data("bsky-navigator-index")) - parseInt($(a).find(".item").first().data("bsky-navigator-index"))
-                        : parseInt($(a).find(".item").first().data("bsky-navigator-index")) - parseInt($(b).find(".item").first().data("bsky-navigator-index"))
-                )
+                const threadIndexA = parseInt($(a).closest(".thread").data("bsky-navigator-thread-index"));
+                const threadIndexB = parseInt($(b).closest(".thread").data("bsky-navigator-thread-index"));
+                const itemIndexA = parseInt($(a).data("bsky-navigator-item-index"));
+                const itemIndexB = parseInt($(b).data("bsky-navigator-item-index"));
+
+                if (threadIndexA !== threadIndexB) {
+                    return reversed
+                        ? threadIndexB - threadIndexA
+                        : threadIndexA - threadIndexB;
+                }
+
+                return itemIndexA - itemIndexB;
             }
         )
         parent.prepend(newItems)

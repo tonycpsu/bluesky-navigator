@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-04.7
+// @version      2025-12-04.8
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -28,7 +28,7 @@ const LINK_SELECTOR = 'a[target="_blank"]'
 const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
 const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"}
-const ITEM_SCROLL_MARGIN = "50px"
+const ITEM_SCROLL_MARGIN = 50
 
 const range = (start, stop, step = 1) =>
   Array.from({ length: Math.ceil((stop - start) / step) }, (_, i) => start + i * step);
@@ -165,11 +165,11 @@ const CONFIG_FIELDS = {
 
 }
 
-let $ = window.jQuery
-let stateManager
-let config
+let $ = window.jQuery;
+let stateManager;
+let config;
 let enableLoadMoreItems = false;
-let loadMoreItemsCallback
+let loadMoreItemsCallback;
 let itemIndex = 0;
 let threadIndex = 0;
 
@@ -718,6 +718,8 @@ class ItemHandler extends Handler {
         this.onItemMouseOver = this.onItemMouseOver.bind(this)
         this.didMouseMove = this.didMouseMove.bind(this)
         this.loading = false;
+        this.visibleItems = new Set();
+
     }
 
     isActive() {
@@ -729,7 +731,8 @@ class ItemHandler extends Handler {
         this.popupObserver = waitForElement(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
         this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
             root: null, // Observing within the viewport
-            threshold: Array.from({ length: 101 }, (_, i) => i / 100),
+            rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
+            threshold: 1.0
         });
 
         this.footerIntersectionObserver = new IntersectionObserver(this.onFooterIntersection, {
@@ -783,13 +786,32 @@ class ItemHandler extends Handler {
     }
 
     onIntersection(entries) {
-        entries.forEach((entry) => {
-            if (entry.boundingClientRect.top <= 0 && entry.isIntersecting) {
-                const target = entry.target;
-                var index = this.getIndexFromItem(target)
-                this.markItemRead(index, true)
+        let focusedElement = null;
+
+        entries.forEach(entry => {
+            if (entry.isIntersecting && entry.intersectionRatio === 1) {
+                this.visibleItems.add(entry.target);
+            } else {
+                this.visibleItems.delete(entry.target);
             }
         });
+
+        const visibleItems = Array.from(this.visibleItems).sort(
+            (a, b) =>  a.getBoundingClientRect().top - b.getBoundingClientRect().top
+        )
+
+        if (! visibleItems.length) {
+            return;
+        }
+        const target = visibleItems[0]
+
+        if (target) {
+            var index = this.getIndexFromItem(target);
+            if (config.get("markReadOnScroll")) {
+                this.markItemRead(index, true);
+            }
+            this.setIndex(index);
+        }
     }
 
     onFooterIntersection(entries) {
@@ -992,14 +1014,11 @@ class ItemHandler extends Handler {
 
         this.items = $(this.selector).filter(":visible")
 
-        if(config.get("markReadOnScroll")) {
-            $(this.items).each(
-                (i, item) => {
-                    console.log(item)
-                    this.intersectionObserver.observe($(item)[0]);
-                }
-            )
-        }
+        $(this.items).each(
+            (i, item) => {
+                this.intersectionObserver.observe($(item)[0]);
+            }
+        )
 
         this.activate()
         if(!stateManager.state.feedSortReverse && this.items.length > 0) {
@@ -1692,7 +1711,7 @@ function setScreen(screen) {
 
         .item {
             ${config.get("posts")}
-            scroll-margin: ${ITEM_SCROLL_MARGIN};
+            scroll-margin: ${ITEM_SCROLL_MARGIN}px;
         }
 
         .item-selection-active {

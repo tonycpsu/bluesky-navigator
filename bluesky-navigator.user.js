@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-04.10
+// @version      2025-12-04.11
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -10,6 +10,7 @@
 // @require https://cdn.jsdelivr.net/npm/date-fns@4.1.0/cdn.min.js
 // @downloadURL  https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
 // @updateURL    https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
+// @grant GM_info
 // @grant GM_setValue
 // @grant GM_getValue
 // @grant GM.getValue
@@ -1999,7 +2000,7 @@ function setScreen(screen) {
         // Create the title link
         const configTitleDiv = `
     <div class="config-title">
-      <h1><a href="https://github.com/tonycpsu/bluesky-navigator" target="_blank">Bluesky Navigator</a></h1>
+      <h1><a href="https://github.com/tonycpsu/bluesky-navigator" target="_blank">Bluesky Navigator</a> v${GM_info.script.version}</h1>
       <h2>Configuration</h2>
     </div>
   `;

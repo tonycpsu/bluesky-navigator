@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-04.11
+// @version      2025-12-17.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -145,6 +145,12 @@ const CONFIG_FIELDS = {
         'type': 'checkbox',
         'default': false
     },
+    'disableLoadMoreOnScroll':  {
+        'label': 'Disable Load More on Scroll',
+        'title': 'If checked, the default behavior of loading more items when scrolling will be disabled. You can still press "U" to load more manually.',
+        'type': 'checkbox',
+        'default': false
+    },
     'savePostState':  {
         'label': 'Save Post State',
         'title': 'If checked, read/unread state is kept for post items in addition to feed items',
@@ -171,8 +177,6 @@ let stateManager;
 let config;
 let enableLoadMoreItems = false;
 let loadMoreItemsCallback;
-let itemIndex = 0;
-let threadIndex = 0;
 
 class StateManager {
     constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
@@ -850,7 +854,8 @@ class ItemHandler extends Handler {
             // console.log(postTimeString)
             const postTimestamp = new Date(postTimeString.replace(' at', ''));
             const formattedDate = dateFns.format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
-            postTimestampElement.text(formattedDate)
+            // postTimestampElement.text(formattedDate)
+            postTimestampElement.text(`${formattedDate} (${$(element).parent().parent().attr("data-bsky-navigator-thread-index")}, ${$(element).attr("data-bsky-navigator-item-index")})`)
         }
 
         // FIXME: This method of finding threads is likely to be unstable.
@@ -991,12 +996,15 @@ class ItemHandler extends Handler {
         let set = [];
 
         this.deactivate()
-        $(this.items).css("opacity", "0%")
-        const newItems = $(this.selector).not("div[data-bsky-navigator-item-index]")
+        // $(this.items).css("opacity", "0%")
+        // const newItems = $(this.selector).not("div[data-bsky-navigator-item-index]")
         // console.log(newItems.length)
-        const newItemsOrig = newItems.get()
-        newItems.filter(":visible").each(function (i, item) {
-            $(item).attr("data-bsky-navigator-item-index", itemIndex++);
+        // const newItemsOrig = newItems.get()
+        let itemIndex = 0;
+        let threadIndex = 0;
+
+        $(this.selector).filter(":visible").each(function (i, item) {
+            $(item).attr("data-bsky-navigator-item-index", stateManager.state.feedSortReverse ? itemIndex++: itemIndex--);
             // console.log(item);
             $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
 
@@ -1005,11 +1013,12 @@ class ItemHandler extends Handler {
             if (classes.some(cls => $(threadDiv).hasClass(cls))) {
                 set.push(threadDiv[0]); // Collect the div
                 if ($(threadDiv).hasClass("thread-last")) {
-                    threadIndex++;
+                    stateManager.state.feedSortReverse ? threadIndex++ : threadIndex--;
                 }
             }
         });
 
+        // debugger;
         this.sortItems();
         this.filterItems();
 
@@ -1022,8 +1031,10 @@ class ItemHandler extends Handler {
         )
 
         this.activate()
-        if(!stateManager.state.feedSortReverse && this.items.length > 0) {
-            this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
+        if(!config.get("disableLoadMoreOnScroll")){
+            if(!stateManager.state.feedSortReverse && this.items.length > 0) {
+                this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
+            }
         }
 
         // console.log(this.items)
@@ -1054,7 +1065,7 @@ class ItemHandler extends Handler {
         // console.log("set loading false")
         $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
         this.loading = false;
-        $(this.items).css("opacity", "100%")
+        // $(this.items).css("opacity", "100%")
         this.updateItems();
     }
 
@@ -1468,7 +1479,7 @@ class FeedItemHandler extends ItemHandler {
         // const sortIndicator = reversed ? '↑' :  '↓';
 
         const parent = $(this.selector).closest(".thread").first().parent()
-        const newItems = parent.children().not("div.bsky-navigator-seen").get().sort(
+        const newItems = parent.children().get().sort(
             (a, b) => {
                 const threadIndexA = parseInt($(a).closest(".thread").data("bsky-navigator-thread-index"));
                 const threadIndexB = parseInt($(b).closest(".thread").data("bsky-navigator-thread-index"));
@@ -1477,13 +1488,14 @@ class FeedItemHandler extends ItemHandler {
 
                 if (threadIndexA !== threadIndexB) {
                     return reversed
-                        ? threadIndexB - threadIndexA
-                        : threadIndexA - threadIndexB;
+                        ? threadIndexA - threadIndexB
+                        : threadIndexB - threadIndexA;
                 }
 
-                return itemIndexA - itemIndexB;
+                return itemIndexB - itemIndexA;
             }
         )
+        // reversed ? parent.children().eq(-2).after(newItems) : parent.children().eq(0).after(newItems);
         reversed ? parent.prepend(newItems) : parent.append(newItems);
     }
 
@@ -1706,9 +1718,13 @@ function setScreen(screen) {
         const stylesheet = `
 
         /* Feed itmes may be sorted, so we hide them visually and show them later */
+
+
+        /*
         div[data-testid$="FeedPage"] ${FEED_ITEM_SELECTOR} {
-            opacity: 0%;
+           opacity: 0%;
         }
+        */
 
         .item {
             ${config.get("posts")}

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-19.1
+// @version      2025-01-19.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -34,6 +34,16 @@ const ITEM_SCROLL_MARGIN = 100;
 
 const range = (start, stop, step = 1) =>
   Array.from({ length: Math.ceil((stop - start) / step) }, (_, i) => start + i * step);
+
+let debounceTimeout;
+
+// Debounce function
+function debounce(func, delay) {
+    return function (...args) {
+        clearTimeout(debounceTimeout);
+        debounceTimeout = setTimeout(() => func.apply(this, args), delay);
+    };
+}
 
 const DEFAULT_STATE = {
     seen: {},
@@ -936,7 +946,7 @@ class ItemHandler extends Handler {
             $(element).addClass("item-unread")
             $(element).removeClass("item-read")
         }
-        var handle = $.trim($(element).find(PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1)
+        const handle = this.handleFromItem(element);
         // console.log(handle)
         if (stateManager.state.blocks.all.includes(handle)) {
             $(element).find(PROFILE_SELECTOR).css(CLEARSKY_BLOCKED_ALL_CSS)
@@ -1130,6 +1140,14 @@ class ItemHandler extends Handler {
         } catch (e) {
             return this.postIdFromUrl()
         }
+    }
+
+    handleFromItem(item) {
+        return $.trim($(item).find(PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1)
+    }
+
+    displayNameFromItem(item) {
+        return $.trim($(item).find(PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""))
     }
 
     updateItems() {
@@ -1417,13 +1435,8 @@ class FeedItemHandler extends ItemHandler {
                 // $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
                 console.log($(logoDiv).parent());
                 if($(logoDiv).parent().attr("style").includes("width: 100%")) {
-                    console.log("foo");
                     $(logoDiv).parent().after(this.toolbarDiv);
                 } else {
-                    // $('div[data-testid="HomeScreen"] > div > div > div:first').parprepend(this.toolbarDiv);
-                    // debugger;
-                    // console.log("bar");
-                    // $(logoDiv).parent().parent().append(this.toolbarDiv);
                     $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
                 }
             }
@@ -1453,19 +1466,15 @@ class FeedItemHandler extends ItemHandler {
             }
 
             if (!this.searchField) {
-                this.searchField = $(this.toolbarDiv).append(`<input id="bsky-navigator-search"/>`)
-                // Debounced event handler
-                // const debouncedFetch = debounce(function () {
-                //     fetchSuggestions($input.val());
-                // }, 300); // Adjust delay (300ms) as needed
-
-                // // Attach event listener
-                // $input.on("input", debouncedFetch);
-                // $('#sortIndicator').on("kepyress", (event) => {
-                //     event.preventDefault();
-                //     this.toggleSortOrder();
-                // });
-
+                this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
+                $(this.toolbarDiv).append(this.searchField);
+                this.onSearchUpdate = debounce(function (event) {
+                    console.log($(event.target).val());
+                    this.setFilter($(event.target).val());
+                    this.filterItems();
+                }, 300);
+                this.onSearchUpdate = this.onSearchUpdate.bind(this)
+                $(this.searchField).on("input", this.onSearchUpdate);
             }
         })
     }
@@ -1490,24 +1499,68 @@ class FeedItemHandler extends ItemHandler {
         this.loadItems();
     }
 
+    setFilter(text) {
+        this.filter = text;
+    }
+
+    filterItem(item) {
+        if(stateManager.state.feedHideRead) {
+            if($(item).hasClass("item-read")) {
+                return false;
+            }
+        }
+        if (this.filter) {
+            const pattern = new RegExp(this.filter, "i");
+            const handle = this.handleFromItem(item);
+            const displayName = this.displayNameFromItem(item);
+            if (!handle.match(pattern) && !displayName.match(pattern)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    filterThread(thread) {
+        return ($(thread).find(".item").length != $(thread).find(".filtered").length);
+    }
+
     filterItems() {
         const hideRead = stateManager.state.feedHideRead;
         $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+hideRead])
 
         const parent = $(this.selector).first().closest(".thread").parent()
         const unseenThreads = parent.children()//.not("div.bsky-navigator-seen")
-
+        // debugger;
         $(unseenThreads).map(
             (i, thread) => {
-                if ($(thread).find(".item").length == $(thread).find(".item-read").length) {
-                    $(thread).css("display", hideRead ? "none": "block", "!important");
-                }
-                $(thread).find(".item-read").map(
+                // if ($(thread).find(".item").length == $(thread).find(".item-read").length) {
+                //     $(thread).css("display", hideRead ? "none": "block", "!important");
+                // }
+                $(thread).find(".item").each(
                     (i, item) => {
-                        // console.log(item)
-                        $(item).css("display", hideRead ? "none": "block", "!important");
+                        if(this.filterItem(item)) {
+                            $(item).removeClass("filtered");
+                        } else {
+                            $(item).addClass("filtered");
+                        }
+                        // $(item).css("display", this.filterItem(item) ? "block": "none", "!important");
+                        // $(item).css("display", this.filterItem(item) ? "block": "none", "!important");
                     }
                 )
+
+                if(this.filterThread(thread)) {
+                    $(thread).removeClass("filtered");
+                } else {
+                    $(thread).addClass("filtered");
+                }
+
+                // $(thread).css("display", this.filterThread(thread) ? "block": "none", "!important");
+                // $(thread).find(".item-read").map(
+                //     (i, item) => {
+                //         // console.log(item)
+                //         $(item).css("display", hideRead ? "none": "block", "!important");
+                //     }
+                // )
             }
         )
         if(hideRead && $(this.items[this.index]).hasClass("item-read")) {
@@ -1574,6 +1627,10 @@ class FeedItemHandler extends ItemHandler {
             this.toggleSortOrder();
         } else if (event.key == '"') {
             this.toggleHideRead();
+        } else if (event.key == '/') {
+            console.log("foo")
+            event.preventDefault();
+            $("input#bsky-navigator-search").focus();
         } else {
             super.handleInput(event)
         }
@@ -1961,6 +2018,10 @@ function setScreen(screen) {
         div.loading-indicator-forward {
             border-top: 10px solid;
             animation: oscillateBorderTop 0.5s infinite;
+        }
+
+        .filtered {
+            display: none !important;
         }
 
 `

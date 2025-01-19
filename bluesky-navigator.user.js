@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-18.2
+// @version      2025-12-19.1
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -18,6 +18,7 @@
 // @grant GM_xmlhttpRequest
 // @grant GM.xmlhttpRequest
 // ==/UserScript==
+
 const DEFAULT_HISTORY_MAX = 5000;
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000;
 const URL_MONITOR_INTERVAL = 500;
@@ -1410,13 +1411,24 @@ class FeedItemHandler extends ItemHandler {
 
             this.indicatorContainer = indicatorContainer;
             if (!this.toolbarDiv) {
+                const logoDiv = $(this.indicatorContainer).find('div[style^="flex: 1 1 0%;"]')
                 this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
                 // $(this.indicatorContainer).parent().append(this.toolbarDiv);
-                $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
+                // $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
+                console.log($(logoDiv).parent());
+                if($(logoDiv).parent().attr("style").includes("width: 100%")) {
+                    console.log("foo");
+                    $(logoDiv).parent().after(this.toolbarDiv);
+                } else {
+                    // $('div[data-testid="HomeScreen"] > div > div > div:first').parprepend(this.toolbarDiv);
+                    // debugger;
+                    // console.log("bar");
+                    // $(logoDiv).parent().parent().append(this.toolbarDiv);
+                    $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
+                }
             }
             // debugger;
 
-            // const logoDiv = $(this.indicatorContainer).find('div[style^="flex: 1 1 0%;"]')
 
             if (!this.sortIndicator) {
                 this.sortIndicator = `<div id="sortIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`;
@@ -1441,7 +1453,7 @@ class FeedItemHandler extends ItemHandler {
             }
 
             if (!this.searchField) {
-                this.searchField = $(this.toolbarDiv).append(`<input id="bskyNavigatorSearch"/>`)
+                this.searchField = $(this.toolbarDiv).append(`<input id="bsky-navigator-search"/>`)
                 // Debounced event handler
                 // const debouncedFetch = debounce(function () {
                 //     fetchSuggestions($input.val());
@@ -1894,15 +1906,16 @@ function setScreen(screen) {
             position: sticky;
             top: 0;
             align-items: center;
-            padding: 12px 20px 0px;
             background-color: rgb(255, 255, 255);
             width: 100%;
+            height: 30px;
         }
+
         .indicator-div {
             margin: 0px;
-            width: 34px;
-            height: 34px;
-            padding: 0px 14px;
+            width: 24px;
+            height: 24px;
+            padding: 0px 8px;
             flex: 0.1 0.1 0%;
         }
 
@@ -1911,8 +1924,9 @@ function setScreen(screen) {
             height: 24px;
         }
 
-        #bskyNavigatorSearch {
-            width: 20%;
+        #bsky-navigator-search {
+            flex: 1;
+            margin: 0px 8px;
         }
 
         @keyframes oscillateBorderBottom {

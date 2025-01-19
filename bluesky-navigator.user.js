@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-12-18.1
+// @version      2025-12-18.2
 // @author       @tonycpsu
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -18,18 +18,18 @@
 // @grant GM_xmlhttpRequest
 // @grant GM.xmlhttpRequest
 // ==/UserScript==
-const DEFAULT_HISTORY_MAX = 5000
-const DEFAULT_STATE_SAVE_TIMEOUT = 5000
-const URL_MONITOR_INTERVAL = 500
-const STATE_KEY = "bluesky_state"
-const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)'
-const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]'
-const PROFILE_SELECTOR = 'a[aria-label="View profile"]'
-const LINK_SELECTOR = 'a[target="_blank"]'
-const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24
-const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"}
-const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"}
-const ITEM_SCROLL_MARGIN = 50
+const DEFAULT_HISTORY_MAX = 5000;
+const DEFAULT_STATE_SAVE_TIMEOUT = 5000;
+const URL_MONITOR_INTERVAL = 500;
+const STATE_KEY = "bluesky_state";
+const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)';
+const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]';
+const PROFILE_SELECTOR = 'a[aria-label="View profile"]';
+const LINK_SELECTOR = 'a[target="_blank"]';
+const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24;
+const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"};
+const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"};
+const ITEM_SCROLL_MARGIN = 100;
 
 const range = (start, stop, step = 1) =>
   Array.from({ length: Math.ceil((stop - start) / step) }, (_, i) => start + i * step);
@@ -1409,13 +1409,20 @@ class FeedItemHandler extends ItemHandler {
         waitForElement('div[data-testid="HomeScreen"] > div > div > div:first', (indicatorContainer) => {
 
             this.indicatorContainer = indicatorContainer;
+            if (!this.toolbarDiv) {
+                this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
+                // $(this.indicatorContainer).parent().append(this.toolbarDiv);
+                $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
+            }
+            // debugger;
 
-            const logoDiv = $(this.indicatorContainer).find('div[style^="flex: 1 1 0%;"]')
+            // const logoDiv = $(this.indicatorContainer).find('div[style^="flex: 1 1 0%;"]')
 
             if (!this.sortIndicator) {
-                this.sortIndicator = $(logoDiv).before(`<div id="sortIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`)
+                this.sortIndicator = `<div id="sortIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`;
+                $(this.toolbarDiv).append(this.sortIndicator);
                 // add dummy button space to keep bsky logo centered
-                this.indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
+                // this.indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
                 $('#sortIndicator').on("click", (event) => {
                     event.preventDefault();
                     this.toggleSortOrder();
@@ -1423,9 +1430,10 @@ class FeedItemHandler extends ItemHandler {
             }
 
             if (!this.filterIndicator) {
-                this.filterIndicator = $(logoDiv).before(`<div id="filterIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`)
+                this.filterIndicator = `<div id="filterIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`;
+                $(this.toolbarDiv).append(this.filterIndicator);
                 // add dummy button space to keep bsky logo centered
-                this.indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
+                // this.indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
                 $('#filterIndicator').on("click", (event) => {
                     event.preventDefault();
                     this.toggleHideRead();
@@ -1433,7 +1441,7 @@ class FeedItemHandler extends ItemHandler {
             }
 
             if (!this.searchField) {
-                this.searchField = $(logoDiv).before(`<input id="bskyNavigatorSearch"/>`)
+                this.searchField = $(this.toolbarDiv).append(`<input id="bskyNavigatorSearch"/>`)
                 // Debounced event handler
                 // const debouncedFetch = debounce(function () {
                 //     fetchSuggestions($input.val());
@@ -1880,11 +1888,21 @@ function setScreen(screen) {
             background-color: ${config.get("threadIndicatorColor")} !important;
         }
 
+        div#bsky-navigator-toolbar {
+            display: flex;
+            flex-direction: row;
+            position: sticky;
+            top: 0;
+            align-items: center;
+            padding: 12px 20px 0px;
+            background-color: rgb(255, 255, 255);
+            width: 100%;
+        }
         .indicator-div {
             margin: 0px;
             width: 34px;
             height: 34px;
-            padding: 0px;
+            padding: 0px 14px;
             flex: 0.1 0.1 0%;
         }
 

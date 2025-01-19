@@ -1239,7 +1239,7 @@ class ItemHandler extends Handler {
         } else if (this.keyState[0] == "g") {
             if (event.key == "g") {
                 // gg = home
-                if (this.index < this.items.length - 1)
+                if (this.index < this.items.length)
                 {
                     this.setIndex(0)
                 }

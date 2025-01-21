@@ -854,6 +854,7 @@ class ItemHandler extends Handler {
     set index(value) {
         this._index = value
         this.postId = this.postIdForItem(this.items[this.index]);
+        this.updateInfoIndicator();
     }
 
     onItemAdded(element) {
@@ -1164,10 +1165,20 @@ class ItemHandler extends Handler {
         } else if (!this.jumpToPost(this.postId)) {
             this.setIndex(0);
         }
+        this.updateInfoIndicator();
         // else if (this.index == null) {
         //     this.setIndex(0);
         // }
         // this.updateItems();
+    }
+
+    updateInfoIndicator() {
+        const count = this.items.length
+        const unreadCount = this.items.filter(
+            (i, item) => $(item).hasClass("item-unread")
+        ).length;
+        const index = count ? this.index+1 : 0;
+        $("span#infoIndicatorText").html(`<strong>${index}</strong>/<strong>${count}</strong> (<strong>${unreadCount}</strong> new)`);
     }
 
     loadNewItems() {
@@ -1293,6 +1304,7 @@ class ItemHandler extends Handler {
         }
         this.markPostRead(postId, isRead)
         this.applyItemStyle(this.items[index], index == this.index)
+        this.updateInfoIndicator();
     }
 
     markPostRead(postId, isRead) {
@@ -1546,6 +1558,10 @@ class FeedItemHandler extends ItemHandler {
                 }
             }
 
+            if (!this.infoIndicator) {
+                this.infoIndicator = $(`<div id="infoIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span id="infoIndicatorText"/></div>`);
+                $(this.toolbarDiv).append(this.infoIndicator);
+            }
 
             if (!this.sortIndicator) {
                 this.sortIndicator = $(`<div id="sortIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
@@ -2113,6 +2129,14 @@ function setScreen(screen) {
 
         .filtered {
             display: none !important;
+        }
+
+        div#infoIndicator {
+            flex: 0.3;
+        }
+
+        span#infoIndicatorText {
+            font-size: 12px;
         }
 
 `

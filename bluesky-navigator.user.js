@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-19.1
-// @author       @tonycpsu
+// @version      2025-01-21.1
+// @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
 // @require https://code.jquery.com/jquery-3.7.1.min.js
@@ -23,6 +23,7 @@ const DEFAULT_HISTORY_MAX = 5000;
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000;
 const URL_MONITOR_INTERVAL = 500;
 const STATE_KEY = "bluesky_state";
+const LOAD_NEW_BUTTON_SELECTOR = "button[aria-label^='Load new']"
 const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)';
 const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]';
 const PROFILE_SELECTOR = 'a[aria-label="View profile"]';
@@ -719,6 +720,7 @@ class ItemHandler extends Handler {
         super(name)
         this._index = null;
         this.postId = null;
+        this.loadNewCallback = null;
         this.selector = selector
         this.debounceTimeout = null
         this.lastMousePosition = null
@@ -734,6 +736,7 @@ class ItemHandler extends Handler {
         this.didMouseMove = this.didMouseMove.bind(this)
         this.loading = false;
         this.loadingNew = false;
+        this.handlingClick = false;
         this.visibleItems = new Set();
 
     }
@@ -759,8 +762,66 @@ class ItemHandler extends Handler {
 
         const safeSelector = `${this.selector}:not(.thread ${this.selector})`
         this.observer = waitForElement(safeSelector, (element) => {
-            this.onItemAdded(element)
-        })
+            this.onItemAdded(element),
+            this.onItemRemoved(element)
+        });
+
+        this.loadNewObserver = waitForElement(LOAD_NEW_BUTTON_SELECTOR, (button) => {
+            this.loadNewButton = button[0];
+            this.loadNewButton.addEventListener(
+                "click",
+                (event) => {
+                    if (this.loadingNew) {
+                        console.log("handling click, returning")
+                        return; // Avoid re-entry
+                    }
+
+                    console.log("Intercepted click in capture phase", event.target);
+                    const listeners = getEventListeners(event.target);
+                    // Save the target and event details for later
+                    const target = event.target;
+                    // const originalHandler = target.onclick;
+
+                    // Stop propagation but allow calling the original logic manually
+                    event.stopImmediatePropagation();
+
+                    // // Call the application's original handler if necessary
+                    setTimeout(() => {
+                        console.log("Calling original handler");
+                        this.loadNewItems();
+                    }, 0);
+
+                    // Add custom logic
+                    console.log("Custom logic executed");
+                },
+                true // Capture phase
+            );
+        });
+
+
+        // this.loadNewObserver = waitForElement(LOAD_NEW_BUTTON_SELECTOR, (button) => {
+        //     this.loadNewButton = button[0];
+
+        //     // Get the original onclick handler
+        //     const originalHandler = this.loadNewButton.onclick;
+        //     // Override the onclick property
+        //     this.loadNewButton.onclick = (event) => {
+        //         event.preventDefault();
+        //         event.stopPropagation();
+
+        //         console.log("Click intercepted");
+        //         console.log("Original handler:", originalHandler);
+        //         console.log("Original handler context (this):", this.loadNewButton);
+        //         // Call the original handler if it exists
+        //         if (originalHandler) {
+        //             originalHandler.call(this.loadNewButton, event);
+        //         }
+
+        //         // Add your custom logic here
+        //     };
+
+        // });
+
         super.activate()
     }
 
@@ -810,7 +871,16 @@ class ItemHandler extends Handler {
         }, 500)
     }
 
+    onItemRemoved(element) {
+        this.intersectionObserver.disconnect(element)
+    }
+
+
     onIntersection(entries) {
+
+        if(this.loading || this.loadingNew) {
+            return;
+        }
         let focusedElement = null;
 
         entries.forEach(entry => {
@@ -1011,14 +1081,14 @@ class ItemHandler extends Handler {
         return;
     }
 
-    loadItems() {
+    loadItems(focusedPostId) {
         var old_length = this.items.length
         var old_index = this.index
 
         const classes = ["thread-first", "thread-middle", "thread-last"];
         let set = [];
 
-        this.deactivate()
+        // this.deactivate()
         // $(this.items).css("opacity", "0%")
         // const newItems = $(this.selector).not("div[data-bsky-navigator-item-index]")
         // console.log(newItems.length)
@@ -1042,7 +1112,6 @@ class ItemHandler extends Handler {
             }
         });
 
-        // debugger;
         this.sortItems();
         this.filterItems();
 
@@ -1054,7 +1123,7 @@ class ItemHandler extends Handler {
             }
         )
 
-        this.activate()
+        // this.activate()
         if(!config.get("disableLoadMoreOnScroll")){
             if(!stateManager.state.feedSortReverse && this.items.length > 0) {
                 this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
@@ -1089,12 +1158,38 @@ class ItemHandler extends Handler {
         // console.log("set loading false")
         $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
         this.loading = false;
-        this.jumpToPost(this.postId);
         // $(this.items).css("opacity", "100%")
-        if (this.index == null) {
+        if(focusedPostId) {
+            this.jumpToPost(focusedPostId);
+        } else if (!this.jumpToPost(this.postId)) {
             this.setIndex(0);
         }
-        this.updateItems();
+        // else if (this.index == null) {
+        //     this.setIndex(0);
+        // }
+        // this.updateItems();
+    }
+
+    loadNewItems() {
+        if(!this.loadNewButton) {
+            console.log("no button")
+            return;
+        }
+        this.loadingNew = true;
+        this.applyItemStyle(this.items[this.index], false)
+        // // this.setIndex(0)
+        // //this.updateItems()
+        // $(document).find(LOAD_NEW_BUTTON_SELECTOR).click()
+        let oldPostId = this.postIdForItem(this.items[this.index])
+        $(this.loadNewButton).click()
+        setTimeout( () => {
+            this.loadItems(oldPostId);
+            // if (!this.jumpToPost(oldPostId)) {
+            //     console.log("set 0");
+            //     this.setIndex(0);
+            // }
+            this.loadingNew = false;
+        }, 1000)
     }
 
     loadMoreItems() {
@@ -1138,6 +1233,7 @@ class ItemHandler extends Handler {
         try {
             return $(item).find("a[href*='/post/']").attr("href").split("/")[4]
         } catch (e) {
+            // debugger;
             return this.postIdFromUrl()
         }
     }
@@ -1168,17 +1264,22 @@ class ItemHandler extends Handler {
         this.applyItemStyle(this.items[oldIndex], false)
         this.index = index
         this.applyItemStyle(this.items[this.index], true)
+        // this.updateItems();
     }
 
     jumpToPost(postId) {
-        $(this.items).each(
-            (i, item) => {
-                if (postId == this.postIdForItem(item))
-                {
-                    this.setIndex(i);
-                }
+        // debugger;
+        for (const [i, item] of $(this.items).get().entries()) {
+            const other = this.postIdForItem(item);
+            if (postId == other)
+            {
+                // console.log(`jumping to ${postId} (${i})`);
+                this.setIndex(i);
+                this.updateItems();
+                return true;
             }
-        );
+        }
+        return false;
     }
 
 
@@ -1414,6 +1515,10 @@ class FeedItemHandler extends ItemHandler {
         sort: [
             "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg",
             "https://www.svgrepo.com/show/506582/sort-numeric-up.svg"
+        ],
+        preferences: [
+            "https://www.svgrepo.com/show/522235/preferences.svg",
+            "https://www.svgrepo.com/show/522236/preferences.svg"
         ]
     }
 
@@ -1440,14 +1545,13 @@ class FeedItemHandler extends ItemHandler {
                     $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
                 }
             }
-            // debugger;
 
 
             if (!this.sortIndicator) {
-                this.sortIndicator = `<div id="sortIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`;
+                this.sortIndicator = $(`<div id="sortIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
                 $(this.toolbarDiv).append(this.sortIndicator);
                 // add dummy button space to keep bsky logo centered
-                // this.indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
+                // this.indicatorContainer.children().eq(-1).before(`<div class="toolbar-icon"/>`)
                 $('#sortIndicator').on("click", (event) => {
                     event.preventDefault();
                     this.toggleSortOrder();
@@ -1455,10 +1559,10 @@ class FeedItemHandler extends ItemHandler {
             }
 
             if (!this.filterIndicator) {
-                this.filterIndicator = `<div id="filterIndicator" class="indicator-div css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`;
+                this.filterIndicator = $(`<div id="filterIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`);
                 $(this.toolbarDiv).append(this.filterIndicator);
                 // add dummy button space to keep bsky logo centered
-                // this.indicatorContainer.children().eq(-1).before(`<div class="indicator-div"/>`)
+                // this.indicatorContainer.children().eq(-1).before(`<div class="toolbar-icon"/>`)
                 $('#filterIndicator').on("click", (event) => {
                     event.preventDefault();
                     this.toggleHideRead();
@@ -1476,6 +1580,21 @@ class FeedItemHandler extends ItemHandler {
                 this.onSearchUpdate = this.onSearchUpdate.bind(this)
                 $(this.searchField).on("input", this.onSearchUpdate);
             }
+
+            if (!this.preferencesIcon) {
+                this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
+  //               this.preferencesIcon = $(`
+  //   <div id="preferences-icon" class="toolbar-icon preferences-icon-overlay">
+  //     <span>⚪️</span>
+  //   </div>
+  // `);
+                $(this.preferencesIcon).on("click", () => {
+                    $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1])
+                    config.open()
+                });
+                $(this.toolbarDiv).append(this.preferencesIcon);
+            }
+
         })
     }
 
@@ -1530,7 +1649,6 @@ class FeedItemHandler extends ItemHandler {
 
         const parent = $(this.selector).first().closest(".thread").parent()
         const unseenThreads = parent.children()//.not("div.bsky-navigator-seen")
-        // debugger;
         $(unseenThreads).map(
             (i, thread) => {
                 // if ($(thread).find(".item").length == $(thread).find(".item-read").length) {
@@ -1570,7 +1688,6 @@ class FeedItemHandler extends ItemHandler {
     }
 
     sortItems() {
-        // debugger;
         const reversed = stateManager.state.feedSortReverse
         $("#sortIndicatorImage").attr("src", this.INDICATOR_IMAGES.sort[+reversed])
         // const sortIndicator = reversed ? '↑' :  '↓';
@@ -1603,8 +1720,7 @@ class FeedItemHandler extends ItemHandler {
         } else {
             console.log(`${reversed}, ${this.loadingNew}: append`);
         }
-        // (reversed ^ this.loadingNew) ? parent.prepend(newItems) : parent.append(newItems);
-        (reversed ^ this.loadingNew) ? parent.children().eq(1).before(newItems) : parent.children().eq(-2).after(newItems);
+        (reversed ^ this.loadingNew) ? parent.prepend(newItems) : parent.append(newItems);
     }
 
     handleInput(event) {
@@ -1612,27 +1728,18 @@ class FeedItemHandler extends ItemHandler {
         if(event.key == "a") {
             $(item).find(PROFILE_SELECTOR)[0].click()
         } else if(event.key == "u") {
-            this.loadingNew = true;
-            this.applyItemStyle(this.items[this.index], false)
-            // this.setIndex(0)
-            //this.updateItems()
-            $(document).find("button[aria-label^='Load new']").click()
-            setTimeout( () => {
-                let postId = this.postIdForItem(this.items[this.index])
-                this.loadItems()
-                this.jumpToPost(postId);
-                this.loadingNew = false;
-            }, 1000)
+            this.loadNewItems();
         } else if (event.key == ":") {
             this.toggleSortOrder();
         } else if (event.key == '"') {
             this.toggleHideRead();
         } else if (event.key == '/') {
-            console.log("foo")
             event.preventDefault();
             $("input#bsky-navigator-search").focus();
+        } else if (event.key == ',' ) {
+            this.loadItems();
         } else {
-            super.handleInput(event)
+            super.handleInput(event);
         }
     }
 }
@@ -1805,12 +1912,12 @@ function setScreen(screen) {
 
     function onConfigInit()
     {
-        const preferencesIconDiv = `
-    <div class="preferences-icon-overlay">
-      <span>⚙️</span>
-    </div>
-  `;
-        $("body").append(preferencesIconDiv);
+  //       const preferencesIconDiv = `
+  //   <div class="preferences-icon-overlay">
+  //     <span>⚙️</span>
+  //   </div>
+  // `;
+  //       $("body").append(preferencesIconDiv);
 
 
         // stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
@@ -1895,32 +2002,19 @@ function setScreen(screen) {
         }
 
         .preferences-icon-overlay {
-            position: fixed;
-            width: 30px;
-            height: 30px;
             background-color: #cccccc;
-            border-radius: 50%;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            display: flex;
-            justify-content: center;
-            align-items: center;
             cursor: pointer;
+            justify-content: center;
             z-index: 1000;
         }
-
 
        .preferences-icon-overlay-sync-ready {
             background-color: #d5f5e3;
         }
 
         .preferences-icon-overlay-sync-pending {
+            animation: fadeInOut 1s infinite; /* Adjust timing as needed */
             background-color: #f9e79f;
-            transition:2.5s;
-            -o-transform:rotate(720deg);
-            -ms-transform:rotate(720deg);
-            -moz-transform:rotate(720deg);
-            -webkit-transform:rotate(720deg);
-            transform:rotate(720deg);
         }
 
         .preferences-icon-overlay-sync-success {
@@ -1931,22 +2025,6 @@ function setScreen(screen) {
             background-color: #ec7063 ;
         }
 
-        @media only screen and not (max-width: 640px) {
-            .preferences-icon-overlay {
-                bottom: 20px;
-                left: 20px;
-            }
-        }
-
-        @media only screen and (max-width: 640px) {
-            .preferences-icon-overlay {
-                bottom: 5px;
-                right: 5px;
-                transform: scale(0.5);
-                transform-origin: center;
-
-            }
-        }
         .preferences-icon-overlay span {
             color: white;
             font-size: 16px;
@@ -1968,12 +2046,13 @@ function setScreen(screen) {
             height: 30px;
         }
 
-        .indicator-div {
+        .toolbar-icon {
             margin: 0px;
             width: 24px;
             height: 24px;
             padding: 0px 8px;
             flex: 0.1 0.1 0%;
+            text-align: center;
         }
 
         .indicator-image {
@@ -2010,6 +2089,18 @@ function setScreen(screen) {
             }
         }
 
+        @keyframes fadeInOut {
+          0% {
+            opacity: 0.5;
+          }
+          50% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0.5;
+          }
+        }
+
         div.loading-indicator-reverse {
             border-bottom: 10px solid;
             animation: oscillateBorderBottom 0.5s infinite;
@@ -2025,11 +2116,6 @@ function setScreen(screen) {
         }
 
 `
-
-        // Add event listeners using jQuery
-        $(".preferences-icon-overlay").on("click", function () {
-            config.open()
-        });
 
         // Inject the style into the page
         const styleElement = document.createElement("style");
@@ -2234,7 +2320,8 @@ function setScreen(screen) {
             fields: CONFIG_FIELDS,
             'events': {
                 'init': onConfigInit,
-                'save': () => config.close()
+                'save': () => config.close(),
+                'close': () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
             },
             'css':  `
 h1 {

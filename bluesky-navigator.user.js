@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-21.3
+// @version      2025-01-21.4
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -47,6 +47,15 @@ function debounce(func, delay) {
     };
 }
 
+function partition(array, predicate) {
+  return array.reduce(
+    ([pass, fail], element) =>
+      predicate(element)
+        ? [[...pass, element], fail]
+        : [pass, [...fail, element]],
+    [[], []]
+  );
+}
 const DEFAULT_STATE = {
     seen: {},
     lastUpdated: null,
@@ -2279,19 +2288,9 @@ function setScreen(screen) {
 
                 // Create the "real" IntersectionObserver instance
                 this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
-                    // Decide when to override behavior
-                    // console.dir("proxy")
-                    // console.dir(entries)
-                    if (this.shouldOverride(entries, observer)) {
-                        // console.log("Custom behavior triggered!");
-                        // Custom behavior
-                        this.overrideBehavior(entries, observer);
-                    } else {
-                        // Call the original callback
-                        // console.log("calling original callback!");
-                        // console.log(entries);
-                        callback(entries, observer);
-                    }
+                    const [threadEntries, nonThreadEntries] = partition(entries, (entry) => $(entry.target).hasClass("thread"));
+                    this.overrideBehavior(threadEntries, observer);
+                    callback(nonThreadEntries, observer);
                 }, options);
             }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-21.2
+// @version      2025-01-21.3
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -27,6 +27,7 @@ const LOAD_NEW_BUTTON_SELECTOR = "button[aria-label^='Load new']"
 const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)';
 const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]';
 const PROFILE_SELECTOR = 'a[aria-label="View profile"]';
+const TOOLBAR_SELECTOR = 'div[data-testid="homeScreenFeedTabs"]'
 const LINK_SELECTOR = 'a[target="_blank"]';
 const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24;
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"};
@@ -1554,7 +1555,9 @@ class FeedItemHandler extends ItemHandler {
                 if($(logoDiv).parent().attr("style").includes("width: 100%")) {
                     $(logoDiv).parent().after(this.toolbarDiv);
                 } else {
-                    $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
+                    waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
+                        $(homeScreenFeedTabsDiv).parent().prepend(this.toolbarDiv);
+                    });
                 }
             }
 

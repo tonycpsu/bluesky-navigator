@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-21.4
+// @version      2025-01-21.5
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -134,6 +134,13 @@ const CONFIG_FIELDS = {
         'label': 'Post timestamp format',
         'title': 'A format string specifying how post timestamps are displayed',
         'type': 'textarea',
+        'default': "'$age' '('yyyy-MM-dd hh:mmaaa')'"
+    },
+    'videoPreviewPlayback': {
+        'label': 'Video Preview Playback',
+        'title': 'Control playback of video previews',
+        'type': 'select',
+        'options': ['Play all', 'Play selected', 'Pause all'],
         'default': "'$age' '('yyyy-MM-dd hh:mmaaa')'"
     },
     'stateSyncSection': {
@@ -883,7 +890,22 @@ class ItemHandler extends Handler {
     }
 
     onItemRemoved(element) {
-        this.intersectionObserver.disconnect(element)
+        if (this.intersectionObserver) {
+            this.intersectionObserver.disconnect(element)
+        }
+    }
+
+    // Function to programmatically play a video from the userscript
+    playVideo(video) {
+        video.dataset.allowPlay = 'true'; // Set the custom flag
+        console.log('Userscript playing video:', video);
+        video.play(); // Call the overridden play method
+    }
+
+    pauseVideo(video) {
+        video.dataset.allowPlay = 'true'; // Set the custom flag
+        console.log('Userscript playing video:', video);
+        video.pause(); // Call the overridden play method
     }
 
 
@@ -967,6 +989,28 @@ class ItemHandler extends Handler {
         const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
 
         $(element).parent().parent().addClass("thread")
+
+
+        $(element).find('video').each(
+            (i, video) => {
+                if (
+                    (config.get("videoPreviewPlayback") == "Pause all")
+                        ||
+                        ( (config.get("videoPreviewPlayback") == "Play selected") && !selected)
+                ) {
+                    console.log("pause")
+                    console.log(video);
+                    this.pauseVideo(video);
+                    // video.pause();
+                } else if ((config.get("videoPreviewPlayback") == "Play selected") && selected)
+                    {
+                        console.log("play")
+                        console.log(video);
+                        this.playVideo(video);
+                        // video.play();
+                    }
+            }
+        )
 
         if (selected) {
             $(element).parent().parent().addClass("thread-selection-active")
@@ -1128,11 +1172,13 @@ class ItemHandler extends Handler {
 
         this.items = $(this.selector).filter(":visible")
 
-        $(this.items).each(
-            (i, item) => {
-                this.intersectionObserver.observe($(item)[0]);
-            }
-        )
+        if(this.intersectionObserver) {
+            $(this.items).each(
+                (i, item) => {
+                    this.intersectionObserver.observe($(item)[0]);
+                }
+            )
+        }
 
         // this.activate()
         if(!config.get("disableLoadMoreOnScroll")){
@@ -1168,6 +1214,8 @@ class ItemHandler extends Handler {
         $(this.selector).closest("div.thread").addClass("bsky-navigator-seen")
         // console.log("set loading false")
         $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
+
+
         this.loading = false;
         // $(this.items).css("opacity", "100%")
         if(focusedPostId) {
@@ -1485,6 +1533,12 @@ class ItemHandler extends Handler {
             if (media.length > 0)
             {
                 media[0].click()
+            } else {
+                const video = $(item).find('video')[0];
+                if(video) {
+                    event.preventDefault();
+                    video.paused ? this.playVideo(video): this.pauseVideo(video);
+                }
             }
         } else if(event.key == "r") {
             // r = reply
@@ -1525,6 +1579,7 @@ class ItemHandler extends Handler {
         }
         return event.key
     }
+
 }
 
 class FeedItemHandler extends ItemHandler {
@@ -2259,6 +2314,7 @@ function setScreen(screen) {
             }, URL_MONITOR_INTERVAL)
         }
 
+
         startMonitor()
         setContextFromUrl()
 
@@ -2284,13 +2340,18 @@ function setScreen(screen) {
                 this.options = options;
                 this.enabled = true
                 loadMoreItemsCallback = this.callback;
-                console.log(`callback: ${loadMoreItemsCallback}`)
+                // console.log(`callback: ${loadMoreItemsCallback}`)
 
                 // Create the "real" IntersectionObserver instance
                 this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
                     const [threadEntries, nonThreadEntries] = partition(entries, (entry) => $(entry.target).hasClass("thread"));
-                    this.overrideBehavior(threadEntries, observer);
-                    callback(nonThreadEntries, observer);
+                    if (threadEntries.length) {
+                        this.overrideBehavior(threadEntries, observer);
+                    }
+
+                    if (nonThreadEntries.length) {
+                        callback(nonThreadEntries, observer);
+                    }
                 }, options);
             }
 
@@ -2339,6 +2400,32 @@ function setScreen(screen) {
         // Replace the global IntersectionObserver with the proxy
         unsafeWindow.IntersectionObserver = ProxyIntersectionObserver;
 
+        // Store the original play method
+        const originalPlay = HTMLMediaElement.prototype.play;
+
+        // Override the play method
+        HTMLMediaElement.prototype.play = function () {
+            const isUserInitiated = this.dataset.allowPlay === 'true';
+
+            // Allow user-initiated playback or userscript playback
+            if (isUserInitiated || config.get("videoPreviewPlayback") == "Play all") {
+                console.log('Allowing play:', this);
+                delete this.dataset.allowPlay; // Clear the flag after use
+                return originalPlay.apply(this, arguments);
+            }
+
+            // Check if play is triggered by a user click
+            else if ($(document.activeElement).is('button[aria-label^="Play"]')) {
+                console.log('Allowing play from user interaction:', this);
+                return originalPlay.apply(this, arguments);
+            }
+
+            else  {
+                // Block all other play calls (likely from the app)
+                console.log('Blocking play call from app:', this);
+                return Promise.resolve(); // Return a resolved promise to prevent errors
+            }
+        };
 
         config = new GM_config({
             id: 'GM_config',

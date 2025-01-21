@@ -22,9 +22,12 @@ Features
 - keyboard shortcuts to switch between home, search, notifications, chat, etc.
 - optionally reverse sorting of feeds to browse them in chronological order
   (currently only works on "Following" feed)
+- optionally show only unread posts
 - visual indicator for post read/unread status
 - configurable formatting of post timestamps
+- optionally disable embedded video previews
 - sync read/unread state between multiple browsers via cloud service(s)
+
 
 
 Keyboard Shortcuts
@@ -41,7 +44,7 @@ Keyboard Shortcuts
  | o / Enter   | open post (feed view) or embedded post (post view) |
  | O           | open embedded post (feed view)                     |
  | i           | open link in post                                  |
- | m           | open media in post                                 |
+ | m           | view/play/pause media in post                      |
  | a           | open post author's profile                         |
  | r           | reply to post                                      |
  | l           | like post                                          |

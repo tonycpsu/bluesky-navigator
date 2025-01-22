@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-21.5
+// @version      2025-01-21.6
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -47,15 +47,6 @@ function debounce(func, delay) {
     };
 }
 
-function partition(array, predicate) {
-  return array.reduce(
-    ([pass, fail], element) =>
-      predicate(element)
-        ? [[...pass, element], fail]
-        : [pass, [...fail, element]],
-    [[], []]
-  );
-}
 const DEFAULT_STATE = {
     seen: {},
     lastUpdated: null,
@@ -855,10 +846,7 @@ class ItemHandler extends Handler {
         {
             this.intersectionObserver.disconnect()
         }
-        if(this.footerIntersectionObserver)
-        {
-            this.footerIntersectionObserver.disconnect()
-        }
+        this.disableFooterObserver();
 
         $(this.selector).off("mouseover mouseleave");
         super.deactivate()
@@ -947,11 +935,28 @@ class ItemHandler extends Handler {
             if (entry.isIntersecting) {
                 console.log("footer")
                 const target = entry.target;
-                this.setIndex(this.getIndexFromItem(target))
+                //this.setIndex(this.getIndexFromItem(target))
                 // this.index = this.getIndexFromItem(target)
+                this.disableFooterObserver();
                 this.loadMoreItems();
             }
         });
+    }
+
+    enableFooterObserver() {
+        if (config.get("disableLoadMoreOnScroll")) {
+            return;
+        }
+        if(!stateManager.state.feedSortReverse && this.items.length > 0) {
+            this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
+        }
+    }
+
+    disableFooterObserver() {
+        if(this.footerIntersectionObserver)
+        {
+            this.footerIntersectionObserver.disconnect()
+        }
     }
 
     onPopupAdd() {
@@ -1151,6 +1156,7 @@ class ItemHandler extends Handler {
         let itemIndex = 0;
         let threadIndex = 0;
 
+        this.ignoreMouseMovement = true;
         $(this.selector).filter(":visible").each(function (i, item) {
             $(item).attr("data-bsky-navigator-item-index", itemIndex++);
             // $(item).attr("data-bsky-navigator-item-index", stateManager.state.feedSortReverse ? itemIndex++: itemIndex--);
@@ -1181,11 +1187,7 @@ class ItemHandler extends Handler {
         }
 
         // this.activate()
-        if(!config.get("disableLoadMoreOnScroll")){
-            if(!stateManager.state.feedSortReverse && this.items.length > 0) {
-                this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
-            }
-        }
+        this.enableFooterObserver();
 
         // console.log(this.items)
         this.applyItemStyle(this.items[this.index], true)
@@ -1224,6 +1226,8 @@ class ItemHandler extends Handler {
             this.setIndex(0);
         }
         this.updateInfoIndicator();
+        this.enableFooterObserver();
+        this.ignoreMouseMovement = false;
         // else if (this.index == null) {
         //     this.setIndex(0);
         // }
@@ -1266,6 +1270,7 @@ class ItemHandler extends Handler {
             // console.log("already loading, returning")
             return;
         }
+        console.log("loading more");
         this.loading = true;
         const reversed = stateManager.state.feedSortReverse;
         const index = reversed ? 0 : this.items.length-1;
@@ -2344,14 +2349,18 @@ function setScreen(screen) {
 
                 // Create the "real" IntersectionObserver instance
                 this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
-                    const [threadEntries, nonThreadEntries] = partition(entries, (entry) => $(entry.target).hasClass("thread"));
-                    if (threadEntries.length) {
-                        this.overrideBehavior(threadEntries, observer);
-                    }
-
-                    if (nonThreadEntries.length) {
-                        callback(nonThreadEntries, observer);
-                    }
+                    callback(
+                        entries.filter(
+                            (i, entry) => {
+                                return !(
+                                    ! $(entry.target).hasClass("thread")
+                                    ||
+                                    ! $(entry.target).closest('div[data-testid]="HomeScreen"').length
+                                )
+                            }
+                        ),
+                        observer
+                    )
                 }, options);
             }
 
@@ -2366,8 +2375,6 @@ function setScreen(screen) {
             // Custom logic to decide when to override
             shouldOverride(entries, observer) {
                 return !enableLoadMoreItems;
-                // Example: Override if any target's boundingClientRect is fully visible
-                return entries.some(entry => entry.isIntersecting);
             }
 
             // Custom override behavior

@@ -1619,7 +1619,8 @@ class FeedItemHandler extends ItemHandler {
                 if($(logoDiv).parent().attr("style").includes("width: 100%")) {
                     $(logoDiv).parent().after(this.toolbarDiv);
                 } else {
-                    $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
+                    $(logoDiv).parent().after(this.toolbarDiv);
+                    // $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
                 }
             }
 

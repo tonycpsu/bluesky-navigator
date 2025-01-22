@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-21.6
+// @version      2025-01-21.7
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -2349,16 +2349,17 @@ function setScreen(screen) {
 
                 // Create the "real" IntersectionObserver instance
                 this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
+                    // filter thread divs out
+                    const filteredEntries = entries.filter(
+                        (entry) => !(
+                            $(entry.target).hasClass("thread")
+                            ||
+                            $(entry.target).closest('div[data-testid="HomeScreen"]').length
+                        )
+                    )
+
                     callback(
-                        entries.filter(
-                            (i, entry) => {
-                                return !(
-                                    ! $(entry.target).hasClass("thread")
-                                    ||
-                                    ! $(entry.target).closest('div[data-testid]="HomeScreen"').length
-                                )
-                            }
-                        ),
+                        filteredEntries,
                         observer
                     )
                 }, options);

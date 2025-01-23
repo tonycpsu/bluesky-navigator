@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-22.2
+// @version      2025-01-23.1
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -23,12 +23,12 @@ const DEFAULT_HISTORY_MAX = 5000;
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000;
 const URL_MONITOR_INTERVAL = 500;
 const STATE_KEY = "bluesky_state";
+const TOOLBAR_SELECTOR = 'div[data-testid="HomeScreen"] > div > div > div:first'
 const LOAD_NEW_BUTTON_SELECTOR = "button[aria-label^='Load new']"
 const LOAD_NEW_INDICATOR_SELECTOR = 'div[style*="border-color: rgb(197, 207, 217)"]'
 const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)';
 const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]';
 const PROFILE_SELECTOR = 'a[aria-label="View profile"]';
-const TOOLBAR_SELECTOR = 'div[data-testid="homeScreenFeedTabs"]'
 const LINK_SELECTOR = 'a[target="_blank"]';
 const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24;
 const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"};
@@ -209,7 +209,7 @@ let $ = window.jQuery;
 let stateManager;
 let config;
 let enableLoadMoreItems = false;
-let loadMoreItemsCallback;
+let loadOlderItemsCallback;
 
 class StateManager {
     constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
@@ -735,7 +735,7 @@ class ItemHandler extends Handler {
         super(name)
         this._index = null;
         this.postId = null;
-        this.loadNewCallback = null;
+        this.loadNewerCallback = null;
         this.selector = selector
         this.debounceTimeout = null
         this.lastMousePosition = null
@@ -781,12 +781,12 @@ class ItemHandler extends Handler {
             this.onItemRemoved(element)
         });
 
-        this.loadNewObserver = waitForElement(LOAD_NEW_INDICATOR_SELECTOR, (button) => {
-            this.loadNewButton = button[0];
-            $('a#loadNewIndicatorLink').on("click", () => this.loadNewItems())
-            $('img#loadNewIndicatorImage').css("opacity", "1");
+        this.loadNewerObserver = waitForElement(LOAD_NEW_INDICATOR_SELECTOR, (button) => {
+            this.loadNewerButton = button[0];
+            $('a#loadNewerIndicatorLink').on("click", () => this.loadNewerItems())
+            $('img#loadNewerIndicatorImage').css("opacity", "1");
 
-            this.loadNewButton.addEventListener(
+            this.loadNewerButton.addEventListener(
                 "click",
                 (event) => {
                     if (this.loadingNew) {
@@ -805,7 +805,7 @@ class ItemHandler extends Handler {
                     // // Call the application's original handler if necessary
                     setTimeout(() => {
                         console.log("Calling original handler");
-                        this.loadNewItems();
+                        this.loadNewerItems();
                     }, 0);
 
                     // Add custom logic
@@ -924,7 +924,7 @@ class ItemHandler extends Handler {
                 //this.setIndex(this.getIndexFromItem(target))
                 // this.index = this.getIndexFromItem(target)
                 this.disableFooterObserver();
-                this.loadMoreItems();
+                this.loadOlderItems();
             }
         });
     }
@@ -1113,7 +1113,7 @@ class ItemHandler extends Handler {
             return event.key
         } else if (event.key == "U") {
             console.log("Update")
-            this.loadMoreItems();
+            this.loadOlderItems();
         } else {
             return super.handleInput(event)
         }
@@ -1205,6 +1205,7 @@ class ItemHandler extends Handler {
 
 
         this.loading = false;
+        $('img#loadOlderIndicatorImage').css("opacity", "1");
         // $(this.items).css("opacity", "100%")
         if(focusedPostId) {
             this.jumpToPost(focusedPostId);
@@ -1229,8 +1230,8 @@ class ItemHandler extends Handler {
         $("span#infoIndicatorText").html(`<strong>${index}</strong>/<strong>${count}</strong> (<strong>${unreadCount}</strong> new)`);
     }
 
-    loadNewItems() {
-        if(!this.loadNewButton) {
+    loadNewerItems() {
+        if(!this.loadNewerButton) {
             console.log("no button")
             return;
         }
@@ -1240,24 +1241,25 @@ class ItemHandler extends Handler {
         // //this.updateItems()
         // $(document).find(LOAD_NEW_BUTTON_SELECTOR).click()
         let oldPostId = this.postIdForItem(this.items[this.index])
-        $(this.loadNewButton).click()
+        $(this.loadNewerButton).click()
         setTimeout( () => {
             this.loadItems(oldPostId);
             // if (!this.jumpToPost(oldPostId)) {
             //     console.log("set 0");
             //     this.setIndex(0);
             // }
-            $('img#loadNewIndicatorImage').css("opacity", "0.2");
+            $('img#loadNewerIndicatorImage').css("opacity", "0.2");
             this.loadingNew = false;
         }, 1000)
     }
 
-    loadMoreItems() {
+    loadOlderItems() {
         if(this.loading) {
             // console.log("already loading, returning")
             return;
         }
         console.log("loading more");
+        $('img#loadOlderIndicatorImage').css("opacity", "0.2");
         this.loading = true;
         const reversed = stateManager.state.feedSortReverse;
         const index = reversed ? 0 : this.items.length-1;
@@ -1270,7 +1272,7 @@ class ItemHandler extends Handler {
         );
         var loadElement = this.items.length ? this.items[this.items.length-1] : $(this.selector).first()[0];
         $(indicatorElement).closest("div.thread").addClass(stateManager.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse");
-        loadMoreItemsCallback(
+        loadOlderItemsCallback(
             [
                 {
                     time: performance.now(),
@@ -1577,8 +1579,11 @@ class ItemHandler extends Handler {
 class FeedItemHandler extends ItemHandler {
 
     INDICATOR_IMAGES = {
-        loadNew: [
+        loadNewer: [
             "https://www.svgrepo.com/show/502348/circleupmajor.svg"
+        ],
+        loadOlder: [
+            "https://www.svgrepo.com/show/502338/circledownmajor.svg"
         ],
         filter: [
             "https://www.svgrepo.com/show/347140/mail.svg",
@@ -1599,79 +1604,77 @@ class FeedItemHandler extends ItemHandler {
         this.toggleSortOrder = this.toggleSortOrder.bind(this)
     }
 
-    activate() {
-        super.activate()
-
-        waitForElement('div[data-testid="HomeScreen"] > div > div > div:first', (indicatorContainer) => {
-
-            this.indicatorContainer = indicatorContainer;
+    addToolbars(container) {
+        waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
             if (!this.toolbarDiv) {
-                const logoDiv = $(this.indicatorContainer).find('div[style^="flex: 1 1 0%;"]')
+                const logoDiv = $(container).find('div[style^="flex: 1 1 0%;"]')
                 this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
-                // $(this.indicatorContainer).parent().append(this.toolbarDiv);
-                // $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
-                waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
-                    $(homeScreenFeedTabsDiv).before(this.toolbarDiv);
-                });
-
-                // console.log($(logoDiv).parent());
-                // if($(logoDiv).parent().attr("style").includes("width: 100%")) {
-                //     $(logoDiv).parent().after(this.toolbarDiv);
-                // } else {
-                //     waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
-                //         $(homeScreenFeedTabsDiv).parent().prepend(this.toolbarDiv);
-                //     });
-                // }
-            }
-
-            if (!this.loadNewIndicator) {
-                this.loadNewIndicator = $(`
-<div id="loadNewIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m">
-    <span id="loadNewIndicatorText">
-    <a id="loadNewIndicatorLink"><img id="loadNewIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.loadNew[0]}"/></a>
+                $(homeScreenFeedTabsDiv).before(this.toolbarDiv);
+                if (!this.loadNewerIndicator) {
+                    this.loadNewerIndicator = $(`
+<div id="loadNewerIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m">
+    <span id="loadNewerIndicatorText">
+    <a id="loadNewerIndicatorLink" title="Load newer items"><img id="loadNewerIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.loadNewer[0]}"/></a>
     </span>
 </div>`);
-                $(this.toolbarDiv).append(this.loadNewIndicator);
+                    $(this.toolbarDiv).append(this.loadNewerIndicator);
+                }
+
+                if (!this.sortIndicator) {
+                    this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
+                    $(this.toolbarDiv).append(this.sortIndicator);
+                    $('#sortIndicator').on("click", (event) => {
+                        event.preventDefault();
+                        this.toggleSortOrder();
+                    });
+                }
+
+                if (!this.filterIndicator) {
+                    this.filterIndicator = $(`<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`);
+                    $(this.toolbarDiv).append(this.filterIndicator);
+                    $('#filterIndicator').on("click", (event) => {
+                        event.preventDefault();
+                        this.toggleHideRead();
+                    });
+                }
+
+                if (!this.searchField) {
+                    this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
+                    $(this.toolbarDiv).append(this.searchField);
+                    this.onSearchUpdate = debounce(function (event) {
+                        console.log($(event.target).val());
+                        this.setFilter($(event.target).val());
+                        this.filterItems();
+                    }, 300);
+                    this.onSearchUpdate = this.onSearchUpdate.bind(this)
+                    $(this.searchField).on("input", this.onSearchUpdate);
+                }
             }
+        });
 
-
+        if (!this.statusBar) {
+            this.statusBar = $(`<div id="statusBar"></div>`);
+            this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
+            this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
+            this.statusBarRight = $(`<div id="statusBarRight"></div>`);
+            $(this.statusBar).append(this.statusBarLeft);
+            $(this.statusBar).append(this.statusBarCenter);
+            $(this.statusBar).append(this.statusBarRight);
+            $('div[data-testid="HomeScreen"]').append(this.statusBar);
+            // debugger;
+            if (!this.loadOlderIndicator) {
+                this.loadOlderIndicator = $(`
+<div id="loadOlderIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m">
+    <span id="loadOlderIndicatorText">
+    <a id="loadOlderIndicatorLink" title="Load older items"><img id="loadOlderIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.loadOlder[0]}"/></a>
+    </span>
+</div>`);
+                $(this.statusBarLeft).append(this.loadOlderIndicator);
+                $('a#loadOlderIndicatorLink').on("click", () => this.loadOlderItems())
+            }
             if (!this.infoIndicator) {
-                this.infoIndicator = $(`<div id="infoIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span id="infoIndicatorText"/></div>`);
-                $(this.toolbarDiv).append(this.infoIndicator);
-            }
-
-            if (!this.sortIndicator) {
-                this.sortIndicator = $(`<div id="sortIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
-                $(this.toolbarDiv).append(this.sortIndicator);
-                // add dummy button space to keep bsky logo centered
-                // this.indicatorContainer.children().eq(-1).before(`<div class="toolbar-icon"/>`)
-                $('#sortIndicator').on("click", (event) => {
-                    event.preventDefault();
-                    this.toggleSortOrder();
-                });
-            }
-
-            if (!this.filterIndicator) {
-                this.filterIndicator = $(`<div id="filterIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`);
-                $(this.toolbarDiv).append(this.filterIndicator);
-                // add dummy button space to keep bsky logo centered
-                // this.indicatorContainer.children().eq(-1).before(`<div class="toolbar-icon"/>`)
-                $('#filterIndicator').on("click", (event) => {
-                    event.preventDefault();
-                    this.toggleHideRead();
-                });
-            }
-
-            if (!this.searchField) {
-                this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
-                $(this.toolbarDiv).append(this.searchField);
-                this.onSearchUpdate = debounce(function (event) {
-                    console.log($(event.target).val());
-                    this.setFilter($(event.target).val());
-                    this.filterItems();
-                }, 300);
-                this.onSearchUpdate = this.onSearchUpdate.bind(this)
-                $(this.searchField).on("input", this.onSearchUpdate);
+                this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span id="infoIndicatorText"/></div>`);
+                $(this.statusBarCenter).append(this.infoIndicator);
             }
 
             if (!this.preferencesIcon) {
@@ -1680,14 +1683,22 @@ class FeedItemHandler extends ItemHandler {
                     $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1])
                     config.open()
                 });
-                $(this.toolbarDiv).append(this.preferencesIcon);
+                $(this.statusBarRight).append(this.preferencesIcon);
             }
 
-            if (!this.statusBar) {
-                this.statusBar = $(`<div id="statusBar">status</div>`);
-                $(this.indicatorContainer).parent().parent().last().append(this.statusBar);
-            }
-        })
+        }
+    }
+
+    activate() {
+        super.activate()
+        const indicatorContainer = $(TOOLBAR_SELECTOR).first();
+        (
+            indicatorContainer
+                ? this.addToolbars(indicatorContainer[0])
+                : waitForElement(
+                    TOOLBAR_SELECTOR, (indicatorContainer) => this.addToolbars(indicatorContainer)
+                )
+        )
     }
 
     deactivate() {
@@ -1738,6 +1749,7 @@ class FeedItemHandler extends ItemHandler {
     filterItems() {
         const hideRead = stateManager.state.feedHideRead;
         $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+hideRead])
+        $("#filterIndicator").attr("title", `show all or unread (currently ${hideRead ? 'unread' : 'all'})`);
 
         const parent = $(this.selector).first().closest(".thread").parent()
         const unseenThreads = parent.children()//.not("div.bsky-navigator-seen")
@@ -1782,6 +1794,7 @@ class FeedItemHandler extends ItemHandler {
     sortItems() {
         const reversed = stateManager.state.feedSortReverse
         $("#sortIndicatorImage").attr("src", this.INDICATOR_IMAGES.sort[+reversed])
+        $("#sortIndicator").attr("title", `change sort order (currently ${reversed ? 'forward' : 'reverse'} chronological)`);
         // const sortIndicator = reversed ? '↑' :  '↓';
 
         const parent = $(this.selector).closest(".thread").first().parent()
@@ -1820,7 +1833,7 @@ class FeedItemHandler extends ItemHandler {
         if(event.key == "a") {
             $(item).find(PROFILE_SELECTOR)[0].click()
         } else if(event.key == "u") {
-            this.loadNewItems();
+            this.loadNewerItems();
         } else if (event.key == ":") {
             this.toggleSortOrder();
         } else if (event.key == '"') {
@@ -2004,13 +2017,6 @@ function setScreen(screen) {
 
     function onConfigInit()
     {
-  //       const preferencesIconDiv = `
-  //   <div class="preferences-icon-overlay">
-  //     <span>⚙️</span>
-  //   </div>
-  // `;
-  //       $("body").append(preferencesIconDiv);
-
 
         // stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
         StateManager.create(STATE_KEY, DEFAULT_STATE, config.get("historyMax"))
@@ -2147,7 +2153,8 @@ function setScreen(screen) {
             align-items: center;
             background-color: rgb(255, 255, 255);
             width: 100%;
-            height: 30px;
+            height: 32px;
+            border-bottom: 1px solid rgb(192, 192, 192);
         }
 
         .toolbar-icon {
@@ -2156,7 +2163,6 @@ function setScreen(screen) {
             height: 24px;
             padding: 0px 8px;
             flex: 1;
-            text-align: center;
         }
 
         .indicator-image {
@@ -2164,7 +2170,11 @@ function setScreen(screen) {
             height: 24px;
         }
 
-        img#loadNewIndicatorImage {
+        img#loadNewerIndicatorImage {
+            opacity: 0.2;
+        }
+
+        img#loadOlderIndicatorImage {
             opacity: 0.2;
         }
 
@@ -2179,6 +2189,64 @@ function setScreen(screen) {
         #bsky-navigator-search {
             flex: 1;
             margin: 0px 8px;
+        }
+
+        @media only screen and not (max-width: 800px) {
+            div#statusBar {
+                display: flex;
+                width: 100%;
+                height: 32px;
+                margin-left: auto;
+                margin-right: auto;
+                max-width: 600px;
+                position: sticky;
+                z-index: 10;
+                align-items: center;
+                background-color: rgb(255, 255, 255);
+                bottom: 0;
+                font-size: 1em;
+                padding: 1px;
+                border-top: 1px solid rgb(192, 192, 192);
+            }
+        }
+
+        @media only screen and (max-width: 800px) {
+            div#statusBar {
+                display: flex;
+                width: 100%;
+                height: 32px;
+                margin-left: auto;
+                margin-right: auto;
+                max-width: 600px;
+                position: sticky;
+                z-index: 10;
+                align-items: center;
+                background-color: rgb(255, 255, 255);
+                bottom: 58px;
+                font-size: 1em;
+                padding: 1px;
+            }
+        }
+
+        div#statusBarLeft {
+            display: flex;
+            flex: 1;
+            text-align: left;
+            padding: 1px;
+        }
+
+        div#statusBarCenter {
+            display: flex;
+            flex: 1 1 auto;
+            text-align: center;
+            padding: 1px;
+        }
+
+        div#statusBarRight {
+            display: flex;
+            flex: 1;
+            text-align: right;
+            padding: 1px;
         }
 
         @keyframes oscillateBorderBottom {
@@ -2365,7 +2433,7 @@ function setScreen(screen) {
                 this.callback = callback;
                 this.options = options;
                 this.enabled = true
-                loadMoreItemsCallback = this.callback;
+                loadOlderItemsCallback = this.callback;
 
                 // Create the "real" IntersectionObserver instance
                 this.realObserver = new OriginalIntersectionObserver((entries, observer) => {

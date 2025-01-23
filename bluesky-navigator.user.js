@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-21.7
+// @version      2025-01-22.1
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -133,6 +133,12 @@ const CONFIG_FIELDS = {
         'type': 'select',
         'options': ['Play all', 'Play selected', 'Pause all'],
         'default': "'$age' '('yyyy-MM-dd hh:mmaaa')'"
+    },
+    'hideLoadNewButton':  {
+        'label': 'Hide Load New Button',
+        'title': 'If checked, the floating button to load new items will be hidden.',
+        'type': 'checkbox',
+        'default': false
     },
     'stateSyncSection': {
         'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],
@@ -776,6 +782,9 @@ class ItemHandler extends Handler {
 
         this.loadNewObserver = waitForElement(LOAD_NEW_BUTTON_SELECTOR, (button) => {
             this.loadNewButton = button[0];
+            $('a#loadNewIndicatorLink').on("click", () => this.loadNewItems())
+            $('span#loadNewIndicatorText').css("opacity", "1");
+
             this.loadNewButton.addEventListener(
                 "click",
                 (event) => {
@@ -785,7 +794,6 @@ class ItemHandler extends Handler {
                     }
 
                     console.log("Intercepted click in capture phase", event.target);
-                    const listeners = getEventListeners(event.target);
                     // Save the target and event details for later
                     const target = event.target;
                     // const originalHandler = target.onclick;
@@ -806,29 +814,6 @@ class ItemHandler extends Handler {
             );
         });
 
-
-        // this.loadNewObserver = waitForElement(LOAD_NEW_BUTTON_SELECTOR, (button) => {
-        //     this.loadNewButton = button[0];
-
-        //     // Get the original onclick handler
-        //     const originalHandler = this.loadNewButton.onclick;
-        //     // Override the onclick property
-        //     this.loadNewButton.onclick = (event) => {
-        //         event.preventDefault();
-        //         event.stopPropagation();
-
-        //         console.log("Click intercepted");
-        //         console.log("Original handler:", originalHandler);
-        //         console.log("Original handler context (this):", this.loadNewButton);
-        //         // Call the original handler if it exists
-        //         if (originalHandler) {
-        //             originalHandler.call(this.loadNewButton, event);
-        //         }
-
-        //         // Add your custom logic here
-        //     };
-
-        // });
 
         super.activate()
     }
@@ -1261,6 +1246,7 @@ class ItemHandler extends Handler {
             //     console.log("set 0");
             //     this.setIndex(0);
             // }
+            $('span#loadNewIndicatorText').css("opacity", "0.2");
             this.loadingNew = false;
         }, 1000)
     }
@@ -1590,6 +1576,9 @@ class ItemHandler extends Handler {
 class FeedItemHandler extends ItemHandler {
 
     INDICATOR_IMAGES = {
+        loadNew: [
+            "https://www.svgrepo.com/show/529113/notification-unread-lines.svg"
+        ],
         filter: [
             "https://www.svgrepo.com/show/347140/mail.svg",
             "https://www.svgrepo.com/show/347147/mail-unread.svg"
@@ -1620,15 +1609,30 @@ class FeedItemHandler extends ItemHandler {
                 this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
                 // $(this.indicatorContainer).parent().append(this.toolbarDiv);
                 // $('div[data-testid="homeScreenFeedTabs"]').parent().prepend(this.toolbarDiv);
-                console.log($(logoDiv).parent());
-                if($(logoDiv).parent().attr("style").includes("width: 100%")) {
-                    $(logoDiv).parent().after(this.toolbarDiv);
-                } else {
-                    waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
-                        $(homeScreenFeedTabsDiv).parent().prepend(this.toolbarDiv);
-                    });
-                }
+                waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
+                    $(homeScreenFeedTabsDiv).before(this.toolbarDiv);
+                });
+
+                // console.log($(logoDiv).parent());
+                // if($(logoDiv).parent().attr("style").includes("width: 100%")) {
+                //     $(logoDiv).parent().after(this.toolbarDiv);
+                // } else {
+                //     waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
+                //         $(homeScreenFeedTabsDiv).parent().prepend(this.toolbarDiv);
+                //     });
+                // }
             }
+
+            if (!this.loadNewIndicator) {
+                this.loadNewIndicator = $(`
+<div id="loadNewIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m">
+    <span id="loadNewIndicatorText">
+    <a id="loadNewIndicatorLink">🔁</a>
+    </span>
+</div>`);
+                $(this.toolbarDiv).append(this.loadNewIndicator);
+            }
+
 
             if (!this.infoIndicator) {
                 this.infoIndicator = $(`<div id="infoIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span id="infoIndicatorText"/></div>`);
@@ -1671,11 +1675,6 @@ class FeedItemHandler extends ItemHandler {
 
             if (!this.preferencesIcon) {
                 this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
-  //               this.preferencesIcon = $(`
-  //   <div id="preferences-icon" class="toolbar-icon preferences-icon-overlay">
-  //     <span>⚪️</span>
-  //   </div>
-  // `);
                 $(this.preferencesIcon).on("click", () => {
                     $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1])
                     config.open()
@@ -1683,6 +1682,10 @@ class FeedItemHandler extends ItemHandler {
                 $(this.toolbarDiv).append(this.preferencesIcon);
             }
 
+            if (!this.statusBar) {
+                this.statusBar = $(`<div id="statusBar">status</div>`);
+                $(this.indicatorContainer).parent().parent().last().append(this.statusBar);
+            }
         })
     }
 
@@ -2036,6 +2039,18 @@ function setScreen(screen) {
         }
         */
 
+        ${
+            config.get("hideLoadNewButton")
+            ?
+            `
+            ${LOAD_NEW_BUTTON_SELECTOR} {
+                display: none;
+            }
+            `
+            :
+            ``
+        }
+
         .item {
             ${config.get("posts")}
             scroll-margin: ${ITEM_SCROLL_MARGIN}px;
@@ -2139,13 +2154,25 @@ function setScreen(screen) {
             width: 24px;
             height: 24px;
             padding: 0px 8px;
-            flex: 0.1 0.1 0%;
+            flex: 1;
             text-align: center;
         }
 
         .indicator-image {
             width: 24px;
             height: 24px;
+        }
+
+        span#loadNewIndicatorText {
+            opacity: 0.2;
+        }
+
+        div#infoIndicator {
+            flex: 3;
+        }
+
+        span#infoIndicatorText {
+            font-size: 0.8em;
         }
 
         #bsky-navigator-search {
@@ -2203,13 +2230,6 @@ function setScreen(screen) {
             display: none !important;
         }
 
-        div#infoIndicator {
-            flex: 0.3;
-        }
-
-        span#infoIndicatorText {
-            font-size: 0.8em;
-        }
 
 `
 
@@ -2354,10 +2374,24 @@ function setScreen(screen) {
                         (entry) => !(
                             $(entry.target).hasClass("thread")
                             ||
-                            $(entry.target).closest('div[data-testid="HomeScreen"]').length
+                            $(entry.target).hasClass("item")
+                            ||
+                            $(entry.target).next()?.attr("style") == "height: 32px;"
+                            // $(entry.target).first()?.attr("style")?.includes("top: calc(50% - 50vh)")
+                            // $(entry.target).parent().parent().parent().is('div[data-testid="HomeScreen"]')
                         )
                     )
 
+                    // if (filteredEntries.some(
+                    //     (entry) => $(entry.target).is(".css-175oi2r.r-633pao.r-1wyyakw")
+                    // )) {
+                    //     debugger;
+                    // }
+
+                    if(filteredEntries.length) {
+                        console.dir(filteredEntries.map((e) => e.target));
+                    }
+                    // console.log(entries.map( (entry) => $(entry.target).first()?.attr("style")?.includes("top: calc(50% - 50vh)")))
                     callback(
                         filteredEntries,
                         observer

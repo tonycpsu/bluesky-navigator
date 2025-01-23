@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-22.1
+// @version      2025-01-22.2
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -24,6 +24,7 @@ const DEFAULT_STATE_SAVE_TIMEOUT = 5000;
 const URL_MONITOR_INTERVAL = 500;
 const STATE_KEY = "bluesky_state";
 const LOAD_NEW_BUTTON_SELECTOR = "button[aria-label^='Load new']"
+const LOAD_NEW_INDICATOR_SELECTOR = 'div[style*="border-color: rgb(197, 207, 217)"]'
 const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)';
 const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]';
 const PROFILE_SELECTOR = 'a[aria-label="View profile"]';
@@ -318,7 +319,7 @@ class StateManager {
 
             if (config.get("stateSyncEnabled")) {
                 const remoteState = await this.loadRemoteState(this.state.lastUpdated);
-                console.dir(remoteState);
+                // console.dir(remoteState);
                 return remoteState ? { ...defaultState, ...remoteState } :  { ...defaultState, ...savedState };
             } else {
                 return { ...defaultState, ...savedState };
@@ -780,10 +781,10 @@ class ItemHandler extends Handler {
             this.onItemRemoved(element)
         });
 
-        this.loadNewObserver = waitForElement(LOAD_NEW_BUTTON_SELECTOR, (button) => {
+        this.loadNewObserver = waitForElement(LOAD_NEW_INDICATOR_SELECTOR, (button) => {
             this.loadNewButton = button[0];
             $('a#loadNewIndicatorLink').on("click", () => this.loadNewItems())
-            $('span#loadNewIndicatorText').css("opacity", "1");
+            $('img#loadNewIndicatorImage').css("opacity", "1");
 
             this.loadNewButton.addEventListener(
                 "click",
@@ -1246,7 +1247,7 @@ class ItemHandler extends Handler {
             //     console.log("set 0");
             //     this.setIndex(0);
             // }
-            $('span#loadNewIndicatorText').css("opacity", "0.2");
+            $('img#loadNewIndicatorImage').css("opacity", "0.2");
             this.loadingNew = false;
         }, 1000)
     }
@@ -1577,7 +1578,7 @@ class FeedItemHandler extends ItemHandler {
 
     INDICATOR_IMAGES = {
         loadNew: [
-            "https://www.svgrepo.com/show/529113/notification-unread-lines.svg"
+            "https://www.svgrepo.com/show/502348/circleupmajor.svg"
         ],
         filter: [
             "https://www.svgrepo.com/show/347140/mail.svg",
@@ -1627,7 +1628,7 @@ class FeedItemHandler extends ItemHandler {
                 this.loadNewIndicator = $(`
 <div id="loadNewIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m">
     <span id="loadNewIndicatorText">
-    <a id="loadNewIndicatorLink">🔁</a>
+    <a id="loadNewIndicatorLink"><img id="loadNewIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.loadNew[0]}"/></a>
     </span>
 </div>`);
                 $(this.toolbarDiv).append(this.loadNewIndicator);
@@ -2163,7 +2164,7 @@ function setScreen(screen) {
             height: 24px;
         }
 
-        span#loadNewIndicatorText {
+        img#loadNewIndicatorImage {
             opacity: 0.2;
         }
 
@@ -2365,7 +2366,6 @@ function setScreen(screen) {
                 this.options = options;
                 this.enabled = true
                 loadMoreItemsCallback = this.callback;
-                // console.log(`callback: ${loadMoreItemsCallback}`)
 
                 // Create the "real" IntersectionObserver instance
                 this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
@@ -2377,21 +2377,9 @@ function setScreen(screen) {
                             $(entry.target).hasClass("item")
                             ||
                             $(entry.target).next()?.attr("style") == "height: 32px;"
-                            // $(entry.target).first()?.attr("style")?.includes("top: calc(50% - 50vh)")
-                            // $(entry.target).parent().parent().parent().is('div[data-testid="HomeScreen"]')
                         )
                     )
 
-                    // if (filteredEntries.some(
-                    //     (entry) => $(entry.target).is(".css-175oi2r.r-633pao.r-1wyyakw")
-                    // )) {
-                    //     debugger;
-                    // }
-
-                    if(filteredEntries.length) {
-                        console.dir(filteredEntries.map((e) => e.target));
-                    }
-                    // console.log(entries.map( (entry) => $(entry.target).first()?.attr("style")?.includes("top: calc(50% - 50vh)")))
                     callback(
                         filteredEntries,
                         observer

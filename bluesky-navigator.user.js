@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-24.3
+// @version      2025-01-24.4
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1685,42 +1685,45 @@ class FeedItemHandler extends ItemHandler {
             }
         });
 
-        if (!this.statusBar) {
-            this.statusBar = $(`<div id="statusBar"></div>`);
-            this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
-            this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
-            this.statusBarRight = $(`<div id="statusBarRight"></div>`);
-            $(this.statusBar).append(this.statusBarLeft);
-            $(this.statusBar).append(this.statusBarCenter);
-            $(this.statusBar).append(this.statusBarRight);
-            $('div[data-testid="HomeScreen"]').append(this.statusBar);
-            // debugger;
-            if (!this.loadOlderIndicator) {
-                this.loadOlderIndicator = $(`
+        waitForElement($('div[data-testid="HomeScreen"]'), (statusBarContainer) => {
+            if (!this.statusBar) {
+                this.statusBar = $(`<div id="statusBar"></div>`);
+                this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
+                this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
+                this.statusBarRight = $(`<div id="statusBarRight"></div>`);
+                $(this.statusBar).append(this.statusBarLeft);
+                $(this.statusBar).append(this.statusBarCenter);
+                $(this.statusBar).append(this.statusBarRight);
+                $('div[data-testid="HomeScreen"]').append(this.statusBar);
+                // debugger;
+                if (!this.loadOlderIndicator) {
+                    this.loadOlderIndicator = $(`
 <div id="loadOlderIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m">
     <span id="loadOlderIndicatorText">
     <a id="loadOlderIndicatorLink" title="Load older items"><img id="loadOlderIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.loadOlder[0]}"/></a>
     </span>
 </div>`);
-                $(this.statusBarLeft).append(this.loadOlderIndicator);
-                $('a#loadOlderIndicatorLink').on("click", () => this.loadOlderItems())
-            }
-            if (!this.infoIndicator) {
-                this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span id="infoIndicatorText"/></div>`);
-                $(this.statusBarCenter).append(this.infoIndicator);
-            }
+                    $(this.statusBarLeft).append(this.loadOlderIndicator);
+                    $('a#loadOlderIndicatorLink').on("click", () => this.loadOlderItems())
+                }
+                if (!this.infoIndicator) {
+                    this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span id="infoIndicatorText"/></div>`);
+                    $(this.statusBarCenter).append(this.infoIndicator);
+                }
 
-            if (!this.preferencesIcon) {
-                this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
-                $(this.preferencesIcon).on("click", () => {
-                    $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1])
-                    config.open()
-                });
-                $(this.statusBarRight).append(this.preferencesIcon);
-            }
+                if (!this.preferencesIcon) {
+                    this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
+                    $(this.preferencesIcon).on("click", () => {
+                        $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1])
+                        config.open()
+                    });
+                    $(this.statusBarRight).append(this.preferencesIcon);
+                }
 
-        }
-        this.swapSortIcons();
+            }
+            this.swapSortIcons();
+
+        });
     }
 
     activate() {

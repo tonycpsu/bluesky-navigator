@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-24.5
+// @version      2025-01-24.6
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -772,7 +772,7 @@ class ItemHandler extends Handler {
         this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
             root: null, // Observing within the viewport
             rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
-            threshold: 1.0
+            threshold: Array.from({ length: 101 }, (_, i) => i / 100)
         });
 
         this.footerIntersectionObserver = new IntersectionObserver(this.onFooterIntersection, {

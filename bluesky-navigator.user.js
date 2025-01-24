@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-24.1
+// @version      2025-01-24.2
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -746,14 +746,15 @@ class ItemHandler extends Handler {
         this.onIntersection = this.onIntersection.bind(this)
         this.onFooterIntersection = this.onFooterIntersection.bind(this)
         this.onItemAdded = this.onItemAdded.bind(this)
+        this.onScroll = this.onScroll.bind(this)
         this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
         this.onItemMouseOver = this.onItemMouseOver.bind(this)
         this.didMouseMove = this.didMouseMove.bind(this)
         this.loading = false;
         this.loadingNew = false;
+        this.enableScrollMonitor = false;
         this.handlingClick = false;
         this.visibleItems = new Set();
-
     }
 
     isActive() {
@@ -816,6 +817,7 @@ class ItemHandler extends Handler {
             );
         });
 
+        $(document).on("scroll", this.onScroll);
 
         super.activate()
     }
@@ -836,6 +838,7 @@ class ItemHandler extends Handler {
         this.disableFooterObserver();
 
         $(this.selector).off("mouseover mouseleave");
+        $(document).off("scroll", this.onScroll);
         super.deactivate()
     }
 
@@ -870,6 +873,10 @@ class ItemHandler extends Handler {
         }
     }
 
+    onScroll(event) {
+        this.enableScrollMonitor = true;
+    }
+
     // Function to programmatically play a video from the userscript
     playVideo(video) {
         video.dataset.allowPlay = 'true'; // Set the custom flag
@@ -886,7 +893,7 @@ class ItemHandler extends Handler {
 
     onIntersection(entries) {
 
-        if(this.loading || this.loadingNew) {
+        if(!this.enableScrollMonitor || this.loading || this.loadingNew) {
             return;
         }
         let focusedElement = null;
@@ -1108,6 +1115,7 @@ class ItemHandler extends Handler {
 
 
     handleInput(event) {
+        this.enableScrollMonitor = false;
         if (this.handleMovementKey(event)) {
             return event.key
         } else if (this.handleItemKey(event)) {

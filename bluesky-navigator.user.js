@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-24.2
+// @version      2025-01-24.3
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -138,6 +138,12 @@ const CONFIG_FIELDS = {
     'hideLoadNewButton':  {
         'label': 'Hide Load New Button',
         'title': 'If checked, the floating button to load new items will be hidden.',
+        'type': 'checkbox',
+        'default': false
+    },
+    'enableSmoothScrolling':  {
+        'label': 'Enable Smooth Scrolling',
+        'title': 'If checked, scrolling using keyboard navigation will be smooth 🛥️ 🎷',
         'type': 'checkbox',
         'default': false
     },
@@ -582,8 +588,6 @@ function waitForElement(selector, onAdd, onRemove) {
     return observer;
 }
 
-
-
 function observeChanges(target, callback) {
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
@@ -753,6 +757,7 @@ class ItemHandler extends Handler {
         this.loading = false;
         this.loadingNew = false;
         this.enableScrollMonitor = false;
+        this.enableIntersectionObserver = false;
         this.handlingClick = false;
         this.visibleItems = new Set();
     }
@@ -874,7 +879,21 @@ class ItemHandler extends Handler {
     }
 
     onScroll(event) {
-        this.enableScrollMonitor = true;
+        if(!this.enableScrollMonitor) {
+            return;
+        }
+        this.enableIntersectionObserver = true;
+    }
+
+    scrollToElement(target) {
+        this.enableScrollMonitor = false;
+        target.scrollIntoView(
+            {behavior: config.get("enableSmoothScrolling") ? "smooth" : "instant"}
+        );
+        // Allow user scroll detection after animation
+        setTimeout(() => {
+            this.enableScrollMonitor = true;
+        }, 500); // Timeout should match the animation duration
     }
 
     // Function to programmatically play a video from the userscript
@@ -893,7 +912,8 @@ class ItemHandler extends Handler {
 
     onIntersection(entries) {
 
-        if(!this.enableScrollMonitor || this.loading || this.loadingNew) {
+        console.log(this.enableIntersectionObserver);
+        if(!this.enableIntersectionObserver || this.loading || this.loadingNew) {
             return;
         }
         let focusedElement = null;
@@ -1225,6 +1245,7 @@ class ItemHandler extends Handler {
         this.updateInfoIndicator();
         this.enableFooterObserver();
         this.ignoreMouseMovement = false;
+        this.enableScrollMonitor = false;
         // else if (this.index == null) {
         //     this.setIndex(0);
         // }
@@ -1327,7 +1348,7 @@ class ItemHandler extends Handler {
         {
             window.scrollTo(0, 0)
         } else if (this.items[this.index]) {
-            $(this.items[this.index])[0].scrollIntoView()
+            this.scrollToElement($(this.items[this.index])[0]);
         } else {
             // console.log(this.index, this.items.length)
         }

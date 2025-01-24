@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-23.3
+// @version      2025-01-24.1
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -785,6 +785,7 @@ class ItemHandler extends Handler {
             this.loadNewerButton = button[0];
             $('a#loadNewerIndicatorLink').on("click", () => this.loadNewerItems())
             $('img#loadNewerIndicatorImage').css("opacity", "1");
+            $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
 
             this.loadNewerButton.addEventListener(
                 "click",
@@ -1206,6 +1207,7 @@ class ItemHandler extends Handler {
 
         this.loading = false;
         $('img#loadOlderIndicatorImage').css("opacity", "1");
+        $('img#loadOlderIndicatorImage').removeClass("toolbar-icon-pending");
         // $(this.items).css("opacity", "100%")
         if(focusedPostId) {
             this.jumpToPost(focusedPostId);
@@ -1249,6 +1251,7 @@ class ItemHandler extends Handler {
             //     this.setIndex(0);
             // }
             $('img#loadNewerIndicatorImage').css("opacity", "0.2");
+            $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
             this.loadingNew = false;
         }, 1000)
     }
@@ -1260,6 +1263,7 @@ class ItemHandler extends Handler {
         }
         console.log("loading more");
         $('img#loadOlderIndicatorImage').css("opacity", "0.2");
+        $('img#loadOlderIndicatorImage').addClass("toolbar-icon-pending");
         this.loading = true;
         const reversed = stateManager.state.feedSortReverse;
         const index = reversed ? 0 : this.items.length-1;
@@ -1687,6 +1691,7 @@ class FeedItemHandler extends ItemHandler {
             }
 
         }
+        this.swapSortIcons();
     }
 
     activate() {
@@ -1711,20 +1716,30 @@ class FeedItemHandler extends ItemHandler {
 
     toggleSortOrder() {
         stateManager.updateState({feedSortReverse: !stateManager.state.feedSortReverse});
-
-        const older = $("div#loadOlderIndicator");
-        const newer = $("div#loadNewerIndicator");
-        const tempDiv = $("<div>").hide();
-        older.before(tempDiv);
-        newer.before(older);
-        tempDiv.before(newer);
-        tempDiv.remove();
-        const olderImg = older.find("img").attr("src");
-        const newerImg = newer.find("img").attr("src");
-        older.find("img").attr("src", newerImg);
-        newer.find("img").attr("src", olderImg);
+        this.swapSortIcons();
         $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen");
         this.loadItems();
+    }
+
+    swapSortIcons() {
+        const older = $("div#loadOlderIndicator");
+        const newer = $("div#loadNewerIndicator");
+        const swap = (
+            !stateManager.state.feedSortReverse && older.closest("div#bsky-navigator-toolbar").length
+            ||
+            stateManager.state.feedSortReverse && newer.closest("div#bsky-navigator-toolbar").length
+        )
+        if (swap) {
+            const tempDiv = $("<div>").hide();
+            older.before(tempDiv);
+            newer.before(older);
+            tempDiv.before(newer);
+            tempDiv.remove();
+            const olderImg = older.find("img").attr("src");
+            const newerImg = newer.find("img").attr("src");
+            older.find("img").attr("src", newerImg);
+            newer.find("img").attr("src", olderImg);
+        }
     }
 
     toggleHideRead() {
@@ -2130,12 +2145,12 @@ function setScreen(screen) {
             z-index: 1000;
         }
 
-       .preferences-icon-overlay-sync-ready {
+        .preferences-icon-overlay-sync-ready {
             background-color: #d5f5e3;
         }
 
         .preferences-icon-overlay-sync-pending {
-            animation: fadeInOut 1s infinite; /* Adjust timing as needed */
+            animation: fadeInOut 1s infinite;
             background-color: #f9e79f;
         }
 
@@ -2175,6 +2190,10 @@ function setScreen(screen) {
             height: 24px;
             padding: 0px 8px;
             flex: 1;
+        }
+
+        .toolbar-icon-pending {
+            animation: fadeInOut 1s infinite !important;
         }
 
         .indicator-image {

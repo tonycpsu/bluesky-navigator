@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-23.2
+// @version      2025-01-23.3
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1710,8 +1710,20 @@ class FeedItemHandler extends ItemHandler {
     }
 
     toggleSortOrder() {
-        stateManager.updateState({feedSortReverse: !stateManager.state.feedSortReverse})
-        $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen")
+        stateManager.updateState({feedSortReverse: !stateManager.state.feedSortReverse});
+
+        const older = $("div#loadOlderIndicator");
+        const newer = $("div#loadNewerIndicator");
+        const tempDiv = $("<div>").hide();
+        older.before(tempDiv);
+        newer.before(older);
+        tempDiv.before(newer);
+        tempDiv.remove();
+        const olderImg = older.find("img").attr("src");
+        const newerImg = newer.find("img").attr("src");
+        older.find("img").attr("src", newerImg);
+        newer.find("img").attr("src", olderImg);
+        $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen");
         this.loadItems();
     }
 

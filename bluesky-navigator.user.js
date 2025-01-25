@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-25.4
+// @version      2025-01-25.5
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -311,7 +311,7 @@ class StateManager {
                 onerror: (error) => {
                     console.error("Network error executing query:", error.message);
                     this.setSyncStatus("failure", error.message);
-                    $('div#statusBarCenter').html(error.message);
+                    alert(error.message);
                     reject(error);
                 }
             });

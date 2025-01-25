@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-25.2
+// @version      2025-01-25.3
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -23,7 +23,8 @@ const DEFAULT_HISTORY_MAX = 5000;
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000;
 const URL_MONITOR_INTERVAL = 500;
 const STATE_KEY = "bluesky_state";
-const TOOLBAR_SELECTOR = 'div[data-testid="HomeScreen"] > div > div > div:first'
+const TOOLBAR_CONTAINER_SELECTOR = 'div[data-testid="HomeScreen"] > div > div > div:first-child'
+const STATUS_BAR_CONTAINER_SELECTOR = 'div[style="background-color: rgb(255, 255, 255);"]'
 const LOAD_NEW_BUTTON_SELECTOR = "button[aria-label^='Load new']"
 const LOAD_NEW_INDICATOR_SELECTOR = 'div[style*="border-color: rgb(197, 207, 217)"]'
 const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)';
@@ -560,36 +561,29 @@ class StateManager {
 }
 
 function waitForElement(selector, onAdd, onRemove) {
-    // Immediately handle any existing elements
     const processExistingElements = () => {
-        const elements = $(selector);
-        if (elements.length) {
-            elements.each((_, el) => onAdd($(el)));
-        }
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(el => onAdd(el));
     };
 
-    // Process current elements once
     processExistingElements();
 
     const observer = new MutationObserver(mutations => {
         mutations.forEach(mutation => {
-            // Handle added nodes
-            $(mutation.addedNodes)
-                .find(selector)
-                .addBack(selector)
-                .each((_, el) => onAdd($(el)));
+            mutation.addedNodes.forEach(node => {
+                if (node.matches && node.matches(selector)) onAdd(node);
+                node.querySelectorAll?.(selector).forEach(el => onAdd(el));
+            });
 
             if (onRemove) {
-                // Handle removed nodes
-                $(mutation.removedNodes)
-                    .find(selector)
-                    .addBack(selector)
-                    .each((_, el) => onRemove($(el)));
+                mutation.removedNodes.forEach(node => {
+                    if (node.matches && node.matches(selector)) onRemove(node);
+                    node.querySelectorAll?.(selector).forEach(el => onRemove(el));
+                });
             }
         });
     });
 
-    // Start observing the document body for changes
     observer.observe(document.body, { childList: true, subtree: true });
     return observer;
 }
@@ -1715,8 +1709,11 @@ class FeedItemHandler extends ItemHandler {
                 }
             }
         });
+    }
 
-        waitForElement($('div[data-testid="HomeScreen"]'), (statusBarContainer) => {
+    addStatusBar() {
+        // console.log($('div[style="min-height: 100vh; padding-top: 0px;"]'));
+        waitForElement(STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
             if (!this.statusBar) {
                 this.statusBar = $(`<div id="statusBar"></div>`);
                 this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
@@ -1725,7 +1722,7 @@ class FeedItemHandler extends ItemHandler {
                 $(this.statusBar).append(this.statusBarLeft);
                 $(this.statusBar).append(this.statusBarCenter);
                 $(this.statusBar).append(this.statusBarRight);
-                $('div[data-testid="HomeScreen"]').append(this.statusBar);
+                $(statusBarContainer).append(this.statusBar);
                 // debugger;
                 if (!this.loadOlderIndicator) {
                     this.loadOlderIndicator = $(`
@@ -1759,14 +1756,15 @@ class FeedItemHandler extends ItemHandler {
 
     activate() {
         super.activate()
-        const indicatorContainer = $(TOOLBAR_SELECTOR).first();
+        const indicatorContainer = $(TOOLBAR_CONTAINER_SELECTOR).first();
         (
             indicatorContainer
                 ? this.addToolbars(indicatorContainer[0])
                 : waitForElement(
-                    TOOLBAR_SELECTOR, (indicatorContainer) => this.addToolbars(indicatorContainer)
+                    TOOLBAR_CONTAINER_SELECTOR, (indicatorContainer) => this.addToolbars(indicatorContainer)
                 )
         )
+        this.addStatusBar();
     }
 
     deactivate() {
@@ -2052,13 +2050,13 @@ class ProfileItemHandler extends ItemHandler {
 }
 
 const screenPredicateMap = {
-    search: (element) => element.find('div[data-testid="searchScreen"]').length,
-    notifications: (element) => element.find('div[data-testid="notificationsScreen"]').length,
-    chat: (element) => element.find('div:contains("Messages")').length,
-    feeds: (element) => element.find('div[data-testid="FeedsScreen"]').length,
-    lists: (element) => element.find('div[data-testid="listsScreen"]').length,
-    profile: (element) => element.find('div[data-testid="profileScreen"]').length,
-    settings: (element) => element.find('div[data-testid="userAvatarImage"]').length,
+    search: (element) => $(element).find('div[data-testid="searchScreen"]').length,
+    notifications: (element) => $(element).find('div[data-testid="notificationsScreen"]').length,
+    chat: (element) => $(element).find('div:contains("Messages")').length,
+    feeds: (element) => $(element).find('div[data-testid="FeedsScreen"]').length,
+    lists: (element) => $(element).find('div[data-testid="listsScreen"]').length,
+    profile: (element) => $(element).find('div[data-testid="profileScreen"]').length,
+    settings: (element) => $(element).find('div[data-testid="userAvatarImage"]').length,
     home: (element) => true,
 }
 

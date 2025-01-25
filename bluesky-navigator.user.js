@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-25.1
+// @version      2025-01-25.2
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -133,13 +133,19 @@ const CONFIG_FIELDS = {
         'title': 'Control playback of video previews',
         'type': 'select',
         'options': ['Play all', 'Play selected', 'Pause all'],
-        'default': "'$age' '('yyyy-MM-dd hh:mmaaa')'"
     },
     'hideLoadNewButton':  {
         'label': 'Hide Load New Button',
         'title': 'If checked, the floating button to load new items will be hidden.',
         'type': 'checkbox',
         'default': false
+    },
+    'showPostCounts':  {
+        'label': 'Show Post Counts',
+        'title': 'Specify whether post counts are displayed in all, selected, or no posts.',
+        'type': 'select',
+        'options': ['All', 'Selection', 'None'],
+        'default': "All"
     },
     'enableSmoothScrolling':  {
         'label': 'Enable Smooth Scrolling',
@@ -994,11 +1000,6 @@ class ItemHandler extends Handler {
 
         $(element).addClass("item");
 
-        const bannerDiv = $(element).find("div.item-banner").first().length
-              ? $(element).find("div.item-banner").first()
-              : $(element).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
-        $(bannerDiv).html(`<strong>${this.getIndexFromItem(element)+1}</strong>/<strong>${this.items.length}</strong>`);
-
         const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first()
         if (!postTimestampElement.attr("data-bsky-navigator-age")) {
             postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text())
@@ -1020,9 +1021,16 @@ class ItemHandler extends Handler {
         const threadIndicator = $(element).find("div.r-lchren, div.r-1mhb1uw > svg")
         const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
 
-        $(element).parent().parent().addClass("thread")
+        $(element).parent().parent().addClass("thread");
 
-        $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
+        if(config.get("showPostCounts") == "All" || selected && config.get("showPostCounts") == "Selection") {
+            const bannerDiv = $(element).find("div.item-banner").first().length
+                  ? $(element).find("div.item-banner").first()
+                  : $(element).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
+            $(bannerDiv).html(`<strong>${this.getIndexFromItem(element)+1}</strong>/<strong>${this.items.length}</strong>`);
+
+            $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
+        }
 
         $(element).find('video').each(
             (i, video) => {

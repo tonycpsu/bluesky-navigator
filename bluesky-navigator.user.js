@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-24.6
+// @version      2025-01-25.1
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -759,6 +759,7 @@ class ItemHandler extends Handler {
         this.enableScrollMonitor = false;
         this.enableIntersectionObserver = false;
         this.handlingClick = false;
+        this.itemStats = {}
         this.visibleItems = new Set();
     }
 
@@ -892,10 +893,9 @@ class ItemHandler extends Handler {
         target.scrollIntoView(
             {behavior: config.get("enableSmoothScrolling") ? "smooth" : "instant"}
         );
-        // Allow user scroll detection after animation
         setTimeout(() => {
             this.enableScrollMonitor = true;
-        }, 500); // Timeout should match the animation duration
+        }, 250);
     }
 
     // Function to programmatically play a video from the userscript
@@ -983,10 +983,21 @@ class ItemHandler extends Handler {
         this.isPopupVisible = false;
     }
 
+    get scrollMargin() {
+        return $('div[data-testid="HomeScreen"] > div > div').eq(2).outerHeight();
+    }
+
     applyItemStyle(element, selected) {
         //console.log(`applyItemStyle: ${$(element).parent().parent().index()-1}, ${this.index}`)
 
-        $(element).addClass("item")
+
+
+        $(element).addClass("item");
+
+        const bannerDiv = $(element).find("div.item-banner").first().length
+              ? $(element).find("div.item-banner").first()
+              : $(element).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
+        $(bannerDiv).html(`<strong>${this.getIndexFromItem(element)+1}</strong>/<strong>${this.items.length}</strong>`);
 
         const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first()
         if (!postTimestampElement.attr("data-bsky-navigator-age")) {
@@ -1011,6 +1022,7 @@ class ItemHandler extends Handler {
 
         $(element).parent().parent().addClass("thread")
 
+        $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
 
         $(element).find('video').each(
             (i, video) => {
@@ -1019,14 +1031,10 @@ class ItemHandler extends Handler {
                         ||
                         ( (config.get("videoPreviewPlayback") == "Play selected") && !selected)
                 ) {
-                    console.log("pause")
-                    console.log(video);
                     this.pauseVideo(video);
                     // video.pause();
                 } else if ((config.get("videoPreviewPlayback") == "Play selected") && selected)
                     {
-                        console.log("play")
-                        console.log(video);
                         this.playVideo(video);
                         // video.play();
                     }
@@ -1207,7 +1215,9 @@ class ItemHandler extends Handler {
         this.enableFooterObserver();
 
         // console.log(this.items)
-        this.applyItemStyle(this.items[this.index], true)
+        if(this.index != null) {
+            this.applyItemStyle(this.items[this.index], true)
+        }
         $("div.r-1mhb1uw").each(
             (i, el) => {
                 const ancestor = $(el).parent().parent().parent().parent()
@@ -1234,6 +1244,7 @@ class ItemHandler extends Handler {
         // console.log("set loading false")
         $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
 
+        this.refreshItems();
 
         this.loading = false;
         $('img#loadOlderIndicatorImage').css("opacity", "1");
@@ -1254,13 +1265,21 @@ class ItemHandler extends Handler {
         // this.updateItems();
     }
 
+    refreshItems() {
+        $(this.items).each(
+            (index, item) => {
+                this.applyItemStyle(this.items[index], index == this.index);
+
+            }
+        )
+    }
+
     updateInfoIndicator() {
-        const count = this.items.length
-        const unreadCount = this.items.filter(
+        this.itemStats.unreadCount = this.items.filter(
             (i, item) => $(item).hasClass("item-unread")
         ).length;
-        const index = count ? this.index+1 : 0;
-        $("span#infoIndicatorText").html(`<strong>${index}</strong>/<strong>${count}</strong> (<strong>${unreadCount}</strong> new)`);
+        const index = this.items.length ? this.index+1 : 0;
+        $("span#infoIndicatorText").html(`<strong>${index}</strong>/<strong>${this.items.length}</strong> (<strong>${this.itemStats.unreadCount}</strong> new)`);
     }
 
     loadNewerItems() {
@@ -1359,9 +1378,11 @@ class ItemHandler extends Handler {
 
     setIndex(index) {
         let oldIndex = this.index
-        this.applyItemStyle(this.items[oldIndex], false)
-        this.index = index
-        this.applyItemStyle(this.items[this.index], true)
+        if (oldIndex != null) {
+            this.applyItemStyle(this.items[oldIndex], false);
+        }
+        this.index = index;
+        this.applyItemStyle(this.items[this.index], true);
         // this.updateItems();
     }
 
@@ -1856,10 +1877,8 @@ class FeedItemHandler extends ItemHandler {
         const reversed = stateManager.state.feedSortReverse
         $("#sortIndicatorImage").attr("src", this.INDICATOR_IMAGES.sort[+reversed])
         $("#sortIndicator").attr("title", `change sort order (currently ${reversed ? 'forward' : 'reverse'} chronological)`);
-        // const sortIndicator = reversed ? '↑' :  '↓';
 
         const parent = $(this.selector).closest(".thread").first().parent()
-        // const newItems = parent.children().get().sort(
         const newItems = parent.children().filter(
             (i, item) => $(item).hasClass("thread")
         ).get().sort(
@@ -1874,18 +1893,9 @@ class FeedItemHandler extends ItemHandler {
                         ? threadIndexB - threadIndexA
                         : threadIndexA - threadIndexB;
                 }
-                // if (threadIndexA !== threadIndexB) {
-                //     return threadIndexB - threadIndexA;
-                // }
                 return itemIndexB - itemIndexA;
             }
         );
-        // reversed ? parent.children().eq(-2).after(newItems) : parent.children().eq(0).after(newItems);
-        if (reversed ^ this.loadingNew) {
-            console.log(`${reversed}, ${this.loadingNew}: prepend`);
-        } else {
-            console.log(`${reversed}, ${this.loadingNew}: append`);
-        }
         (reversed ^ this.loadingNew) ? parent.prepend(newItems) : parent.append(newItems);
     }
 
@@ -1940,6 +1950,10 @@ class PostItemHandler extends ItemHandler {
 
     isActive() {
         return window.location.pathname.match(/\/post\//)
+    }
+
+    get scrollMargin() {
+        return $('div[data-testid="postThreadScreen"] > div').eq(0).outerHeight();
     }
 
     // getIndexFromItem(item) {
@@ -2121,7 +2135,6 @@ function setScreen(screen) {
 
         .item {
             ${config.get("posts")}
-            scroll-margin: ${ITEM_SCROLL_MARGIN}px;
         }
 
         .item-selection-active {
@@ -2143,6 +2156,20 @@ function setScreen(screen) {
                 ${config.get("readPostsLightMode")};
             }
 
+        }
+
+        div.item-banner {
+            position: absolute;
+            top: 0;
+            left: 0;
+            font-family: "Lucida Console", "Courier New", monospace;
+            font-size: 0.7em;
+            z-index: 10;
+            color: black;
+            text-shadow: 1px 1px rgba(255, 255, 255,0.8);
+            background: rgba(128, 192, 192, 0.3);
+            padding: 3px;
+            border-radius: 4px;
         }
 
         @media (prefers-color-scheme:dark){

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-25.3
+// @version      2025-01-25.4
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -311,6 +311,7 @@ class StateManager {
                 onerror: (error) => {
                     console.error("Network error executing query:", error.message);
                     this.setSyncStatus("failure", error.message);
+                    $('div#statusBarCenter').html(error.message);
                     reject(error);
                 }
             });
@@ -789,7 +790,7 @@ class ItemHandler extends Handler {
         });
 
         this.loadNewerObserver = waitForElement(LOAD_NEW_INDICATOR_SELECTOR, (button) => {
-            this.loadNewerButton = button[0];
+            this.loadNewerButton = $(button)[0];
             $('a#loadNewerIndicatorLink').on("click", () => this.loadNewerItems())
             $('img#loadNewerIndicatorImage').css("opacity", "1");
             $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");

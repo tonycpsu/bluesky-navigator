@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-25.8
+// @version      2025-01-26.1
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -2527,13 +2527,13 @@ function setScreen(screen) {
             switch (targetTagName){
                 case 'input':
                 case 'textarea':
-                    setContext("input")
-                    break
+                    setContext("input");
+                    break;
                 case 'div':
                     let maybeTiptap = $(target).closest(".tiptap")
-                    if(maybeTiptap)
+                    if(maybeTiptap.length)
                     {
-                        waitForElement(maybeTiptap, () => null, () => onBlur({"target": maybeTiptap[0]}))
+                        waitForElement(".tiptap", () => null, () => onBlur({"target": maybeTiptap[0]}))
                         setContext("input")
                     }
                     else
@@ -2551,6 +2551,7 @@ function setScreen(screen) {
             if (typeof target.tagName === 'undefined') {return false;}
             var targetTagName = target.tagName.toLowerCase()
             console.log(`onBlur: ${targetTagName}`)
+            console.log(e.target);
             switch (targetTagName){
                 case 'input':
                 case 'textarea':
@@ -2558,13 +2559,13 @@ function setScreen(screen) {
                     //document.addEventListener('keypress', func, true)
                     break
                 case 'div':
-                    if($(target).closest(".tiptap"))
+                    if($(target).closest(".tiptap").length)
                     {
                         setContextFromUrl()
                     }
                     break
                 default:
-                    setContext("input")
+                    setContextFromUrl()
                     break
             }
         }

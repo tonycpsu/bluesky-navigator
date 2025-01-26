@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-25.5
+// @version      2025-01-25.6
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -40,6 +40,11 @@ const range = (start, stop, step = 1) =>
   Array.from({ length: Math.ceil((stop - start) / step) }, (_, i) => start + i * step);
 
 let debounceTimeout;
+let $ = window.jQuery;
+let stateManager;
+let config;
+let enableLoadMoreItems = false;
+let loadOlderItemsCallback;
 
 // Debounce function
 function debounce(func, delay) {
@@ -217,12 +222,6 @@ const CONFIG_FIELDS = {
     },
 
 }
-
-let $ = window.jQuery;
-let stateManager;
-let config;
-let enableLoadMoreItems = false;
-let loadOlderItemsCallback;
 
 class StateManager {
     constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
@@ -1665,6 +1664,7 @@ class FeedItemHandler extends ItemHandler {
 
     addToolbars(container) {
         waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
+
             if (!this.toolbarDiv) {
                 const logoDiv = $(container).find('div[style^="flex: 1 1 0%;"]')
                 this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
@@ -1724,7 +1724,7 @@ class FeedItemHandler extends ItemHandler {
                 $(this.statusBar).append(this.statusBarCenter);
                 $(this.statusBar).append(this.statusBarRight);
                 $(statusBarContainer).append(this.statusBar);
-                // debugger;
+
                 if (!this.loadOlderIndicator) {
                     this.loadOlderIndicator = $(`
 <div id="loadOlderIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m">
@@ -2100,6 +2100,37 @@ function setScreen(screen) {
     function onConfigInit()
     {
 
+        if(config.get("showDebuggingInfo")) {
+            const logContainer = $(`<div id="logContainer"></div>`);
+            $("body").append(logContainer);
+            const logHeader = $(`<div id="logHeader"></div>`);
+            logHeader.append($(`<button id="clearLogs"/>Clear</button>`));
+            logContainer.append(logHeader);
+            logContainer.append($(`<div id="logContent"></div>`));
+            $('#clearLogs').on('click', function () {
+                $('#logContent').empty(); // Clear the logs
+            });
+
+            function appendLog(type, args) {
+                const message = `[${type.toUpperCase()}] ${args.map(arg =>
+                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg).join(' ')}`;
+
+                $('#logContent').append(`<div style="margin-bottom: 5px;">${message}</div>`);
+                $('#logContent').scrollTop($('#logContent')[0].scrollHeight);
+            }
+
+            // Override console methods
+            const originalConsole = {};
+            ["log", "warn", "error", "info"].forEach(type => {
+                originalConsole[type] = console[type];
+                unsafeWindow.console[type] = function(...args) {
+                    appendLog(type, args);
+                    originalConsole[type].apply(console, args);
+                };
+            });
+            window.console = unsafeWindow.console;
+        }
+
         // stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
         StateManager.create(STATE_KEY, DEFAULT_STATE, config.get("historyMax"))
                     .then((initializedStateManager) => {
@@ -2398,7 +2429,48 @@ function setScreen(screen) {
             display: none !important;
         }
 
+        div#logContainer {
+            width: 100%;
+            pointer-events: none;
+            max-height: 70%;
+            position: fixed;
+            background: rgba(0, 0, 0, 0.5);
+            color: #e0e0e0;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 10000;
+            padding: 10px;
+            padding-top: 30px;
+        }
 
+        #logHeader {
+                    position: relative;
+                    width: 100%;
+                    background: #333;
+                    color: white;
+                    padding: 5px 10px;
+                    box-sizing: border-box;
+            pointer-events: auto;
+        }
+
+        button#clearLogs {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100px;
+                    background: red;
+                    color: white;
+                    border: none;
+                    padding: 2px 5px;
+                    cursor: pointer;
+        }
+
+        #logContent {
+                    overflow-y: auto;
+                    max-height: calc(70% - 30px);
+                    padding: 10px;
+                    box-sizing: border-box;
+        }
 `
 
         // Inject the style into the page
@@ -2514,14 +2586,40 @@ function setScreen(screen) {
 
     }
 
-    $(document).ready(function(e) {
-        // Create the title link
         const configTitleDiv = `
     <div class="config-title">
       <h1><a href="https://github.com/tonycpsu/bluesky-navigator" target="_blank">Bluesky Navigator</a> v${GM_info.script.version}</h1>
       <h2>Configuration</h2>
     </div>
   `;
+        config = new GM_config({
+            id: 'GM_config',
+            title: configTitleDiv,
+            fields: CONFIG_FIELDS,
+            'events': {
+                'init': onConfigInit,
+                'save': () => config.close(),
+                'close': () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
+            },
+            'css':  `
+h1 {
+    font-size: 18pt;
+}
+
+h2 {
+    font-size: 14pt;
+}
+.config_var textarea {
+    width: 100%;
+    height: 1.5em;
+}
+#GM_config_stateSyncConfig_var textarea {
+    height: 10em;
+}
+`,
+        });
+
+    $(document).ready(function(e) {
 
         const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
 
@@ -2624,30 +2722,4 @@ function setScreen(screen) {
             }
         };
 
-        config = new GM_config({
-            id: 'GM_config',
-            title: configTitleDiv,
-            fields: CONFIG_FIELDS,
-            'events': {
-                'init': onConfigInit,
-                'save': () => config.close(),
-                'close': () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
-            },
-            'css':  `
-h1 {
-    font-size: 18pt;
-}
-
-h2 {
-    font-size: 14pt;
-}
-.config_var textarea {
-    width: 100%;
-    height: 1.5em;
-}
-#GM_config_stateSyncConfig_var textarea {
-    height: 10em;
-}
-`,
-        });
 })})()

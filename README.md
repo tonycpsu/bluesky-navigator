@@ -23,7 +23,10 @@ Features
 - optionally reverse sorting of feeds to browse them in chronological order
   (currently only works on "Following" feed)
 - optionally show only unread posts
+- optionally disable built-in behavior of loading more items when scrolling (can
+  still load more using toolbar button or keyboard shortcut)
 - visual indicator for post read/unread status
+- filter posts by author
 - configurable formatting of post timestamps
 - optionally disable embedded video previews
 - sync read/unread state between multiple browsers via cloud service(s)
@@ -50,6 +53,8 @@ Keyboard Shortcuts
  | l           | like post                                          |
  | p           | open repost menu                                   |
  | P           | repost                                             |
+ | u           | load newer posts (feed view)                       |
+ | U           | load older posts (feed view)                       |
  | .           | mark post read/unread                              |
  | .           | mark all visible posts read/unread                 |
  | :           | toggle between forward/reverse order (feed view)   |

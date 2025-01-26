@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-26.1
+// @version      2025-01-26.2
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1379,13 +1379,27 @@ class ItemHandler extends Handler {
 
     }
 
-    setIndex(index) {
-        let oldIndex = this.index
+    setIndex(index, mark, update) {
+        let oldIndex = this.index;
         if (oldIndex != null) {
-            this.applyItemStyle(this.items[oldIndex], false);
+            if (mark)
+            {
+                this.markItemRead(oldIndex, true)
+            }
         }
+        if (index < 0 || index >= this.items.length) {
+            return;
+        }
+        this.applyItemStyle(this.items[oldIndex], false)
         this.index = index;
-        this.applyItemStyle(this.items[this.index], true);
+        this.applyItemStyle(this.items[this.index], true)
+        if(update) {
+            this.updateItems()
+        }
+        // to avoid mouseover getting triggered by keyboard movement
+        this.lastMousePosition = null;
+        this.ignoreMouseMovement = false;
+        return true;
         // this.updateItems();
     }
 
@@ -1449,6 +1463,31 @@ class ItemHandler extends Handler {
         this.loadPageObserver.disconnect()
     }
 
+    jumpToPrev(mark) {
+        this.setIndex(this.index - 1, mark, true);
+        return true;
+    }
+
+    jumpToNext(mark) {
+        if (this.index < this.items.length) {
+            // this.index += 1
+            this.setIndex(this.index + 1, mark, true);
+        } else {
+            var next = $(this.items[this.index]).parent().parent().parent().next()
+            // console.log(next.text())
+            if (next && $.trim(next.text()) == "Continue thread...") {
+                console.log("click")
+                this.loadPageObserver = waitForElement(
+                    this.THREAD_PAGE_SELECTOR,
+                    this.handleNewThreadPage
+                );
+                console.log(this.loadPageObserver)
+                $(next).find("div").click()
+            }
+        }
+        return true;
+    }
+
     handleMovementKey(event) {
         var moved = false
         var mark = false
@@ -1464,38 +1503,18 @@ class ItemHandler extends Handler {
             {
                 if (["j", "ArrowDown"].indexOf(event.key) != -1) {
                     event.preventDefault()
-                    if (this.index < this.items.length - 1) {
-                        // this.index += 1
-                        this.setIndex(this.index + 1)
-                    } else {
-                        var next = $(this.items[this.index]).parent().parent().parent().next()
-                        // console.log(next.text())
-                        if (next && $.trim(next.text()) == "Continue thread...") {
-                            console.log("click")
-                            this.loadPageObserver = waitForElement(
-                                this.THREAD_PAGE_SELECTOR,
-                                this.handleNewThreadPage
-                            );
-                            console.log(this.loadPageObserver)
-                            $(next).find("div").click()
-                        }
-                    }
-                    mark = event.key == "j"
+                    moved = this.jumpToNext(event.key == "j");
                 }
                 else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
                     event.preventDefault()
-                    if (this.index > 0)
-                    {
-                        this.setIndex(this.index - 1)
-                    }
-                    mark = event.key == "k"
+                    moved = this.jumpToPrev(event.key == "k");
                 }
                 else if (event.key == "G") {
                     // G = end
-                    this.setIndex(this.items.length-1)
+                    moved = this.setIndex(this.items.length-1, false, true);
                 } else if (event.key == "J") {
-                    this.jumpToNextUnseenItem();
                     mark = true
+                    this.jumpToNextUnseenItem(mark);
                 }
                 moved = true
                 console.log(this.postIdForItem(this.items[this.index]))
@@ -1507,32 +1526,32 @@ class ItemHandler extends Handler {
                 // gg = home
                 if (this.index < this.items.length)
                 {
-                    this.setIndex(0)
+                    this.setIndex(0, false, true);
                 }
-                moved = true
+                moved = true;
             }
             this.keyState = []
         }
-        if (moved)
-        {
-            if (mark)
-            {
-                this.markItemRead(old_index, true)
-            }
-            this.applyItemStyle(this.items[old_index], false)
-            this.applyItemStyle(this.items[this.index], true)
-            this.updateItems()
-            // to avoid mouseover getting triggered by keyboard movement
-            this.lastMousePosition = null
-            this.ignoreMouseMovement = false
-            return event.key
-        } else {
-            this.ignoreMouseMovement = false
-            return null
-        }
+        // if (moved)
+        // {
+        //     if (mark)
+        //     {
+        //         this.markItemRead(old_index, true)
+        //     }
+        //     this.applyItemStyle(this.items[old_index], false)
+        //     this.applyItemStyle(this.items[this.index], true)
+        //     this.updateItems()
+        //     // to avoid mouseover getting triggered by keyboard movement
+        //     this.lastMousePosition = null
+        //     this.ignoreMouseMovement = false
+        //     return event.key
+        // } else {
+        //     this.ignoreMouseMovement = false
+        //     return null
+        // }
     }
 
-    jumpToNextUnseenItem() {
+    jumpToNextUnseenItem(mark) {
         var i
         for (i = this.index+1; i < this.items.length-1; i++)
         {
@@ -1542,7 +1561,7 @@ class ItemHandler extends Handler {
                 break;
             }
         }
-        this.setIndex(i)
+        this.setIndex(i, mark)
         this.updateItems();
     }
 
@@ -1652,6 +1671,12 @@ class FeedItemHandler extends ItemHandler {
             "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg",
             "https://www.svgrepo.com/show/506582/sort-numeric-up.svg"
         ],
+        prev: [
+            'https://www.svgrepo.com/show/491060/prev.svg'
+        ],
+        next: [
+            'https://www.svgrepo.com/show/491054/next.svg'
+        ],
         preferences: [
             "https://www.svgrepo.com/show/522235/preferences.svg",
             "https://www.svgrepo.com/show/522236/preferences.svg"
@@ -1736,6 +1761,26 @@ class FeedItemHandler extends ItemHandler {
                     $(this.statusBarLeft).append(this.loadOlderIndicator);
                     $('a#loadOlderIndicatorLink').on("click", () => this.loadOlderItems())
                 }
+
+                if (!this.prevButton) {
+                    this.prevButton = $(`<div id="prevButton" title="previous post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="prevButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.prev[0]}"/></div>`);
+                    $(this.statusBarLeft).append(this.prevButton);
+                    $('#prevButton').on("click", (event) => {
+                        event.preventDefault();
+                        this.jumpToPrev(true);
+                    });
+                }
+
+                if (!this.nextButton) {
+                    this.nextButton = $(`<div id="nextButton" title="next post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="nextButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.next[0]}"/></div>`);
+                    $(this.statusBarLeft).append(this.nextButton);
+                    $('#nextButton').on("click", (event) => {
+                        event.preventDefault();
+                        this.jumpToNext(true);
+                    });
+                }
+
+
                 if (!this.infoIndicator) {
                     this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span id="infoIndicatorText"/></div>`);
                     $(this.statusBarCenter).append(this.infoIndicator);

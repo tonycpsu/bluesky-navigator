@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-26.3
+// @version      2025-01-26.4
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -984,15 +984,45 @@ class ItemHandler extends Handler {
         this.isPopupVisible = false;
     }
 
+    get scrollMargin2() {
+        const els = $('div[data-testid="HomeScreen"] > div > div[style*="removed-body-scroll-bar-size"]');
+        console.log(els);
+        var margin = 0;
+        els.each(
+            (i, el) => {margin += $(el).outerHeight()}
+        );
+        // const margin = el.outerHeight();
+        console.log(margin);
+        return margin;
+    }
+
     get scrollMargin() {
-        return $('div[data-testid="HomeScreen"] > div > div').eq(2).outerHeight();
+        var margin;
+        var el = $('div[data-testid="HomeScreen"] > div > div').eq(2);
+        // debugger;
+        if ($(el).attr('style')?.includes('removed-body-scroll-bar-size')) {
+            margin = el.outerHeight();
+        } else {
+            el = $('div[data-testid="HomeScreen"] > div > div').first().first();
+            if(this.index) {
+                var transform = el[0].style.transform
+                // console.log("Transform updated:", targetElement.style.transform);
+                // Place additional handling code here
+                var translateY = transform.indexOf("(") == -1 ? 0 : parseInt(transform.split("(")[1].split("px")[0])
+                console.log(`translateY ${translateY}`);
+                // const translateY = translateY(-128px)
+                console.log(el);
+                margin = el.outerHeight() + translateY;
+            } else {
+                margin = el.outerHeight();
+            }
+        }
+        console.log(margin);
+        return margin;
     }
 
     applyItemStyle(element, selected) {
         //console.log(`applyItemStyle: ${$(element).parent().parent().index()-1}, ${this.index}`)
-
-
-
         $(element).addClass("item");
 
         const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first()
@@ -1024,8 +1054,9 @@ class ItemHandler extends Handler {
                   : $(element).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
             $(bannerDiv).html(`<strong>${this.getIndexFromItem(element)+1}</strong>/<strong>${this.items.length}</strong>`);
 
-            $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
         }
+
+        $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
 
         $(element).find('video').each(
             (i, video) => {
@@ -1394,11 +1425,8 @@ class ItemHandler extends Handler {
         this.index = index;
         this.applyItemStyle(this.items[this.index], true)
         if(update) {
-            this.updateItems()
+            this.updateItems();
         }
-        // to avoid mouseover getting triggered by keyboard movement
-        this.lastMousePosition = null;
-        this.ignoreMouseMovement = false;
         return true;
         // this.updateItems();
     }

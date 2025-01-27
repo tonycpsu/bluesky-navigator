@@ -827,7 +827,7 @@ class ItemHandler extends Handler {
         this.enableScrollMonitor = true;
         this.enableIntersectionObserver = true;
         $(document).on("scroll", this.onScroll);
-
+        this.loadItems();
         super.activate()
     }
 
@@ -1208,7 +1208,7 @@ class ItemHandler extends Handler {
         let set = [];
 
         // this.deactivate()
-        // $(this.items).css("opacity", "0%")
+        $(this.items).css("opacity", "0%")
         // const newItems = $(this.selector).not("div[data-bsky-navigator-item-index]")
         // console.log(newItems.length)
         // const newItemsOrig = newItems.get()
@@ -1283,7 +1283,7 @@ class ItemHandler extends Handler {
         this.loading = false;
         $('img#loadOlderIndicatorImage').css("opacity", "1");
         $('img#loadOlderIndicatorImage').removeClass("toolbar-icon-pending");
-        // $(this.items).css("opacity", "100%")
+        $(this.items).css("opacity", "100%")
         if(focusedPostId) {
             this.jumpToPost(focusedPostId);
         } else if (!this.jumpToPost(this.postId)) {
@@ -1920,9 +1920,6 @@ class FeedItemHandler extends ItemHandler {
         const unseenThreads = parent.children()//.not("div.bsky-navigator-seen")
         $(unseenThreads).map(
             (i, thread) => {
-                // if ($(thread).find(".item").length == $(thread).find(".item-read").length) {
-                //     $(thread).css("display", hideRead ? "none": "block", "!important");
-                // }
                 $(thread).find(".item").each(
                     (i, item) => {
                         if(this.filterItem(item)) {
@@ -1930,8 +1927,6 @@ class FeedItemHandler extends ItemHandler {
                         } else {
                             $(item).addClass("filtered");
                         }
-                        // $(item).css("display", this.filterItem(item) ? "block": "none", "!important");
-                        // $(item).css("display", this.filterItem(item) ? "block": "none", "!important");
                     }
                 )
 
@@ -1941,13 +1936,6 @@ class FeedItemHandler extends ItemHandler {
                     $(thread).addClass("filtered");
                 }
 
-                // $(thread).css("display", this.filterThread(thread) ? "block": "none", "!important");
-                // $(thread).find(".item-read").map(
-                //     (i, item) => {
-                //         // console.log(item)
-                //         $(item).css("display", hideRead ? "none": "block", "!important");
-                //     }
-                // )
             }
         )
         if(hideRead && $(this.items[this.index]).hasClass("item-read")) {
@@ -2229,11 +2217,9 @@ function setScreen(screen) {
         /* Feed itmes may be sorted, so we hide them visually and show them later */
 
 
-        /*
         div[data-testid$="FeedPage"] ${FEED_ITEM_SELECTOR} {
            opacity: 0%;
         }
-        */
 
         ${
             config.get("hideLoadNewButton")

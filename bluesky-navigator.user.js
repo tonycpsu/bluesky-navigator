@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-26.5
+// @version      2025-01-27.1
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -29,6 +29,7 @@ const TOOLBAR_CONTAINER_SELECTOR = 'div[data-testid="HomeScreen"] > div > div > 
 const STATUS_BAR_CONTAINER_SELECTOR = 'div[style="background-color: rgb(255, 255, 255);"]'
 const LOAD_NEW_BUTTON_SELECTOR = "button[aria-label^='Load new']"
 const LOAD_NEW_INDICATOR_SELECTOR = 'div[style*="border-color: rgb(197, 207, 217)"]'
+const FEED_CONTAINER_SELECTOR = 'div[data-testid="HomeScreen"] div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div'
 const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)';
 const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]';
 const PROFILE_SELECTOR = 'a[aria-label="View profile"]';
@@ -741,20 +742,21 @@ class ItemHandler extends Handler {
         this._index = null;
         this.postId = null;
         this.loadNewerCallback = null;
-        this.selector = selector
-        this.debounceTimeout = null
-        this.lastMousePosition = null
-        this.isPopupVisible = false
-        this.ignoreMouseMovement = false
-        this.onPopupAdd = this.onPopupAdd.bind(this)
-        this.onPopupRemove = this.onPopupRemove.bind(this)
-        this.onIntersection = this.onIntersection.bind(this)
-        this.onFooterIntersection = this.onFooterIntersection.bind(this)
-        this.onItemAdded = this.onItemAdded.bind(this)
-        this.onScroll = this.onScroll.bind(this)
-        this.handleNewThreadPage = this.handleNewThreadPage.bind(this) // FIXME: move to PostItemHandler
-        this.onItemMouseOver = this.onItemMouseOver.bind(this)
-        this.didMouseMove = this.didMouseMove.bind(this)
+        this.selector = selector;
+        this.debounceTimeout = null;
+        this.lastMousePosition = null;
+        this.isPopupVisible = false;
+        this.ignoreMouseMovement = false;
+        this.onPopupAdd = this.onPopupAdd.bind(this);
+        this.onPopupRemove = this.onPopupRemove.bind(this);
+        this.onIntersection = this.onIntersection.bind(this);
+        this.onFooterIntersection = this.onFooterIntersection.bind(this);
+        this.onItemAdded = this.onItemAdded.bind(this);
+        this.onScroll = this.onScroll.bind(this);
+        this.handleNewThreadPage = this.handleNewThreadPage.bind(this); // FIXME: move to PostItemHandler
+        this.onItemMouseOver = this.onItemMouseOver.bind(this);
+        this.didMouseMove = this.didMouseMove.bind(this);
+        this.getTimestampForItem = this.getTimestampForItem.bind(this);
         this.loading = false;
         this.loadingNew = false;
         this.enableScrollMonitor = false;
@@ -794,7 +796,8 @@ class ItemHandler extends Handler {
             $('a#loadNewerIndicatorLink').on("click", () => this.loadNewerItems())
             $('img#loadNewerIndicatorImage').css("opacity", "1");
             $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
-
+            $('#messageActions').append($('<div id="loadNewerAction"><a Load newer posts</a>.</div>'));
+            $('#loadNewerAction > a').on("click", () => this.loadNewerItems());
             this.loadNewerButton.addEventListener(
                 "click",
                 (event) => {
@@ -999,7 +1002,6 @@ class ItemHandler extends Handler {
     get scrollMargin() {
         var margin;
         var el = $('div[data-testid="HomeScreen"] > div > div').eq(2);
-        // debugger;
         if ($(el).attr('style')?.includes('removed-body-scroll-bar-size')) {
             margin = el.outerHeight();
         } else {
@@ -1034,11 +1036,13 @@ class ItemHandler extends Handler {
         if (postTimeString && userFormat) {
             // console.log(postTimeString)
             const postTimestamp = new Date(postTimeString.replace(' at', ''));
-            const formattedDate = dateFns.format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
-            if (config.get("showDebuggingInfo")) {
-                postTimestampElement.text(`${formattedDate} (${$(element).parent().parent().attr("data-bsky-navigator-thread-index")}, ${$(element).attr("data-bsky-navigator-item-index")})`);
-            } else {
-                postTimestampElement.text(formattedDate);
+            if (userFormat) {
+                const formattedDate = dateFns.format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
+                if (config.get("showDebuggingInfo")) {
+                    postTimestampElement.text(`${formattedDate} (${$(element).parent().parent().attr("data-bsky-navigator-thread-index")}, ${$(element).attr("data-bsky-navigator-item-index")})`);
+                } else {
+                    postTimestampElement.text(formattedDate);
+                }
             }
         }
 
@@ -1200,6 +1204,39 @@ class ItemHandler extends Handler {
         return;
     }
 
+    showMessage(title, message) {
+        if (this.messageContainer) {
+            this.hideMessage();
+        }
+        this.messageContainer = $('<div id="messageContainer">');
+        if (title) {
+            const messageTitle = $('<div class="messageTitle">');
+            $(messageTitle).html(title)
+            this.messageContainer.append(messageTitle);
+        }
+        const messageBody = $('<div class="messageBody">');
+        this.messageContainer.append(messageBody);
+        $(messageBody).html(message);
+        $(FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
+        window.scrollTo(0, 0);
+
+
+    }
+
+    hideMessage(content) {
+        $(this.messageContainer).remove();
+        this.messageContainer = null;
+    }
+
+    getTimestampForItem(item) {
+        const postTimestampElement = $(item).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
+        const postTimeString = postTimestampElement.attr("aria-label");
+        if(!postTimeString) {
+            return null;
+        }
+        return new Date(postTimeString.replace(' at', ''));
+    }
+
     loadItems(focusedPostId) {
         var old_length = this.items.length
         var old_index = this.index
@@ -1216,7 +1253,7 @@ class ItemHandler extends Handler {
         let threadIndex = 0;
 
         this.ignoreMouseMovement = true;
-        $(this.selector).filter(":visible").each(function (i, item) {
+        $(this.selector).filter(":visible").each( (i, item) => {
             $(item).attr("data-bsky-navigator-item-index", itemIndex++);
             // $(item).attr("data-bsky-navigator-item-index", stateManager.state.feedSortReverse ? itemIndex++: itemIndex--);
             $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
@@ -1236,6 +1273,18 @@ class ItemHandler extends Handler {
         this.filterItems();
 
         this.items = $(this.selector).filter(":visible")
+
+        this.itemStats.oldest = this.itemStats.newest = null;
+        $(this.selector).filter(":visible").each( (i, item) => {
+
+            const timestamp = this.getTimestampForItem(item);
+            if(!this.itemStats.oldest || timestamp < this.itemStats.oldest) {
+                this.itemStats.oldest = timestamp;
+            }
+            if(!this.itemStats.newest || timestamp > this.itemStats.newest) {
+                this.itemStats.newest = timestamp;
+            }
+        });
 
         if(this.intersectionObserver) {
             $(this.items).each(
@@ -1291,6 +1340,26 @@ class ItemHandler extends Handler {
         }
         this.updateInfoIndicator();
         this.enableFooterObserver();
+
+        if ($(this.items).filter(":visible").length == 0) {
+            this.showMessage("No more unread messages.", `
+<p>
+You're all caught up.
+</p>
+
+<div id="messageActions"/>
+`)
+            $('#messageActions').append($('<div id="loadOlderAction"><a>Load older posts</a>.</private/>'));
+            $('#loadOlderAction > a').on("click", () => this.loadOlderItems());
+            if ($('img#loadNewerIndicatorImage').css("opacity") == "1") {
+                $('#messageActions').append($('<div id="loadNewerAction"><a>Load newer posts</a>.</div>'));
+                $('#loadNewerAction > a').on("click", () => this.loadNewerItems());
+            }
+
+        } else {
+            this.hideMessage()
+        }
+        
         this.ignoreMouseMovement = false;
         this.enableScrollMonitor = false;
         // else if (this.index == null) {
@@ -1313,7 +1382,17 @@ class ItemHandler extends Handler {
             (i, item) => $(item).hasClass("item-unread")
         ).length;
         const index = this.items.length ? this.index+1 : 0;
-        $("span#infoIndicatorText").html(`<strong>${index}</strong>/<strong>${this.items.length}</strong> (<strong>${this.itemStats.unreadCount}</strong> new)`);
+        $("span#infoIndicatorText").html(`
+<div>
+<strong>${index}</strong>/<strong>${this.items.length}</strong> (<strong>${this.itemStats.unreadCount}</strong> new)
+</div>
+<div>
+${
+this.itemStats.oldest
+?
+`${dateFns.format(this.itemStats.oldest, 'yyyy-MM-dd hh:mmaaa')} - ${dateFns.format(this.itemStats.newest, 'yyyy-MM-dd hh:mmaaa')}</div>`
+: ``
+}`);
     }
 
     loadNewerItems() {
@@ -1336,6 +1415,7 @@ class ItemHandler extends Handler {
             // }
             $('img#loadNewerIndicatorImage').css("opacity", "0.2");
             $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
+            $('#loadNewerAction').remove();
             this.loadingNew = false;
         }, 1000)
     }
@@ -1727,7 +1807,7 @@ class FeedItemHandler extends ItemHandler {
                 $(homeScreenFeedTabsDiv).before(this.toolbarDiv);
                 if (!this.loadNewerIndicator) {
                     this.loadNewerIndicator = $(`
-<div id="loadNewerIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m">
+<div id="loadNewerIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
     <span id="loadNewerIndicatorText">
     <a id="loadNewerIndicatorLink" title="Load newer items"><img id="loadNewerIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.loadNewer[0]}"/></a>
     </span>
@@ -1736,7 +1816,7 @@ class FeedItemHandler extends ItemHandler {
                 }
 
                 if (!this.sortIndicator) {
-                    this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
+                    this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
                     $(this.toolbarDiv).append(this.sortIndicator);
                     $('#sortIndicator').on("click", (event) => {
                         event.preventDefault();
@@ -1745,7 +1825,7 @@ class FeedItemHandler extends ItemHandler {
                 }
 
                 if (!this.filterIndicator) {
-                    this.filterIndicator = $(`<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`);
+                    this.filterIndicator = $(`<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`);
                     $(this.toolbarDiv).append(this.filterIndicator);
                     $('#filterIndicator').on("click", (event) => {
                         event.preventDefault();
@@ -1783,7 +1863,7 @@ class FeedItemHandler extends ItemHandler {
 
                 if (!this.loadOlderIndicator) {
                     this.loadOlderIndicator = $(`
-<div id="loadOlderIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m">
+<div id="loadOlderIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
     <span id="loadOlderIndicatorText">
     <a id="loadOlderIndicatorLink" title="Load older items"><img id="loadOlderIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.loadOlder[0]}"/></a>
     </span>
@@ -1793,7 +1873,7 @@ class FeedItemHandler extends ItemHandler {
                 }
 
                 if (!this.prevButton) {
-                    this.prevButton = $(`<div id="prevButton" title="previous post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="prevButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.prev[0]}"/></div>`);
+                    this.prevButton = $(`<div id="prevButton" title="previous post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.prev[0]}"/></div>`);
                     $(this.statusBarLeft).append(this.prevButton);
                     $('#prevButton').on("click", (event) => {
                         event.preventDefault();
@@ -1802,7 +1882,7 @@ class FeedItemHandler extends ItemHandler {
                 }
 
                 if (!this.nextButton) {
-                    this.nextButton = $(`<div id="nextButton" title="next post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><img id="nextButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.next[0]}"/></div>`);
+                    this.nextButton = $(`<div id="nextButton" title="next post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.next[0]}"/></div>`);
                     $(this.statusBarLeft).append(this.nextButton);
                     $('#nextButton').on("click", (event) => {
                         event.preventDefault();
@@ -1812,12 +1892,12 @@ class FeedItemHandler extends ItemHandler {
 
 
                 if (!this.infoIndicator) {
-                    this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><span id="infoIndicatorText"/></div>`);
+                    this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><span id="infoIndicatorText"/></div>`);
                     $(this.statusBarCenter).append(this.infoIndicator);
                 }
 
                 if (!this.preferencesIcon) {
-                    this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb r-5t7p9m"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
+                    this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
                     $(this.preferencesIcon).on("click", () => {
                         $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1])
                         config.open()
@@ -1917,7 +1997,7 @@ class FeedItemHandler extends ItemHandler {
         $("#filterIndicator").attr("title", `show all or unread (currently ${hideRead ? 'unread' : 'all'})`);
 
         const parent = $(this.selector).first().closest(".thread").parent()
-        const unseenThreads = parent.children()//.not("div.bsky-navigator-seen")
+        const unseenThreads = parent.find(".thread");//.not("div.bsky-navigator-seen")
         $(unseenThreads).map(
             (i, thread) => {
                 $(thread).find(".item").each(
@@ -2532,6 +2612,24 @@ function setScreen(screen) {
                     max-height: calc(70% - 30px);
                     padding: 10px;
                     box-sizing: border-box;
+        }
+
+        #messageContainer {
+            inset: 5%;
+            padding: 10px;
+        }
+
+        .messageTitle {
+            font-size: 1.5em;
+            text-align: center;
+        }
+
+        .messageBody {
+            font-size: 1.2em;
+        }
+
+        #messageActions a:hover {
+            text-decoration: underline;
         }
 `
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-26.4
+// @version      2025-01-26.5
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -2552,6 +2552,9 @@ function setScreen(screen) {
         })
 
         function setContext(ctx) {
+            if(context == ctx) {
+                return;
+            }
             context = ctx
             console.log(`context: ${context}`)
             for (const [name, handler] of Object.entries(handlers) )

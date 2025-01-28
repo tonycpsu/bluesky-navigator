@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-27.5
+// @version      2025-01-27.6
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -833,7 +833,7 @@ class ItemHandler extends Handler {
         this.enableScrollMonitor = true;
         this.enableIntersectionObserver = true;
         $(document).on("scroll", this.onScroll);
-        this.loadItems();
+        // this.loadItems();
         super.activate()
     }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-27.1
+// @version      2025-01-27.2
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1223,7 +1223,8 @@ class ItemHandler extends Handler {
 
     }
 
-    hideMessage(content) {
+    hideMessage() {
+        debugger;
         $(this.messageContainer).remove();
         this.messageContainer = null;
     }
@@ -1342,14 +1343,14 @@ class ItemHandler extends Handler {
         this.enableFooterObserver();
 
         if ($(this.items).filter(":visible").length == 0) {
-            this.showMessage("No more unread messages.", `
+            this.showMessage("No more unread posts.", `
 <p>
 You're all caught up.
 </p>
 
 <div id="messageActions"/>
 `)
-            $('#messageActions').append($('<div id="loadOlderAction"><a>Load older posts</a>.</private/>'));
+            $('#messageActions').append($('<div id="loadOlderAction"><a>Load older posts</a>.</div>'));
             $('#loadOlderAction > a').on("click", () => this.loadOlderItems());
             if ($('img#loadNewerIndicatorImage').css("opacity") == "1") {
                 $('#messageActions').append($('<div id="loadNewerAction"><a>Load newer posts</a>.</div>'));
@@ -2630,6 +2631,7 @@ function setScreen(screen) {
 
         #messageActions a:hover {
             text-decoration: underline;
+            cursor: pointer;
         }
 `
 

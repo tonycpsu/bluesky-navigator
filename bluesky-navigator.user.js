@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-27.2
+// @version      2025-01-27.3
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -796,7 +796,7 @@ class ItemHandler extends Handler {
             $('a#loadNewerIndicatorLink').on("click", () => this.loadNewerItems())
             $('img#loadNewerIndicatorImage').css("opacity", "1");
             $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
-            $('#messageActions').append($('<div id="loadNewerAction"><a Load newer posts</a>.</div>'));
+            $('#messageActions').append($('<div id="loadNewerAction"><a> Load newer posts</a></div>'));
             $('#loadNewerAction > a').on("click", () => this.loadNewerItems());
             this.loadNewerButton.addEventListener(
                 "click",
@@ -1350,10 +1350,10 @@ You're all caught up.
 
 <div id="messageActions"/>
 `)
-            $('#messageActions').append($('<div id="loadOlderAction"><a>Load older posts</a>.</div>'));
+            $('#messageActions').append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
             $('#loadOlderAction > a').on("click", () => this.loadOlderItems());
             if ($('img#loadNewerIndicatorImage').css("opacity") == "1") {
-                $('#messageActions').append($('<div id="loadNewerAction"><a>Load newer posts</a>.</div>'));
+                $('#messageActions').append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
                 $('#loadNewerAction > a').on("click", () => this.loadNewerItems());
             }
 

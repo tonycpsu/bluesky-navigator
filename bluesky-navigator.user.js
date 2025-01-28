@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-27.6
+// @version      2025-01-27.7
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -28,7 +28,7 @@ const STATE_KEY = "bluesky_state";
 const TOOLBAR_CONTAINER_SELECTOR = 'div[data-testid="HomeScreen"] > div > div > div:first-child'
 const STATUS_BAR_CONTAINER_SELECTOR = 'div[style="background-color: rgb(255, 255, 255);"]'
 const LOAD_NEW_BUTTON_SELECTOR = "button[aria-label^='Load new']"
-const LOAD_NEW_INDICATOR_SELECTOR = 'div[style*="border-color: rgb(197, 207, 217)"]'
+const LOAD_NEW_INDICATOR_SELECTOR = `${LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`
 const FEED_CONTAINER_SELECTOR = 'div[data-testid="HomeScreen"] div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div'
 const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)';
 const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]';
@@ -921,7 +921,6 @@ class ItemHandler extends Handler {
 
     onIntersection(entries) {
 
-        console.log(this.enableIntersectionObserver);
         if(!this.enableIntersectionObserver || this.loading || this.loadingNew) {
             return;
         }
@@ -1022,7 +1021,7 @@ class ItemHandler extends Handler {
                 margin = el.outerHeight();
             }
         }
-        console.log(margin);
+        // console.log(margin);
         return margin;
     }
 
@@ -1978,8 +1977,9 @@ class FeedItemHandler extends ItemHandler {
         this.filter = text;
     }
 
-    filterItem(item) {
+    filterItem(item, thread) {
         if(stateManager.state.feedHideRead) {
+            // console.log($(thread).children().index($(item).parent()));
             if($(item).hasClass("item-read")) {
                 return false;
             }
@@ -2010,7 +2010,7 @@ class FeedItemHandler extends ItemHandler {
             (i, thread) => {
                 $(thread).find(".item").each(
                     (i, item) => {
-                        if(this.filterItem(item)) {
+                        if(this.filterItem(item, thread)) {
                             $(item).removeClass("filtered");
                         } else {
                             $(item).addClass("filtered");
@@ -2121,23 +2121,27 @@ class PostItemHandler extends ItemHandler {
 
     handleInput(event) {
 
+        if (["o", "Enter"].includes(event.key) && !(event.altKey || event.metaKey) ) {
+            // o/Enter = open inner post
+            var inner = $(item).find("div[aria-label^='Post by']")
+            inner.click()
+        }
+
+        if (super.handleInput(event)) {
+            return
+        }
+
         if(this.isPopupVisible || event.altKey || event.metaKey) {
             return
         }
+
         var item = this.items[this.index]
         if(event.key == "a") {
             var handle = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1])
             $(item).find("div").filter( (i, el) =>
                 $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == `@${handle}`
             )[0].click()
-        } else if (["o", "Enter"].includes(event.key)) {
-            // o/Enter = open inner post
-            var inner = $(item).find("div[aria-label^='Post by']")
-            inner.click()
-        } else {
-            return super.handleInput(event);
         }
-
 
     }
 }

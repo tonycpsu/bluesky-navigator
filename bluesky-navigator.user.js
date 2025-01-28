@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-27.4
+// @version      2025-01-27.5
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -794,10 +794,13 @@ class ItemHandler extends Handler {
         this.loadNewerObserver = waitForElement(LOAD_NEW_INDICATOR_SELECTOR, (button) => {
             this.loadNewerButton = $(button)[0];
             $('a#loadNewerIndicatorLink').on("click", () => this.loadNewerItems())
+
             $('img#loadNewerIndicatorImage').css("opacity", "1");
             $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
-            $('#messageActions').append($('<div id="loadNewerAction"><a> Load newer posts</a></div>'));
-            $('#loadNewerAction > a').on("click", () => this.loadNewerItems());
+            if ($('#loadNewerAction').length == 0) {
+                $('#messageActions').append($('<div id="loadNewerAction"><a> Load newer posts</a></div>'));
+                $('#loadNewerAction > a').on("click", () => this.loadNewerItems());
+            }
             this.loadNewerButton.addEventListener(
                 "click",
                 (event) => {
@@ -1239,6 +1242,8 @@ class ItemHandler extends Handler {
     }
 
     loadItems(focusedPostId) {
+        // debugger;
+
         var old_length = this.items.length
         var old_index = this.index
 
@@ -1350,8 +1355,10 @@ You're all caught up.
 
 <div id="messageActions"/>
 `)
-            $('#messageActions').append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
-            $('#loadOlderAction > a').on("click", () => this.loadOlderItems());
+            if ($('#loadOlderAction').length == 0) {
+                $('#messageActions').append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
+                $('#loadOlderAction > a').on("click", () => this.loadOlderItems());
+            }
             if ($('img#loadNewerIndicatorImage').css("opacity") == "1") {
                 $('#messageActions').append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
                 $('#loadNewerAction > a').on("click", () => this.loadNewerItems());
@@ -2113,9 +2120,6 @@ class PostItemHandler extends ItemHandler {
     // }
 
     handleInput(event) {
-        if (super.handleInput(event)) {
-            return
-        }
 
         if(this.isPopupVisible || event.altKey || event.metaKey) {
             return
@@ -2130,7 +2134,10 @@ class PostItemHandler extends ItemHandler {
             // o/Enter = open inner post
             var inner = $(item).find("div[aria-label^='Post by']")
             inner.click()
+        } else {
+            return super.handleInput(event);
         }
+
 
     }
 }
@@ -2627,6 +2634,10 @@ function setScreen(screen) {
 
         .messageBody {
             font-size: 1.2em;
+        }
+
+        #messageActions a {
+            color: #8040c0;
         }
 
         #messageActions a:hover {

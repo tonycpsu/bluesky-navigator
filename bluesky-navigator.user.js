@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-29.1
+// @version      2025-01-30.1
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -182,6 +182,14 @@ const CONFIG_FIELDS = {
         'title': 'Number of milliseconds of idle time before syncing state',
         'type': 'int',
         'default': 5000
+    },
+    'rulesSection': {
+        'section': [GM_config.create('Rules'), 'Post Rules'],
+        'type': 'hidden',
+    },
+    'rulesConfig': {
+        'label': 'Filters Configuration',
+        'type': 'textarea',
     },
     'miscellaneousSection': {
         'section': [GM_config.create('Miscellaneous'), 'Other settings'],
@@ -1852,8 +1860,8 @@ class FeedItemHandler extends ItemHandler {
                     this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
                     $(this.toolbarDiv).append(this.searchField);
                     this.onSearchUpdate = debounce(function (event) {
-                        console.log($(event.target).val());
-                        this.setFilter($(event.target).val());
+                        console.log($(event.target).val().trim());
+                        this.setFilter($(event.target).val().trim());
                         this.filterItems();
                     }, 300);
                     this.onSearchUpdate = this.onSearchUpdate.bind(this)
@@ -1992,15 +2000,74 @@ class FeedItemHandler extends ItemHandler {
                 return false;
             }
         }
-        if (this.filter) {
-            const pattern = new RegExp(this.filter, "i");
-            const handle = this.handleFromItem(item);
-            const displayName = this.displayNameFromItem(item);
-            if (!handle.match(pattern) && !displayName.match(pattern)) {
-                return false;
-            }
+
+        if(this.filter && stateManager.state.rules) {
+            const activeRules = this.filter.split(/[ ]+/).map(
+                (ruleStatement) => {
+                    const [_, invert, matchType, query] = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
+                    return {
+                        invert,
+                        matchType,
+                        query
+                    }
+                }
+            );
+
+            return activeRules.map(
+                (activeRule) => {
+                    console.log(activeRule);
+                    var allowed = null;
+                    switch (activeRule.matchType) {
+                        case '$':
+                            const rules = stateManager.state.rules[activeRule.query];
+                            if (!rules) {
+                                console.log(`no rule ${activeRule.query}`);
+                                return null;
+                            }
+                            rules.forEach(rule => {
+                                console.log(rule, allowed);
+                                if (rule.type === "all") {
+                                    allowed = rule.action === "allow";
+                                } else if (rule.type === "from" && !!this.filterAuthor(item, rule.value.substring(1))) {
+                                    allowed = allowed || rule.action === "allow";
+                                } else if (rule.type === "content" && !!this.filterContent(item, rule.value)) {
+                                    allowed = allowed || rule.action === "allow";
+                                }
+                            });
+                            break;
+                        case '@':
+                            allowed = !!this.filterAuthor(item, activeRule.query)
+                            break;
+                        case '%':
+                            allowed = !!this.filterContent(item, activeRule.query)
+                            break;
+                        default:
+                            allowed = !!this.filterAuthor(item, activeRule.query) || !!this.filterContent(item, activeRule.query)
+                            break;
+                    }
+                    return activeRule.invert ? !allowed : allowed;
+                }
+            ).every( (allowed) => allowed == true )
+
         }
         return true;
+    }
+
+    filterAuthor(item, author) {
+        const pattern = new RegExp(author, "i");
+        const handle = this.handleFromItem(item);
+        const displayName = this.displayNameFromItem(item);
+        console.log(author, handle, displayName);
+        if (!handle.match(pattern) && !displayName.match(pattern)) {
+            return false;
+        }
+        return true;
+    }
+
+    filterContent(item, query) {
+        const pattern = new RegExp(query, "i");
+        const content = $(item).find('div[data-testid="postText"]').text();
+        return content.match(pattern);
     }
 
     filterThread(thread) {
@@ -2262,8 +2329,65 @@ function setScreen(screen) {
 
     const SCREEN_SELECTOR = "main > div > div > div"
 
+    function parseRulesConfig(configText) {
+        const lines = configText.split("\n");
+        const rules = {};
+        let rulesName = null;
+
+        for (let line of lines) {
+            line = line.trim();
+            if (!line || line.startsWith(";") || line.startsWith("#")) continue;
+
+            const sectionMatch = line.match(/^\[(.+)\]$/);
+            if (sectionMatch) {
+                rulesName = sectionMatch[1];
+                rules[rulesName] = [];
+                continue;
+            }
+
+            if (!rulesName) continue;
+
+            // Match explicit allow/deny rules
+            const ruleMatch = line.match(/(allow|deny) (all|from|content) "?([^"]+)"?/);
+            if (ruleMatch) {
+                const [_, action, type, value] = ruleMatch;
+                rules[rulesName].push({ action, type, value });
+                continue;
+            }
+
+            // **Shortcut Parsing**
+            if (line.startsWith("@")) {
+                // Interpret "@foo" as "allow author 'foo'"
+                rules[rulesName].push({ action: "allow", type: "from", value: line });
+            } else {
+                // Any other string is interpreted as "allow content 'foobar'"
+                rules[rulesName].push({ action: "allow", type: "content", value: line });
+            }
+        }
+        return rules;
+    }
     function onConfigInit()
     {
+
+        // stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
+        StateManager.create(STATE_KEY, DEFAULT_STATE, config.get("historyMax"))
+                    .then((initializedStateManager) => {
+                        stateManager = initializedStateManager; // Assign the fully initialized instance
+                        console.log("State initialized");
+                        console.dir(stateManager.state); // Access the fully initialized state
+                        onStateInit(); // Now safe to call
+                    })
+                    .catch((error) => {
+                        console.error("Failed to initialize StateManager:", error);
+                    });
+    }
+
+
+    function onStateInit() {
+
+
+        // FIXME: find a better place for this
+        stateManager.state.rules = parseRulesConfig(config.get("rulesConfig"));
 
         if(config.get("showDebuggingInfo")) {
             const logContainer = $(`<div id="logContainer"></div>`);
@@ -2296,21 +2420,6 @@ function setScreen(screen) {
             window.console = unsafeWindow.console;
         }
 
-        // stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
-        StateManager.create(STATE_KEY, DEFAULT_STATE, config.get("historyMax"))
-                    .then((initializedStateManager) => {
-                        stateManager = initializedStateManager; // Assign the fully initialized instance
-                        console.log("State initialized");
-                        console.dir(stateManager.state); // Access the fully initialized state
-                        onStateInit(); // Now safe to call
-                    })
-                    .catch((error) => {
-                        console.error("Failed to initialize StateManager:", error);
-                    });
-    }
-
-
-    function onStateInit() {
 
         // Define the reusable style
         const stylesheet = `
@@ -2803,6 +2912,11 @@ h2 {
     width: 100%;
     height: 1.5em;
 }
+
+#GM_config_rulesConfig_var textarea {
+    height: 10em;
+}
+
 #GM_config_stateSyncConfig_var textarea {
     height: 10em;
 }

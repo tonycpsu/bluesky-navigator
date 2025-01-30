@@ -26,7 +26,7 @@ Features
 - optionally disable built-in behavior of loading more items when scrolling (can
   still load more using toolbar button or keyboard shortcut)
 - visual indicator for post read/unread status
-- filter posts by author
+- dynamically filter posts by authors, keywords, etc. using configurable rules
 - configurable formatting of post timestamps
 - optionally disable embedded video previews
 - sync read/unread state between multiple browsers via cloud service(s)
@@ -73,6 +73,45 @@ Keyboard Shortcuts
  | Meta/Alt+p  | open profile page                                  |
  | Meta/Alt+,  | open settings page                                 |
  | Meta/Alt+.  | open Bluesky Navigator config panel                |
+
+Dynamic Post Filtering
+----------------------
+
+The text box at the right of the toolbar allows you to filter posts using search
+terms.
+
+A plain search string will be interpreted as a search of words/phrases in either
+the author's handle, display name, or the content of their posts. Phrases can be
+wrapped in quotes. Multiple words/phrases must all match.
+
+If a search term is preceded by a `@` character, the matching will be confined
+to the user's handle and display name. 
+
+If a search term is preceded by a `%` character, the matching will be confined
+to the content of the post.
+
+if a search term is preceded by a `$` character, then matching will be performed
+according to rules configured in the `Rules` section of the script configuration
+panel. Here's an example configuration:
+
+``` ini
+[music]
+deny from all
+allow from @thecure.com
+allow content "Pearl Jam"
+
+[news]
+@cnn.com
+weather forecast
+
+
+```
+
+With this configuration, you can type `$music` to show posts from `@thecure.com`
+or that contain the phrase `Pearl Jam`, or `$news` to match posts from `@cnn.com` or that contain the phrase "weather forecast". This matching is not case sensitive.
+
+These searches can be combined, and any search can be negated by prefixing it
+with `!`.
 
 
 Remote State Sync (beta)

@@ -96,7 +96,7 @@ panel. Here's an example configuration:
 
 ``` ini
 [music]
-deny from all
+deny all
 allow from @thecure.com
 allow content "Pearl Jam"
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-27.8
+// @version      2025-01-29.1
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1256,7 +1256,10 @@ class ItemHandler extends Handler {
         let threadIndex = 0;
 
         this.ignoreMouseMovement = true;
+        console.log("loadItems");
+        // debugger;
         $(this.selector).filter(":visible").each( (i, item) => {
+            console.log(item);
             $(item).attr("data-bsky-navigator-item-index", itemIndex++);
             // $(item).attr("data-bsky-navigator-item-index", stateManager.state.feedSortReverse ? itemIndex++: itemIndex--);
             $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
@@ -1724,7 +1727,14 @@ this.itemStats.oldest
                 const video = $(item).find('video')[0];
                 if(video) {
                     event.preventDefault();
-                    video.paused ? this.playVideo(video): this.pauseVideo(video);
+                    if (video.muted) {
+                        video.muted = false;
+                    }
+                    if (video.paused) {
+                        this.playVideo(video);
+                    } else {
+                        this.pauseVideo(video)
+                    }
                 }
             }
         } else if(event.key == "r") {
@@ -2040,11 +2050,11 @@ class FeedItemHandler extends ItemHandler {
             (i, item) => $(item).hasClass("thread")
         ).get().sort(
             (a, b) => {
-                const threadIndexA = parseInt($(a).closest(".thread").data("bsky-navigator-thread-index"));
-                const threadIndexB = parseInt($(b).closest(".thread").data("bsky-navigator-thread-index"));
-                const itemIndexA = parseInt($(a).data("bsky-navigator-item-index"));
-                const itemIndexB = parseInt($(b).data("bsky-navigator-item-index"));
-
+                const threadIndexA = parseInt($(a).data("bsky-navigator-thread-index"));
+                const threadIndexB = parseInt($(b).data("bsky-navigator-thread-index"));
+                const itemIndexA = parseInt($(a).find(".item").data("bsky-navigator-item-index"));
+                const itemIndexB = parseInt($(b).find(".item").data("bsky-navigator-item-index"));
+                // console.log(threadIndexA, threadIndexB, itemIndexA, itemIndexB);
                 if (threadIndexA !== threadIndexB) {
                     return reversed
                         ? threadIndexB - threadIndexA
@@ -2053,7 +2063,8 @@ class FeedItemHandler extends ItemHandler {
                 return itemIndexB - itemIndexA;
             }
         );
-        (reversed ^ this.loadingNew) ? parent.prepend(newItems) : parent.append(newItems);
+        // debugger;
+        (reversed ^ this.loadingNew) ? parent.prepend(newItems) : parent.children(".thread").last().next().after(newItems);
     }
 
     handleInput(event) {

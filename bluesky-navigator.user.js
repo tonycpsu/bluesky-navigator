@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-30.1
+// @version      2025-01-30.2
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -79,7 +79,7 @@ const CONFIG_FIELDS = {
     'unreadPosts': {
         'label': 'Unread Posts',
         'type': 'textarea',
-        'default': 'opacity: 100%;'
+        'default': 'opacity: 100% !important;'
     },
     'unreadPostsLightMode': {
         'label': 'Unread Posts (Light Mode)',
@@ -94,7 +94,7 @@ const CONFIG_FIELDS = {
     'readPosts': {
         'label': 'Read Posts',
         'type': 'textarea',
-        'default': 'opacity: 75%;'
+        'default': 'opacity: 75% !important;'
     },
     'readPostsLightMode': {
         'label': 'Read Posts (Light Mode)',

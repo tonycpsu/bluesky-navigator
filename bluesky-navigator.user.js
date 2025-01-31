@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-31.1
+// @version      2025-01-31.2
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -1399,7 +1399,6 @@ You're all caught up.
         $(this.items).each(
             (index, item) => {
                 this.applyItemStyle(this.items[index], index == this.index);
-
             }
         )
     }
@@ -1408,10 +1407,12 @@ You're all caught up.
         this.itemStats.unreadCount = this.items.filter(
             (i, item) => $(item).hasClass("item-unread")
         ).length;
-        const index = this.items.length ? this.index+1 : 0;
+        this.itemStats.filteredCount = this.items.filter(".filtered").length;
+        this.itemStats.shownCount = this.items.length - this.itemStats.filteredCount
+        const index = this.itemStats.shownCount ? this.index+1 : 0;
         $("span#infoIndicatorText").html(`
 <div>
-<strong>${index}</strong>/<strong>${this.items.length}</strong> (<strong>${this.itemStats.unreadCount}</strong> new)
+<strong>${index}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
 </div>
 <div>
 ${
@@ -1741,15 +1742,17 @@ this.itemStats.oldest
         } else if (event.altKey) {
             if(event.code.startsWith("Digit")) {
                 const num = parseInt(event.code.substr(5))-1;
-                const ruleName = Object.keys(stateManager.state.rules)[num];
-                console.log(ruleName);
-                const rule = stateManager.state.rules[ruleName];
-                if (rule) {
-                    $("#bsky-navigator-search").autocomplete("disable");
+                $("#bsky-navigator-search").autocomplete("disable");
+                if (num >= 0) {
+                    const ruleName = Object.keys(stateManager.state.rules)[num];
+                    console.log(ruleName);
+                    // const rule = stateManager.state.rules[ruleName];
                     $("#bsky-navigator-search").val("$" + ruleName);
-                    $("#bsky-navigator-search").trigger("input");
-                    $("#bsky-navigator-search").autocomplete("enable");
+                } else {
+                    $("#bsky-navigator-search").val(null);
                 }
+                $("#bsky-navigator-search").trigger("input");
+                $("#bsky-navigator-search").autocomplete("enable");
             }
         } else {
             // console.log(event.key)
@@ -2246,6 +2249,7 @@ class FeedItemHandler extends ItemHandler {
 
             }
         )
+        this.refreshItems();
         if(hideRead && $(this.items[this.index]).hasClass("item-read")) {
             console.log("jumping")
             this.jumpToNextUnseenItem();

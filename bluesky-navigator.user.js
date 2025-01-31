@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-30.2
+// @version      2025-01-31.1
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
 // @require https://code.jquery.com/jquery-3.7.1.min.js
+// @require https://code.jquery.com/ui/1.12.1/jquery-ui.min.js
 // @require https://openuserjs.org/src/libs/sizzle/GM_config.js
 // @require https://cdn.jsdelivr.net/npm/date-fns@4.1.0/cdn.min.js
 // @downloadURL  https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
@@ -669,6 +670,16 @@ function observeVisibilityChange($element, callback) {
     return () => observer.disconnect();
 }
 
+function splitTerms(input) {
+    return input.split(/\s+/).filter(term => term.length > 0); // Split by spaces
+}
+
+function extractLastTerm(input) {
+    let terms = splitTerms(input);
+    return terms.length > 0 ? terms[terms.length - 1] : "";
+}
+
+
 class Handler {
 
     constructor(name) {
@@ -1267,7 +1278,7 @@ class ItemHandler extends Handler {
         console.log("loadItems");
         // debugger;
         $(this.selector).filter(":visible").each( (i, item) => {
-            console.log(item);
+            // console.log(item);
             $(item).attr("data-bsky-navigator-item-index", itemIndex++);
             // $(item).attr("data-bsky-navigator-item-index", stateManager.state.feedSortReverse ? itemIndex++: itemIndex--);
             $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
@@ -1493,6 +1504,29 @@ this.itemStats.oldest
         return $.trim($(item).find(PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""))
     }
 
+    getHandles() {
+        return Array.from(new Set(this.items.map( (i, item) => this.handleFromItem(item) )));
+    }
+
+    getDisplayNames() {
+        return Array.from(new Set(this.items.map( (i, item) => this.displayNameFromItem(item) )));
+    }
+
+    getAuthors() {
+        const authors = this.items.get().map( (item) => ({
+            handle: this.handleFromItem(item),
+            displayName: this.displayNameFromItem(item)
+        })).filter(
+            (author) => author.handle.length > 0
+        );
+        const uniqueMap = new Map();
+        // debugger;
+        authors.forEach(author => {
+            uniqueMap.set(author.handle, author); // Only keeps the last occurrence
+        });
+        return Array.from(uniqueMap.values()); // Convert back to an array
+    }
+
     updateItems() {
 
         if (this.index == 0)
@@ -1697,90 +1731,108 @@ this.itemStats.oldest
     }
 
     handleItemKey(event) {
-        if(this.isPopupVisible || event.altKey || event.metaKey) {
+
+        if(this.isPopupVisible) {
             return
         }
 
-        // console.log(event.key)
-        var item = this.items[this.index]
-        //if(event.key == "o")
-        if (["o", "Enter"].includes(event.key))
-        {
-            // o = open
-            $(item).click()
-            //bindKeys(post_key_event)
-        }
-        else if(event.key == "O")
-        {
-            // O = open inner post
-            var inner = $(item).find("div[aria-label^='Post by']")
-            inner.click()
-        }
-        else if(event.key == "i")
-        {
-            // i = open link
-            if($(item).find(LINK_SELECTOR).length)
-            {
-                $(item).find(LINK_SELECTOR)[0].click()
-            }
-        }
-        else if(event.key == "m")
-        {
-            // m = media?
-            var media = $(item).find("img[src*='feed_thumbnail']")
-            if (media.length > 0)
-            {
-                media[0].click()
-            } else {
-                const video = $(item).find('video')[0];
-                if(video) {
-                    event.preventDefault();
-                    if (video.muted) {
-                        video.muted = false;
-                    }
-                    if (video.paused) {
-                        this.playVideo(video);
-                    } else {
-                        this.pauseVideo(video)
-                    }
+        if (event.metaKey) {
+            return;
+        } else if (event.altKey) {
+            if(event.code.startsWith("Digit")) {
+                const num = parseInt(event.code.substr(5))-1;
+                const ruleName = Object.keys(stateManager.state.rules)[num];
+                console.log(ruleName);
+                const rule = stateManager.state.rules[ruleName];
+                if (rule) {
+                    $("#bsky-navigator-search").autocomplete("disable");
+                    $("#bsky-navigator-search").val("$" + ruleName);
+                    $("#bsky-navigator-search").trigger("input");
+                    $("#bsky-navigator-search").autocomplete("enable");
                 }
             }
-        } else if(event.key == "r") {
-            // r = reply
-            var button = $(item).find("button[aria-label^='Reply']")
-            button.focus()
-            button.click()
-        } else if(event.key == "l") {
-            // l = like
-            $(item).find("button[data-testid='likeBtn']").click()
-        } else if(event.key == "p") {
-            // p = repost menu
-            $(item).find("button[aria-label^='Repost']").click()
-        } else if(event.key == "P") {
-            // P = repost
-            $(item).find("button[aria-label^='Repost']").click()
-            setTimeout(function() {
-                $("div[aria-label^='Repost'][role='menuitem']").click()
-            }, 1000)
-        } else if (event.key == ".") {
-            // toggle read/unread
-            this.markItemRead(this.index, null)
-        } else if (event.key == "A") {
-            // mark all visible items read
-            this.markVisibleRead();
-        } else if(event.key == "h") {
-            // h = back?
-            //data-testid="profileHeaderBackBtn"
-            var back_button = $("button[aria-label^='Back' i]").filter(":visible")
-            if (back_button.length) {
-                back_button.click()
-            } else {
-                history.back(1)
-            }
-        } else if(!isNaN(parseInt(event.key))) {
-            $("div[role='tablist'] > div > div > div").filter(":visible")[parseInt(event.key)-1].click()
         } else {
-            return false
+            // console.log(event.key)
+            var item = this.items[this.index]
+            //if(event.key == "o")
+            if (["o", "Enter"].includes(event.key))
+            {
+                // o = open
+                $(item).click()
+                //bindKeys(post_key_event)
+            }
+            else if(event.key == "O")
+            {
+                // O = open inner post
+                var inner = $(item).find("div[aria-label^='Post by']")
+                inner.click()
+            }
+            else if(event.key == "i")
+            {
+                // i = open link
+                if($(item).find(LINK_SELECTOR).length)
+                {
+                    $(item).find(LINK_SELECTOR)[0].click()
+                }
+            }
+            else if(event.key == "m")
+            {
+                // m = media?
+                var media = $(item).find("img[src*='feed_thumbnail']")
+                if (media.length > 0)
+                {
+                    media[0].click()
+                } else {
+                    const video = $(item).find('video')[0];
+                    if(video) {
+                        event.preventDefault();
+                        if (video.muted) {
+                            video.muted = false;
+                        }
+                        if (video.paused) {
+                            this.playVideo(video);
+                        } else {
+                            this.pauseVideo(video)
+                        }
+                    }
+                }
+            } else if(event.key == "r") {
+                // r = reply
+                var button = $(item).find("button[aria-label^='Reply']")
+                button.focus()
+                button.click()
+            } else if(event.key == "l") {
+                // l = like
+                $(item).find("button[data-testid='likeBtn']").click()
+            } else if(event.key == "p") {
+                // p = repost menu
+                $(item).find("button[aria-label^='Repost']").click()
+            } else if(event.key == "P") {
+                // P = repost
+                $(item).find("button[aria-label^='Repost']").click()
+                setTimeout(function() {
+                    $("div[aria-label^='Repost'][role='menuitem']").click()
+                }, 1000)
+            } else if (event.key == ".") {
+                // toggle read/unread
+                this.markItemRead(this.index, null)
+            } else if (event.key == "A") {
+                // mark all visible items read
+                this.markVisibleRead();
+            } else if(event.key == "h") {
+                // h = back?
+                //data-testid="profileHeaderBackBtn"
+                var back_button = $("button[aria-label^='Back' i]").filter(":visible")
+                if (back_button.length) {
+                    back_button.click()
+                } else {
+                    history.back(1)
+                }
+            } else if(!isNaN(parseInt(event.key))) {
+                $("div[role='tablist'] > div > div > div").filter(":visible")[parseInt(event.key)-1].click()
+            } else {
+                return false
+            }
         }
         return event.key
     }
@@ -1818,7 +1870,9 @@ class FeedItemHandler extends ItemHandler {
 
     constructor(name, selector) {
         super(name, selector)
-        this.toggleSortOrder = this.toggleSortOrder.bind(this)
+        this.toggleSortOrder = this.toggleSortOrder.bind(this);
+        this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
+        this.setFilter = this.setFilter.bind(this);
     }
 
     addToolbars(container) {
@@ -1858,17 +1912,108 @@ class FeedItemHandler extends ItemHandler {
 
                 if (!this.searchField) {
                     this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
+
                     $(this.toolbarDiv).append(this.searchField);
-                    this.onSearchUpdate = debounce(function (event) {
+                    $("#bsky-navigator-search").autocomplete({
+                        minLength: 0,
+                        appendTo: 'div[data-testid="homeScreenFeedTabs"]',
+                        source: this.onSearchAutocomplete,
+                        focus: function(event, ui) {
+                            event.preventDefault(); // Prevent autocomplete from auto-filling input on hover
+                        },
+                        focus: function(event, ui) {
+                            event.preventDefault();
+                        },
+                        select: function(event, ui) {
+                            event.preventDefault(); // Prevent default selection behavior
+
+                            let input = this;
+                            let terms = splitTerms(input.value);
+                            terms.pop(); // Remove the last typed term
+                            terms.push(ui.item.value); // Add the selected suggestion
+                            input.value = terms.join(" ") + " "; // Ensure a space after selection
+
+                            $(this).autocomplete("close"); // Close the dropdown after selection
+                        }
+
+                    });
+
+                    $("#bsky-navigator-search").on("keydown", function(event) {
+                        if (event.key === "Tab") {
+                            let autocompleteMenu = $(".ui-autocomplete:visible");
+                            let firstItem = autocompleteMenu.children(".ui-menu-item").first();
+
+                            if (firstItem.length) {
+                                let uiItem = firstItem.data("ui-autocomplete-item"); // Get the first suggested item
+                                $(this).autocomplete("close"); // Close autocomplete after selection
+
+                                let terms = splitTerms(this.value);
+                                terms.pop(); // Remove the last typed term
+                                terms.push(uiItem.value); // Add the selected suggestion
+                                this.value = terms.join(" ") + " "; // Ensure a space after selection
+                                event.preventDefault();
+                            }
+                        }
+                    });
+
+                    this.onSearchUpdate = debounce( (event) => {
                         console.log($(event.target).val().trim());
                         this.setFilter($(event.target).val().trim());
                         this.filterItems();
                     }, 300);
-                    this.onSearchUpdate = this.onSearchUpdate.bind(this)
                     $(this.searchField).on("input", this.onSearchUpdate);
+                    $(this.searchField).on("focus", function() {
+                        $(this).autocomplete("search", ""); // Trigger search with an empty string
+                    });
+                    // Trigger when autocomplete modifies the input
+                    $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
+
+                    // Also trigger when an item is selected from autocomplete
+                    $(this.searchField).on("autocompleteselect", function(event, ui) {
+                        this.onSearchUpdate();
+                    });
+
+                    // $(this.searchField).on("input", this.onSearchUpdate);
+                    this.onSearchUpdate = this.onSearchUpdate.bind(this)
                 }
             }
         });
+    }
+
+    onSearchAutocomplete(request, response) {
+        const authors = this.getAuthors().sort((a, b) => a.handle.localeCompare(b.handle, undefined, {sensitivity: 'base'}));;
+        const rules = Object.keys(stateManager.state.rules);
+
+        let term = extractLastTerm(request.term); // Get the last word being typed
+        let results = [];
+
+        if (term === "") {
+            results = rules.map(f => ({ label: `$${f}`, value: `$${f}` }));
+        }
+        else if (term.startsWith("@")) {
+            let search = term.substring(1).toLowerCase();
+            results = authors.filter(a =>
+                a.handle.toLowerCase().includes(search) ||
+                    a.displayName.toLowerCase().includes(search)
+            ).map(a => ({
+                label: `@${a.handle} (${a.displayName})`, // Show as @handle (Display Name)
+                value: `@${a.handle}` // Insert only @handle
+            }));
+        } else if (term.startsWith("$")) {
+            let search = term.substring(1).toLowerCase();
+            results = rules.filter(f => f.toLowerCase().includes(search))
+                           .map(f => ({ label: `$${f}`, value: `$${f}` }));
+        } else {
+            results = [
+               ...authors.filter(a =>
+                        a.handle.toLowerCase().includes(term) ||
+                        a.displayName.toLowerCase().includes(term)
+                    ).map(a => ({ label: `@${a.handle} (${a.displayName})`, value: `@${a.handle}` })),
+                ...rules.filter(f => f.toLowerCase().includes(term)).map(f => ({ label: `$${f}`, value: `$${f}` })),
+                { label: `Search: "${term}"`, value: term }
+            ];
+        }
+        response(results);
     }
 
     addStatusBar() {
@@ -2057,7 +2202,7 @@ class FeedItemHandler extends ItemHandler {
         const pattern = new RegExp(author, "i");
         const handle = this.handleFromItem(item);
         const displayName = this.displayNameFromItem(item);
-        console.log(author, handle, displayName);
+        // console.log(author, handle, displayName);
         if (!handle.match(pattern) && !displayName.match(pattern)) {
             return false;
         }
@@ -2591,6 +2736,30 @@ function setScreen(screen) {
         #bsky-navigator-search {
             flex: 1;
             margin: 0px 8px;
+            z-index: 10;
+        }
+
+        .ui-autocomplete {
+            position: absolute !important;
+            background-color: white !important;
+            border: 1px solid #ccc !important;
+            z-index: 1000 !important;
+            max-height: 200px !important;
+            overflow-y: auto !important;
+            list-style-type: none !important;
+            padding: 2px !important;
+        }
+
+        .ui-menu-item {
+            padding: 2px !important;
+            font-size: 14px !important;
+            color: black !important;
+        }
+
+        /* Highlight hovered item */
+        .ui-state-active {
+            background-color: #007bff !important;
+            color: white !important;
         }
 
         @media only screen and not (max-width: 800px) {

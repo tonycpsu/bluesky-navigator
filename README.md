@@ -36,43 +36,44 @@ Features
 Keyboard Shortcuts
 ------------------
 
- | key         | function                                           |
- | ------------|----------------------------------------------------|
- | j / ↑       | move to next item                                  |
- | k / ↓       | move to previous item                              |
- | J           | move to next unread item, or last item if all read |
- | gg          | move to first item                                 |
- | G           | move to last item                                  |
- | h           | go back to previous page                           | 
- | o / Enter   | open post (feed view) or embedded post (post view) |
- | O           | open embedded post (feed view)                     |
- | i           | open link in post                                  |
- | m           | view/play/pause media in post                      |
- | a           | open post author's profile                         |
- | r           | reply to post                                      |
- | l           | like post                                          |
- | p           | open repost menu                                   |
- | P           | repost                                             |
- | u           | load newer posts (feed view)                       |
- | U           | load older posts (feed view)                       |
- | .           | mark post read/unread                              |
- | .           | mark all visible posts read/unread                 |
- | :           | toggle between forward/reverse order (feed view)   |
- | "           | toggle show all or only unread posts (feed view)   |
- | /           | filter threads (feed view)                         |
- | f           | follow author (profile view)                       |
- | F           | unfollow author (profile view)                     |
- | L           | add author to list (profile view)                  |
- | 1...9       | switch between feeds on home page                  |
- | Meta/Alt+h  | open home page                                     |
- | Meta/Alt+s  | open search page                                   |
- | Meta/Alt+n  | open notifications page                            |
- | Meta/Alt+m  | open messages page                                 |
- | Meta/Alt+f  | open feeds page                                    |
- | Meta/Alt+h  | open lists page                                    |
- | Meta/Alt+p  | open profile page                                  |
- | Meta/Alt+,  | open settings page                                 |
- | Meta/Alt+.  | open Bluesky Navigator config panel                |
+ | key          | function                                           |
+ | -------------|----------------------------------------------------|
+ | j / ↑        | move to next item                                  |
+ | k / ↓        | move to previous item                              |
+ | J            | move to next unread item, or last item if all read |
+ | gg           | move to first item                                 |
+ | G            | move to last item                                  |
+ | h            | go back to previous page                           | 
+ | o / Enter    | open post (feed view) or embedded post (post view) |
+ | O            | open embedded post (feed view)                     |
+ | i            | open link in post                                  |
+ | m            | view/play/pause media in post                      |
+ | a            | open post author's profile                         |
+ | r            | reply to post                                      |
+ | l            | like post                                          |
+ | p            | open repost menu                                   |
+ | P            | repost                                             |
+ | u            | load newer posts (feed view)                       |
+ | U            | load older posts (feed view)                       |
+ | .            | mark post read/unread                              |
+ | .            | mark all visible posts read/unread                 |
+ | :            | toggle between forward/reverse order (feed view)   |
+ | "            | toggle show all or only unread posts (feed view)   |
+ | /            | filter posts (feed view)                           |
+ | Option+1...9 | activate rule N                                    |
+ | f            | follow author (profile view)                       |
+ | F            | unfollow author (profile view)                     |
+ | L            | add author to list (profile view)                  |
+ | 1...9        | switch between feeds on home page                  |
+ | Meta/Alt+h   | open home page                                     |
+ | Meta/Alt+s   | open search page                                   |
+ | Meta/Alt+n   | open notifications page                            |
+ | Meta/Alt+m   | open messages page                                 |
+ | Meta/Alt+f   | open feeds page                                    |
+ | Meta/Alt+h   | open lists page                                    |
+ | Meta/Alt+p   | open profile page                                  |
+ | Meta/Alt+,   | open settings page                                 |
+ | Meta/Alt+.   | open Bluesky Navigator config panel                |
 
 Dynamic Post Filtering
 ----------------------

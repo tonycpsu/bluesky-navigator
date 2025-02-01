@@ -1,7 +1,10 @@
 import { defineConfig } from 'vite'
 import Userscript from 'vite-userscript-plugin'
+import { execSync } from "child_process";
 import { name, version } from './package.json'
 
+const gitHash = execSync("git rev-parse --short HEAD").toString().trim();
+const fullVersion = `${version}${process.env.NODE_ENV === "development" ? `-dev.${gitHash}` : ""}`
 export default defineConfig((config) => {
   return {
     plugins: [
@@ -10,7 +13,7 @@ export default defineConfig((config) => {
         header: {
             name: "bluesky-navigator",
             description: "Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky",
-            version: "2025-02-01.2",
+            version: version,
             author: "https://bsky.app/profile/tonyc.org",
             namespace: "https://tonyc.org/",
             match: "https://bsky.app/*",

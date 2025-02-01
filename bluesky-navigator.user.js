@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-02-01.1
+// @version      2025-02-01.2
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -2841,8 +2841,9 @@ function setScreen(screen) {
 
         div#logContainer {
             width: 100%;
+            bottom: 0;
             pointer-events: none;
-            max-height: 70%;
+            height: 25%;
             position: fixed;
             background: rgba(0, 0, 0, 0.5);
             color: #e0e0e0;
@@ -3095,7 +3096,6 @@ h2 {
                 this.options = options;
                 this.enabled = true
                 loadOlderItemsCallback = this.callback;
-
                 // Create the "real" IntersectionObserver instance
                 this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
                     // filter thread divs out
@@ -3105,9 +3105,15 @@ h2 {
                             ||
                             $(entry.target).hasClass("item")
                             ||
+                            $(entry.target).find('div[data-testid^="feedItem"]').length
+                            ||
                             $(entry.target).next()?.attr("style") == "height: 32px;"
                         )
                     )
+
+                    // if(filteredEntries.length) {
+                    //     debugger;
+                    // }
 
                     callback(
                         filteredEntries,

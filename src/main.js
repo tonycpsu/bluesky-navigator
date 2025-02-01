@@ -1,20 +1,4 @@
-const DEFAULT_HISTORY_MAX = 5000;
-const DEFAULT_STATE_SAVE_TIMEOUT = 5000;
-const URL_MONITOR_INTERVAL = 500;
-const STATE_KEY = "bluesky_state";
-const TOOLBAR_CONTAINER_SELECTOR = 'div[data-testid="HomeScreen"] > div > div > div:first-child'
-const STATUS_BAR_CONTAINER_SELECTOR = 'div[style="background-color: rgb(255, 255, 255);"]'
-const LOAD_NEW_BUTTON_SELECTOR = "button[aria-label^='Load new']"
-const LOAD_NEW_INDICATOR_SELECTOR = `${LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`
-const FEED_CONTAINER_SELECTOR = 'div[data-testid="HomeScreen"] div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div'
-const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)';
-const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]';
-const PROFILE_SELECTOR = 'a[aria-label="View profile"]';
-const LINK_SELECTOR = 'a[target="_blank"]';
-const CLEARSKY_LIST_REFRESH_INTERVAL = 60*60*24;
-const CLEARSKY_BLOCKED_ALL_CSS = {"background-color": "#ff8080"};
-const CLEARSKY_BLOCKED_RECENT_CSS = {"background-color": "#cc4040"};
-const ITEM_SCROLL_MARGIN = 100;
+import constants from './constants.js'
 
 const range = (start, stop, step = 1) =>
   Array.from({ length: Math.ceil((stop - start) / step) }, (_, i) => start + i * step);
@@ -200,7 +184,7 @@ const CONFIG_FIELDS = {
         'label': 'History Max Size',
         'title': 'Maximum number of posts to remember for saving read state',
         'type': 'int',
-        'default': DEFAULT_HISTORY_MAX
+        'default': constants.DEFAULT_HISTORY_MAX
     },
     'showDebuggingInfo':  {
         'label': 'Enable Debugging',
@@ -212,7 +196,7 @@ const CONFIG_FIELDS = {
 }
 
 class StateManager {
-    constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
+    constructor(key, defaultState = {}, maxEntries = constants.DEFAULT_HISTORY_MAX) {
         this.key = key;
         this.listeners = [];
         this.debounceTimeout = null;
@@ -225,7 +209,7 @@ class StateManager {
         window.addEventListener("beforeunload", () => this.saveStateImmediately());
     }
 
-    static async create(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
+    static async create(key, defaultState = {}, maxEntries = constants.DEFAULT_HISTORY_MAX) {
         const instance = new StateManager(key, defaultState, maxEntries);
         await instance.initializeState(defaultState);
         return instance;
@@ -530,7 +514,7 @@ class StateManager {
             if (
                 this.state.blocks[stateKey].updated == null
                     ||
-                Date.now() + CLEARSKY_LIST_REFRESH_INTERVAL > this.state.blocks[stateKey].updated
+                    Date.now() + constants.CLEARSKY_LIST_REFRESH_INTERVAL > this.state.blocks[stateKey].updated
             ) {
                 GM_xmlhttpRequest({
                     method: "GET",
@@ -786,7 +770,7 @@ class ItemHandler extends Handler {
         this.popupObserver = waitForElement(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
         this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
             root: null, // Observing within the viewport
-            rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
+            // rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
             threshold: Array.from({ length: 101 }, (_, i) => i / 100)
         });
         this.setupIntersectionObserver();
@@ -803,7 +787,7 @@ class ItemHandler extends Handler {
             this.onItemRemoved(element)
         });
 
-        this.loadNewerObserver = waitForElement(LOAD_NEW_INDICATOR_SELECTOR, (button) => {
+        this.loadNewerObserver = waitForElement(constants.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
             this.loadNewerButton = $(button)[0];
             $('a#loadNewerIndicatorLink').on("click", () => this.loadNewerItems())
 
@@ -1134,10 +1118,10 @@ class ItemHandler extends Handler {
         const handle = this.handleFromItem(element);
         // console.log(handle)
         if (stateManager.state.blocks.all.includes(handle)) {
-            $(element).find(PROFILE_SELECTOR).css(CLEARSKY_BLOCKED_ALL_CSS)
+            $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_ALL_CSS)
         }
         if (stateManager.state.blocks.recent.includes(handle)) {
-            $(element).find(PROFILE_SELECTOR).css(CLEARSKY_BLOCKED_RECENT_CSS)
+            $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_RECENT_CSS)
         }
     }
 
@@ -1449,11 +1433,11 @@ this.itemStats.oldest
     }
 
     handleFromItem(item) {
-        return $.trim($(item).find(PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1)
+        return $.trim($(item).find(constants.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1)
     }
 
     displayNameFromItem(item) {
-        return $.trim($(item).find(PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""))
+        return $.trim($(item).find(constants.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""))
     }
 
     getHandles() {
@@ -1914,7 +1898,7 @@ class FeedItemHandler extends ItemHandler {
 
     refreshToolbars() {
         waitForElement(
-            TOOLBAR_CONTAINER_SELECTOR, (indicatorContainer) => {
+            constants.TOOLBAR_CONTAINER_SELECTOR, (indicatorContainer) => {
                 waitForElement(
                     'div[data-testid="homeScreenFeedTabs"]',
                     (homeScreenFeedTabsDiv) => {
@@ -1926,7 +1910,7 @@ class FeedItemHandler extends ItemHandler {
             }
         )
 
-        waitForElement(STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
+        waitForElement(constants.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
             if (!$('#statusBar').length) {
                 this.addStatusBar(statusBarContainer);
             }
@@ -2226,7 +2210,7 @@ class FeedItemHandler extends ItemHandler {
     handleInput(event) {
         var item = this.items[this.index]
         if(event.key == "a") {
-            $(item).find(PROFILE_SELECTOR)[0].click()
+            $(item).find(constants.PROFILE_SELECTOR)[0].click()
         } else if(event.key == "u") {
             this.loadNewerItems();
         } else if (event.key == ":") {
@@ -2410,9 +2394,9 @@ function setScreen(screen) {
     var func = null
     // FIXME: ordering of these is important since posts can be in profiles
     var handlers = {
-        feed: new FeedItemHandler("feed", FEED_ITEM_SELECTOR),
-        post: new PostItemHandler("post", POST_ITEM_SELECTOR),
-        profile: new ProfileItemHandler("profile", FEED_ITEM_SELECTOR),
+        feed: new FeedItemHandler("feed", constants.FEED_ITEM_SELECTOR),
+        post: new PostItemHandler("post", constants.POST_ITEM_SELECTOR),
+        profile: new ProfileItemHandler("profile", constants.FEED_ITEM_SELECTOR),
         input: new Handler("input")
     }
 
@@ -2458,8 +2442,7 @@ function setScreen(screen) {
     function onConfigInit()
     {
 
-        // stateManager = new StateManager(STATE_KEY, DEFAULT_STATE, config.get("historyMax"));
-        StateManager.create(STATE_KEY, DEFAULT_STATE, config.get("historyMax"))
+        StateManager.create(constants.STATE_KEY, constants.DEFAULT_STATE, config.get("historyMax"))
                     .then((initializedStateManager) => {
                         stateManager = initializedStateManager; // Assign the fully initialized instance
                         console.log("State initialized");
@@ -2516,7 +2499,7 @@ function setScreen(screen) {
         /* Feed itmes may be sorted, so we hide them visually and show them later */
 
 
-        div[data-testid$="FeedPage"] ${FEED_ITEM_SELECTOR} {
+        div[data-testid$="FeedPage"] ${constants.FEED_ITEM_SELECTOR} {
            opacity: 0%;
         }
 
@@ -2524,7 +2507,7 @@ function setScreen(screen) {
             config.get("hideLoadNewButton")
             ?
             `
-            ${LOAD_NEW_BUTTON_SELECTOR} {
+            ${constants.LOAD_NEW_BUTTON_SELECTOR} {
                 display: none;
             }
             `
@@ -2888,7 +2871,7 @@ function setScreen(screen) {
         styleElement.textContent = stylesheet;
         document.head.appendChild(styleElement);
 
-        waitForElement(SCREEN_SELECTOR, (element) => {
+        waitForElement(constants.SCREEN_SELECTOR, (element) => {
             setScreen(getScreenFromElement(element))
             observeVisibilityChange($(element), (isVisible) => {
                 if (isVisible) {
@@ -2989,7 +2972,7 @@ function setScreen(screen) {
                 if (window.location.href !== current_url) {
                     setContextFromUrl()
                 }
-            }, URL_MONITOR_INTERVAL)
+            }, constants.URL_MONITOR_INTERVAL)
         }
 
 

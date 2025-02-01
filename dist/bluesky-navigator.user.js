@@ -64,6 +64,23 @@
 
 (function() {
   "use strict";
+  const constants = {
+    DEFAULT_HISTORY_MAX: 5e3,
+    URL_MONITOR_INTERVAL: 500,
+    STATE_KEY: "bluesky_state",
+    TOOLBAR_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] > div > div > div:first-child',
+    STATUS_BAR_CONTAINER_SELECTOR: 'div[style="background-color: rgb(255, 255, 255),"]',
+    LOAD_NEW_BUTTON_SELECTOR: "button[aria-label^='Load new']",
+    get LOAD_NEW_INDICATOR_SELECTOR() {
+      return `${constants.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
+    },
+    FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
+    POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
+    PROFILE_SELECTOR: 'a[aria-label="View profile"]',
+    CLEARSKY_LIST_REFRESH_INTERVAL: 60 * 60 * 24,
+    CLEARSKY_BLOCKED_ALL_CSS: { "background-color": "#ff8080" },
+    CLEARSKY_BLOCKED_RECENT_CSS: { "background-color": "#cc4040" }
+  };
   const millisecondsInWeek = 6048e5;
   const millisecondsInDay = 864e5;
   const constructFromSymbol = Symbol.for("constructDateFrom");
@@ -1550,22 +1567,6 @@
     }
     return matched[1].replace(doubleQuoteRegExp, "'");
   }
-  const DEFAULT_HISTORY_MAX = 5e3;
-  const URL_MONITOR_INTERVAL = 500;
-  const STATE_KEY = "bluesky_state";
-  const TOOLBAR_CONTAINER_SELECTOR = 'div[data-testid="HomeScreen"] > div > div > div:first-child';
-  const STATUS_BAR_CONTAINER_SELECTOR = 'div[style="background-color: rgb(255, 255, 255);"]';
-  const LOAD_NEW_BUTTON_SELECTOR = "button[aria-label^='Load new']";
-  const LOAD_NEW_INDICATOR_SELECTOR = `${LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
-  const FEED_CONTAINER_SELECTOR = 'div[data-testid="HomeScreen"] div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div';
-  const FEED_ITEM_SELECTOR = 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)';
-  const POST_ITEM_SELECTOR = 'div[data-testid^="postThreadItem-by-"]';
-  const PROFILE_SELECTOR = 'a[aria-label="View profile"]';
-  const LINK_SELECTOR = 'a[target="_blank"]';
-  const CLEARSKY_LIST_REFRESH_INTERVAL = 60 * 60 * 24;
-  const CLEARSKY_BLOCKED_ALL_CSS = { "background-color": "#ff8080" };
-  const CLEARSKY_BLOCKED_RECENT_CSS = { "background-color": "#cc4040" };
-  const ITEM_SCROLL_MARGIN = 100;
   let debounceTimeout;
   let stateManager;
   let config;
@@ -1576,14 +1577,6 @@
       debounceTimeout = setTimeout(() => func.apply(this, args), delay);
     };
   }
-  const DEFAULT_STATE = {
-    seen: {},
-    lastUpdated: null,
-    page: "home",
-    "blocks": { "all": [], "recent": [] },
-    feedSortReverse: false,
-    feedHideRead: false
-  };
   const CONFIG_FIELDS = {
     "styleSection": {
       "section": [GM_config.create("Display Preferences"), "Customize how items are displayed"],
@@ -1741,7 +1734,7 @@
       "label": "History Max Size",
       "title": "Maximum number of posts to remember for saving read state",
       "type": "int",
-      "default": DEFAULT_HISTORY_MAX
+      "default": constants.DEFAULT_HISTORY_MAX
     },
     "showDebuggingInfo": {
       "label": "Enable Debugging",
@@ -1751,7 +1744,7 @@
     }
   };
   class StateManager {
-    constructor(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
+    constructor(key, defaultState = {}, maxEntries = constants.DEFAULT_HISTORY_MAX) {
       this.key = key;
       this.listeners = [];
       this.debounceTimeout = null;
@@ -1763,7 +1756,7 @@
       this.handleBlockListResponse = this.handleBlockListResponse.bind(this);
       window.addEventListener("beforeunload", () => this.saveStateImmediately());
     }
-    static async create(key, defaultState = {}, maxEntries = DEFAULT_HISTORY_MAX) {
+    static async create(key, defaultState = {}, maxEntries = constants.DEFAULT_HISTORY_MAX) {
       const instance = new StateManager(key, defaultState, maxEntries);
       await instance.initializeState(defaultState);
       return instance;
@@ -2023,7 +2016,7 @@
         }
       };
       for (const [stateKey, cfg] of Object.entries(blockConfig)) {
-        if (this.state.blocks[stateKey].updated == null || Date.now() + CLEARSKY_LIST_REFRESH_INTERVAL > this.state.blocks[stateKey].updated) {
+        if (this.state.blocks[stateKey].updated == null || Date.now() + constants.CLEARSKY_LIST_REFRESH_INTERVAL > this.state.blocks[stateKey].updated) {
           GM_xmlhttpRequest({
             method: "GET",
             url: cfg.url,
@@ -2172,7 +2165,7 @@
       this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
         root: null,
         // Observing within the viewport
-        rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
+        // rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
         threshold: Array.from({ length: 101 }, (_, i) => i / 100)
       });
       this.setupIntersectionObserver();
@@ -2186,7 +2179,7 @@
       this.observer = waitForElement(safeSelector, (element) => {
         this.onItemAdded(element), this.onItemRemoved(element);
       });
-      this.loadNewerObserver = waitForElement(LOAD_NEW_INDICATOR_SELECTOR, (button) => {
+      this.loadNewerObserver = waitForElement(constants.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
         this.loadNewerButton = $(button)[0];
         $("a#loadNewerIndicatorLink").on("click", () => this.loadNewerItems());
         $("img#loadNewerIndicatorImage").css("opacity", "1");
@@ -2440,10 +2433,10 @@
       }
       const handle = this.handleFromItem(element);
       if (stateManager.state.blocks.all.includes(handle)) {
-        $(element).find(PROFILE_SELECTOR).css(CLEARSKY_BLOCKED_ALL_CSS);
+        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_ALL_CSS);
       }
       if (stateManager.state.blocks.recent.includes(handle)) {
-        $(element).find(PROFILE_SELECTOR).css(CLEARSKY_BLOCKED_RECENT_CSS);
+        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_RECENT_CSS);
       }
     }
     didMouseMove(event) {
@@ -2685,10 +2678,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
     handleFromItem(item) {
-      return $.trim($(item).find(PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1);
+      return $.trim($(item).find(constants.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1);
     }
     displayNameFromItem(item) {
-      return $.trim($(item).find(PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""));
+      return $.trim($(item).find(constants.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""));
     }
     getHandles() {
       return Array.from(new Set(this.items.map((i, item) => this.handleFromItem(item))));
@@ -3050,7 +3043,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     refreshToolbars() {
       waitForElement(
-        TOOLBAR_CONTAINER_SELECTOR,
+        constants.TOOLBAR_CONTAINER_SELECTOR,
         (indicatorContainer) => {
           waitForElement(
             'div[data-testid="homeScreenFeedTabs"]',
@@ -3062,7 +3055,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           );
         }
       );
-      waitForElement(STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
+      waitForElement(constants.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
         if (!$("#statusBar").length) {
           this.addStatusBar(statusBarContainer);
         }
@@ -3320,7 +3313,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     handleInput(event) {
       var item = this.items[this.index];
       if (event.key == "a") {
-        $(item).find(PROFILE_SELECTOR)[0].click();
+        $(item).find(constants.PROFILE_SELECTOR)[0].click();
       } else if (event.key == "u") {
         this.loadNewerItems();
       } else if (event.key == ":") {
@@ -3459,12 +3452,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     var current_url = null;
     var context = null;
     var handlers = {
-      feed: new FeedItemHandler("feed", FEED_ITEM_SELECTOR),
-      post: new PostItemHandler("post", POST_ITEM_SELECTOR),
-      profile: new ProfileItemHandler("profile", FEED_ITEM_SELECTOR),
+      feed: new FeedItemHandler("feed", constants.FEED_ITEM_SELECTOR),
+      post: new PostItemHandler("post", constants.POST_ITEM_SELECTOR),
+      profile: new ProfileItemHandler("profile", constants.FEED_ITEM_SELECTOR),
       input: new Handler("input")
     };
-    const SCREEN_SELECTOR = "main > div > div > div";
     function parseRulesConfig(configText) {
       const lines = configText.split("\n");
       const rules = {};
@@ -3494,7 +3486,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return rules;
     }
     function onConfigInit() {
-      StateManager.create(STATE_KEY, DEFAULT_STATE, config.get("historyMax")).then((initializedStateManager) => {
+      StateManager.create(constants.STATE_KEY, constants.DEFAULT_STATE, config.get("historyMax")).then((initializedStateManager) => {
         stateManager = initializedStateManager;
         console.log("State initialized");
         console.dir(stateManager.state);
@@ -3535,12 +3527,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         /* Feed itmes may be sorted, so we hide them visually and show them later */
 
 
-        div[data-testid$="FeedPage"] ${FEED_ITEM_SELECTOR} {
+        div[data-testid$="FeedPage"] ${constants.FEED_ITEM_SELECTOR} {
            opacity: 0%;
         }
 
         ${config.get("hideLoadNewButton") ? `
-            ${LOAD_NEW_BUTTON_SELECTOR} {
+            ${constants.LOAD_NEW_BUTTON_SELECTOR} {
                 display: none;
             }
             ` : ``}
@@ -3898,7 +3890,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       styleElement.type = "text/css";
       styleElement.textContent = stylesheet;
       document.head.appendChild(styleElement);
-      waitForElement(SCREEN_SELECTOR, (element) => {
+      waitForElement(constants.SCREEN_SELECTOR, (element) => {
         setScreen(getScreenFromElement(element));
         observeVisibilityChange($(element), (isVisible) => {
           if (isVisible) {
@@ -3983,7 +3975,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (window.location.href !== current_url) {
             setContextFromUrl();
           }
-        }, URL_MONITOR_INTERVAL);
+        }, constants.URL_MONITOR_INTERVAL);
       }
       startMonitor();
       setContextFromUrl();

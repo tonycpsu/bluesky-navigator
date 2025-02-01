@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.7+231.df3a320d
+// @version     1.0.11+232.7244fccd
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -79,127 +79,14 @@
     CLEARSKY_BLOCKED_ALL_CSS: { "background-color": "#ff8080" },
     CLEARSKY_BLOCKED_RECENT_CSS: { "background-color": "#cc4040" }
   };
-  function debounce$1(func, delay) {
-    return function(...args) {
-      clearTimeout(debounceTimeout);
-      debounceTimeout = setTimeout(() => func.apply(this, args), delay);
-    };
-  }
-  function waitForElement$1(selector, onAdd, onRemove, onChange, ignoreExisting) {
-    const processExistingElements = () => {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach((el) => onAdd(el));
-    };
-    if (onAdd && !ignoreExisting) {
-      processExistingElements();
-    }
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (onAdd) {
-          mutation.addedNodes.forEach((node) => {
-            if (node.matches && node.matches(selector)) onAdd(node);
-            node.querySelectorAll?.(selector).forEach((el) => onAdd(el));
-          });
-        }
-        if (onRemove) {
-          mutation.removedNodes.forEach((node) => {
-            if (node.matches && node.matches(selector)) onRemove(node);
-            node.querySelectorAll?.(selector).forEach((el) => onRemove(el));
-          });
-        }
-        if (onChange) {
-          if (mutation.type === "attributes") {
-            const attributeName = mutation.attributeName;
-            const oldValue = mutation.oldValue;
-            const newValue = mutation.target.getAttribute(attributeName);
-            if (oldValue !== newValue) {
-              onChange(attributeName, oldValue, newValue, mutation.target);
-            }
-          }
-        }
-      });
-    });
-    observer.observe(document.body, { childList: true, subtree: true, attributes: !!onChange });
-    return observer;
-  }
-  function observeChanges(target, callback, subtree) {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === "attributes") {
-          const attributeName = mutation.attributeName;
-          const oldValue = mutation.oldValue;
-          const newValue = mutation.target.getAttribute(attributeName);
-          if (oldValue !== newValue) {
-            callback(attributeName, oldValue, newValue, mutation.target);
-          }
-        }
-      });
-    });
-    observer.observe(target, {
-      attributes: true,
-      attributeOldValue: true,
-      subtree: !!subtree
-    });
-    return observer;
-  }
-  function onVisibilityChange(selector, callback) {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === "attributes") {
-          const target = mutation.target;
-          const isVisible = $(target).is(":visible");
-          callback($(target), isVisible);
-        }
-      });
-    });
-    $(selector).each((_, el) => {
-      observer.observe(el, {
-        attributes: true,
-        // Observe attribute changes
-        attributeFilter: ["style", "class"],
-        // Filter for relevant attributes
-        subtree: false
-        // Do not observe children
-      });
-    });
-    return observer;
-  }
-  function observeVisibilityChange$1($element, callback) {
-    const target = $element[0];
-    const observer = new MutationObserver(() => {
-      const isVisible = $element.is(":visible");
-      callback(isVisible);
-    });
-    observer.observe(target, {
-      attributes: true,
-      childList: true,
-      subtree: false
-      // Only observe the target element
-    });
-    return () => observer.disconnect();
-  }
-  function splitTerms$1(input) {
-    return input.split(/\s+/).filter((term) => term.length > 0);
-  }
-  function extractLastTerm$1(input) {
-    let terms = splitTerms$1(input);
-    return terms.length > 0 ? terms[terms.length - 1] : "";
-  }
-  const utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
-    __proto__: null,
-    debounce: debounce$1,
-    extractLastTerm: extractLastTerm$1,
-    observeChanges,
-    observeVisibilityChange: observeVisibilityChange$1,
-    onVisibilityChange,
-    splitTerms: splitTerms$1,
-    waitForElement: waitForElement$1
-  }, Symbol.toStringTag, { value: "Module" }));
   const DEFAULT_HISTORY_MAX = 5e3;
   class StateManager {
     constructor(key, defaultState = {}, config2 = {}) {
       this.key = key;
       this.config = config2;
+      if (!this.config) {
+        debugger;
+      }
       this.listeners = [];
       this.debounceTimeout = null;
       this.maxEntries = this.config.maxEntries || DEFAULT_HISTORY_MAX;
@@ -483,6 +370,161 @@
       }
     }
   }
+  const DEFAULT_STATE = {
+    seen: {},
+    lastUpdated: null,
+    page: "home",
+    "blocks": { "all": [], "recent": [] },
+    feedSortReverse: false,
+    feedHideRead: false
+  };
+  let stateManager;
+  const target = {
+    init(key, config2, onSuccess) {
+      StateManager.create(key, DEFAULT_STATE, config2).then((initializedStateManager) => {
+        stateManager = initializedStateManager;
+        console.log("State initialized");
+        console.dir(stateManager.state);
+        onSuccess();
+      }).catch((error) => {
+        console.error("Failed to initialize StateManager:", error);
+      });
+    }
+  };
+  const state = new Proxy(target, {
+    get(target2, prop, receiver) {
+      if (prop in target2) {
+        return typeof target2[prop] === "function" ? target2[prop].bind(receiver) : target2[prop];
+      } else if (prop == "stateManager") {
+        return stateManager;
+      } else if (prop in stateManager.state) {
+        return stateManager.state[prop];
+      }
+      console.warn(`State Warning: ${prop} is not defined`);
+      return void 0;
+    },
+    set(target2, prop, value) {
+      console.log(`State Update: ${prop} = ${value}`);
+      stateManager[prop] = value;
+      return true;
+    }
+  });
+  function debounce(func, delay) {
+    return function(...args) {
+      clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => func.apply(this, args), delay);
+    };
+  }
+  function waitForElement$2(selector, onAdd, onRemove, onChange, ignoreExisting) {
+    const processExistingElements = () => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach((el) => onAdd(el));
+    };
+    if (onAdd && !ignoreExisting) {
+      processExistingElements();
+    }
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (onAdd) {
+          mutation.addedNodes.forEach((node) => {
+            if (node.matches && node.matches(selector)) onAdd(node);
+            node.querySelectorAll?.(selector).forEach((el) => onAdd(el));
+          });
+        }
+        if (onRemove) {
+          mutation.removedNodes.forEach((node) => {
+            if (node.matches && node.matches(selector)) onRemove(node);
+            node.querySelectorAll?.(selector).forEach((el) => onRemove(el));
+          });
+        }
+        if (onChange) {
+          if (mutation.type === "attributes") {
+            const attributeName = mutation.attributeName;
+            const oldValue = mutation.oldValue;
+            const newValue = mutation.target.getAttribute(attributeName);
+            if (oldValue !== newValue) {
+              onChange(attributeName, oldValue, newValue, mutation.target);
+            }
+          }
+        }
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: !!onChange });
+    return observer;
+  }
+  function observeChanges(target2, callback, subtree) {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === "attributes") {
+          const attributeName = mutation.attributeName;
+          const oldValue = mutation.oldValue;
+          const newValue = mutation.target.getAttribute(attributeName);
+          if (oldValue !== newValue) {
+            callback(attributeName, oldValue, newValue, mutation.target);
+          }
+        }
+      });
+    });
+    observer.observe(target2, {
+      attributes: true,
+      attributeOldValue: true,
+      subtree: !!subtree
+    });
+    return observer;
+  }
+  function onVisibilityChange(selector, callback) {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === "attributes") {
+          const target2 = mutation.target;
+          const isVisible = $(target2).is(":visible");
+          callback($(target2), isVisible);
+        }
+      });
+    });
+    $(selector).each((_, el) => {
+      observer.observe(el, {
+        attributes: true,
+        // Observe attribute changes
+        attributeFilter: ["style", "class"],
+        // Filter for relevant attributes
+        subtree: false
+        // Do not observe children
+      });
+    });
+    return observer;
+  }
+  function observeVisibilityChange$1($element, callback) {
+    const target2 = $element[0];
+    const observer = new MutationObserver(() => {
+      const isVisible = $element.is(":visible");
+      callback(isVisible);
+    });
+    observer.observe(target2, {
+      attributes: true,
+      childList: true,
+      subtree: false
+      // Only observe the target element
+    });
+    return () => observer.disconnect();
+  }
+  function splitTerms$1(input) {
+    return input.split(/\s+/).filter((term) => term.length > 0);
+  }
+  function extractLastTerm$1(input) {
+    let terms = splitTerms$1(input);
+    return terms.length > 0 ? terms[terms.length - 1] : "";
+  }
+  const utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+    __proto__: null,
+    debounce,
+    extractLastTerm: extractLastTerm$1,
+    observeChanges,
+    observeVisibilityChange: observeVisibilityChange$1,
+    onVisibilityChange,
+    splitTerms: splitTerms$1,
+    waitForElement: waitForElement$2
+  }, Symbol.toStringTag, { value: "Module" }));
   const style = '/* style.css */\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.5);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    background-color: rgb(255, 255, 255);\n    width: 100%;\n    height: 32px;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\nimg#loadNewerIndicatorImage {\n    opacity: 0.2;\n}\n\nimg#loadOlderIndicatorImage {\n    opacity: 0.2;\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\nspan#infoIndicatorText {\n    font-size: 0.8em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.5;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.5;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.5s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.5s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n';
   const millisecondsInWeek = 6048e5;
   const millisecondsInDay = 864e5;
@@ -1971,24 +2013,1371 @@
     return matched[1].replace(doubleQuoteRegExp, "'");
   }
   const {
-    debounce,
+    waitForElement: waitForElement$1
+  } = utils;
+  class Handler {
+    constructor(name) {
+      this.name = name;
+      this.items = [];
+      this.handleInput = this.handleInput.bind(this);
+    }
+    activate() {
+      this.bindKeys();
+    }
+    deactivate() {
+      this.unbindKeys();
+    }
+    isActive() {
+      return true;
+    }
+    bindKeys() {
+      document.addEventListener("keydown", this.handleInput, true);
+    }
+    unbindKeys() {
+      document.removeEventListener("keydown", this.handleInput, true);
+    }
+    handleInput(event) {
+      if (event.altKey && !event.metaKey) {
+        if (event.code === "KeyH") {
+          $("a[aria-label='Home']")[0].click();
+        } else if (event.code === "KeyS") {
+          $("a[aria-label='Search']")[0].click();
+        } else if (event.code === "KeyN") {
+          $("a[aria-label='Notifications']")[0].click();
+        } else if (event.code === "KeyM") {
+          $("a[aria-label='Chat']")[0].click();
+        } else if (event.code === "KeyF") {
+          $("a[aria-label='Feeds']")[0].click();
+        } else if (event.code === "KeyL") {
+          $("a[aria-label='Lists']")[0].click();
+        } else if (event.code === "KeyP") {
+          $("a[aria-label='Profile']")[0].click();
+        } else if (event.code === "Comma") {
+          $("a[aria-label='Settings']")[0].click();
+        } else if (event.code === "Period") {
+          config.open();
+        }
+      }
+    }
+  }
+  class ItemHandler extends Handler {
+    // POPUP_MENU_SELECTOR = "div[data-radix-popper-content-wrapper]"
+    POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
+    // FIXME: this belongs in PostItemHandler
+    THREAD_PAGE_SELECTOR = "main > div > div > div";
+    MOUSE_MOVEMENT_THRESHOLD = 10;
+    constructor(name, selector, config2, state2) {
+      super(name);
+      this.selector = selector;
+      this.config = config2;
+      this.state = state2;
+      this._index = null;
+      this.postId = null;
+      this.loadNewerCallback = null;
+      this.debounceTimeout = null;
+      this.lastMousePosition = null;
+      this.isPopupVisible = false;
+      this.ignoreMouseMovement = false;
+      this.onPopupAdd = this.onPopupAdd.bind(this);
+      this.onPopupRemove = this.onPopupRemove.bind(this);
+      this.onIntersection = this.onIntersection.bind(this);
+      this.onFooterIntersection = this.onFooterIntersection.bind(this);
+      this.onItemAdded = this.onItemAdded.bind(this);
+      this.onScroll = this.onScroll.bind(this);
+      this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
+      this.onItemMouseOver = this.onItemMouseOver.bind(this);
+      this.didMouseMove = this.didMouseMove.bind(this);
+      this.getTimestampForItem = this.getTimestampForItem.bind(this);
+      this.loading = false;
+      this.loadingNew = false;
+      this.enableScrollMonitor = false;
+      this.enableIntersectionObserver = false;
+      this.handlingClick = false;
+      this.itemStats = {};
+      this.visibleItems = /* @__PURE__ */ new Set();
+    }
+    isActive() {
+      return false;
+    }
+    activate() {
+      this.keyState = [];
+      this.popupObserver = waitForElement$1(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
+      this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
+        root: null,
+        // Observing within the viewport
+        // rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
+        threshold: Array.from({ length: 101 }, (_, i) => i / 100)
+      });
+      this.setupIntersectionObserver();
+      this.footerIntersectionObserver = new IntersectionObserver(this.onFooterIntersection, {
+        root: null,
+        // Observing within the viewport
+        // threshold: [1]
+        threshold: Array.from({ length: 101 }, (_, i) => i / 100)
+      });
+      const safeSelector = `${this.selector}:not(.thread ${this.selector})`;
+      this.observer = waitForElement$1(safeSelector, (element) => {
+        this.onItemAdded(element), this.onItemRemoved(element);
+      });
+      this.loadNewerObserver = waitForElement$1(constants$1.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
+        this.loadNewerButton = $(button)[0];
+        $("a#loadNewerIndicatorLink").on("click", () => this.loadNewerItems());
+        $("img#loadNewerIndicatorImage").css("opacity", "1");
+        $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
+        if ($("#loadNewerAction").length == 0) {
+          $("#messageActions").append($('<div id="loadNewerAction"><a> Load newer posts</a></div>'));
+          $("#loadNewerAction > a").on("click", () => this.loadNewerItems());
+        }
+        this.loadNewerButton.addEventListener(
+          "click",
+          (event) => {
+            if (this.loadingNew) {
+              console.log("handling click, returning");
+              return;
+            }
+            console.log("Intercepted click in capture phase", event.target);
+            event.target;
+            event.stopImmediatePropagation();
+            setTimeout(() => {
+              console.log("Calling original handler");
+              this.loadNewerItems();
+            }, 0);
+            console.log("Custom logic executed");
+          },
+          true
+          // Capture phase
+        );
+      });
+      this.enableScrollMonitor = true;
+      this.enableIntersectionObserver = true;
+      $(document).on("scroll", this.onScroll);
+      super.activate();
+    }
+    deactivate() {
+      if (this.observer) {
+        this.observer.disconnect();
+      }
+      if (this.popupObserver) {
+        this.popupObserver.disconnect();
+      }
+      if (this.intersectionObserver) {
+        this.intersectionObserver.disconnect();
+      }
+      this.disableFooterObserver();
+      $(this.selector).off("mouseover mouseleave");
+      $(document).off("scroll", this.onScroll);
+      super.deactivate();
+    }
+    get index() {
+      return this._index;
+    }
+    set index(value) {
+      this._index = value;
+      this.postId = this.postIdForItem(this.items[this.index]);
+      this.updateInfoIndicator();
+    }
+    onItemAdded(element) {
+      this.applyItemStyle(element);
+      clearTimeout(this.debounceTimeout);
+      this.debounceTimeout = setTimeout(() => {
+        this.loadItems();
+      }, 500);
+    }
+    onItemRemoved(element) {
+      if (this.intersectionObserver) {
+        this.intersectionObserver.disconnect(element);
+      }
+    }
+    onScroll(event) {
+      if (!this.enableScrollMonitor) {
+        return;
+      }
+      this.enableIntersectionObserver = true;
+    }
+    scrollToElement(target2) {
+      this.enableScrollMonitor = false;
+      target2.scrollIntoView(
+        { behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant" }
+      );
+      setTimeout(() => {
+        this.enableScrollMonitor = true;
+      }, 250);
+    }
+    // Function to programmatically play a video from the userscript
+    playVideo(video) {
+      video.dataset.allowPlay = "true";
+      console.log("Userscript playing video:", video);
+      video.play();
+    }
+    pauseVideo(video) {
+      video.dataset.allowPlay = "true";
+      console.log("Userscript playing video:", video);
+      video.pause();
+    }
+    setupIntersectionObserver(entries) {
+      if (this.intersectionObserver) {
+        $(this.items).each(
+          (i, item) => {
+            this.intersectionObserver.observe($(item)[0]);
+          }
+        );
+      }
+    }
+    onIntersection(entries) {
+      if (!this.enableIntersectionObserver || this.loading || this.loadingNew) {
+        return;
+      }
+      console.log("onIntersection");
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          this.visibleItems.add(entry.target);
+        } else {
+          this.visibleItems.delete(entry.target);
+        }
+      });
+      const visibleItems = Array.from(this.visibleItems).sort(
+        (a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top
+      );
+      if (!visibleItems.length) {
+        return;
+      }
+      const target2 = visibleItems[0];
+      if (target2) {
+        var index = this.getIndexFromItem(target2);
+        if (this.config.get("markReadOnScroll")) {
+          this.markItemRead(index, true);
+        }
+        this.setIndex(index);
+      }
+    }
+    onFooterIntersection(entries) {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          console.log("footer");
+          entry.target;
+          this.disableFooterObserver();
+          this.loadOlderItems();
+        }
+      });
+    }
+    enableFooterObserver() {
+      if (this.config.get("disableLoadMoreOnScroll")) {
+        return;
+      }
+      if (!this.state.feedSortReverse && this.items.length > 0) {
+        this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
+      }
+    }
+    disableFooterObserver() {
+      if (this.footerIntersectionObserver) {
+        this.footerIntersectionObserver.disconnect();
+      }
+    }
+    onPopupAdd() {
+      this.isPopupVisible = true;
+    }
+    onPopupRemove() {
+      this.isPopupVisible = false;
+    }
+    get scrollMargin() {
+      var margin;
+      var el = $('div[data-testid="HomeScreen"] > div > div').eq(2);
+      if (this.state.mobileView) {
+        el = el.first().first();
+        if (this.index) {
+          var transform = el[0].style.transform;
+          var translateY = transform.indexOf("(") == -1 ? 0 : parseInt(transform.split("(")[1].split("px")[0]);
+          margin = el.outerHeight() + translateY;
+        } else {
+          margin = el.outerHeight();
+        }
+      } else {
+        margin = el.outerHeight();
+      }
+      return margin;
+    }
+    applyItemStyle(element, selected) {
+      $(element).addClass("item");
+      const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
+      if (!postTimestampElement.attr("data-bsky-navigator-age")) {
+        postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text());
+      }
+      const userFormat = this.config.get("postTimestampFormat");
+      const postTimeString = postTimestampElement.attr("aria-label");
+      if (postTimeString && userFormat) {
+        const postTimestamp = new Date(postTimeString.replace(" at", ""));
+        if (userFormat) {
+          const formattedDate = format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
+          if (this.config.get("showDebuggingInfo")) {
+            postTimestampElement.text(`${formattedDate} (${$(element).parent().parent().attr("data-bsky-navigator-thread-index")}, ${$(element).attr("data-bsky-navigator-item-index")})`);
+          } else {
+            postTimestampElement.text(formattedDate);
+          }
+        }
+      }
+      const threadIndicator = $(element).find("div.r-lchren, div.r-1mhb1uw > svg");
+      const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
+      $(element).parent().parent().addClass("thread");
+      if (this.config.get("showPostCounts") == "All" || selected && this.config.get("showPostCounts") == "Selection") {
+        const bannerDiv = $(element).find("div.item-banner").first().length ? $(element).find("div.item-banner").first() : $(element).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
+        $(bannerDiv).html(`<strong>${this.getIndexFromItem(element) + 1}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
+      }
+      $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
+      $(element).find("video").each(
+        (i, video) => {
+          if (this.config.get("videoPreviewPlayback") == "Pause all" || this.config.get("videoPreviewPlayback") == "Play selected" && !selected) {
+            this.pauseVideo(video);
+          } else if (this.config.get("videoPreviewPlayback") == "Play selected" && selected) {
+            this.playVideo(video);
+          }
+        }
+      );
+      if (selected) {
+        $(element).parent().parent().addClass("thread-selection-active");
+        $(element).parent().parent().removeClass("thread-selection-inactive");
+      } else {
+        $(element).parent().parent().removeClass("thread-selection-active");
+        $(element).parent().parent().addClass("thread-selection-inactive");
+      }
+      if (threadIndicator.length) {
+        var parent = threadIndicator.parents().has(avatarDiv).first();
+        var children = parent.find("*");
+        if (threadIndicator.length == 1) {
+          var parent = threadIndicator.parents().has(avatarDiv).first();
+          var children = parent.find("*");
+          if (children.index(threadIndicator) < children.index(avatarDiv)) {
+            $(element).parent().parent().addClass("thread-last");
+          } else {
+            $(element).parent().parent().addClass("thread-first");
+          }
+        } else {
+          $(element).parent().parent().addClass("thread-middle");
+        }
+      } else {
+        $(element).parent().parent().addClass(["thread-first", "thread-middle", "thread-last"]);
+      }
+      if (selected) {
+        $(element).addClass("item-selection-active");
+        $(element).removeClass("item-selection-inactive");
+      } else {
+        $(element).removeClass("item-selection-active");
+        $(element).addClass("item-selection-inactive");
+      }
+      var postId = this.postIdForItem($(element));
+      if (postId != null && this.state.seen[postId]) {
+        $(element).addClass("item-read");
+        $(element).removeClass("item-unread");
+      } else {
+        $(element).addClass("item-unread");
+        $(element).removeClass("item-read");
+      }
+      const handle = this.handleFromItem(element);
+      if (this.state.blocks.all.includes(handle)) {
+        $(element).find(constants$1.PROFILE_SELECTOR).css(constants$1.CLEARSKY_BLOCKED_ALL_CSS);
+      }
+      if (this.state.blocks.recent.includes(handle)) {
+        $(element).find(constants$1.PROFILE_SELECTOR).css(constants$1.CLEARSKY_BLOCKED_RECENT_CSS);
+      }
+    }
+    didMouseMove(event) {
+      const currentPosition = { x: event.pageX, y: event.pageY };
+      if (this.lastMousePosition) {
+        const distanceMoved = Math.sqrt(
+          Math.pow(currentPosition.x - this.lastMousePosition.x, 2) + Math.pow(currentPosition.y - this.lastMousePosition.y, 2)
+        );
+        this.lastMousePosition = currentPosition;
+        if (distanceMoved >= this.MOUSE_MOVEMENT_THRESHOLD) {
+          return true;
+        }
+      } else {
+        this.lastMousePosition = currentPosition;
+      }
+      return false;
+    }
+    onItemMouseOver(event) {
+      var target2 = $(event.target).closest(this.selector);
+      if (this.ignoreMouseMovement || !this.didMouseMove(event)) {
+        return;
+      }
+      this.setIndex(this.getIndexFromItem(target2));
+    }
+    handleInput(event) {
+      this.enableScrollMonitor = false;
+      if (this.handleMovementKey(event)) {
+        return event.key;
+      } else if (this.handleItemKey(event)) {
+        return event.key;
+      } else if (event.key == "U") {
+        console.log("Update");
+        this.loadOlderItems();
+      } else {
+        return super.handleInput(event);
+      }
+    }
+    filterItems() {
+      return;
+    }
+    sortItems() {
+      return;
+    }
+    showMessage(title, message2) {
+      this.hideMessage();
+      this.messageContainer = $('<div id="messageContainer">');
+      if (title) {
+        const messageTitle = $('<div class="messageTitle">');
+        $(messageTitle).html(title);
+        this.messageContainer.append(messageTitle);
+      }
+      const messageBody = $('<div class="messageBody">');
+      this.messageContainer.append(messageBody);
+      $(messageBody).html(message2);
+      $(FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
+      window.scrollTo(0, 0);
+    }
+    hideMessage() {
+      $("#messageContainer").remove();
+      this.messageContainer = null;
+    }
+    getTimestampForItem(item) {
+      const postTimestampElement = $(item).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
+      const postTimeString = postTimestampElement.attr("aria-label");
+      if (!postTimeString) {
+        return null;
+      }
+      return new Date(postTimeString.replace(" at", ""));
+    }
+    loadItems(focusedPostId) {
+      this.items.length;
+      this.index;
+      const classes = ["thread-first", "thread-middle", "thread-last"];
+      let set = [];
+      $(this.items).css("opacity", "0%");
+      let itemIndex = 0;
+      let threadIndex = 0;
+      this.ignoreMouseMovement = true;
+      $(this.selector).filter(":visible").each((i, item) => {
+        $(item).attr("data-bsky-navigator-item-index", itemIndex++);
+        $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
+        const threadDiv = $(item).parent().parent();
+        if (classes.some((cls) => $(threadDiv).hasClass(cls))) {
+          set.push(threadDiv[0]);
+          if ($(threadDiv).hasClass("thread-last")) {
+            threadIndex++;
+          }
+        }
+      });
+      this.sortItems();
+      this.filterItems();
+      this.items = $(this.selector).filter(":visible");
+      this.itemStats.oldest = this.itemStats.newest = null;
+      $(this.selector).filter(":visible").each((i, item) => {
+        const timestamp = this.getTimestampForItem(item);
+        if (!this.itemStats.oldest || timestamp < this.itemStats.oldest) {
+          this.itemStats.oldest = timestamp;
+        }
+        if (!this.itemStats.newest || timestamp > this.itemStats.newest) {
+          this.itemStats.newest = timestamp;
+        }
+      });
+      this.setupIntersectionObserver();
+      this.enableFooterObserver();
+      if (this.index != null) {
+        this.applyItemStyle(this.items[this.index], true);
+      }
+      $("div.r-1mhb1uw").each(
+        (i, el) => {
+          const ancestor = $(el).parent().parent().parent().parent();
+          $(el).parent().parent().parent().addClass("item-selection-inactive");
+          if ($(ancestor).prev().find("div.item-unread").length) {
+            $(el).parent().parent().parent().addClass("item-unread");
+            $(el).parent().parent().parent().removeClass("item-read");
+          } else {
+            $(el).parent().parent().parent().addClass("item-read");
+            $(el).parent().parent().parent().removeClass("item-unread");
+          }
+        }
+      );
+      $("div.r-1mhb1uw svg").each(
+        (i, el) => {
+          $(el).find("line").attr("stroke", this.config.get("threadIndicatorColor"));
+          $(el).find("circle").attr("fill", this.config.get("threadIndicatorColor"));
+        }
+      );
+      $(this.selector).on("mouseover", this.onItemMouseOver);
+      $(this.selector).closest("div.thread").addClass("bsky-navigator-seen");
+      $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
+      this.refreshItems();
+      this.loading = false;
+      $("img#loadOlderIndicatorImage").css("opacity", "1");
+      $("img#loadOlderIndicatorImage").removeClass("toolbar-icon-pending");
+      $(this.items).css("opacity", "100%");
+      if (focusedPostId) {
+        this.jumpToPost(focusedPostId);
+      } else if (!this.jumpToPost(this.postId)) {
+        this.setIndex(0);
+      }
+      this.updateInfoIndicator();
+      this.enableFooterObserver();
+      if ($(this.items).filter(":visible").length == 0) {
+        this.showMessage("No more unread posts.", `
+<p>
+You're all caught up.
+</p>
+
+<div id="messageActions"/>
+`);
+        if ($("#loadOlderAction").length == 0) {
+          $("#messageActions").append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
+          $("#loadOlderAction > a").on("click", () => this.loadOlderItems());
+        }
+        if ($("img#loadNewerIndicatorImage").css("opacity") == "1") {
+          $("#messageActions").append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
+          $("#loadNewerAction > a").on("click", () => this.loadNewerItems());
+        }
+      } else {
+        this.hideMessage();
+      }
+      this.ignoreMouseMovement = false;
+      this.enableScrollMonitor = false;
+    }
+    refreshItems() {
+      $(this.items).each(
+        (index, item) => {
+          this.applyItemStyle(this.items[index], index == this.index);
+        }
+      );
+    }
+    updateInfoIndicator() {
+      this.itemStats.unreadCount = this.items.filter(
+        (i, item) => $(item).hasClass("item-unread")
+      ).length;
+      this.itemStats.filteredCount = this.items.filter(".filtered").length;
+      this.itemStats.shownCount = this.items.length - this.itemStats.filteredCount;
+      const index = this.itemStats.shownCount ? this.index + 1 : 0;
+      $("span#infoIndicatorText").html(`
+<div>
+<strong>${index}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
+</div>
+<div>
+${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa")} - ${format(this.itemStats.newest, "yyyy-MM-dd hh:mmaaa")}</div>` : ``}`);
+    }
+    loadNewerItems() {
+      if (!this.loadNewerButton) {
+        console.log("no button");
+        return;
+      }
+      this.loadingNew = true;
+      this.applyItemStyle(this.items[this.index], false);
+      let oldPostId = this.postIdForItem(this.items[this.index]);
+      $(this.loadNewerButton).click();
+      setTimeout(() => {
+        this.loadItems(oldPostId);
+        $("img#loadNewerIndicatorImage").css("opacity", "0.2");
+        $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
+        $("#loadNewerAction").remove();
+        this.loadingNew = false;
+      }, 1e3);
+    }
+    loadOlderItems() {
+      if (this.loading) {
+        return;
+      }
+      console.log("loading more");
+      $("img#loadOlderIndicatorImage").css("opacity", "0.2");
+      $("img#loadOlderIndicatorImage").addClass("toolbar-icon-pending");
+      this.loading = true;
+      const reversed = this.state.feedSortReverse;
+      const index = reversed ? 0 : this.items.length - 1;
+      this.setIndex(index);
+      this.updateItems();
+      var indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
+      var loadElement = this.items.length ? this.items[this.items.length - 1] : $(this.selector).first()[0];
+      $(indicatorElement).closest("div.thread").addClass(this.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse");
+      loadOlderItemsCallback(
+        [
+          {
+            time: performance.now(),
+            target: loadElement,
+            isIntersecting: true,
+            intersectionRatio: 1,
+            boundingClientRect: loadElement.getBoundingClientRect(),
+            intersectionRect: loadElement.getBoundingClientRect(),
+            rootBounds: document.documentElement.getBoundingClientRect()
+          }
+        ]
+      );
+    }
+    postIdFromUrl() {
+      return window.location.href.split("/")[6];
+    }
+    postIdForItem(item) {
+      try {
+        return $(item).find("a[href*='/post/']").attr("href").split("/")[4];
+      } catch (e) {
+        return this.postIdFromUrl();
+      }
+    }
+    handleFromItem(item) {
+      return $.trim($(item).find(constants$1.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1);
+    }
+    displayNameFromItem(item) {
+      return $.trim($(item).find(constants$1.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""));
+    }
+    getHandles() {
+      return Array.from(new Set(this.items.map((i, item) => this.handleFromItem(item))));
+    }
+    getDisplayNames() {
+      return Array.from(new Set(this.items.map((i, item) => this.displayNameFromItem(item))));
+    }
+    getAuthors() {
+      const authors = this.items.get().map((item) => ({
+        handle: this.handleFromItem(item),
+        displayName: this.displayNameFromItem(item)
+      })).filter(
+        (author) => author.handle.length > 0
+      );
+      const uniqueMap = /* @__PURE__ */ new Map();
+      authors.forEach((author) => {
+        uniqueMap.set(author.handle, author);
+      });
+      return Array.from(uniqueMap.values());
+    }
+    updateItems() {
+      if (this.index == 0) {
+        window.scrollTo(0, 0);
+      } else if (this.items[this.index]) {
+        this.scrollToElement($(this.items[this.index])[0]);
+      } else ;
+    }
+    setIndex(index, mark, update) {
+      let oldIndex = this.index;
+      this.enableIntersectionObserver = false;
+      if (oldIndex != null) {
+        if (mark) {
+          this.markItemRead(oldIndex, true);
+        }
+      }
+      if (index < 0 || index >= this.items.length) {
+        return;
+      }
+      this.applyItemStyle(this.items[oldIndex], false);
+      this.index = index;
+      this.applyItemStyle(this.items[this.index], true);
+      if (update) {
+        this.updateItems();
+      }
+      setTimeout(
+        () => this.enableIntersectionObserver = true,
+        500
+      );
+      return true;
+    }
+    jumpToPost(postId) {
+      for (const [i, item] of $(this.items).get().entries()) {
+        const other = this.postIdForItem(item);
+        if (postId == other) {
+          this.setIndex(i);
+          this.updateItems();
+          return true;
+        }
+      }
+      return false;
+    }
+    markItemRead(index, isRead) {
+      if (this.name == "post" && !this.config.get("savePostState")) {
+        return;
+      }
+      let postId = this.postIdForItem(this.items[index]);
+      if (!postId) {
+        return;
+      }
+      this.markPostRead(postId, isRead);
+      this.applyItemStyle(this.items[index], index == this.index);
+      this.updateInfoIndicator();
+    }
+    markPostRead(postId, isRead) {
+      const currentTime = (/* @__PURE__ */ new Date()).toISOString();
+      const seen = { ...this.state.seen };
+      if (isRead || isRead == null && !seen[postId]) {
+        seen[postId] = currentTime;
+      } else {
+        seen[postId] = null;
+      }
+      this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
+    }
+    markVisibleRead() {
+      $(this.items).each(
+        (i, item) => {
+          this.markItemRead(i, true);
+        }
+      );
+    }
+    // FIXME: move to PostItemHanler
+    handleNewThreadPage(element) {
+      console.log(`new page: ${element}`);
+      console.log(this.items.length);
+      this.loadPageObserver.disconnect();
+    }
+    jumpToPrev(mark) {
+      this.setIndex(this.index - 1, mark, true);
+      return true;
+    }
+    jumpToNext(mark) {
+      if (this.index < this.items.length) {
+        this.setIndex(this.index + 1, mark, true);
+      } else {
+        var next = $(this.items[this.index]).parent().parent().parent().next();
+        if (next && $.trim(next.text()) == "Continue thread...") {
+          console.log("click");
+          this.loadPageObserver = waitForElement$1(
+            this.THREAD_PAGE_SELECTOR,
+            this.handleNewThreadPage
+          );
+          console.log(this.loadPageObserver);
+          $(next).find("div").click();
+        }
+      }
+      return true;
+    }
+    handleMovementKey(event) {
+      var moved = false;
+      var mark = false;
+      this.index;
+      if (this.isPopupVisible) {
+        return;
+      }
+      this.ignoreMouseMovement = true;
+      if (this.keyState.length == 0) {
+        if (["j", "k", "ArrowDown", "ArrowUp", "J", "G"].includes(event.key)) {
+          if (["j", "ArrowDown"].indexOf(event.key) != -1) {
+            event.preventDefault();
+            moved = this.jumpToNext(event.key == "j");
+          } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
+            event.preventDefault();
+            moved = this.jumpToPrev(event.key == "k");
+          } else if (event.key == "G") {
+            moved = this.setIndex(this.items.length - 1, false, true);
+          } else if (event.key == "J") {
+            mark = true;
+            this.jumpToNextUnseenItem(mark);
+          }
+          moved = true;
+          console.log(this.postIdForItem(this.items[this.index]));
+        } else if (event.key == "g") {
+          this.keyState.push(event.key);
+        }
+      } else if (this.keyState[0] == "g") {
+        if (event.key == "g") {
+          if (this.index < this.items.length) {
+            this.setIndex(0, false, true);
+          }
+          moved = true;
+        }
+        this.keyState = [];
+      }
+      if (moved) {
+        this.lastMousePosition = null;
+      }
+    }
+    jumpToNextUnseenItem(mark) {
+      var i;
+      for (i = this.index + 1; i < this.items.length - 1; i++) {
+        var postId = this.postIdForItem(this.items[i]);
+        if (!this.state.seen[postId]) {
+          break;
+        }
+      }
+      this.setIndex(i, mark);
+      this.updateItems();
+    }
+    getIndexFromItem(item) {
+      return $(".item").filter(":visible").index(item);
+    }
+    handleItemKey(event) {
+      if (this.isPopupVisible) {
+        return false;
+      } else if (event.altKey && !event.metaKey) {
+        if (event.code.startsWith("Digit")) {
+          const num = parseInt(event.code.substr(5)) - 1;
+          $("#bsky-navigator-search").autocomplete("disable");
+          if (num >= 0) {
+            const ruleName = Object.keys(this.state.rules)[num];
+            console.log(ruleName);
+            $("#bsky-navigator-search").val("$" + ruleName);
+          } else {
+            $("#bsky-navigator-search").val(null);
+          }
+          $("#bsky-navigator-search").trigger("input");
+          $("#bsky-navigator-search").autocomplete("enable");
+          return event.key;
+        } else {
+          return false;
+        }
+      } else if (!event.metaKey) {
+        var item = this.items[this.index];
+        if (["o", "Enter"].includes(event.key)) {
+          $(item).click();
+        } else if (event.key == "O") {
+          var inner = $(item).find("div[aria-label^='Post by']");
+          inner.click();
+        } else if (event.key == "i") {
+          if ($(item).find(LINK_SELECTOR).length) {
+            $(item).find(LINK_SELECTOR)[0].click();
+          }
+        } else if (event.key == "m") {
+          var media = $(item).find("img[src*='feed_thumbnail']");
+          if (media.length > 0) {
+            media[0].click();
+          } else {
+            const video = $(item).find("video")[0];
+            if (video) {
+              event.preventDefault();
+              if (video.muted) {
+                video.muted = false;
+              }
+              if (video.paused) {
+                this.playVideo(video);
+              } else {
+                this.pauseVideo(video);
+              }
+            }
+          }
+        } else if (event.key == "r") {
+          var button = $(item).find("button[aria-label^='Reply']");
+          button.focus();
+          button.click();
+        } else if (event.key == "l") {
+          $(item).find("button[data-testid='likeBtn']").click();
+        } else if (event.key == "p") {
+          $(item).find("button[aria-label^='Repost']").click();
+        } else if (event.key == "P") {
+          $(item).find("button[aria-label^='Repost']").click();
+          setTimeout(function() {
+            $("div[aria-label^='Repost'][role='menuitem']").click();
+          }, 1e3);
+        } else if (event.key == ".") {
+          this.markItemRead(this.index, null);
+        } else if (event.key == "A") {
+          this.markVisibleRead();
+        } else if (event.key == "h") {
+          var back_button = $("button[aria-label^='Back' i]").filter(":visible");
+          if (back_button.length) {
+            back_button.click();
+          } else {
+            history.back(1);
+          }
+        } else if (!isNaN(parseInt(event.key))) {
+          $("div[role='tablist'] > div > div > div").filter(":visible")[parseInt(event.key) - 1].click();
+        } else {
+          return false;
+        }
+      }
+      return event.key;
+    }
+  }
+  class FeedItemHandler extends ItemHandler {
+    INDICATOR_IMAGES = {
+      loadTop: [
+        "https://www.svgrepo.com/show/502348/circleupmajor.svg"
+      ],
+      loadBottom: [
+        "https://www.svgrepo.com/show/502338/circledownmajor.svg"
+      ],
+      filter: [
+        "https://www.svgrepo.com/show/347140/mail.svg",
+        "https://www.svgrepo.com/show/347147/mail-unread.svg"
+      ],
+      sort: [
+        "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg",
+        "https://www.svgrepo.com/show/506582/sort-numeric-up.svg"
+      ],
+      prev: [
+        "https://www.svgrepo.com/show/491060/prev.svg"
+      ],
+      next: [
+        "https://www.svgrepo.com/show/491054/next.svg"
+      ],
+      preferences: [
+        "https://www.svgrepo.com/show/522235/preferences.svg",
+        "https://www.svgrepo.com/show/522236/preferences.svg"
+      ]
+    };
+    constructor(name, selector, config2, state2) {
+      super(name, selector, config2, state2);
+      this.toggleSortOrder = this.toggleSortOrder.bind(this);
+      this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
+      this.setFilter = this.setFilter.bind(this);
+    }
+    addToolbar(beforeDiv) {
+      this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
+      $(beforeDiv).before(this.toolbarDiv);
+      this.topLoadIndicator = $(`
+<div id="topLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
+</div>`);
+      $(this.toolbarDiv).append(this.topLoadIndicator);
+      this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
+      $(this.toolbarDiv).append(this.sortIndicator);
+      $("#sortIndicator").on("click", (event) => {
+        event.preventDefault();
+        this.toggleSortOrder();
+      });
+      this.filterIndicator = $(`<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`);
+      $(this.toolbarDiv).append(this.filterIndicator);
+      $("#filterIndicator").on("click", (event) => {
+        event.preventDefault();
+        this.toggleHideRead();
+      });
+      this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
+      $(this.toolbarDiv).append(this.searchField);
+      $("#bsky-navigator-search").autocomplete({
+        minLength: 0,
+        appendTo: 'div[data-testid="homeScreenFeedTabs"]',
+        source: this.onSearchAutocomplete,
+        focus: function(event, ui) {
+          event.preventDefault();
+        },
+        focus: function(event, ui) {
+          event.preventDefault();
+        },
+        select: function(event, ui) {
+          event.preventDefault();
+          let input = this;
+          let terms = splitTerms(input.value);
+          terms.pop();
+          terms.push(ui.item.value);
+          input.value = terms.join(" ") + " ";
+          $(this).autocomplete("close");
+        }
+      });
+      $("#bsky-navigator-search").on("keydown", function(event) {
+        if (event.key === "Tab") {
+          let autocompleteMenu = $(".ui-autocomplete:visible");
+          let firstItem = autocompleteMenu.children(".ui-menu-item").first();
+          if (firstItem.length) {
+            let uiItem = firstItem.data("ui-autocomplete-item");
+            $(this).autocomplete("close");
+            let terms = splitTerms(this.value);
+            terms.pop();
+            terms.push(uiItem.value);
+            this.value = terms.join(" ") + " ";
+            event.preventDefault();
+          }
+        }
+      });
+      this.onSearchUpdate = debounce((event) => {
+        console.log($(event.target).val().trim());
+        this.setFilter($(event.target).val().trim());
+        this.filterItems();
+      }, 300);
+      $(this.searchField).on("input", this.onSearchUpdate);
+      $(this.searchField).on("focus", function() {
+        $(this).autocomplete("search", "");
+      });
+      $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
+      $(this.searchField).on("autocompleteselect", function(event, ui) {
+        this.onSearchUpdate();
+      });
+      this.onSearchUpdate = this.onSearchUpdate.bind(this);
+      waitForElement$1(
+        "#bsky-navigator-toolbar",
+        null,
+        (div) => {
+          this.addToolbar(beforeDiv);
+        }
+      );
+    }
+    refreshToolbars() {
+      waitForElement$1(
+        constants$1.TOOLBAR_CONTAINER_SELECTOR,
+        (indicatorContainer) => {
+          waitForElement$1(
+            'div[data-testid="homeScreenFeedTabs"]',
+            (homeScreenFeedTabsDiv) => {
+              if (!$("#bsky-navigator-toolbar").length) {
+                this.addToolbar(homeScreenFeedTabsDiv);
+              }
+            }
+          );
+        }
+      );
+      waitForElement$1(constants$1.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
+        if (!$("#statusBar").length) {
+          this.addStatusBar(statusBarContainer);
+        }
+      });
+      waitForElement$1(
+        "#bsky-navigator-toolbar",
+        (div) => {
+          waitForElement$1(
+            "#statusBar",
+            (div2) => {
+              this.setSortIcons();
+            }
+          );
+        }
+      );
+    }
+    onSearchAutocomplete(request, response) {
+      const authors = this.getAuthors().sort((a, b) => a.handle.localeCompare(b.handle, void 0, { sensitivity: "base" }));
+      const rules = Object.keys(this.state.rules);
+      let term = extractLastTerm(request.term);
+      let results = [];
+      if (term === "") {
+        results = rules.map((f) => ({ label: `$${f}`, value: `$${f}` }));
+      } else if (term.startsWith("@")) {
+        let search = term.substring(1).toLowerCase();
+        results = authors.filter(
+          (a) => a.handle.toLowerCase().includes(search) || a.displayName.toLowerCase().includes(search)
+        ).map((a) => ({
+          label: `@${a.handle} (${a.displayName})`,
+          // Show as @handle (Display Name)
+          value: `@${a.handle}`
+          // Insert only @handle
+        }));
+      } else if (term.startsWith("$")) {
+        let search = term.substring(1).toLowerCase();
+        results = rules.filter((f) => f.toLowerCase().includes(search)).map((f) => ({ label: `$${f}`, value: `$${f}` }));
+      } else {
+        results = [
+          ...authors.filter(
+            (a) => a.handle.toLowerCase().includes(term) || a.displayName.toLowerCase().includes(term)
+          ).map((a) => ({ label: `@${a.handle} (${a.displayName})`, value: `@${a.handle}` })),
+          ...rules.filter((f) => f.toLowerCase().includes(term)).map((f) => ({ label: `$${f}`, value: `$${f}` })),
+          { label: `Search: "${term}"`, value: term }
+        ];
+      }
+      response(results);
+    }
+    addStatusBar(statusBarContainer) {
+      this.statusBar = $(`<div id="statusBar"></div>`);
+      this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
+      this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
+      this.statusBarRight = $(`<div id="statusBarRight"></div>`);
+      $(this.statusBar).append(this.statusBarLeft);
+      $(this.statusBar).append(this.statusBarCenter);
+      $(this.statusBar).append(this.statusBarRight);
+      $(statusBarContainer).append(this.statusBar);
+      this.bottomLoadIndicator = $(`
+<div id="bottomLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"/>
+`);
+      $(this.statusBarLeft).append(this.bottomLoadIndicator);
+      if (!this.prevButton) {
+        this.prevButton = $(`<div id="prevButton" title="previous post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.prev[0]}"/></div>`);
+        $(this.statusBarLeft).append(this.prevButton);
+        $("#prevButton").on("click", (event) => {
+          event.preventDefault();
+          this.jumpToPrev(true);
+        });
+      }
+      if (!this.nextButton) {
+        this.nextButton = $(`<div id="nextButton" title="next post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.next[0]}"/></div>`);
+        $(this.statusBarLeft).append(this.nextButton);
+        $("#nextButton").on("click", (event) => {
+          event.preventDefault();
+          this.jumpToNext(true);
+        });
+      }
+      if (!this.infoIndicator) {
+        this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><span id="infoIndicatorText"/></div>`);
+        $(this.statusBarCenter).append(this.infoIndicator);
+      }
+      if (!this.preferencesIcon) {
+        this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
+        $(this.preferencesIcon).on("click", () => {
+          $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1]);
+          config.open();
+        });
+        $(this.statusBarRight).append(this.preferencesIcon);
+      }
+    }
+    activate() {
+      super.activate();
+      this.refreshToolbars();
+    }
+    deactivate() {
+      super.deactivate();
+    }
+    isActive() {
+      return window.location.pathname == "/";
+    }
+    toggleSortOrder() {
+      this.state.stateManager.updateState({ feedSortReverse: !this.state.feedSortReverse });
+      this.setSortIcons();
+      $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen");
+      this.loadItems();
+    }
+    setSortIcons() {
+      ["top", "bottom"].forEach(
+        (bar) => {
+          const which = !this.state.feedSortReverse && bar == "bottom" || this.state.feedSortReverse && bar == "top" ? "Older" : "Newer";
+          const img = this.INDICATOR_IMAGES[`load${bar.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())}`][0];
+          $(`#${bar}LoadIndicator`).empty();
+          $(`#${bar}LoadIndicator`).append(
+            `
+<div id="load${which}Indicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
+      <span id="load${which}IndicatorText">
+      <a id="load${which}IndicatorLink" title="Load ${which.toLowerCase()} items"><img id="load${which}IndicatorImage" class="indicator-image" src="${img}"/></a>
+      </span>
+</div>
+`
+          );
+        }
+      );
+      $("img#loadOlderIndicatorImage").css("opacity", "1");
+      $("a#loadOlderIndicatorLink").on("click", () => this.loadOlderItems());
+    }
+    toggleHideRead() {
+      this.state.stateManager.updateState({ feedHideRead: !this.state.feedHideRead });
+      $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen");
+      this.loadItems();
+    }
+    setFilter(text) {
+      this.filter = text;
+    }
+    filterItem(item, thread) {
+      if (this.state.feedHideRead) {
+        if ($(item).hasClass("item-read")) {
+          return false;
+        }
+      }
+      if (this.filter && this.state.rules) {
+        const activeRules = this.filter.split(/[ ]+/).map(
+          (ruleStatement) => {
+            const [_, invert, matchType, query] = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
+            return {
+              invert,
+              matchType,
+              query
+            };
+          }
+        );
+        return activeRules.map(
+          (activeRule) => {
+            var allowed = null;
+            switch (activeRule.matchType) {
+              case "$":
+                const rules = this.state.rules[activeRule.query];
+                if (!rules) {
+                  console.log(`no rule ${activeRule.query}`);
+                  return null;
+                }
+                rules.forEach((rule) => {
+                  if (rule.type === "all") {
+                    allowed = rule.action === "allow";
+                  } else if (rule.type === "from" && !!this.filterAuthor(item, rule.value.substring(1))) {
+                    allowed = allowed || rule.action === "allow";
+                  } else if (rule.type === "content" && !!this.filterContent(item, rule.value)) {
+                    allowed = allowed || rule.action === "allow";
+                  }
+                });
+                break;
+              case "@":
+                allowed = !!this.filterAuthor(item, activeRule.query);
+                break;
+              case "%":
+                allowed = !!this.filterContent(item, activeRule.query);
+                break;
+              default:
+                allowed = !!this.filterAuthor(item, activeRule.query) || !!this.filterContent(item, activeRule.query);
+                break;
+            }
+            return activeRule.invert ? !allowed : allowed;
+          }
+        ).every((allowed) => allowed == true);
+      }
+      return true;
+    }
+    filterAuthor(item, author) {
+      const pattern = new RegExp(author, "i");
+      const handle = this.handleFromItem(item);
+      const displayName = this.displayNameFromItem(item);
+      if (!handle.match(pattern) && !displayName.match(pattern)) {
+        return false;
+      }
+      return true;
+    }
+    filterContent(item, query) {
+      const pattern = new RegExp(query, "i");
+      const content = $(item).find('div[data-testid="postText"]').text();
+      return content.match(pattern);
+    }
+    filterThread(thread) {
+      return $(thread).find(".item").length != $(thread).find(".filtered").length;
+    }
+    filterItems() {
+      const hideRead = this.state.feedHideRead;
+      $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+hideRead]);
+      $("#filterIndicator").attr("title", `show all or unread (currently ${hideRead ? "unread" : "all"})`);
+      const parent = $(this.selector).first().closest(".thread").parent();
+      const unseenThreads = parent.find(".thread");
+      $(unseenThreads).map(
+        (i, thread) => {
+          $(thread).find(".item").each(
+            (i2, item) => {
+              if (this.filterItem(item, thread)) {
+                $(item).removeClass("filtered");
+              } else {
+                $(item).addClass("filtered");
+              }
+            }
+          );
+          if (this.filterThread(thread)) {
+            $(thread).removeClass("filtered");
+          } else {
+            $(thread).addClass("filtered");
+          }
+        }
+      );
+      this.refreshItems();
+      if (hideRead && $(this.items[this.index]).hasClass("item-read")) {
+        console.log("jumping");
+        this.jumpToNextUnseenItem();
+      }
+    }
+    sortItems() {
+      const reversed = this.state.feedSortReverse;
+      $("#sortIndicatorImage").attr("src", this.INDICATOR_IMAGES.sort[+reversed]);
+      $("#sortIndicator").attr("title", `change sort order (currently ${reversed ? "forward" : "reverse"} chronological)`);
+      const parent = $(this.selector).closest(".thread").first().parent();
+      const newItems = parent.children().filter(
+        (i, item) => $(item).hasClass("thread")
+      ).get().sort(
+        (a, b) => {
+          const threadIndexA = parseInt($(a).data("bsky-navigator-thread-index"));
+          const threadIndexB = parseInt($(b).data("bsky-navigator-thread-index"));
+          const itemIndexA = parseInt($(a).find(".item").data("bsky-navigator-item-index"));
+          const itemIndexB = parseInt($(b).find(".item").data("bsky-navigator-item-index"));
+          if (threadIndexA !== threadIndexB) {
+            return reversed ? threadIndexB - threadIndexA : threadIndexA - threadIndexB;
+          }
+          return itemIndexA - itemIndexB;
+        }
+      );
+      reversed ^ this.loadingNew ? parent.prepend(newItems) : parent.children(".thread").last().next().after(newItems);
+    }
+    handleInput(event) {
+      var item = this.items[this.index];
+      if (event.key == "a") {
+        $(item).find(constants$1.PROFILE_SELECTOR)[0].click();
+      } else if (event.key == "u") {
+        this.loadNewerItems();
+      } else if (event.key == ":") {
+        this.toggleSortOrder();
+      } else if (event.key == '"') {
+        this.toggleHideRead();
+      } else if (event.key == "/") {
+        event.preventDefault();
+        $("input#bsky-navigator-search").focus();
+      } else if (event.key == ",") {
+        this.loadItems();
+      } else {
+        super.handleInput(event);
+      }
+    }
+  }
+  class PostItemHandler extends ItemHandler {
+    constructor(name, selector, config2, state2) {
+      super(name, selector, config2);
+      this.indexMap = {};
+      this.handleInput = this.handleInput.bind(this);
+    }
+    get index() {
+      return this.indexMap?.[this.postId] ?? 0;
+    }
+    set index(value) {
+      this.indexMap[this.postId] = value;
+    }
+    activate() {
+      super.activate();
+      this.postId = this.postIdFromUrl();
+      this.markPostRead(this.postId, null);
+    }
+    deactivate() {
+      super.deactivate();
+    }
+    isActive() {
+      return window.location.pathname.match(/\/post\//);
+    }
+    get scrollMargin() {
+      return $('div[data-testid="postThreadScreen"] > div').eq(0).outerHeight();
+    }
+    // getIndexFromItem(item) {
+    //     return $(item).parent().parent().parent().parent().index() - 3
+    // }
+    handleInput(event) {
+      if (["o", "Enter"].includes(event.key) && !(event.altKey || event.metaKey)) {
+        var inner = $(item).find("div[aria-label^='Post by']");
+        inner.click();
+      }
+      if (super.handleInput(event)) {
+        return;
+      }
+      if (this.isPopupVisible || event.altKey || event.metaKey) {
+        return;
+      }
+      var item = this.items[this.index];
+      if (event.key == "a") {
+        var handle = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1]);
+        $(item).find("div").filter(
+          (i, el) => $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == `@${handle}`
+        )[0].click();
+      }
+    }
+  }
+  class ProfileItemHandler extends ItemHandler {
+    constructor(name, selector, config2, state2) {
+      super(name, selector, config2);
+    }
+    activate() {
+      this.setIndex(0);
+      super.activate();
+    }
+    deactivate() {
+      super.deactivate();
+    }
+    isActive() {
+      return window.location.pathname.match(/^\/profile\//);
+    }
+    handleInput(event) {
+      if (super.handleInput(event)) {
+        return;
+      }
+      if (event.altKey || event.metaKey) {
+        return;
+      }
+      if (event.key == "f") {
+        $("button[data-testid='followBtn']").click();
+      } else if (event.key == "F") {
+        $("button[data-testid='unfollowBtn']").click();
+      } else if (event.key == "L") {
+        $("button[aria-label^='More options']").click();
+        setTimeout(function() {
+          $("div[data-testid='profileHeaderDropdownListAddRemoveBtn']").click();
+        }, 200);
+      } else if (event.key == "M") {
+        $("button[aria-label^='More options']").click();
+        setTimeout(function() {
+          $("div[data-testid='profileHeaderDropdownMuteBtn']").click();
+        }, 200);
+      } else if (event.key == "B") {
+        $("button[aria-label^='More options']").click();
+        setTimeout(function() {
+          $("div[data-testid='profileHeaderDropdownBlockBtn']").click();
+        }, 200);
+      } else if (event.key == "R") {
+        $("button[aria-label^='More options']").click();
+        setTimeout(function() {
+          $("div[data-testid='profileHeaderDropdownReportBtn']").click();
+        }, 200);
+      }
+    }
+  }
+  const {
     waitForElement,
-    observeVisibilityChange,
-    splitTerms,
-    extractLastTerm
+    observeVisibilityChange
   } = utils;
   GM_addStyle(style);
-  let stateManager;
-  let config;
-  let loadOlderItemsCallback;
-  const DEFAULT_STATE = {
-    seen: {},
-    lastUpdated: null,
-    page: "home",
-    "blocks": { "all": [], "recent": [] },
-    feedSortReverse: false,
-    feedHideRead: false
-  };
+  let config$1;
   const CONFIG_FIELDS = {
     "styleSection": {
       "section": [GM_config.create("Display Preferences"), "Customize how items are displayed"],
@@ -2155,1361 +3544,6 @@
       "default": false
     }
   };
-  class Handler {
-    constructor(name) {
-      this.name = name;
-      this.items = [];
-      this.handleInput = this.handleInput.bind(this);
-    }
-    activate() {
-      this.bindKeys();
-    }
-    deactivate() {
-      this.unbindKeys();
-    }
-    isActive() {
-      return true;
-    }
-    bindKeys() {
-      document.addEventListener("keydown", this.handleInput, true);
-    }
-    unbindKeys() {
-      document.removeEventListener("keydown", this.handleInput, true);
-    }
-    handleInput(event) {
-      if (event.altKey && !event.metaKey) {
-        if (event.code === "KeyH") {
-          $("a[aria-label='Home']")[0].click();
-        } else if (event.code === "KeyS") {
-          $("a[aria-label='Search']")[0].click();
-        } else if (event.code === "KeyN") {
-          $("a[aria-label='Notifications']")[0].click();
-        } else if (event.code === "KeyM") {
-          $("a[aria-label='Chat']")[0].click();
-        } else if (event.code === "KeyF") {
-          $("a[aria-label='Feeds']")[0].click();
-        } else if (event.code === "KeyL") {
-          $("a[aria-label='Lists']")[0].click();
-        } else if (event.code === "KeyP") {
-          $("a[aria-label='Profile']")[0].click();
-        } else if (event.code === "Comma") {
-          $("a[aria-label='Settings']")[0].click();
-        } else if (event.code === "Period") {
-          config.open();
-        }
-      }
-    }
-  }
-  class ItemHandler extends Handler {
-    // POPUP_MENU_SELECTOR = "div[data-radix-popper-content-wrapper]"
-    POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
-    // FIXME: this belongs in PostItemHandler
-    THREAD_PAGE_SELECTOR = "main > div > div > div";
-    MOUSE_MOVEMENT_THRESHOLD = 10;
-    constructor(name, selector) {
-      super(name);
-      this._index = null;
-      this.postId = null;
-      this.loadNewerCallback = null;
-      this.selector = selector;
-      this.debounceTimeout = null;
-      this.lastMousePosition = null;
-      this.isPopupVisible = false;
-      this.ignoreMouseMovement = false;
-      this.onPopupAdd = this.onPopupAdd.bind(this);
-      this.onPopupRemove = this.onPopupRemove.bind(this);
-      this.onIntersection = this.onIntersection.bind(this);
-      this.onFooterIntersection = this.onFooterIntersection.bind(this);
-      this.onItemAdded = this.onItemAdded.bind(this);
-      this.onScroll = this.onScroll.bind(this);
-      this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
-      this.onItemMouseOver = this.onItemMouseOver.bind(this);
-      this.didMouseMove = this.didMouseMove.bind(this);
-      this.getTimestampForItem = this.getTimestampForItem.bind(this);
-      this.loading = false;
-      this.loadingNew = false;
-      this.enableScrollMonitor = false;
-      this.enableIntersectionObserver = false;
-      this.handlingClick = false;
-      this.itemStats = {};
-      this.visibleItems = /* @__PURE__ */ new Set();
-    }
-    isActive() {
-      return false;
-    }
-    activate() {
-      this.keyState = [];
-      this.popupObserver = waitForElement(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
-      this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
-        root: null,
-        // Observing within the viewport
-        // rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
-        threshold: Array.from({ length: 101 }, (_, i) => i / 100)
-      });
-      this.setupIntersectionObserver();
-      this.footerIntersectionObserver = new IntersectionObserver(this.onFooterIntersection, {
-        root: null,
-        // Observing within the viewport
-        // threshold: [1]
-        threshold: Array.from({ length: 101 }, (_, i) => i / 100)
-      });
-      const safeSelector = `${this.selector}:not(.thread ${this.selector})`;
-      this.observer = waitForElement(safeSelector, (element) => {
-        this.onItemAdded(element), this.onItemRemoved(element);
-      });
-      this.loadNewerObserver = waitForElement(constants$1.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
-        this.loadNewerButton = $(button)[0];
-        $("a#loadNewerIndicatorLink").on("click", () => this.loadNewerItems());
-        $("img#loadNewerIndicatorImage").css("opacity", "1");
-        $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
-        if ($("#loadNewerAction").length == 0) {
-          $("#messageActions").append($('<div id="loadNewerAction"><a> Load newer posts</a></div>'));
-          $("#loadNewerAction > a").on("click", () => this.loadNewerItems());
-        }
-        this.loadNewerButton.addEventListener(
-          "click",
-          (event) => {
-            if (this.loadingNew) {
-              console.log("handling click, returning");
-              return;
-            }
-            console.log("Intercepted click in capture phase", event.target);
-            event.target;
-            event.stopImmediatePropagation();
-            setTimeout(() => {
-              console.log("Calling original handler");
-              this.loadNewerItems();
-            }, 0);
-            console.log("Custom logic executed");
-          },
-          true
-          // Capture phase
-        );
-      });
-      this.enableScrollMonitor = true;
-      this.enableIntersectionObserver = true;
-      $(document).on("scroll", this.onScroll);
-      super.activate();
-    }
-    deactivate() {
-      if (this.observer) {
-        this.observer.disconnect();
-      }
-      if (this.popupObserver) {
-        this.popupObserver.disconnect();
-      }
-      if (this.intersectionObserver) {
-        this.intersectionObserver.disconnect();
-      }
-      this.disableFooterObserver();
-      $(this.selector).off("mouseover mouseleave");
-      $(document).off("scroll", this.onScroll);
-      super.deactivate();
-    }
-    get index() {
-      return this._index;
-    }
-    set index(value) {
-      this._index = value;
-      this.postId = this.postIdForItem(this.items[this.index]);
-      this.updateInfoIndicator();
-    }
-    onItemAdded(element) {
-      this.applyItemStyle(element);
-      clearTimeout(this.debounceTimeout);
-      this.debounceTimeout = setTimeout(() => {
-        this.loadItems();
-      }, 500);
-    }
-    onItemRemoved(element) {
-      if (this.intersectionObserver) {
-        this.intersectionObserver.disconnect(element);
-      }
-    }
-    onScroll(event) {
-      if (!this.enableScrollMonitor) {
-        return;
-      }
-      this.enableIntersectionObserver = true;
-    }
-    scrollToElement(target) {
-      this.enableScrollMonitor = false;
-      target.scrollIntoView(
-        { behavior: config.get("enableSmoothScrolling") ? "smooth" : "instant" }
-      );
-      setTimeout(() => {
-        this.enableScrollMonitor = true;
-      }, 250);
-    }
-    // Function to programmatically play a video from the userscript
-    playVideo(video) {
-      video.dataset.allowPlay = "true";
-      console.log("Userscript playing video:", video);
-      video.play();
-    }
-    pauseVideo(video) {
-      video.dataset.allowPlay = "true";
-      console.log("Userscript playing video:", video);
-      video.pause();
-    }
-    setupIntersectionObserver(entries) {
-      if (this.intersectionObserver) {
-        $(this.items).each(
-          (i, item) => {
-            this.intersectionObserver.observe($(item)[0]);
-          }
-        );
-      }
-    }
-    onIntersection(entries) {
-      if (!this.enableIntersectionObserver || this.loading || this.loadingNew) {
-        return;
-      }
-      console.log("onIntersection");
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          this.visibleItems.add(entry.target);
-        } else {
-          this.visibleItems.delete(entry.target);
-        }
-      });
-      const visibleItems = Array.from(this.visibleItems).sort(
-        (a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top
-      );
-      if (!visibleItems.length) {
-        return;
-      }
-      const target = visibleItems[0];
-      if (target) {
-        var index = this.getIndexFromItem(target);
-        if (config.get("markReadOnScroll")) {
-          this.markItemRead(index, true);
-        }
-        this.setIndex(index);
-      }
-    }
-    onFooterIntersection(entries) {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          console.log("footer");
-          entry.target;
-          this.disableFooterObserver();
-          this.loadOlderItems();
-        }
-      });
-    }
-    enableFooterObserver() {
-      if (config.get("disableLoadMoreOnScroll")) {
-        return;
-      }
-      if (!stateManager.state.feedSortReverse && this.items.length > 0) {
-        this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
-      }
-    }
-    disableFooterObserver() {
-      if (this.footerIntersectionObserver) {
-        this.footerIntersectionObserver.disconnect();
-      }
-    }
-    onPopupAdd() {
-      this.isPopupVisible = true;
-    }
-    onPopupRemove() {
-      this.isPopupVisible = false;
-    }
-    get scrollMargin() {
-      var margin;
-      var el = $('div[data-testid="HomeScreen"] > div > div').eq(2);
-      if (stateManager.state.mobileView) {
-        el = el.first().first();
-        if (this.index) {
-          var transform = el[0].style.transform;
-          var translateY = transform.indexOf("(") == -1 ? 0 : parseInt(transform.split("(")[1].split("px")[0]);
-          margin = el.outerHeight() + translateY;
-        } else {
-          margin = el.outerHeight();
-        }
-      } else {
-        margin = el.outerHeight();
-      }
-      return margin;
-    }
-    applyItemStyle(element, selected) {
-      $(element).addClass("item");
-      const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
-      if (!postTimestampElement.attr("data-bsky-navigator-age")) {
-        postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text());
-      }
-      const userFormat = config.get("postTimestampFormat");
-      const postTimeString = postTimestampElement.attr("aria-label");
-      if (postTimeString && userFormat) {
-        const postTimestamp = new Date(postTimeString.replace(" at", ""));
-        if (userFormat) {
-          const formattedDate = format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
-          if (config.get("showDebuggingInfo")) {
-            postTimestampElement.text(`${formattedDate} (${$(element).parent().parent().attr("data-bsky-navigator-thread-index")}, ${$(element).attr("data-bsky-navigator-item-index")})`);
-          } else {
-            postTimestampElement.text(formattedDate);
-          }
-        }
-      }
-      const threadIndicator = $(element).find("div.r-lchren, div.r-1mhb1uw > svg");
-      const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
-      $(element).parent().parent().addClass("thread");
-      if (config.get("showPostCounts") == "All" || selected && config.get("showPostCounts") == "Selection") {
-        const bannerDiv = $(element).find("div.item-banner").first().length ? $(element).find("div.item-banner").first() : $(element).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
-        $(bannerDiv).html(`<strong>${this.getIndexFromItem(element) + 1}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
-      }
-      $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
-      $(element).find("video").each(
-        (i, video) => {
-          if (config.get("videoPreviewPlayback") == "Pause all" || config.get("videoPreviewPlayback") == "Play selected" && !selected) {
-            this.pauseVideo(video);
-          } else if (config.get("videoPreviewPlayback") == "Play selected" && selected) {
-            this.playVideo(video);
-          }
-        }
-      );
-      if (selected) {
-        $(element).parent().parent().addClass("thread-selection-active");
-        $(element).parent().parent().removeClass("thread-selection-inactive");
-      } else {
-        $(element).parent().parent().removeClass("thread-selection-active");
-        $(element).parent().parent().addClass("thread-selection-inactive");
-      }
-      if (threadIndicator.length) {
-        var parent = threadIndicator.parents().has(avatarDiv).first();
-        var children = parent.find("*");
-        if (threadIndicator.length == 1) {
-          var parent = threadIndicator.parents().has(avatarDiv).first();
-          var children = parent.find("*");
-          if (children.index(threadIndicator) < children.index(avatarDiv)) {
-            $(element).parent().parent().addClass("thread-last");
-          } else {
-            $(element).parent().parent().addClass("thread-first");
-          }
-        } else {
-          $(element).parent().parent().addClass("thread-middle");
-        }
-      } else {
-        $(element).parent().parent().addClass(["thread-first", "thread-middle", "thread-last"]);
-      }
-      if (selected) {
-        $(element).addClass("item-selection-active");
-        $(element).removeClass("item-selection-inactive");
-      } else {
-        $(element).removeClass("item-selection-active");
-        $(element).addClass("item-selection-inactive");
-      }
-      var postId = this.postIdForItem($(element));
-      if (postId != null && stateManager.state.seen[postId]) {
-        $(element).addClass("item-read");
-        $(element).removeClass("item-unread");
-      } else {
-        $(element).addClass("item-unread");
-        $(element).removeClass("item-read");
-      }
-      const handle = this.handleFromItem(element);
-      if (stateManager.state.blocks.all.includes(handle)) {
-        $(element).find(constants$1.PROFILE_SELECTOR).css(constants$1.CLEARSKY_BLOCKED_ALL_CSS);
-      }
-      if (stateManager.state.blocks.recent.includes(handle)) {
-        $(element).find(constants$1.PROFILE_SELECTOR).css(constants$1.CLEARSKY_BLOCKED_RECENT_CSS);
-      }
-    }
-    didMouseMove(event) {
-      const currentPosition = { x: event.pageX, y: event.pageY };
-      if (this.lastMousePosition) {
-        const distanceMoved = Math.sqrt(
-          Math.pow(currentPosition.x - this.lastMousePosition.x, 2) + Math.pow(currentPosition.y - this.lastMousePosition.y, 2)
-        );
-        this.lastMousePosition = currentPosition;
-        if (distanceMoved >= this.MOUSE_MOVEMENT_THRESHOLD) {
-          return true;
-        }
-      } else {
-        this.lastMousePosition = currentPosition;
-      }
-      return false;
-    }
-    onItemMouseOver(event) {
-      var target = $(event.target).closest(this.selector);
-      if (this.ignoreMouseMovement || !this.didMouseMove(event)) {
-        return;
-      }
-      this.setIndex(this.getIndexFromItem(target));
-    }
-    handleInput(event) {
-      this.enableScrollMonitor = false;
-      if (this.handleMovementKey(event)) {
-        return event.key;
-      } else if (this.handleItemKey(event)) {
-        return event.key;
-      } else if (event.key == "U") {
-        console.log("Update");
-        this.loadOlderItems();
-      } else {
-        return super.handleInput(event);
-      }
-    }
-    filterItems() {
-      return;
-    }
-    sortItems() {
-      return;
-    }
-    showMessage(title, message2) {
-      this.hideMessage();
-      this.messageContainer = $('<div id="messageContainer">');
-      if (title) {
-        const messageTitle = $('<div class="messageTitle">');
-        $(messageTitle).html(title);
-        this.messageContainer.append(messageTitle);
-      }
-      const messageBody = $('<div class="messageBody">');
-      this.messageContainer.append(messageBody);
-      $(messageBody).html(message2);
-      $(FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
-      window.scrollTo(0, 0);
-    }
-    hideMessage() {
-      $("#messageContainer").remove();
-      this.messageContainer = null;
-    }
-    getTimestampForItem(item) {
-      const postTimestampElement = $(item).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
-      const postTimeString = postTimestampElement.attr("aria-label");
-      if (!postTimeString) {
-        return null;
-      }
-      return new Date(postTimeString.replace(" at", ""));
-    }
-    loadItems(focusedPostId) {
-      this.items.length;
-      this.index;
-      const classes = ["thread-first", "thread-middle", "thread-last"];
-      let set = [];
-      $(this.items).css("opacity", "0%");
-      let itemIndex = 0;
-      let threadIndex = 0;
-      this.ignoreMouseMovement = true;
-      $(this.selector).filter(":visible").each((i, item) => {
-        $(item).attr("data-bsky-navigator-item-index", itemIndex++);
-        $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
-        const threadDiv = $(item).parent().parent();
-        if (classes.some((cls) => $(threadDiv).hasClass(cls))) {
-          set.push(threadDiv[0]);
-          if ($(threadDiv).hasClass("thread-last")) {
-            threadIndex++;
-          }
-        }
-      });
-      this.sortItems();
-      this.filterItems();
-      this.items = $(this.selector).filter(":visible");
-      this.itemStats.oldest = this.itemStats.newest = null;
-      $(this.selector).filter(":visible").each((i, item) => {
-        const timestamp = this.getTimestampForItem(item);
-        if (!this.itemStats.oldest || timestamp < this.itemStats.oldest) {
-          this.itemStats.oldest = timestamp;
-        }
-        if (!this.itemStats.newest || timestamp > this.itemStats.newest) {
-          this.itemStats.newest = timestamp;
-        }
-      });
-      this.setupIntersectionObserver();
-      this.enableFooterObserver();
-      if (this.index != null) {
-        this.applyItemStyle(this.items[this.index], true);
-      }
-      $("div.r-1mhb1uw").each(
-        (i, el) => {
-          const ancestor = $(el).parent().parent().parent().parent();
-          $(el).parent().parent().parent().addClass("item-selection-inactive");
-          if ($(ancestor).prev().find("div.item-unread").length) {
-            $(el).parent().parent().parent().addClass("item-unread");
-            $(el).parent().parent().parent().removeClass("item-read");
-          } else {
-            $(el).parent().parent().parent().addClass("item-read");
-            $(el).parent().parent().parent().removeClass("item-unread");
-          }
-        }
-      );
-      $("div.r-1mhb1uw svg").each(
-        (i, el) => {
-          $(el).find("line").attr("stroke", config.get("threadIndicatorColor"));
-          $(el).find("circle").attr("fill", config.get("threadIndicatorColor"));
-        }
-      );
-      $(this.selector).on("mouseover", this.onItemMouseOver);
-      $(this.selector).closest("div.thread").addClass("bsky-navigator-seen");
-      $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
-      this.refreshItems();
-      this.loading = false;
-      $("img#loadOlderIndicatorImage").css("opacity", "1");
-      $("img#loadOlderIndicatorImage").removeClass("toolbar-icon-pending");
-      $(this.items).css("opacity", "100%");
-      if (focusedPostId) {
-        this.jumpToPost(focusedPostId);
-      } else if (!this.jumpToPost(this.postId)) {
-        this.setIndex(0);
-      }
-      this.updateInfoIndicator();
-      this.enableFooterObserver();
-      if ($(this.items).filter(":visible").length == 0) {
-        this.showMessage("No more unread posts.", `
-<p>
-You're all caught up.
-</p>
-
-<div id="messageActions"/>
-`);
-        if ($("#loadOlderAction").length == 0) {
-          $("#messageActions").append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
-          $("#loadOlderAction > a").on("click", () => this.loadOlderItems());
-        }
-        if ($("img#loadNewerIndicatorImage").css("opacity") == "1") {
-          $("#messageActions").append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
-          $("#loadNewerAction > a").on("click", () => this.loadNewerItems());
-        }
-      } else {
-        this.hideMessage();
-      }
-      this.ignoreMouseMovement = false;
-      this.enableScrollMonitor = false;
-    }
-    refreshItems() {
-      $(this.items).each(
-        (index, item) => {
-          this.applyItemStyle(this.items[index], index == this.index);
-        }
-      );
-    }
-    updateInfoIndicator() {
-      this.itemStats.unreadCount = this.items.filter(
-        (i, item) => $(item).hasClass("item-unread")
-      ).length;
-      this.itemStats.filteredCount = this.items.filter(".filtered").length;
-      this.itemStats.shownCount = this.items.length - this.itemStats.filteredCount;
-      const index = this.itemStats.shownCount ? this.index + 1 : 0;
-      $("span#infoIndicatorText").html(`
-<div>
-<strong>${index}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
-</div>
-<div>
-${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa")} - ${format(this.itemStats.newest, "yyyy-MM-dd hh:mmaaa")}</div>` : ``}`);
-    }
-    loadNewerItems() {
-      if (!this.loadNewerButton) {
-        console.log("no button");
-        return;
-      }
-      this.loadingNew = true;
-      this.applyItemStyle(this.items[this.index], false);
-      let oldPostId = this.postIdForItem(this.items[this.index]);
-      $(this.loadNewerButton).click();
-      setTimeout(() => {
-        this.loadItems(oldPostId);
-        $("img#loadNewerIndicatorImage").css("opacity", "0.2");
-        $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
-        $("#loadNewerAction").remove();
-        this.loadingNew = false;
-      }, 1e3);
-    }
-    loadOlderItems() {
-      if (this.loading) {
-        return;
-      }
-      console.log("loading more");
-      $("img#loadOlderIndicatorImage").css("opacity", "0.2");
-      $("img#loadOlderIndicatorImage").addClass("toolbar-icon-pending");
-      this.loading = true;
-      const reversed = stateManager.state.feedSortReverse;
-      const index = reversed ? 0 : this.items.length - 1;
-      this.setIndex(index);
-      this.updateItems();
-      var indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
-      var loadElement = this.items.length ? this.items[this.items.length - 1] : $(this.selector).first()[0];
-      $(indicatorElement).closest("div.thread").addClass(stateManager.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse");
-      loadOlderItemsCallback(
-        [
-          {
-            time: performance.now(),
-            target: loadElement,
-            isIntersecting: true,
-            intersectionRatio: 1,
-            boundingClientRect: loadElement.getBoundingClientRect(),
-            intersectionRect: loadElement.getBoundingClientRect(),
-            rootBounds: document.documentElement.getBoundingClientRect()
-          }
-        ]
-      );
-    }
-    postIdFromUrl() {
-      return window.location.href.split("/")[6];
-    }
-    postIdForItem(item) {
-      try {
-        return $(item).find("a[href*='/post/']").attr("href").split("/")[4];
-      } catch (e) {
-        return this.postIdFromUrl();
-      }
-    }
-    handleFromItem(item) {
-      return $.trim($(item).find(constants$1.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1);
-    }
-    displayNameFromItem(item) {
-      return $.trim($(item).find(constants$1.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""));
-    }
-    getHandles() {
-      return Array.from(new Set(this.items.map((i, item) => this.handleFromItem(item))));
-    }
-    getDisplayNames() {
-      return Array.from(new Set(this.items.map((i, item) => this.displayNameFromItem(item))));
-    }
-    getAuthors() {
-      const authors = this.items.get().map((item) => ({
-        handle: this.handleFromItem(item),
-        displayName: this.displayNameFromItem(item)
-      })).filter(
-        (author) => author.handle.length > 0
-      );
-      const uniqueMap = /* @__PURE__ */ new Map();
-      authors.forEach((author) => {
-        uniqueMap.set(author.handle, author);
-      });
-      return Array.from(uniqueMap.values());
-    }
-    updateItems() {
-      if (this.index == 0) {
-        window.scrollTo(0, 0);
-      } else if (this.items[this.index]) {
-        this.scrollToElement($(this.items[this.index])[0]);
-      } else ;
-    }
-    setIndex(index, mark, update) {
-      let oldIndex = this.index;
-      this.enableIntersectionObserver = false;
-      if (oldIndex != null) {
-        if (mark) {
-          this.markItemRead(oldIndex, true);
-        }
-      }
-      if (index < 0 || index >= this.items.length) {
-        return;
-      }
-      this.applyItemStyle(this.items[oldIndex], false);
-      this.index = index;
-      this.applyItemStyle(this.items[this.index], true);
-      if (update) {
-        this.updateItems();
-      }
-      setTimeout(
-        () => this.enableIntersectionObserver = true,
-        500
-      );
-      return true;
-    }
-    jumpToPost(postId) {
-      for (const [i, item] of $(this.items).get().entries()) {
-        const other = this.postIdForItem(item);
-        if (postId == other) {
-          this.setIndex(i);
-          this.updateItems();
-          return true;
-        }
-      }
-      return false;
-    }
-    markItemRead(index, isRead) {
-      if (this.name == "post" && !config.get("savePostState")) {
-        return;
-      }
-      let postId = this.postIdForItem(this.items[index]);
-      if (!postId) {
-        return;
-      }
-      this.markPostRead(postId, isRead);
-      this.applyItemStyle(this.items[index], index == this.index);
-      this.updateInfoIndicator();
-    }
-    markPostRead(postId, isRead) {
-      const currentTime = (/* @__PURE__ */ new Date()).toISOString();
-      const seen = { ...stateManager.state.seen };
-      if (isRead || isRead == null && !seen[postId]) {
-        seen[postId] = currentTime;
-      } else {
-        seen[postId] = null;
-      }
-      stateManager.updateState({ seen, lastUpdated: currentTime });
-    }
-    markVisibleRead() {
-      $(this.items).each(
-        (i, item) => {
-          this.markItemRead(i, true);
-        }
-      );
-    }
-    // FIXME: move to PostItemHanler
-    handleNewThreadPage(element) {
-      console.log(`new page: ${element}`);
-      console.log(this.items.length);
-      this.loadPageObserver.disconnect();
-    }
-    jumpToPrev(mark) {
-      this.setIndex(this.index - 1, mark, true);
-      return true;
-    }
-    jumpToNext(mark) {
-      if (this.index < this.items.length) {
-        this.setIndex(this.index + 1, mark, true);
-      } else {
-        var next = $(this.items[this.index]).parent().parent().parent().next();
-        if (next && $.trim(next.text()) == "Continue thread...") {
-          console.log("click");
-          this.loadPageObserver = waitForElement(
-            this.THREAD_PAGE_SELECTOR,
-            this.handleNewThreadPage
-          );
-          console.log(this.loadPageObserver);
-          $(next).find("div").click();
-        }
-      }
-      return true;
-    }
-    handleMovementKey(event) {
-      var moved = false;
-      var mark = false;
-      this.index;
-      if (this.isPopupVisible) {
-        return;
-      }
-      this.ignoreMouseMovement = true;
-      if (this.keyState.length == 0) {
-        if (["j", "k", "ArrowDown", "ArrowUp", "J", "G"].includes(event.key)) {
-          if (["j", "ArrowDown"].indexOf(event.key) != -1) {
-            event.preventDefault();
-            moved = this.jumpToNext(event.key == "j");
-          } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
-            event.preventDefault();
-            moved = this.jumpToPrev(event.key == "k");
-          } else if (event.key == "G") {
-            moved = this.setIndex(this.items.length - 1, false, true);
-          } else if (event.key == "J") {
-            mark = true;
-            this.jumpToNextUnseenItem(mark);
-          }
-          moved = true;
-          console.log(this.postIdForItem(this.items[this.index]));
-        } else if (event.key == "g") {
-          this.keyState.push(event.key);
-        }
-      } else if (this.keyState[0] == "g") {
-        if (event.key == "g") {
-          if (this.index < this.items.length) {
-            this.setIndex(0, false, true);
-          }
-          moved = true;
-        }
-        this.keyState = [];
-      }
-      if (moved) {
-        this.lastMousePosition = null;
-      }
-    }
-    jumpToNextUnseenItem(mark) {
-      var i;
-      for (i = this.index + 1; i < this.items.length - 1; i++) {
-        var postId = this.postIdForItem(this.items[i]);
-        if (!stateManager.state.seen[postId]) {
-          break;
-        }
-      }
-      this.setIndex(i, mark);
-      this.updateItems();
-    }
-    getIndexFromItem(item) {
-      return $(".item").filter(":visible").index(item);
-    }
-    handleItemKey(event) {
-      if (this.isPopupVisible) {
-        return false;
-      } else if (event.altKey && !event.metaKey) {
-        if (event.code.startsWith("Digit")) {
-          const num = parseInt(event.code.substr(5)) - 1;
-          $("#bsky-navigator-search").autocomplete("disable");
-          if (num >= 0) {
-            const ruleName = Object.keys(stateManager.state.rules)[num];
-            console.log(ruleName);
-            $("#bsky-navigator-search").val("$" + ruleName);
-          } else {
-            $("#bsky-navigator-search").val(null);
-          }
-          $("#bsky-navigator-search").trigger("input");
-          $("#bsky-navigator-search").autocomplete("enable");
-          return event.key;
-        } else {
-          return false;
-        }
-      } else if (!event.metaKey) {
-        var item = this.items[this.index];
-        if (["o", "Enter"].includes(event.key)) {
-          $(item).click();
-        } else if (event.key == "O") {
-          var inner = $(item).find("div[aria-label^='Post by']");
-          inner.click();
-        } else if (event.key == "i") {
-          if ($(item).find(LINK_SELECTOR).length) {
-            $(item).find(LINK_SELECTOR)[0].click();
-          }
-        } else if (event.key == "m") {
-          var media = $(item).find("img[src*='feed_thumbnail']");
-          if (media.length > 0) {
-            media[0].click();
-          } else {
-            const video = $(item).find("video")[0];
-            if (video) {
-              event.preventDefault();
-              if (video.muted) {
-                video.muted = false;
-              }
-              if (video.paused) {
-                this.playVideo(video);
-              } else {
-                this.pauseVideo(video);
-              }
-            }
-          }
-        } else if (event.key == "r") {
-          var button = $(item).find("button[aria-label^='Reply']");
-          button.focus();
-          button.click();
-        } else if (event.key == "l") {
-          $(item).find("button[data-testid='likeBtn']").click();
-        } else if (event.key == "p") {
-          $(item).find("button[aria-label^='Repost']").click();
-        } else if (event.key == "P") {
-          $(item).find("button[aria-label^='Repost']").click();
-          setTimeout(function() {
-            $("div[aria-label^='Repost'][role='menuitem']").click();
-          }, 1e3);
-        } else if (event.key == ".") {
-          this.markItemRead(this.index, null);
-        } else if (event.key == "A") {
-          this.markVisibleRead();
-        } else if (event.key == "h") {
-          var back_button = $("button[aria-label^='Back' i]").filter(":visible");
-          if (back_button.length) {
-            back_button.click();
-          } else {
-            history.back(1);
-          }
-        } else if (!isNaN(parseInt(event.key))) {
-          $("div[role='tablist'] > div > div > div").filter(":visible")[parseInt(event.key) - 1].click();
-        } else {
-          return false;
-        }
-      }
-      return event.key;
-    }
-  }
-  class FeedItemHandler extends ItemHandler {
-    INDICATOR_IMAGES = {
-      loadTop: [
-        "https://www.svgrepo.com/show/502348/circleupmajor.svg"
-      ],
-      loadBottom: [
-        "https://www.svgrepo.com/show/502338/circledownmajor.svg"
-      ],
-      filter: [
-        "https://www.svgrepo.com/show/347140/mail.svg",
-        "https://www.svgrepo.com/show/347147/mail-unread.svg"
-      ],
-      sort: [
-        "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg",
-        "https://www.svgrepo.com/show/506582/sort-numeric-up.svg"
-      ],
-      prev: [
-        "https://www.svgrepo.com/show/491060/prev.svg"
-      ],
-      next: [
-        "https://www.svgrepo.com/show/491054/next.svg"
-      ],
-      preferences: [
-        "https://www.svgrepo.com/show/522235/preferences.svg",
-        "https://www.svgrepo.com/show/522236/preferences.svg"
-      ]
-    };
-    constructor(name, selector) {
-      super(name, selector);
-      this.toggleSortOrder = this.toggleSortOrder.bind(this);
-      this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
-      this.setFilter = this.setFilter.bind(this);
-    }
-    addToolbar(beforeDiv) {
-      this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
-      $(beforeDiv).before(this.toolbarDiv);
-      this.topLoadIndicator = $(`
-<div id="topLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
-</div>`);
-      $(this.toolbarDiv).append(this.topLoadIndicator);
-      this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
-      $(this.toolbarDiv).append(this.sortIndicator);
-      $("#sortIndicator").on("click", (event) => {
-        event.preventDefault();
-        this.toggleSortOrder();
-      });
-      this.filterIndicator = $(`<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`);
-      $(this.toolbarDiv).append(this.filterIndicator);
-      $("#filterIndicator").on("click", (event) => {
-        event.preventDefault();
-        this.toggleHideRead();
-      });
-      this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
-      $(this.toolbarDiv).append(this.searchField);
-      $("#bsky-navigator-search").autocomplete({
-        minLength: 0,
-        appendTo: 'div[data-testid="homeScreenFeedTabs"]',
-        source: this.onSearchAutocomplete,
-        focus: function(event, ui) {
-          event.preventDefault();
-        },
-        focus: function(event, ui) {
-          event.preventDefault();
-        },
-        select: function(event, ui) {
-          event.preventDefault();
-          let input = this;
-          let terms = splitTerms(input.value);
-          terms.pop();
-          terms.push(ui.item.value);
-          input.value = terms.join(" ") + " ";
-          $(this).autocomplete("close");
-        }
-      });
-      $("#bsky-navigator-search").on("keydown", function(event) {
-        if (event.key === "Tab") {
-          let autocompleteMenu = $(".ui-autocomplete:visible");
-          let firstItem = autocompleteMenu.children(".ui-menu-item").first();
-          if (firstItem.length) {
-            let uiItem = firstItem.data("ui-autocomplete-item");
-            $(this).autocomplete("close");
-            let terms = splitTerms(this.value);
-            terms.pop();
-            terms.push(uiItem.value);
-            this.value = terms.join(" ") + " ";
-            event.preventDefault();
-          }
-        }
-      });
-      this.onSearchUpdate = debounce((event) => {
-        console.log($(event.target).val().trim());
-        this.setFilter($(event.target).val().trim());
-        this.filterItems();
-      }, 300);
-      $(this.searchField).on("input", this.onSearchUpdate);
-      $(this.searchField).on("focus", function() {
-        $(this).autocomplete("search", "");
-      });
-      $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
-      $(this.searchField).on("autocompleteselect", function(event, ui) {
-        this.onSearchUpdate();
-      });
-      this.onSearchUpdate = this.onSearchUpdate.bind(this);
-      waitForElement(
-        "#bsky-navigator-toolbar",
-        null,
-        (div) => {
-          this.addToolbar(beforeDiv);
-        }
-      );
-    }
-    refreshToolbars() {
-      waitForElement(
-        constants$1.TOOLBAR_CONTAINER_SELECTOR,
-        (indicatorContainer) => {
-          waitForElement(
-            'div[data-testid="homeScreenFeedTabs"]',
-            (homeScreenFeedTabsDiv) => {
-              if (!$("#bsky-navigator-toolbar").length) {
-                this.addToolbar(homeScreenFeedTabsDiv);
-              }
-            }
-          );
-        }
-      );
-      waitForElement(constants$1.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
-        if (!$("#statusBar").length) {
-          this.addStatusBar(statusBarContainer);
-        }
-      });
-      waitForElement(
-        "#bsky-navigator-toolbar",
-        (div) => {
-          waitForElement(
-            "#statusBar",
-            (div2) => {
-              this.setSortIcons();
-            }
-          );
-        }
-      );
-    }
-    onSearchAutocomplete(request, response) {
-      const authors = this.getAuthors().sort((a, b) => a.handle.localeCompare(b.handle, void 0, { sensitivity: "base" }));
-      const rules = Object.keys(stateManager.state.rules);
-      let term = extractLastTerm(request.term);
-      let results = [];
-      if (term === "") {
-        results = rules.map((f) => ({ label: `$${f}`, value: `$${f}` }));
-      } else if (term.startsWith("@")) {
-        let search = term.substring(1).toLowerCase();
-        results = authors.filter(
-          (a) => a.handle.toLowerCase().includes(search) || a.displayName.toLowerCase().includes(search)
-        ).map((a) => ({
-          label: `@${a.handle} (${a.displayName})`,
-          // Show as @handle (Display Name)
-          value: `@${a.handle}`
-          // Insert only @handle
-        }));
-      } else if (term.startsWith("$")) {
-        let search = term.substring(1).toLowerCase();
-        results = rules.filter((f) => f.toLowerCase().includes(search)).map((f) => ({ label: `$${f}`, value: `$${f}` }));
-      } else {
-        results = [
-          ...authors.filter(
-            (a) => a.handle.toLowerCase().includes(term) || a.displayName.toLowerCase().includes(term)
-          ).map((a) => ({ label: `@${a.handle} (${a.displayName})`, value: `@${a.handle}` })),
-          ...rules.filter((f) => f.toLowerCase().includes(term)).map((f) => ({ label: `$${f}`, value: `$${f}` })),
-          { label: `Search: "${term}"`, value: term }
-        ];
-      }
-      response(results);
-    }
-    addStatusBar(statusBarContainer) {
-      this.statusBar = $(`<div id="statusBar"></div>`);
-      this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
-      this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
-      this.statusBarRight = $(`<div id="statusBarRight"></div>`);
-      $(this.statusBar).append(this.statusBarLeft);
-      $(this.statusBar).append(this.statusBarCenter);
-      $(this.statusBar).append(this.statusBarRight);
-      $(statusBarContainer).append(this.statusBar);
-      this.bottomLoadIndicator = $(`
-<div id="bottomLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"/>
-`);
-      $(this.statusBarLeft).append(this.bottomLoadIndicator);
-      if (!this.prevButton) {
-        this.prevButton = $(`<div id="prevButton" title="previous post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.prev[0]}"/></div>`);
-        $(this.statusBarLeft).append(this.prevButton);
-        $("#prevButton").on("click", (event) => {
-          event.preventDefault();
-          this.jumpToPrev(true);
-        });
-      }
-      if (!this.nextButton) {
-        this.nextButton = $(`<div id="nextButton" title="next post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.next[0]}"/></div>`);
-        $(this.statusBarLeft).append(this.nextButton);
-        $("#nextButton").on("click", (event) => {
-          event.preventDefault();
-          this.jumpToNext(true);
-        });
-      }
-      if (!this.infoIndicator) {
-        this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><span id="infoIndicatorText"/></div>`);
-        $(this.statusBarCenter).append(this.infoIndicator);
-      }
-      if (!this.preferencesIcon) {
-        this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
-        $(this.preferencesIcon).on("click", () => {
-          $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1]);
-          config.open();
-        });
-        $(this.statusBarRight).append(this.preferencesIcon);
-      }
-    }
-    activate() {
-      super.activate();
-      this.refreshToolbars();
-    }
-    deactivate() {
-      super.deactivate();
-    }
-    isActive() {
-      return window.location.pathname == "/";
-    }
-    toggleSortOrder() {
-      stateManager.updateState({ feedSortReverse: !stateManager.state.feedSortReverse });
-      this.setSortIcons();
-      $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen");
-      this.loadItems();
-    }
-    setSortIcons() {
-      ["top", "bottom"].forEach(
-        (bar) => {
-          const which = !stateManager.state.feedSortReverse && bar == "bottom" || stateManager.state.feedSortReverse && bar == "top" ? "Older" : "Newer";
-          const img = this.INDICATOR_IMAGES[`load${bar.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())}`][0];
-          $(`#${bar}LoadIndicator`).empty();
-          $(`#${bar}LoadIndicator`).append(
-            `
-<div id="load${which}Indicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
-      <span id="load${which}IndicatorText">
-      <a id="load${which}IndicatorLink" title="Load ${which.toLowerCase()} items"><img id="load${which}IndicatorImage" class="indicator-image" src="${img}"/></a>
-      </span>
-</div>
-`
-          );
-        }
-      );
-      $("img#loadOlderIndicatorImage").css("opacity", "1");
-      $("a#loadOlderIndicatorLink").on("click", () => this.loadOlderItems());
-    }
-    toggleHideRead() {
-      stateManager.updateState({ feedHideRead: !stateManager.state.feedHideRead });
-      $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen");
-      this.loadItems();
-    }
-    setFilter(text) {
-      this.filter = text;
-    }
-    filterItem(item, thread) {
-      if (stateManager.state.feedHideRead) {
-        if ($(item).hasClass("item-read")) {
-          return false;
-        }
-      }
-      if (this.filter && stateManager.state.rules) {
-        const activeRules = this.filter.split(/[ ]+/).map(
-          (ruleStatement) => {
-            const [_, invert, matchType, query] = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
-            return {
-              invert,
-              matchType,
-              query
-            };
-          }
-        );
-        return activeRules.map(
-          (activeRule) => {
-            var allowed = null;
-            switch (activeRule.matchType) {
-              case "$":
-                const rules = stateManager.state.rules[activeRule.query];
-                if (!rules) {
-                  console.log(`no rule ${activeRule.query}`);
-                  return null;
-                }
-                rules.forEach((rule) => {
-                  if (rule.type === "all") {
-                    allowed = rule.action === "allow";
-                  } else if (rule.type === "from" && !!this.filterAuthor(item, rule.value.substring(1))) {
-                    allowed = allowed || rule.action === "allow";
-                  } else if (rule.type === "content" && !!this.filterContent(item, rule.value)) {
-                    allowed = allowed || rule.action === "allow";
-                  }
-                });
-                break;
-              case "@":
-                allowed = !!this.filterAuthor(item, activeRule.query);
-                break;
-              case "%":
-                allowed = !!this.filterContent(item, activeRule.query);
-                break;
-              default:
-                allowed = !!this.filterAuthor(item, activeRule.query) || !!this.filterContent(item, activeRule.query);
-                break;
-            }
-            return activeRule.invert ? !allowed : allowed;
-          }
-        ).every((allowed) => allowed == true);
-      }
-      return true;
-    }
-    filterAuthor(item, author) {
-      const pattern = new RegExp(author, "i");
-      const handle = this.handleFromItem(item);
-      const displayName = this.displayNameFromItem(item);
-      if (!handle.match(pattern) && !displayName.match(pattern)) {
-        return false;
-      }
-      return true;
-    }
-    filterContent(item, query) {
-      const pattern = new RegExp(query, "i");
-      const content = $(item).find('div[data-testid="postText"]').text();
-      return content.match(pattern);
-    }
-    filterThread(thread) {
-      return $(thread).find(".item").length != $(thread).find(".filtered").length;
-    }
-    filterItems() {
-      const hideRead = stateManager.state.feedHideRead;
-      $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+hideRead]);
-      $("#filterIndicator").attr("title", `show all or unread (currently ${hideRead ? "unread" : "all"})`);
-      const parent = $(this.selector).first().closest(".thread").parent();
-      const unseenThreads = parent.find(".thread");
-      $(unseenThreads).map(
-        (i, thread) => {
-          $(thread).find(".item").each(
-            (i2, item) => {
-              if (this.filterItem(item, thread)) {
-                $(item).removeClass("filtered");
-              } else {
-                $(item).addClass("filtered");
-              }
-            }
-          );
-          if (this.filterThread(thread)) {
-            $(thread).removeClass("filtered");
-          } else {
-            $(thread).addClass("filtered");
-          }
-        }
-      );
-      this.refreshItems();
-      if (hideRead && $(this.items[this.index]).hasClass("item-read")) {
-        console.log("jumping");
-        this.jumpToNextUnseenItem();
-      }
-    }
-    sortItems() {
-      const reversed = stateManager.state.feedSortReverse;
-      $("#sortIndicatorImage").attr("src", this.INDICATOR_IMAGES.sort[+reversed]);
-      $("#sortIndicator").attr("title", `change sort order (currently ${reversed ? "forward" : "reverse"} chronological)`);
-      const parent = $(this.selector).closest(".thread").first().parent();
-      const newItems = parent.children().filter(
-        (i, item) => $(item).hasClass("thread")
-      ).get().sort(
-        (a, b) => {
-          const threadIndexA = parseInt($(a).data("bsky-navigator-thread-index"));
-          const threadIndexB = parseInt($(b).data("bsky-navigator-thread-index"));
-          const itemIndexA = parseInt($(a).find(".item").data("bsky-navigator-item-index"));
-          const itemIndexB = parseInt($(b).find(".item").data("bsky-navigator-item-index"));
-          if (threadIndexA !== threadIndexB) {
-            return reversed ? threadIndexB - threadIndexA : threadIndexA - threadIndexB;
-          }
-          return itemIndexA - itemIndexB;
-        }
-      );
-      reversed ^ this.loadingNew ? parent.prepend(newItems) : parent.children(".thread").last().next().after(newItems);
-    }
-    handleInput(event) {
-      var item = this.items[this.index];
-      if (event.key == "a") {
-        $(item).find(constants$1.PROFILE_SELECTOR)[0].click();
-      } else if (event.key == "u") {
-        this.loadNewerItems();
-      } else if (event.key == ":") {
-        this.toggleSortOrder();
-      } else if (event.key == '"') {
-        this.toggleHideRead();
-      } else if (event.key == "/") {
-        event.preventDefault();
-        $("input#bsky-navigator-search").focus();
-      } else if (event.key == ",") {
-        this.loadItems();
-      } else {
-        super.handleInput(event);
-      }
-    }
-  }
-  class PostItemHandler extends ItemHandler {
-    constructor(name, selector) {
-      super(name, selector);
-      this.indexMap = {};
-      this.handleInput = this.handleInput.bind(this);
-    }
-    get index() {
-      return this.indexMap?.[this.postId] ?? 0;
-    }
-    set index(value) {
-      this.indexMap[this.postId] = value;
-    }
-    activate() {
-      super.activate();
-      this.postId = this.postIdFromUrl();
-      this.markPostRead(this.postId, null);
-    }
-    deactivate() {
-      super.deactivate();
-    }
-    isActive() {
-      return window.location.pathname.match(/\/post\//);
-    }
-    get scrollMargin() {
-      return $('div[data-testid="postThreadScreen"] > div').eq(0).outerHeight();
-    }
-    // getIndexFromItem(item) {
-    //     return $(item).parent().parent().parent().parent().index() - 3
-    // }
-    handleInput(event) {
-      if (["o", "Enter"].includes(event.key) && !(event.altKey || event.metaKey)) {
-        var inner = $(item).find("div[aria-label^='Post by']");
-        inner.click();
-      }
-      if (super.handleInput(event)) {
-        return;
-      }
-      if (this.isPopupVisible || event.altKey || event.metaKey) {
-        return;
-      }
-      var item = this.items[this.index];
-      if (event.key == "a") {
-        var handle = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1]);
-        $(item).find("div").filter(
-          (i, el) => $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == `@${handle}`
-        )[0].click();
-      }
-    }
-  }
-  class ProfileItemHandler extends ItemHandler {
-    constructor(name, selector) {
-      super(name, selector);
-    }
-    activate() {
-      this.setIndex(0);
-      super.activate();
-    }
-    deactivate() {
-      super.deactivate();
-    }
-    isActive() {
-      return window.location.pathname.match(/^\/profile\//);
-    }
-    handleInput(event) {
-      if (super.handleInput(event)) {
-        return;
-      }
-      if (event.altKey || event.metaKey) {
-        return;
-      }
-      if (event.key == "f") {
-        $("button[data-testid='followBtn']").click();
-      } else if (event.key == "F") {
-        $("button[data-testid='unfollowBtn']").click();
-      } else if (event.key == "L") {
-        $("button[aria-label^='More options']").click();
-        setTimeout(function() {
-          $("div[data-testid='profileHeaderDropdownListAddRemoveBtn']").click();
-        }, 200);
-      } else if (event.key == "M") {
-        $("button[aria-label^='More options']").click();
-        setTimeout(function() {
-          $("div[data-testid='profileHeaderDropdownMuteBtn']").click();
-        }, 200);
-      } else if (event.key == "B") {
-        $("button[aria-label^='More options']").click();
-        setTimeout(function() {
-          $("div[data-testid='profileHeaderDropdownBlockBtn']").click();
-        }, 200);
-      } else if (event.key == "R") {
-        $("button[aria-label^='More options']").click();
-        setTimeout(function() {
-          $("div[data-testid='profileHeaderDropdownReportBtn']").click();
-        }, 200);
-      }
-    }
-  }
   const screenPredicateMap = {
     search: (element) => $(element).find('div[data-testid="searchScreen"]').length,
     notifications: (element) => $(element).find('div[data-testid="notificationsScreen"]').length,
@@ -3529,17 +3563,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     return "unknown";
   }
   function setScreen(screen) {
-    stateManager.state.screen = screen;
+    state.screen = screen;
   }
   (function() {
     var current_url = null;
     var context = null;
-    var handlers = {
-      feed: new FeedItemHandler("feed", constants$1.FEED_ITEM_SELECTOR),
-      post: new PostItemHandler("post", constants$1.POST_ITEM_SELECTOR),
-      profile: new ProfileItemHandler("profile", constants$1.FEED_ITEM_SELECTOR),
-      input: new Handler("input")
-    };
     function parseRulesConfig(configText) {
       const lines = configText.split("\n");
       const rules = {};
@@ -3570,23 +3598,22 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     function onConfigInit() {
       const stateManagerConfig = {
-        stateSyncEnabled: config.get("stateSyncEnabled"),
-        stateSyncConfig: config.get("stateSyncConfig"),
-        stateSaveTimeout: config.get("stateSaveTimeout"),
-        maxEntries: config.get("historyMax")
+        stateSyncEnabled: config$1.get("stateSyncEnabled"),
+        stateSyncConfig: config$1.get("stateSyncConfig"),
+        stateSaveTimeout: config$1.get("stateSaveTimeout"),
+        maxEntries: config$1.get("historyMax")
       };
-      StateManager.create(constants$1.STATE_KEY, DEFAULT_STATE, stateManagerConfig).then((initializedStateManager) => {
-        stateManager = initializedStateManager;
-        console.log("State initialized");
-        console.dir(stateManager.state);
-        onStateInit();
-      }).catch((error) => {
-        console.error("Failed to initialize StateManager:", error);
-      });
+      state.init(constants$1.STATE_KEY, stateManagerConfig, onStateInit);
     }
     function onStateInit() {
-      stateManager.state.rules = parseRulesConfig(config.get("rulesConfig"));
-      if (config.get("showDebuggingInfo")) {
+      var handlers2 = {
+        feed: new FeedItemHandler("feed", constants$1.FEED_ITEM_SELECTOR, config$1, state),
+        post: new PostItemHandler("post", constants$1.POST_ITEM_SELECTOR, config$1, state),
+        profile: new ProfileItemHandler("profile", constants$1.FEED_ITEM_SELECTOR, config$1, state),
+        input: new Handler("input")
+      };
+      state.rules = parseRulesConfig(config$1.get("rulesConfig"));
+      if (config$1.get("showDebuggingInfo")) {
         let appendLog = function(type, args) {
           const message2 = `[${type.toUpperCase()}] ${args.map((arg) => typeof arg === "object" ? JSON.stringify(arg, null, 2) : arg).join(" ")}`;
           $("#logContent").append(`<div style="margin-bottom: 5px;">${message2}</div>`);
@@ -3618,62 +3645,62 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
            opacity: 0%;
         }
 
-        ${config.get("hideLoadNewButton") ? `
+        ${config$1.get("hideLoadNewButton") ? `
             ${constants$1.LOAD_NEW_BUTTON_SELECTOR} {
                 display: none;
             }
             ` : ``}
 
         .item {
-            ${config.get("posts")}
+            ${config$1.get("posts")}
         }
 
         .item-selection-active {
-            ${config.get("selectionActive")}
+            ${config$1.get("selectionActive")}
         }
 
         .item-selection-inactive {
-            ${config.get("selectionInactive")}
+            ${config$1.get("selectionInactive")}
         }
 
         @media (prefers-color-scheme:light){
             .item-unread {
-                ${config.get("unreadPosts")};
-                ${config.get("unreadPostsLightMode")};
+                ${config$1.get("unreadPosts")};
+                ${config$1.get("unreadPostsLightMode")};
             }
 
             .item-read {
-                ${config.get("readPosts")};
-                ${config.get("readPostsLightMode")};
+                ${config$1.get("readPosts")};
+                ${config$1.get("readPostsLightMode")};
             }
 
         }
 
         @media (prefers-color-scheme:dark){
             .item-unread {
-                ${config.get("unreadPosts")};
-                ${config.get("unreadPostsDarkMode")};
+                ${config$1.get("unreadPosts")};
+                ${config$1.get("unreadPostsDarkMode")};
             }
 
             .item-read {
-                ${config.get("readPosts")};
-                ${config.get("readPostsDarkMode")};
+                ${config$1.get("readPosts")};
+                ${config$1.get("readPostsDarkMode")};
             }
         }
 
         .thread-first {
-            margin-top: ${config.get("threadMargin")};
+            margin-top: ${config$1.get("threadMargin")};
             border-bottom: none;
         }
 
         .thread-last {
-            margin-bottom: ${config.get("threadMargin")};
+            margin-bottom: ${config$1.get("threadMargin")};
             border-top: none;
         }
 
         div.r-m5arl1 {
-            width: ${config.get("threadIndicatorWidth")}px;
-            background-color: ${config.get("threadIndicatorColor")} !important;
+            width: ${config$1.get("threadIndicatorWidth")}px;
+            background-color: ${config$1.get("threadIndicatorColor")} !important;
         }
 
 `;
@@ -3695,16 +3722,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         context = ctx;
         console.log(`context: ${context}`);
-        for (const [name, handler] of Object.entries(handlers)) {
+        for (const [name, handler] of Object.entries(handlers2)) {
           handler.deactivate();
         }
-        if (handlers[context]) {
-          handlers[context].activate();
+        if (handlers2[context]) {
+          handlers2[context].activate();
         }
       }
       function setContextFromUrl() {
         current_url = window.location.href;
-        for (const [name, handler] of Object.entries(handlers)) {
+        for (const [name, handler] of Object.entries(handlers2)) {
           if (handler.isActive()) {
             setContext(name);
             break;
@@ -3712,11 +3739,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
       function onFocus(e) {
-        var target = e.target;
-        if (typeof target.tagName === "undefined") {
+        var target2 = e.target;
+        if (typeof target2.tagName === "undefined") {
           return false;
         }
-        var targetTagName = target.tagName.toLowerCase();
+        var targetTagName = target2.tagName.toLowerCase();
         console.log(`onFocus: ${targetTagName}`);
         switch (targetTagName) {
           case "input":
@@ -3724,7 +3751,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             setContext("input");
             break;
           case "div":
-            let maybeTiptap = $(target).closest(".tiptap");
+            let maybeTiptap = $(target2).closest(".tiptap");
             if (maybeTiptap.length) {
               waitForElement(".tiptap", () => null, () => onBlur({ "target": maybeTiptap[0] }));
               setContext("input");
@@ -3737,11 +3764,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
       function onBlur(e) {
-        var target = e.target;
-        if (typeof target.tagName === "undefined") {
+        var target2 = e.target;
+        if (typeof target2.tagName === "undefined") {
           return false;
         }
-        var targetTagName = target.tagName.toLowerCase();
+        var targetTagName = target2.tagName.toLowerCase();
         console.log(`onBlur: ${targetTagName}`);
         console.log(e.target);
         switch (targetTagName) {
@@ -3750,7 +3777,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             setContextFromUrl();
             break;
           case "div":
-            if ($(target).closest(".tiptap").length) {
+            if ($(target2).closest(".tiptap").length) {
               setContextFromUrl();
             }
             break;
@@ -3770,17 +3797,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       startMonitor();
       setContextFromUrl();
-      stateManager.state.mobileView = false;
+      state.mobileView = false;
       waitForElement(
         'button[aria-label="Open drawer menu"]',
         (el) => {
-          stateManager.state.mobileView = true;
+          state.mobileView = true;
           console.log("found");
           console.log($("#bsky-navigator-toolbar").outerHeight());
           $("div.r-sa2ff0").css("padding-top", $("#bsky-navigator-toolbar").outerHeight() + "px");
         },
         (el) => {
-          stateManager.state.mobileView = false;
+          state.mobileView = false;
           $("div.r-sa2ff0").css("padding-top", "0px");
         }
       );
@@ -3791,13 +3818,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       <h2>Configuration</h2>
     </div>
   `;
-    config = new GM_config({
+    config$1 = new GM_config({
       id: "GM_config",
       title: configTitleDiv,
       fields: CONFIG_FIELDS,
       "events": {
         "init": onConfigInit,
-        "save": () => config.close(),
+        "save": () => config$1.close(),
         "close": () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
       },
       "css": `
@@ -3829,7 +3856,7 @@ h2 {
           this.callback = callback;
           this.options = options;
           this.enabled = true;
-          loadOlderItemsCallback = this.callback;
+          this.callback;
           this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
             const filteredEntries = entries.filter(
               (entry) => !($(entry.target).hasClass("thread") || $(entry.target).hasClass("item") || $(entry.target).find('div[data-testid^="feedItem"]').length || $(entry.target).next()?.attr("style") == "height: 32px;")
@@ -3854,11 +3881,11 @@ h2 {
         overrideBehavior(entries, observer) {
         }
         // Proxy all methods to the real IntersectionObserver
-        observe(target) {
-          this.realObserver.observe(target);
+        observe(target2) {
+          this.realObserver.observe(target2);
         }
-        unobserve(target) {
-          this.realObserver.unobserve(target);
+        unobserve(target2) {
+          this.realObserver.unobserve(target2);
         }
         disconnect() {
           this.realObserver.disconnect();
@@ -3871,7 +3898,7 @@ h2 {
       const originalPlay = HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play = function() {
         const isUserInitiated = this.dataset.allowPlay === "true";
-        if (isUserInitiated || config.get("videoPreviewPlayback") == "Play all") {
+        if (isUserInitiated || config$1.get("videoPreviewPlayback") == "Play all") {
           console.log("Allowing play:", this);
           delete this.dataset.allowPlay;
           return originalPlay.apply(this, arguments);

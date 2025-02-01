@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-31.2
+// @version      2025-01-31.3
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -571,20 +571,24 @@ class StateManager {
     }
 }
 
-function waitForElement(selector, onAdd, onRemove) {
+function waitForElement(selector, onAdd, onRemove, onChange, ignoreExisting) {
     const processExistingElements = () => {
         const elements = document.querySelectorAll(selector);
         elements.forEach(el => onAdd(el));
     };
 
-    processExistingElements();
+    if (onAdd && !ignoreExisting) {
+        processExistingElements();
+    }
 
     const observer = new MutationObserver(mutations => {
         mutations.forEach(mutation => {
-            mutation.addedNodes.forEach(node => {
-                if (node.matches && node.matches(selector)) onAdd(node);
-                node.querySelectorAll?.(selector).forEach(el => onAdd(el));
-            });
+            if (onAdd) {
+                mutation.addedNodes.forEach(node => {
+                    if (node.matches && node.matches(selector)) onAdd(node);
+                    node.querySelectorAll?.(selector).forEach(el => onAdd(el));
+                });
+            }
 
             if (onRemove) {
                 mutation.removedNodes.forEach(node => {
@@ -592,14 +596,26 @@ function waitForElement(selector, onAdd, onRemove) {
                     node.querySelectorAll?.(selector).forEach(el => onRemove(el));
                 });
             }
+
+            if(onChange) {
+                if (mutation.type === "attributes") {
+                    const attributeName = mutation.attributeName;
+                    const oldValue = mutation.oldValue;
+                    const newValue = mutation.target.getAttribute(attributeName);
+
+                    if (oldValue !== newValue) {
+                        onChange(attributeName, oldValue, newValue, mutation.target);
+                    }
+                }
+            }
         });
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: !!onChange });
     return observer;
 }
 
-function observeChanges(target, callback) {
+function observeChanges(target, callback, subtree) {
     const observer = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
             if (mutation.type === "attributes") {
@@ -616,9 +632,9 @@ function observeChanges(target, callback) {
     });
 
     observer.observe(target, {
-        attributes: true, // Observe attribute changes
-        attributeOldValue: true, // Capture old values of attributes
-        subtree: true, // Observe changes in child elements as well
+        attributes: true,
+        attributeOldValue: true,
+        subtree: !!subtree,
     });
 
     return observer;
@@ -976,8 +992,6 @@ class ItemHandler extends Handler {
             if (entry.isIntersecting) {
                 console.log("footer")
                 const target = entry.target;
-                //this.setIndex(this.getIndexFromItem(target))
-                // this.index = this.getIndexFromItem(target)
                 this.disableFooterObserver();
                 this.loadOlderItems();
             }
@@ -1008,44 +1022,26 @@ class ItemHandler extends Handler {
         this.isPopupVisible = false;
     }
 
-    get scrollMargin2() {
-        const els = $('div[data-testid="HomeScreen"] > div > div[style*="removed-body-scroll-bar-size"]');
-        console.log(els);
-        var margin = 0;
-        els.each(
-            (i, el) => {margin += $(el).outerHeight()}
-        );
-        // const margin = el.outerHeight();
-        console.log(margin);
-        return margin;
-    }
-
     get scrollMargin() {
         var margin;
         var el = $('div[data-testid="HomeScreen"] > div > div').eq(2);
-        if ($(el).attr('style')?.includes('removed-body-scroll-bar-size')) {
-            margin = el.outerHeight();
-        } else {
-            el = $('div[data-testid="HomeScreen"] > div > div').first().first();
+        if(stateManager.state.mobileView) {
+            el = el.first().first();
             if(this.index) {
                 var transform = el[0].style.transform
-                // console.log("Transform updated:", targetElement.style.transform);
-                // Place additional handling code here
                 var translateY = transform.indexOf("(") == -1 ? 0 : parseInt(transform.split("(")[1].split("px")[0])
-                console.log(`translateY ${translateY}`);
-                // const translateY = translateY(-128px)
-                console.log(el);
                 margin = el.outerHeight() + translateY;
             } else {
                 margin = el.outerHeight();
             }
+
+        } else {
+            margin = el.outerHeight();
         }
-        // console.log(margin);
         return margin;
     }
 
     applyItemStyle(element, selected) {
-        //console.log(`applyItemStyle: ${$(element).parent().parent().index()-1}, ${this.index}`)
         $(element).addClass("item");
 
         const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first()
@@ -1077,7 +1073,7 @@ class ItemHandler extends Handler {
             const bannerDiv = $(element).find("div.item-banner").first().length
                   ? $(element).find("div.item-banner").first()
                   : $(element).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
-            $(bannerDiv).html(`<strong>${this.getIndexFromItem(element)+1}</strong>/<strong>${this.items.length}</strong>`);
+            $(bannerDiv).html(`<strong>${this.getIndexFromItem(element)+1}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
 
         }
 
@@ -1091,11 +1087,8 @@ class ItemHandler extends Handler {
                         ( (config.get("videoPreviewPlayback") == "Play selected") && !selected)
                 ) {
                     this.pauseVideo(video);
-                    // video.pause();
-                } else if ((config.get("videoPreviewPlayback") == "Play selected") && selected)
-                    {
+                } else if ((config.get("videoPreviewPlayback") == "Play selected") && selected) {
                         this.playVideo(video);
-                        // video.play();
                     }
             }
         )
@@ -1114,8 +1107,6 @@ class ItemHandler extends Handler {
             if (threadIndicator.length == 1) {
                 var parent = threadIndicator.parents().has(avatarDiv).first();
                 var children = parent.find("*");
-                // console.log(element, children.index(threadIndicator), children.index(avatarDiv))
-                // first and last posts have 1 indicator, middle posts have 2
                 if (children.index(threadIndicator) < children.index(avatarDiv)) {
                     $(element).parent().parent().addClass("thread-last")
                 } else {
@@ -1125,30 +1116,23 @@ class ItemHandler extends Handler {
                 $(element).parent().parent().addClass("thread-middle")
             }
 
-            // console.log(element, threadIndicator.css("flex-grow"), threadIndicator.css("margin-top"), threadIndicator.css("margin-bottom"))
         } else {
             $(element).parent().parent().addClass(["thread-first", "thread-middle", "thread-last"])
         }
 
         if (selected)
         {
-            // $(element).parent().parent().addClass("thread-selection-active")
-            // $(element).parent().parent().removeClass("thread-selection-inactive")
             $(element).addClass("item-selection-active")
             $(element).removeClass("item-selection-inactive")
-            // $(element).css(SELECTED_POST_CSS)
         }
         else
         {
-            // $(element).parent().parent().removeClass("thread-selection-active")
-            // $(element).parent().parent().addClass("thread-selection-inactive")
             $(element).removeClass("item-selection-active")
             $(element).addClass("item-selection-inactive")
-//            $(element).css(ITEM_CSS)
         }
 
         var postId = this.postIdForItem($(element))
-        //console.log(`postId: ${postId}`)
+
         if (postId != null && stateManager.state.seen[postId])
         {
             $(element).addClass("item-read")
@@ -1266,21 +1250,15 @@ class ItemHandler extends Handler {
         const classes = ["thread-first", "thread-middle", "thread-last"];
         let set = [];
 
-        // this.deactivate()
         $(this.items).css("opacity", "0%")
-        // const newItems = $(this.selector).not("div[data-bsky-navigator-item-index]")
-        // console.log(newItems.length)
-        // const newItemsOrig = newItems.get()
         let itemIndex = 0;
         let threadIndex = 0;
 
         this.ignoreMouseMovement = true;
-        console.log("loadItems");
-        // debugger;
+        // console.log("loadItems");
         $(this.selector).filter(":visible").each( (i, item) => {
             // console.log(item);
             $(item).attr("data-bsky-navigator-item-index", itemIndex++);
-            // $(item).attr("data-bsky-navigator-item-index", stateManager.state.feedSortReverse ? itemIndex++: itemIndex--);
             $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
 
             const threadDiv = $(item).parent().parent()
@@ -1289,7 +1267,6 @@ class ItemHandler extends Handler {
                 set.push(threadDiv[0]); // Collect the div
                 if ($(threadDiv).hasClass("thread-last")) {
                     threadIndex++;
-                    // stateManager.state.feedSortReverse ? threadIndex++ : threadIndex--;
                 }
             }
         });
@@ -1430,17 +1407,10 @@ this.itemStats.oldest
         }
         this.loadingNew = true;
         this.applyItemStyle(this.items[this.index], false)
-        // // this.setIndex(0)
-        // //this.updateItems()
-        // $(document).find(LOAD_NEW_BUTTON_SELECTOR).click()
         let oldPostId = this.postIdForItem(this.items[this.index])
         $(this.loadNewerButton).click()
         setTimeout( () => {
             this.loadItems(oldPostId);
-            // if (!this.jumpToPost(oldPostId)) {
-            //     console.log("set 0");
-            //     this.setIndex(0);
-            // }
             $('img#loadNewerIndicatorImage').css("opacity", "0.2");
             $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
             $('#loadNewerAction').remove();
@@ -1694,22 +1664,6 @@ this.itemStats.oldest
         if (moved) {
             this.lastMousePosition = null;
         }
-        // {
-        //     if (mark)
-        //     {
-        //         this.markItemRead(old_index, true)
-        //     }
-        //     this.applyItemStyle(this.items[old_index], false)
-        //     this.applyItemStyle(this.items[this.index], true)
-        //     this.updateItems()
-        //     // to avoid mouseover getting triggered by keyboard movement
-        //     this.lastMousePosition = null
-        //     this.ignoreMouseMovement = false
-        //     return event.key
-        // } else {
-        //     this.ignoreMouseMovement = false
-        //     return null
-        // }
     }
 
     jumpToNextUnseenItem(mark) {
@@ -1845,10 +1799,10 @@ this.itemStats.oldest
 class FeedItemHandler extends ItemHandler {
 
     INDICATOR_IMAGES = {
-        loadNewer: [
+        loadTop: [
             "https://www.svgrepo.com/show/502348/circleupmajor.svg"
         ],
-        loadOlder: [
+        loadBottom: [
             "https://www.svgrepo.com/show/502338/circledownmajor.svg"
         ],
         filter: [
@@ -1878,109 +1832,133 @@ class FeedItemHandler extends ItemHandler {
         this.setFilter = this.setFilter.bind(this);
     }
 
-    addToolbars(container) {
-        waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
+    addToolbar(beforeDiv) {
 
-            if (!this.toolbarDiv) {
-                const logoDiv = $(container).find('div[style^="flex: 1 1 0%;"]')
-                this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
-                $(homeScreenFeedTabsDiv).before(this.toolbarDiv);
-                if (!this.loadNewerIndicator) {
-                    this.loadNewerIndicator = $(`
-<div id="loadNewerIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
-    <span id="loadNewerIndicatorText">
-    <a id="loadNewerIndicatorLink" title="Load newer items"><img id="loadNewerIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.loadNewer[0]}"/></a>
-    </span>
+        // debugger;
+        this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
+        $(beforeDiv).before(this.toolbarDiv);
+
+        this.topLoadIndicator = $(`
+<div id="topLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
 </div>`);
-                    $(this.toolbarDiv).append(this.loadNewerIndicator);
-                }
+        $(this.toolbarDiv).append(this.topLoadIndicator);
 
-                if (!this.sortIndicator) {
-                    this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
-                    $(this.toolbarDiv).append(this.sortIndicator);
-                    $('#sortIndicator').on("click", (event) => {
-                        event.preventDefault();
-                        this.toggleSortOrder();
-                    });
-                }
+        this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
+        $(this.toolbarDiv).append(this.sortIndicator);
+        $('#sortIndicator').on("click", (event) => {
+            event.preventDefault();
+            this.toggleSortOrder();
+        });
 
-                if (!this.filterIndicator) {
-                    this.filterIndicator = $(`<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`);
-                    $(this.toolbarDiv).append(this.filterIndicator);
-                    $('#filterIndicator').on("click", (event) => {
-                        event.preventDefault();
-                        this.toggleHideRead();
-                    });
-                }
+        this.filterIndicator = $(`<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`);
+        $(this.toolbarDiv).append(this.filterIndicator);
+        $('#filterIndicator').on("click", (event) => {
+            event.preventDefault();
+            this.toggleHideRead();
+        });
 
-                if (!this.searchField) {
-                    this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
+        this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
 
-                    $(this.toolbarDiv).append(this.searchField);
-                    $("#bsky-navigator-search").autocomplete({
-                        minLength: 0,
-                        appendTo: 'div[data-testid="homeScreenFeedTabs"]',
-                        source: this.onSearchAutocomplete,
-                        focus: function(event, ui) {
-                            event.preventDefault(); // Prevent autocomplete from auto-filling input on hover
-                        },
-                        focus: function(event, ui) {
-                            event.preventDefault();
-                        },
-                        select: function(event, ui) {
-                            event.preventDefault(); // Prevent default selection behavior
+        $(this.toolbarDiv).append(this.searchField);
+        $("#bsky-navigator-search").autocomplete({
+            minLength: 0,
+            appendTo: 'div[data-testid="homeScreenFeedTabs"]',
+            source: this.onSearchAutocomplete,
+            focus: function(event, ui) {
+                event.preventDefault(); // Prevent autocomplete from auto-filling input on hover
+            },
+            focus: function(event, ui) {
+                event.preventDefault();
+            },
+            select: function(event, ui) {
+                event.preventDefault(); // Prevent default selection behavior
 
-                            let input = this;
-                            let terms = splitTerms(input.value);
-                            terms.pop(); // Remove the last typed term
-                            terms.push(ui.item.value); // Add the selected suggestion
-                            input.value = terms.join(" ") + " "; // Ensure a space after selection
+                let input = this;
+                let terms = splitTerms(input.value);
+                terms.pop(); // Remove the last typed term
+                terms.push(ui.item.value); // Add the selected suggestion
+                input.value = terms.join(" ") + " "; // Ensure a space after selection
 
-                            $(this).autocomplete("close"); // Close the dropdown after selection
-                        }
+                $(this).autocomplete("close"); // Close the dropdown after selection
+            }
 
-                    });
+        });
 
-                    $("#bsky-navigator-search").on("keydown", function(event) {
-                        if (event.key === "Tab") {
-                            let autocompleteMenu = $(".ui-autocomplete:visible");
-                            let firstItem = autocompleteMenu.children(".ui-menu-item").first();
+        $("#bsky-navigator-search").on("keydown", function(event) {
+            if (event.key === "Tab") {
+                let autocompleteMenu = $(".ui-autocomplete:visible");
+                let firstItem = autocompleteMenu.children(".ui-menu-item").first();
 
-                            if (firstItem.length) {
-                                let uiItem = firstItem.data("ui-autocomplete-item"); // Get the first suggested item
-                                $(this).autocomplete("close"); // Close autocomplete after selection
+                if (firstItem.length) {
+                    let uiItem = firstItem.data("ui-autocomplete-item"); // Get the first suggested item
+                    $(this).autocomplete("close"); // Close autocomplete after selection
 
-                                let terms = splitTerms(this.value);
-                                terms.pop(); // Remove the last typed term
-                                terms.push(uiItem.value); // Add the selected suggestion
-                                this.value = terms.join(" ") + " "; // Ensure a space after selection
-                                event.preventDefault();
-                            }
-                        }
-                    });
-
-                    this.onSearchUpdate = debounce( (event) => {
-                        console.log($(event.target).val().trim());
-                        this.setFilter($(event.target).val().trim());
-                        this.filterItems();
-                    }, 300);
-                    $(this.searchField).on("input", this.onSearchUpdate);
-                    $(this.searchField).on("focus", function() {
-                        $(this).autocomplete("search", ""); // Trigger search with an empty string
-                    });
-                    // Trigger when autocomplete modifies the input
-                    $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
-
-                    // Also trigger when an item is selected from autocomplete
-                    $(this.searchField).on("autocompleteselect", function(event, ui) {
-                        this.onSearchUpdate();
-                    });
-
-                    // $(this.searchField).on("input", this.onSearchUpdate);
-                    this.onSearchUpdate = this.onSearchUpdate.bind(this)
+                    let terms = splitTerms(this.value);
+                    terms.pop(); // Remove the last typed term
+                    terms.push(uiItem.value); // Add the selected suggestion
+                    this.value = terms.join(" ") + " "; // Ensure a space after selection
+                    event.preventDefault();
                 }
             }
         });
+
+        this.onSearchUpdate = debounce( (event) => {
+            console.log($(event.target).val().trim());
+            this.setFilter($(event.target).val().trim());
+            this.filterItems();
+        }, 300);
+        $(this.searchField).on("input", this.onSearchUpdate);
+        $(this.searchField).on("focus", function() {
+            $(this).autocomplete("search", ""); // Trigger search with an empty string
+        });
+        // Trigger when autocomplete modifies the input
+        $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
+
+        // Also trigger when an item is selected from autocomplete
+        $(this.searchField).on("autocompleteselect", function(event, ui) {
+            this.onSearchUpdate();
+        });
+
+        // $(this.searchField).on("input", this.onSearchUpdate);
+        this.onSearchUpdate = this.onSearchUpdate.bind(this)
+
+        waitForElement(
+            "#bsky-navigator-toolbar",
+            null,
+            (div) => {
+                this.addToolbar(beforeDiv);
+            }
+        )
+
+    }
+
+    refreshToolbars() {
+        waitForElement(
+            TOOLBAR_CONTAINER_SELECTOR, (indicatorContainer) => {
+                waitForElement(
+                    'div[data-testid="homeScreenFeedTabs"]',
+                    (homeScreenFeedTabsDiv) => {
+                        if (!$('#bsky-navigator-toolbar').length) {
+                            this.addToolbar(homeScreenFeedTabsDiv);
+                        }
+                    }
+                );
+            }
+        )
+
+        waitForElement(STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
+            if (!$('#statusBar').length) {
+                this.addStatusBar(statusBarContainer);
+            }
+        });
+        waitForElement(
+            '#bsky-navigator-toolbar',
+            (div) => {
+                waitForElement(
+                    '#statusBar', (div) => { this.setSortIcons() }
+                );
+            }
+        );
     }
 
     onSearchAutocomplete(request, response) {
@@ -2019,84 +1997,64 @@ class FeedItemHandler extends ItemHandler {
         response(results);
     }
 
-    addStatusBar() {
+    addStatusBar(statusBarContainer) {
         // console.log($('div[style="min-height: 100vh; padding-top: 0px;"]'));
-        waitForElement(STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
-            if (!this.statusBar) {
-                this.statusBar = $(`<div id="statusBar"></div>`);
-                this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
-                this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
-                this.statusBarRight = $(`<div id="statusBarRight"></div>`);
-                $(this.statusBar).append(this.statusBarLeft);
-                $(this.statusBar).append(this.statusBarCenter);
-                $(this.statusBar).append(this.statusBarRight);
-                $(statusBarContainer).append(this.statusBar);
+        this.statusBar = $(`<div id="statusBar"></div>`);
+        this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
+        this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
+        this.statusBarRight = $(`<div id="statusBarRight"></div>`);
+        $(this.statusBar).append(this.statusBarLeft);
+        $(this.statusBar).append(this.statusBarCenter);
+        $(this.statusBar).append(this.statusBarRight);
+        $(statusBarContainer).append(this.statusBar);
 
-                if (!this.loadOlderIndicator) {
-                    this.loadOlderIndicator = $(`
-<div id="loadOlderIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
-    <span id="loadOlderIndicatorText">
-    <a id="loadOlderIndicatorLink" title="Load older items"><img id="loadOlderIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.loadOlder[0]}"/></a>
-    </span>
-</div>`);
-                    $(this.statusBarLeft).append(this.loadOlderIndicator);
-                    $('a#loadOlderIndicatorLink').on("click", () => this.loadOlderItems())
-                }
+        this.bottomLoadIndicator = $(`
+<div id="bottomLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"/>
+`);
+        $(this.statusBarLeft).append(this.bottomLoadIndicator);
 
-                if (!this.prevButton) {
-                    this.prevButton = $(`<div id="prevButton" title="previous post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.prev[0]}"/></div>`);
-                    $(this.statusBarLeft).append(this.prevButton);
-                    $('#prevButton').on("click", (event) => {
-                        event.preventDefault();
-                        this.jumpToPrev(true);
-                    });
-                }
+        if (!this.prevButton) {
+            this.prevButton = $(`<div id="prevButton" title="previous post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.prev[0]}"/></div>`);
+            $(this.statusBarLeft).append(this.prevButton);
+            $('#prevButton').on("click", (event) => {
+                event.preventDefault();
+                this.jumpToPrev(true);
+            });
+        }
 
-                if (!this.nextButton) {
-                    this.nextButton = $(`<div id="nextButton" title="next post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.next[0]}"/></div>`);
-                    $(this.statusBarLeft).append(this.nextButton);
-                    $('#nextButton').on("click", (event) => {
-                        event.preventDefault();
-                        this.jumpToNext(true);
-                    });
-                }
+        if (!this.nextButton) {
+            this.nextButton = $(`<div id="nextButton" title="next post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.next[0]}"/></div>`);
+            $(this.statusBarLeft).append(this.nextButton);
+            $('#nextButton').on("click", (event) => {
+                event.preventDefault();
+                this.jumpToNext(true);
+            });
+        }
 
 
-                if (!this.infoIndicator) {
-                    this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><span id="infoIndicatorText"/></div>`);
-                    $(this.statusBarCenter).append(this.infoIndicator);
-                }
+        if (!this.infoIndicator) {
+            this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><span id="infoIndicatorText"/></div>`);
+            $(this.statusBarCenter).append(this.infoIndicator);
+        }
 
-                if (!this.preferencesIcon) {
-                    this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
-                    $(this.preferencesIcon).on("click", () => {
-                        $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1])
-                        config.open()
-                    });
-                    $(this.statusBarRight).append(this.preferencesIcon);
-                }
+        if (!this.preferencesIcon) {
+            this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
+            $(this.preferencesIcon).on("click", () => {
+                $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1])
+                config.open()
+            });
+            $(this.statusBarRight).append(this.preferencesIcon);
+        }
 
-            }
-            this.swapSortIcons();
-
-        });
     }
 
     activate() {
-        super.activate()
-        const indicatorContainer = $(TOOLBAR_CONTAINER_SELECTOR).first();
-        (
-            indicatorContainer
-                ? this.addToolbars(indicatorContainer[0])
-                : waitForElement(
-                    TOOLBAR_CONTAINER_SELECTOR, (indicatorContainer) => this.addToolbars(indicatorContainer)
-                )
-        )
-        this.addStatusBar();
+        super.activate();
+        this.refreshToolbars();
     }
 
     deactivate() {
-        super.deactivate()
+        super.deactivate();
     }
 
     isActive() {
@@ -2105,30 +2063,33 @@ class FeedItemHandler extends ItemHandler {
 
     toggleSortOrder() {
         stateManager.updateState({feedSortReverse: !stateManager.state.feedSortReverse});
-        this.swapSortIcons();
+        this.setSortIcons();
         $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen");
         this.loadItems();
     }
 
-    swapSortIcons() {
-        const older = $("div#loadOlderIndicator");
-        const newer = $("div#loadNewerIndicator");
-        const swap = (
-            !stateManager.state.feedSortReverse && older.closest("div#bsky-navigator-toolbar").length
-            ||
-            stateManager.state.feedSortReverse && newer.closest("div#bsky-navigator-toolbar").length
+    setSortIcons() {
+        ["top", "bottom"].forEach(
+            (bar) => {
+                const which = (
+                    !stateManager.state.feedSortReverse && bar == "bottom"
+                    ||
+                    stateManager.state.feedSortReverse && bar == "top"
+                ) ? "Older" : "Newer";
+                const img = this.INDICATOR_IMAGES[`load${bar.toLowerCase().replace(/\b\w/g, char => char.toUpperCase())}`][0];
+                $(`#${bar}LoadIndicator`).empty();
+                $(`#${bar}LoadIndicator`).append(`
+<div id="load${which}Indicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
+      <span id="load${which}IndicatorText">
+      <a id="load${which}IndicatorLink" title="Load ${which.toLowerCase()} items"><img id="load${which}IndicatorImage" class="indicator-image" src="${img}"/></a>
+      </span>
+</div>
+`
+                );
+            }
         )
-        if (swap) {
-            const tempDiv = $("<div>").hide();
-            older.before(tempDiv);
-            newer.before(older);
-            tempDiv.before(newer);
-            tempDiv.remove();
-            const olderImg = older.find("img").attr("src");
-            const newerImg = newer.find("img").attr("src");
-            older.find("img").attr("src", newerImg);
-            newer.find("img").attr("src", olderImg);
-        }
+        $('img#loadOlderIndicatorImage').css("opacity", "1");
+        $('a#loadOlderIndicatorLink').on("click", () => this.loadOlderItems());
     }
 
     toggleHideRead() {
@@ -2163,7 +2124,6 @@ class FeedItemHandler extends ItemHandler {
 
             return activeRules.map(
                 (activeRule) => {
-                    console.log(activeRule);
                     var allowed = null;
                     switch (activeRule.matchType) {
                         case '$':
@@ -2173,7 +2133,7 @@ class FeedItemHandler extends ItemHandler {
                                 return null;
                             }
                             rules.forEach(rule => {
-                                console.log(rule, allowed);
+                                // console.log(rule, allowed);
                                 if (rule.type === "all") {
                                     allowed = rule.action === "allow";
                                 } else if (rule.type === "from" && !!this.filterAuthor(item, rule.value.substring(1))) {
@@ -3055,7 +3015,29 @@ function setScreen(screen) {
         startMonitor()
         setContextFromUrl()
 
-
+        // set up observer to detect if mobile interface is active
+        stateManager.state.mobileView = false;
+        const viewportChangeObserver = waitForElement(
+            'button[aria-label="Open drawer menu"]',
+            (el) => {
+                stateManager.state.mobileView = true;
+                console.log("found");
+                console.log($('#bsky-navigator-toolbar').outerHeight());
+                $("div.r-sa2ff0").css("padding-top", $('#bsky-navigator-toolbar').outerHeight() + "px");
+                // waitForElement(
+                //     '#bsky-navigator-toolbar',
+                //     (toolbar) => {
+                //         console.log("found");
+                //         console.log($(toolbar).outerHeight());
+                //         $("div.r-sa2ff0").css("padding-top", $(toolbar).outerHeight());
+                //     }
+                // );
+            },
+            (el) => {
+                stateManager.state.mobileView = false;
+                $("div.r-sa2ff0").css("padding-top", "0px");
+            }
+        );
     }
 
         const configTitleDiv = `

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bluesky Navigator
 // @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-01-31.3
+// @version      2025-01-31.4
 // @author       https://bsky.app/profile/tonyc.org
 // @namespace    https://tonyc.org/
 // @match        https://bsky.app/*
@@ -813,6 +813,7 @@ class ItemHandler extends Handler {
             rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
             threshold: Array.from({ length: 101 }, (_, i) => i / 100)
         });
+        this.setupIntersectionObserver();
 
         this.footerIntersectionObserver = new IntersectionObserver(this.onFooterIntersection, {
             root: null, // Observing within the viewport
@@ -953,9 +954,20 @@ class ItemHandler extends Handler {
         video.pause(); // Call the overridden play method
     }
 
+    setupIntersectionObserver(entries) {
+
+        if(this.intersectionObserver) {
+            $(this.items).each(
+                (i, item) => {
+                    this.intersectionObserver.observe($(item)[0]);
+                }
+            )
+        }
+    }
 
     onIntersection(entries) {
 
+        console.log("onIntersection");
         if(!this.enableIntersectionObserver || this.loading || this.loadingNew) {
             return;
         }
@@ -1288,13 +1300,7 @@ class ItemHandler extends Handler {
             }
         });
 
-        if(this.intersectionObserver) {
-            $(this.items).each(
-                (i, item) => {
-                    this.intersectionObserver.observe($(item)[0]);
-                }
-            )
-        }
+        this.setupIntersectionObserver();
 
         // this.activate()
         this.enableFooterObserver();
@@ -1688,12 +1694,8 @@ this.itemStats.oldest
     handleItemKey(event) {
 
         if(this.isPopupVisible) {
-            return
-        }
-
-        if (event.metaKey) {
-            return;
-        } else if (event.altKey) {
+            return false;
+        } else if (event.altKey && !event.metaKey) {
             if(event.code.startsWith("Digit")) {
                 const num = parseInt(event.code.substr(5))-1;
                 $("#bsky-navigator-search").autocomplete("disable");
@@ -1707,6 +1709,9 @@ this.itemStats.oldest
                 }
                 $("#bsky-navigator-search").trigger("input");
                 $("#bsky-navigator-search").autocomplete("enable");
+                return event.key;
+            } else {
+                return false;
             }
         } else {
             // console.log(event.key)

@@ -2241,7 +2241,7 @@ class FeedItemHandler extends ItemHandler {
                         ? threadIndexB - threadIndexA
                         : threadIndexA - threadIndexB;
                 }
-                return itemIndexB - itemIndexA;
+                return itemIndexA - itemIndexB;
             }
         );
         // debugger;

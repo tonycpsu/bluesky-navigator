@@ -1314,6 +1314,7 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   addStatusBar(statusBarContainer) {
+    // debugger;
     // console.log($('div[style="min-height: 100vh; padding-top: 0px;"]'));
     this.statusBar = $(`<div id="statusBar"></div>`);
     this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);

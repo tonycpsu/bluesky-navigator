@@ -3,7 +3,7 @@ const constants = {
   URL_MONITOR_INTERVAL: 500,
   STATE_KEY: "bluesky_state",
   TOOLBAR_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] > div > div > div:first-child',
-  STATUS_BAR_CONTAINER_SELECTOR: 'div[style="background-color: rgb(255, 255, 255),"]',
+  STATUS_BAR_CONTAINER_SELECTOR: 'div.r-sa2ff0',
   LOAD_NEW_BUTTON_SELECTOR: "button[aria-label^='Load new']",
   get LOAD_NEW_INDICATOR_SELECTOR() {
     return `${constants.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;

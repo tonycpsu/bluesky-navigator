@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.2+228.bbeb5a23-dev
+// @version     1.0.2+229.5724fad8+230.4e112cc6
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -81,6 +81,7 @@
     CLEARSKY_BLOCKED_ALL_CSS: { "background-color": "#ff8080" },
     CLEARSKY_BLOCKED_RECENT_CSS: { "background-color": "#cc4040" }
   };
+  const style = 'div#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.5);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    background-color: rgb(255, 255, 255);\n    width: 100%;\n    height: 32px;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\nimg#loadNewerIndicatorImage {\n    opacity: 0.2;\n}\n\nimg#loadOlderIndicatorImage {\n    opacity: 0.2;\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\nspan#infoIndicatorText {\n    font-size: 0.8em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.5;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.5;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.5s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.5s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n';
   const millisecondsInWeek = 6048e5;
   const millisecondsInDay = 864e5;
   const constructFromSymbol = Symbol.for("constructDateFrom");
@@ -1567,6 +1568,7 @@
     }
     return matched[1].replace(doubleQuoteRegExp, "'");
   }
+  GM_addStyle(style);
   let debounceTimeout;
   let stateManager;
   let config;
@@ -3525,8 +3527,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const stylesheet = `
 
         /* Feed itmes may be sorted, so we hide them visually and show them later */
-
-
         div[data-testid$="FeedPage"] ${constants.FEED_ITEM_SELECTOR} {
            opacity: 0%;
         }
@@ -3562,20 +3562,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
 
         }
 
-        div.item-banner {
-            position: absolute;
-            top: 0;
-            left: 0;
-            font-family: "Lucida Console", "Courier New", monospace;
-            font-size: 0.7em;
-            z-index: 10;
-            color: black;
-            text-shadow: 1px 1px rgba(255, 255, 255,0.8);
-            background: rgba(128, 192, 192, 0.3);
-            padding: 3px;
-            border-radius: 4px;
-        }
-
         @media (prefers-color-scheme:dark){
             .item-unread {
                 ${config.get("unreadPosts")};
@@ -3588,11 +3574,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             }
         }
 
-
-        .thread-first {
-            border-bottom: none;
-        }
-
         .thread-first {
             margin-top: ${config.get("threadMargin")};
             border-bottom: none;
@@ -3603,288 +3584,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             border-top: none;
         }
 
-        .preferences-icon-overlay {
-            background-color: #cccccc;
-            cursor: pointer;
-            justify-content: center;
-            z-index: 1000;
-        }
-
-        .preferences-icon-overlay-sync-ready {
-            background-color: #d5f5e3;
-        }
-
-        .preferences-icon-overlay-sync-pending {
-            animation: fadeInOut 1s infinite;
-            background-color: #f9e79f;
-        }
-
-        .preferences-icon-overlay-sync-success {
-            background-color: #2ecc71;
-        }
-
-        .preferences-icon-overlay-sync-failure {
-            background-color: #ec7063 ;
-        }
-
-        .preferences-icon-overlay span {
-            color: white;
-            font-size: 16px;
-        }
-
         div.r-m5arl1 {
             width: ${config.get("threadIndicatorWidth")}px;
             background-color: ${config.get("threadIndicatorColor")} !important;
         }
 
-        div#bsky-navigator-toolbar {
-            display: flex;
-            flex-direction: row;
-            position: sticky;
-            top: 0;
-            align-items: center;
-            background-color: rgb(255, 255, 255);
-            width: 100%;
-            height: 32px;
-            border-bottom: 1px solid rgb(192, 192, 192);
-        }
-
-        .toolbar-icon {
-            margin: 0px;
-            width: 24px;
-            height: 24px;
-            padding: 0px 8px;
-            flex: 1;
-        }
-
-        .toolbar-icon-pending {
-            animation: fadeInOut 1s infinite !important;
-        }
-
-        .indicator-image {
-            width: 24px;
-            height: 24px;
-        }
-
-        img#loadNewerIndicatorImage {
-            opacity: 0.2;
-        }
-
-        img#loadOlderIndicatorImage {
-            opacity: 0.2;
-        }
-
-        div#infoIndicator {
-            flex: 3;
-        }
-
-        span#infoIndicatorText {
-            font-size: 0.8em;
-        }
-
-        #bsky-navigator-search {
-            flex: 1;
-            margin: 0px 8px;
-            z-index: 10;
-        }
-
-        .ui-autocomplete {
-            position: absolute !important;
-            background-color: white !important;
-            border: 1px solid #ccc !important;
-            z-index: 1000 !important;
-            max-height: 200px !important;
-            overflow-y: auto !important;
-            list-style-type: none !important;
-            padding: 2px !important;
-        }
-
-        .ui-menu-item {
-            padding: 2px !important;
-            font-size: 14px !important;
-            color: black !important;
-        }
-
-        /* Highlight hovered item */
-        .ui-state-active {
-            background-color: #007bff !important;
-            color: white !important;
-        }
-
-        @media only screen and not (max-width: 800px) {
-            div#statusBar {
-                display: flex;
-                width: 100%;
-                height: 32px;
-                margin-left: auto;
-                margin-right: auto;
-                max-width: 600px;
-                position: sticky;
-                z-index: 10;
-                align-items: center;
-                background-color: rgb(255, 255, 255);
-                bottom: 0;
-                font-size: 1em;
-                padding: 1px;
-                border-top: 1px solid rgb(192, 192, 192);
-            }
-        }
-
-        @media only screen and (max-width: 800px) {
-            div#statusBar {
-                display: flex;
-                width: 100%;
-                height: 32px;
-                margin-left: auto;
-                margin-right: auto;
-                max-width: 600px;
-                position: sticky;
-                z-index: 10;
-                align-items: center;
-                background-color: rgb(255, 255, 255);
-                bottom: 58px;
-                font-size: 1em;
-                padding: 1px;
-            }
-        }
-
-        div#statusBarLeft {
-            display: flex;
-            flex: 1;
-            text-align: left;
-            padding: 1px;
-        }
-
-        div#statusBarCenter {
-            display: flex;
-            flex: 1 1 auto;
-            text-align: center;
-            padding: 1px;
-        }
-
-        div#statusBarRight {
-            display: flex;
-            flex: 1;
-            text-align: right;
-            padding: 1px;
-        }
-
-        @keyframes oscillateBorderBottom {
-            0% {
-                border-bottom-color: rgba(0, 128, 0, 1);
-            }
-            50% {
-                border-bottom-color: rgba(0, 128, 0, 0.3);
-            }
-            100% {
-                border-bottom-color: rgba(0, 128, 0, 1);
-            }
-        }
-
-        @keyframes oscillateBorderTop {
-            0% {
-                border-top-color: rgba(0, 128, 0, 1);
-            }
-            50% {
-                border-top-color: rgba(0, 128, 0, 0.3);
-            }
-            100% {
-                border-top-color: rgba(0, 128, 0, 1);
-            }
-        }
-
-        @keyframes fadeInOut {
-          0% {
-            opacity: 0.5;
-          }
-          50% {
-            opacity: 1;
-          }
-          100% {
-            opacity: 0.5;
-          }
-        }
-
-        div.loading-indicator-reverse {
-            border-bottom: 10px solid;
-            animation: oscillateBorderBottom 0.5s infinite;
-        }
-
-        div.loading-indicator-forward {
-            border-top: 10px solid;
-            animation: oscillateBorderTop 0.5s infinite;
-        }
-
-        .filtered {
-            display: none !important;
-        }
-
-        div#logContainer {
-            width: 100%;
-            bottom: 0;
-            pointer-events: none;
-            height: 25%;
-            position: fixed;
-            background: rgba(0, 0, 0, 0.5);
-            color: #e0e0e0;
-            font-family: monospace;
-            font-size: 12px;
-            z-index: 10000;
-            padding: 10px;
-            padding-top: 30px;
-        }
-
-        #logHeader {
-                    position: relative;
-                    width: 100%;
-                    background: #333;
-                    color: white;
-                    padding: 5px 10px;
-                    box-sizing: border-box;
-            pointer-events: auto;
-        }
-
-        button#clearLogs {
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100px;
-                    background: red;
-                    color: white;
-                    border: none;
-                    padding: 2px 5px;
-                    cursor: pointer;
-        }
-
-        #logContent {
-                    overflow-y: auto;
-                    max-height: calc(70% - 30px);
-                    padding: 10px;
-                    box-sizing: border-box;
-        }
-
-        #messageContainer {
-            inset: 5%;
-            padding: 10px;
-        }
-
-        .messageTitle {
-            font-size: 1.5em;
-            text-align: center;
-        }
-
-        .messageBody {
-            font-size: 1.2em;
-        }
-
-        #messageActions a {
-            color: #8040c0;
-        }
-
-        #messageActions a:hover {
-            text-decoration: underline;
-            cursor: pointer;
-        }
 `;
       const styleElement = document.createElement("style");
       styleElement.type = "text/css";

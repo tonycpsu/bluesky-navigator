@@ -1,6 +1,9 @@
 // main.js
 
 import constants from './constants.js'
+import style from './style.css?raw'
+
+GM_addStyle(style)
 
 const range = (start, stop, step = 1) =>
   Array.from({ length: Math.ceil((stop - start) / step) }, (_, i) => start + i * step);
@@ -2499,8 +2502,6 @@ function setScreen(screen) {
         const stylesheet = `
 
         /* Feed itmes may be sorted, so we hide them visually and show them later */
-
-
         div[data-testid$="FeedPage"] ${constants.FEED_ITEM_SELECTOR} {
            opacity: 0%;
         }
@@ -2542,20 +2543,6 @@ function setScreen(screen) {
 
         }
 
-        div.item-banner {
-            position: absolute;
-            top: 0;
-            left: 0;
-            font-family: "Lucida Console", "Courier New", monospace;
-            font-size: 0.7em;
-            z-index: 10;
-            color: black;
-            text-shadow: 1px 1px rgba(255, 255, 255,0.8);
-            background: rgba(128, 192, 192, 0.3);
-            padding: 3px;
-            border-radius: 4px;
-        }
-
         @media (prefers-color-scheme:dark){
             .item-unread {
                 ${config.get("unreadPosts")};
@@ -2568,11 +2555,6 @@ function setScreen(screen) {
             }
         }
 
-
-        .thread-first {
-            border-bottom: none;
-        }
-
         .thread-first {
             margin-top: ${config.get("threadMargin")};
             border-bottom: none;
@@ -2583,288 +2565,11 @@ function setScreen(screen) {
             border-top: none;
         }
 
-        .preferences-icon-overlay {
-            background-color: #cccccc;
-            cursor: pointer;
-            justify-content: center;
-            z-index: 1000;
-        }
-
-        .preferences-icon-overlay-sync-ready {
-            background-color: #d5f5e3;
-        }
-
-        .preferences-icon-overlay-sync-pending {
-            animation: fadeInOut 1s infinite;
-            background-color: #f9e79f;
-        }
-
-        .preferences-icon-overlay-sync-success {
-            background-color: #2ecc71;
-        }
-
-        .preferences-icon-overlay-sync-failure {
-            background-color: #ec7063 ;
-        }
-
-        .preferences-icon-overlay span {
-            color: white;
-            font-size: 16px;
-        }
-
         div.r-m5arl1 {
             width: ${config.get("threadIndicatorWidth")}px;
             background-color: ${config.get("threadIndicatorColor")} !important;
         }
 
-        div#bsky-navigator-toolbar {
-            display: flex;
-            flex-direction: row;
-            position: sticky;
-            top: 0;
-            align-items: center;
-            background-color: rgb(255, 255, 255);
-            width: 100%;
-            height: 32px;
-            border-bottom: 1px solid rgb(192, 192, 192);
-        }
-
-        .toolbar-icon {
-            margin: 0px;
-            width: 24px;
-            height: 24px;
-            padding: 0px 8px;
-            flex: 1;
-        }
-
-        .toolbar-icon-pending {
-            animation: fadeInOut 1s infinite !important;
-        }
-
-        .indicator-image {
-            width: 24px;
-            height: 24px;
-        }
-
-        img#loadNewerIndicatorImage {
-            opacity: 0.2;
-        }
-
-        img#loadOlderIndicatorImage {
-            opacity: 0.2;
-        }
-
-        div#infoIndicator {
-            flex: 3;
-        }
-
-        span#infoIndicatorText {
-            font-size: 0.8em;
-        }
-
-        #bsky-navigator-search {
-            flex: 1;
-            margin: 0px 8px;
-            z-index: 10;
-        }
-
-        .ui-autocomplete {
-            position: absolute !important;
-            background-color: white !important;
-            border: 1px solid #ccc !important;
-            z-index: 1000 !important;
-            max-height: 200px !important;
-            overflow-y: auto !important;
-            list-style-type: none !important;
-            padding: 2px !important;
-        }
-
-        .ui-menu-item {
-            padding: 2px !important;
-            font-size: 14px !important;
-            color: black !important;
-        }
-
-        /* Highlight hovered item */
-        .ui-state-active {
-            background-color: #007bff !important;
-            color: white !important;
-        }
-
-        @media only screen and not (max-width: 800px) {
-            div#statusBar {
-                display: flex;
-                width: 100%;
-                height: 32px;
-                margin-left: auto;
-                margin-right: auto;
-                max-width: 600px;
-                position: sticky;
-                z-index: 10;
-                align-items: center;
-                background-color: rgb(255, 255, 255);
-                bottom: 0;
-                font-size: 1em;
-                padding: 1px;
-                border-top: 1px solid rgb(192, 192, 192);
-            }
-        }
-
-        @media only screen and (max-width: 800px) {
-            div#statusBar {
-                display: flex;
-                width: 100%;
-                height: 32px;
-                margin-left: auto;
-                margin-right: auto;
-                max-width: 600px;
-                position: sticky;
-                z-index: 10;
-                align-items: center;
-                background-color: rgb(255, 255, 255);
-                bottom: 58px;
-                font-size: 1em;
-                padding: 1px;
-            }
-        }
-
-        div#statusBarLeft {
-            display: flex;
-            flex: 1;
-            text-align: left;
-            padding: 1px;
-        }
-
-        div#statusBarCenter {
-            display: flex;
-            flex: 1 1 auto;
-            text-align: center;
-            padding: 1px;
-        }
-
-        div#statusBarRight {
-            display: flex;
-            flex: 1;
-            text-align: right;
-            padding: 1px;
-        }
-
-        @keyframes oscillateBorderBottom {
-            0% {
-                border-bottom-color: rgba(0, 128, 0, 1);
-            }
-            50% {
-                border-bottom-color: rgba(0, 128, 0, 0.3);
-            }
-            100% {
-                border-bottom-color: rgba(0, 128, 0, 1);
-            }
-        }
-
-        @keyframes oscillateBorderTop {
-            0% {
-                border-top-color: rgba(0, 128, 0, 1);
-            }
-            50% {
-                border-top-color: rgba(0, 128, 0, 0.3);
-            }
-            100% {
-                border-top-color: rgba(0, 128, 0, 1);
-            }
-        }
-
-        @keyframes fadeInOut {
-          0% {
-            opacity: 0.5;
-          }
-          50% {
-            opacity: 1;
-          }
-          100% {
-            opacity: 0.5;
-          }
-        }
-
-        div.loading-indicator-reverse {
-            border-bottom: 10px solid;
-            animation: oscillateBorderBottom 0.5s infinite;
-        }
-
-        div.loading-indicator-forward {
-            border-top: 10px solid;
-            animation: oscillateBorderTop 0.5s infinite;
-        }
-
-        .filtered {
-            display: none !important;
-        }
-
-        div#logContainer {
-            width: 100%;
-            bottom: 0;
-            pointer-events: none;
-            height: 25%;
-            position: fixed;
-            background: rgba(0, 0, 0, 0.5);
-            color: #e0e0e0;
-            font-family: monospace;
-            font-size: 12px;
-            z-index: 10000;
-            padding: 10px;
-            padding-top: 30px;
-        }
-
-        #logHeader {
-                    position: relative;
-                    width: 100%;
-                    background: #333;
-                    color: white;
-                    padding: 5px 10px;
-                    box-sizing: border-box;
-            pointer-events: auto;
-        }
-
-        button#clearLogs {
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100px;
-                    background: red;
-                    color: white;
-                    border: none;
-                    padding: 2px 5px;
-                    cursor: pointer;
-        }
-
-        #logContent {
-                    overflow-y: auto;
-                    max-height: calc(70% - 30px);
-                    padding: 10px;
-                    box-sizing: border-box;
-        }
-
-        #messageContainer {
-            inset: 5%;
-            padding: 10px;
-        }
-
-        .messageTitle {
-            font-size: 1.5em;
-            text-align: center;
-        }
-
-        .messageBody {
-            font-size: 1.2em;
-        }
-
-        #messageActions a {
-            color: #8040c0;
-        }
-
-        #messageActions a:hover {
-            text-decoration: underline;
-            cursor: pointer;
-        }
 `
 
         // Inject the style into the page

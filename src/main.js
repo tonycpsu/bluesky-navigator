@@ -1,27 +1,3 @@
-// ==UserScript==
-// @name         Bluesky Navigator
-// @description  Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version      2025-02-01.2
-// @author       https://bsky.app/profile/tonyc.org
-// @namespace    https://tonyc.org/
-// @match        https://bsky.app/*
-// @require https://code.jquery.com/jquery-3.7.1.min.js
-// @require https://code.jquery.com/ui/1.12.1/jquery-ui.min.js
-// @require https://openuserjs.org/src/libs/sizzle/GM_config.js
-// @require https://cdn.jsdelivr.net/npm/date-fns@4.1.0/cdn.min.js
-// @downloadURL  https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
-// @updateURL    https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
-// @connect clearsky.services
-// @connect surreal.cloud
-// @grant GM_info
-// @grant GM_setValue
-// @grant GM_getValue
-// @grant GM.getValue
-// @grant GM.setValue
-// @grant GM_xmlhttpRequest
-// @grant GM.xmlhttpRequest
-// ==/UserScript==
-
 const DEFAULT_HISTORY_MAX = 5000;
 const DEFAULT_STATE_SAVE_TIMEOUT = 5000;
 const URL_MONITOR_INTERVAL = 500;
@@ -43,8 +19,8 @@ const ITEM_SCROLL_MARGIN = 100;
 const range = (start, stop, step = 1) =>
   Array.from({ length: Math.ceil((stop - start) / step) }, (_, i) => start + i * step);
 
+import * as dateFns from "date-fns";
 let debounceTimeout;
-let $ = window.jQuery;
 let stateManager;
 let config;
 let enableLoadMoreItems = false;
@@ -1234,7 +1210,6 @@ class ItemHandler extends Handler {
         $(messageBody).html(message);
         $(FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
         window.scrollTo(0, 0);
-
 
     }
 

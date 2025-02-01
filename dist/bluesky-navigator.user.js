@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.2+229.5724fad8+230.4e112cc6
+// @version     1.0.7+231.df3a320d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -64,24 +64,426 @@
 
 (function() {
   "use strict";
-  const constants = {
-    DEFAULT_HISTORY_MAX: 5e3,
+  const constants$1 = {
     URL_MONITOR_INTERVAL: 500,
     STATE_KEY: "bluesky_state",
     TOOLBAR_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] > div > div > div:first-child',
     STATUS_BAR_CONTAINER_SELECTOR: 'div[style="background-color: rgb(255, 255, 255),"]',
     LOAD_NEW_BUTTON_SELECTOR: "button[aria-label^='Load new']",
     get LOAD_NEW_INDICATOR_SELECTOR() {
-      return `${constants.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
+      return `${constants$1.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
     },
     FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
     POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
     PROFILE_SELECTOR: 'a[aria-label="View profile"]',
-    CLEARSKY_LIST_REFRESH_INTERVAL: 60 * 60 * 24,
     CLEARSKY_BLOCKED_ALL_CSS: { "background-color": "#ff8080" },
     CLEARSKY_BLOCKED_RECENT_CSS: { "background-color": "#cc4040" }
   };
-  const style = 'div#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.5);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    background-color: rgb(255, 255, 255);\n    width: 100%;\n    height: 32px;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\nimg#loadNewerIndicatorImage {\n    opacity: 0.2;\n}\n\nimg#loadOlderIndicatorImage {\n    opacity: 0.2;\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\nspan#infoIndicatorText {\n    font-size: 0.8em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.5;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.5;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.5s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.5s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n';
+  function debounce$1(func, delay) {
+    return function(...args) {
+      clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => func.apply(this, args), delay);
+    };
+  }
+  function waitForElement$1(selector, onAdd, onRemove, onChange, ignoreExisting) {
+    const processExistingElements = () => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach((el) => onAdd(el));
+    };
+    if (onAdd && !ignoreExisting) {
+      processExistingElements();
+    }
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (onAdd) {
+          mutation.addedNodes.forEach((node) => {
+            if (node.matches && node.matches(selector)) onAdd(node);
+            node.querySelectorAll?.(selector).forEach((el) => onAdd(el));
+          });
+        }
+        if (onRemove) {
+          mutation.removedNodes.forEach((node) => {
+            if (node.matches && node.matches(selector)) onRemove(node);
+            node.querySelectorAll?.(selector).forEach((el) => onRemove(el));
+          });
+        }
+        if (onChange) {
+          if (mutation.type === "attributes") {
+            const attributeName = mutation.attributeName;
+            const oldValue = mutation.oldValue;
+            const newValue = mutation.target.getAttribute(attributeName);
+            if (oldValue !== newValue) {
+              onChange(attributeName, oldValue, newValue, mutation.target);
+            }
+          }
+        }
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: !!onChange });
+    return observer;
+  }
+  function observeChanges(target, callback, subtree) {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === "attributes") {
+          const attributeName = mutation.attributeName;
+          const oldValue = mutation.oldValue;
+          const newValue = mutation.target.getAttribute(attributeName);
+          if (oldValue !== newValue) {
+            callback(attributeName, oldValue, newValue, mutation.target);
+          }
+        }
+      });
+    });
+    observer.observe(target, {
+      attributes: true,
+      attributeOldValue: true,
+      subtree: !!subtree
+    });
+    return observer;
+  }
+  function onVisibilityChange(selector, callback) {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === "attributes") {
+          const target = mutation.target;
+          const isVisible = $(target).is(":visible");
+          callback($(target), isVisible);
+        }
+      });
+    });
+    $(selector).each((_, el) => {
+      observer.observe(el, {
+        attributes: true,
+        // Observe attribute changes
+        attributeFilter: ["style", "class"],
+        // Filter for relevant attributes
+        subtree: false
+        // Do not observe children
+      });
+    });
+    return observer;
+  }
+  function observeVisibilityChange$1($element, callback) {
+    const target = $element[0];
+    const observer = new MutationObserver(() => {
+      const isVisible = $element.is(":visible");
+      callback(isVisible);
+    });
+    observer.observe(target, {
+      attributes: true,
+      childList: true,
+      subtree: false
+      // Only observe the target element
+    });
+    return () => observer.disconnect();
+  }
+  function splitTerms$1(input) {
+    return input.split(/\s+/).filter((term) => term.length > 0);
+  }
+  function extractLastTerm$1(input) {
+    let terms = splitTerms$1(input);
+    return terms.length > 0 ? terms[terms.length - 1] : "";
+  }
+  const utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+    __proto__: null,
+    debounce: debounce$1,
+    extractLastTerm: extractLastTerm$1,
+    observeChanges,
+    observeVisibilityChange: observeVisibilityChange$1,
+    onVisibilityChange,
+    splitTerms: splitTerms$1,
+    waitForElement: waitForElement$1
+  }, Symbol.toStringTag, { value: "Module" }));
+  const DEFAULT_HISTORY_MAX = 5e3;
+  class StateManager {
+    constructor(key, defaultState = {}, config2 = {}) {
+      this.key = key;
+      this.config = config2;
+      this.listeners = [];
+      this.debounceTimeout = null;
+      this.maxEntries = this.config.maxEntries || DEFAULT_HISTORY_MAX;
+      this.state = {};
+      this.isLocalStateDirty = false;
+      this.localSaveTimeout = null;
+      this.remoteSyncTimeout = null;
+      this.handleBlockListResponse = this.handleBlockListResponse.bind(this);
+      window.addEventListener("beforeunload", () => this.saveStateImmediately());
+    }
+    static async create(key, defaultState = {}, config2 = {}) {
+      const instance = new StateManager(key, defaultState, config2);
+      await instance.initializeState(defaultState);
+      return instance;
+    }
+    async initializeState(defaultState) {
+      this.state = await this.loadState(defaultState);
+      this.ensureBlockState();
+      this.updateBlockList();
+    }
+    ensureBlockState() {
+      if (!this.state.blocks) {
+        this.state.blocks = {
+          all: { updated: null, handles: [] },
+          recent: { updated: null, handles: [] }
+        };
+      }
+    }
+    setSyncStatus(status, title) {
+      const overlay = $(".preferences-icon-overlay");
+      if (!overlay) {
+        console.log("no overlay");
+        return;
+      }
+      $(overlay).attr("title", `sync: ${status} ${title || ""}`);
+      for (const s of ["ready", "pending", "success", "failure"]) {
+        $(overlay).removeClass(`preferences-icon-overlay-sync-${s}`);
+      }
+      $(overlay).addClass(`preferences-icon-overlay-sync-${status}`);
+      if (status == "success") {
+        setTimeout(() => this.setSyncStatus("ready"), 3e3);
+      }
+    }
+    /**
+     * Executes a query against the remote database.
+     * @param {string} query - The query string to execute.
+     * @param {string} successStatus - The status to set on successful execution (e.g., "success").
+     * @returns {Promise<Object>} - Resolves with the parsed result of the query.
+     */
+    async executeRemoteQuery(query, successStatus = "success") {
+      const { url, namespace = "bluesky_navigator", database = "state", username, password } = JSON.parse(this.config.stateSyncConfig);
+      return new Promise((resolve, reject) => {
+        GM_xmlhttpRequest({
+          method: "POST",
+          url: `${url.replace(/\/$/, "")}/sql`,
+          headers: {
+            "Accept": "application/json",
+            "Authorization": "Basic " + btoa(`${username}:${password}`)
+          },
+          data: `USE NS ${namespace} DB ${database}; ${query}`,
+          onload: (response) => {
+            try {
+              if (response.status !== 200) {
+                throw new Error(response.statusText);
+              }
+              const result = JSON.parse(response.responseText)[1]?.result[0];
+              this.setSyncStatus(successStatus);
+              resolve(result);
+            } catch (error) {
+              console.error("Error executing query:", error.message);
+              this.setSyncStatus("failure", error.message);
+              reject(error);
+            }
+          },
+          onerror: (error) => {
+            console.error("Network error executing query:", error.message);
+            this.setSyncStatus("failure", error.message);
+            reject(error);
+          }
+        });
+      });
+    }
+    async getRemoteStateUpdated() {
+      const sinceResult = await this.executeRemoteQuery(`SELECT lastUpdated FROM state:current;`);
+      sinceResult["lastUpdated"];
+      return sinceResult["lastUpdated"];
+    }
+    /**
+     * Loads state from storage or initializes with the default state.
+     */
+    async loadState(defaultState) {
+      try {
+        const savedState = JSON.parse(GM_getValue(this.key, "{}"));
+        if (this.config.stateSyncEnabled) {
+          const remoteState = await this.loadRemoteState(this.state.lastUpdated);
+          return remoteState ? { ...defaultState, ...remoteState } : { ...defaultState, ...savedState };
+        } else {
+          return { ...defaultState, ...savedState };
+        }
+      } catch (error) {
+        console.error("Error loading state, using defaults:", error);
+        return defaultState;
+      }
+    }
+    async loadRemoteState(since) {
+      try {
+        console.log("Loading remote state...");
+        this.setSyncStatus("pending");
+        const lastUpdated = await this.getRemoteStateUpdated();
+        if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
+          console.log(`Remote state is newer: ${since} < ${lastUpdated}`);
+          const result = await this.executeRemoteQuery("SELECT * FROM state:current;");
+          const stateObj = result || {};
+          delete stateObj.id;
+          console.log("Remote state loaded successfully.");
+          return stateObj;
+        } else {
+          console.log(`Local state is newer: ${since} >= ${lastUpdated}`);
+          return null;
+        }
+      } catch (error) {
+        console.error("Failed to load remote state:", error);
+        return {};
+      }
+    }
+    /**
+     * Updates the state and schedules a chained local and remote save.
+     */
+    updateState(newState) {
+      this.state = { ...this.state, ...newState };
+      this.state.lastUpdated = (/* @__PURE__ */ new Date()).toISOString();
+      this.isLocalStateDirty = true;
+      this.scheduleLocalSave();
+    }
+    /**
+     * Schedules a local state save after a 1-second delay.
+     * Triggers remote sync only if local state is saved.
+     */
+    scheduleLocalSave() {
+      clearTimeout(this.localSaveTimeout);
+      this.localSaveTimeout = setTimeout(() => {
+        const shouldSyncRemote = this.isLocalStateDirty;
+        this.saveLocalState().then(() => {
+          if (shouldSyncRemote) {
+            this.scheduleRemoteSync();
+          }
+        });
+      }, this.config.stateSaveTimeout);
+    }
+    /**
+     * Saves the local state and resolves a promise.
+     * @returns {Promise<void>}
+     */
+    async saveLocalState() {
+      console.log("Saving local state...");
+      this.cleanupState();
+      GM_setValue(this.key, JSON.stringify(this.state));
+      console.log("Local state saved.");
+      this.isLocalStateDirty = false;
+      this.notifyListeners();
+    }
+    /**
+     * Schedules a remote state synchronization after a longer delay.
+     */
+    scheduleRemoteSync() {
+      if (!this.config.stateSyncEnabled) {
+        console.log("sync disabled");
+        return;
+      }
+      clearTimeout(this.remoteSyncTimeout);
+      this.remoteSyncTimeout = setTimeout(() => {
+        this.saveRemoteState(this.state.lastUpdated);
+      }, this.config.stateSyncTimeout);
+    }
+    /**
+     * Saves the remote state if needed.
+     */
+    async saveRemoteState(since) {
+      const { url, namespace = "bluesky_navigator", database = "state", username, password } = JSON.parse(this.config.stateSyncConfig);
+      try {
+        const lastUpdated = await this.getRemoteStateUpdated();
+        if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
+          console.log("Not saving because remote state is newer.");
+          return;
+        }
+        console.log("Saving remote state...");
+        this.setSyncStatus("pending");
+        await this.executeRemoteQuery(
+          `UPSERT state:current MERGE {${JSON.stringify(this.state).slice(1, -1)}, created_at: time::now()}`,
+          "success"
+        );
+      } catch (error) {
+        console.error("Failed to save remote state:", error);
+      }
+    }
+    /**
+     * Immediately saves both local and remote states.
+     */
+    saveStateImmediately(saveLocal = true, saveRemote = false) {
+      if (saveLocal) {
+        this.saveLocalState();
+      }
+      if (saveRemote) {
+        this.saveRemoteState(this.state.lastUpdated);
+      }
+    }
+    /**
+     * Keeps only the most recent N entries in the state.
+     */
+    cleanupState() {
+      if (this.state.seen) {
+        this.state.seen = this.keepMostRecentValues(this.state.seen, this.maxEntries);
+      }
+    }
+    /**
+     * Utility to keep only the most recent N entries in an object.
+     * Assumes values are ISO date strings for sorting.
+     * @param {Object} obj - The object to prune.
+     * @param {number} maxEntries - The maximum number of entries to retain.
+     */
+    keepMostRecentValues(obj, maxEntries) {
+      const entries = Object.entries(obj);
+      entries.sort(([, dateA], [, dateB]) => new Date(dateB) - new Date(dateA));
+      return Object.fromEntries(entries.slice(0, maxEntries));
+    }
+    /**
+     * Resets state to the default value.
+     * @param {Object} defaultState - The default state object.
+     */
+    resetState(defaultState = {}) {
+      this.state = defaultState;
+    }
+    /**
+     * Registers a listener for state changes.
+     * @param {function} callback - The listener function to invoke on state change.
+     */
+    addListener(callback) {
+      if (typeof callback === "function") {
+        this.listeners.push(callback);
+      }
+    }
+    /**
+     * Notifies all registered listeners of a state change.
+     */
+    notifyListeners() {
+      this.listeners.forEach((callback) => callback(this.state));
+    }
+    handleBlockListResponse(response, responseKey, stateKey) {
+      var jsonResponse = $.parseJSON(response.response);
+      try {
+        this.state.blocks[stateKey].handles = jsonResponse.data[responseKey].map(
+          (entry) => entry.Handle
+        );
+        this.state.blocks[stateKey].updated = Date.now();
+      } catch (error) {
+        console.warn("couldn't fetch block list");
+      }
+    }
+    updateBlockList() {
+      const blockConfig = {
+        all: {
+          url: "https://api.clearsky.services/api/v1/anon/lists/fun-facts",
+          responseKey: "blocked"
+        },
+        recent: {
+          url: "https://api.clearsky.services/api/v1/anon/lists/funer-facts",
+          responseKey: "blocked24"
+        }
+      };
+      for (const [stateKey, cfg] of Object.entries(blockConfig)) {
+        if (this.state.blocks[stateKey].updated == null || Date.now() + constants.CLEARSKY_LIST_REFRESH_INTERVAL > this.state.blocks[stateKey].updated) {
+          GM_xmlhttpRequest({
+            method: "GET",
+            url: cfg.url,
+            headers: {
+              Accept: "application/json"
+            },
+            onload: (response) => this.handleBlockListResponse(response, cfg.responseKey, stateKey)
+          });
+        }
+      }
+    }
+  }
+  const style = '/* style.css */\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.5);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    background-color: rgb(255, 255, 255);\n    width: 100%;\n    height: 32px;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\nimg#loadNewerIndicatorImage {\n    opacity: 0.2;\n}\n\nimg#loadOlderIndicatorImage {\n    opacity: 0.2;\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\nspan#infoIndicatorText {\n    font-size: 0.8em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.5;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.5;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.5s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.5s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n';
   const millisecondsInWeek = 6048e5;
   const millisecondsInDay = 864e5;
   const constructFromSymbol = Symbol.for("constructDateFrom");
@@ -1568,17 +1970,25 @@
     }
     return matched[1].replace(doubleQuoteRegExp, "'");
   }
+  const {
+    debounce,
+    waitForElement,
+    observeVisibilityChange,
+    splitTerms,
+    extractLastTerm
+  } = utils;
   GM_addStyle(style);
-  let debounceTimeout;
   let stateManager;
   let config;
   let loadOlderItemsCallback;
-  function debounce(func, delay) {
-    return function(...args) {
-      clearTimeout(debounceTimeout);
-      debounceTimeout = setTimeout(() => func.apply(this, args), delay);
-    };
-  }
+  const DEFAULT_STATE = {
+    seen: {},
+    lastUpdated: null,
+    page: "home",
+    "blocks": { "all": [], "recent": [] },
+    feedSortReverse: false,
+    feedHideRead: false
+  };
   const CONFIG_FIELDS = {
     "styleSection": {
       "section": [GM_config.create("Display Preferences"), "Customize how items are displayed"],
@@ -1736,7 +2146,7 @@
       "label": "History Max Size",
       "title": "Maximum number of posts to remember for saving read state",
       "type": "int",
-      "default": constants.DEFAULT_HISTORY_MAX
+      "default": constants$1.DEFAULT_HISTORY_MAX
     },
     "showDebuggingInfo": {
       "label": "Enable Debugging",
@@ -1745,340 +2155,6 @@
       "default": false
     }
   };
-  class StateManager {
-    constructor(key, defaultState = {}, maxEntries = constants.DEFAULT_HISTORY_MAX) {
-      this.key = key;
-      this.listeners = [];
-      this.debounceTimeout = null;
-      this.maxEntries = maxEntries;
-      this.state = {};
-      this.isLocalStateDirty = false;
-      this.localSaveTimeout = null;
-      this.remoteSyncTimeout = null;
-      this.handleBlockListResponse = this.handleBlockListResponse.bind(this);
-      window.addEventListener("beforeunload", () => this.saveStateImmediately());
-    }
-    static async create(key, defaultState = {}, maxEntries = constants.DEFAULT_HISTORY_MAX) {
-      const instance = new StateManager(key, defaultState, maxEntries);
-      await instance.initializeState(defaultState);
-      return instance;
-    }
-    async initializeState(defaultState) {
-      this.state = await this.loadState(defaultState);
-      this.ensureBlockState();
-      this.updateBlockList();
-    }
-    ensureBlockState() {
-      if (!this.state.blocks) {
-        this.state.blocks = {
-          all: { updated: null, handles: [] },
-          recent: { updated: null, handles: [] }
-        };
-      }
-    }
-    setSyncStatus(status, title) {
-      const overlay = $(".preferences-icon-overlay");
-      if (!overlay) {
-        console.log("no overlay");
-        return;
-      }
-      $(overlay).attr("title", `sync: ${status} ${title || ""}`);
-      for (const s of ["ready", "pending", "success", "failure"]) {
-        $(overlay).removeClass(`preferences-icon-overlay-sync-${s}`);
-      }
-      $(overlay).addClass(`preferences-icon-overlay-sync-${status}`);
-      if (status == "success") {
-        setTimeout(() => this.setSyncStatus("ready"), 3e3);
-      }
-    }
-    /**
-     * Executes a query against the remote database.
-     * @param {string} query - The query string to execute.
-     * @param {string} successStatus - The status to set on successful execution (e.g., "success").
-     * @returns {Promise<Object>} - Resolves with the parsed result of the query.
-     */
-    async executeRemoteQuery(query, successStatus = "success") {
-      const { url, namespace = "bluesky_navigator", database = "state", username, password } = JSON.parse(config.get("stateSyncConfig"));
-      return new Promise((resolve, reject) => {
-        GM_xmlhttpRequest({
-          method: "POST",
-          url: `${url.replace(/\/$/, "")}/sql`,
-          headers: {
-            "Accept": "application/json",
-            "Authorization": "Basic " + btoa(`${username}:${password}`)
-          },
-          data: `USE NS ${namespace} DB ${database}; ${query}`,
-          onload: (response) => {
-            try {
-              if (response.status !== 200) {
-                throw new Error(response.statusText);
-              }
-              const result = JSON.parse(response.responseText)[1]?.result[0];
-              this.setSyncStatus(successStatus);
-              resolve(result);
-            } catch (error) {
-              console.error("Error executing query:", error.message);
-              this.setSyncStatus("failure", error.message);
-              reject(error);
-            }
-          },
-          onerror: (error) => {
-            console.error("Network error executing query:", error.message);
-            this.setSyncStatus("failure", error.message);
-            reject(error);
-          }
-        });
-      });
-    }
-    async getRemoteStateUpdated() {
-      const sinceResult = await this.executeRemoteQuery(`SELECT lastUpdated FROM state:current;`);
-      sinceResult["lastUpdated"];
-      return sinceResult["lastUpdated"];
-    }
-    /**
-     * Loads state from storage or initializes with the default state.
-     */
-    async loadState(defaultState) {
-      try {
-        const savedState = JSON.parse(GM_getValue(this.key, "{}"));
-        if (config.get("stateSyncEnabled")) {
-          const remoteState = await this.loadRemoteState(this.state.lastUpdated);
-          return remoteState ? { ...defaultState, ...remoteState } : { ...defaultState, ...savedState };
-        } else {
-          return { ...defaultState, ...savedState };
-        }
-      } catch (error) {
-        console.error("Error loading state, using defaults:", error);
-        return defaultState;
-      }
-    }
-    async loadRemoteState(since) {
-      try {
-        console.log("Loading remote state...");
-        this.setSyncStatus("pending");
-        const lastUpdated = await this.getRemoteStateUpdated();
-        if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
-          console.log(`Remote state is newer: ${since} < ${lastUpdated}`);
-          const result = await this.executeRemoteQuery("SELECT * FROM state:current;");
-          const stateObj = result || {};
-          delete stateObj.id;
-          console.log("Remote state loaded successfully.");
-          return stateObj;
-        } else {
-          console.log(`Local state is newer: ${since} >= ${lastUpdated}`);
-          return null;
-        }
-      } catch (error) {
-        console.error("Failed to load remote state:", error);
-        return {};
-      }
-    }
-    /**
-     * Updates the state and schedules a chained local and remote save.
-     */
-    updateState(newState) {
-      this.state = { ...this.state, ...newState };
-      this.state.lastUpdated = (/* @__PURE__ */ new Date()).toISOString();
-      this.isLocalStateDirty = true;
-      this.scheduleLocalSave();
-    }
-    /**
-     * Schedules a local state save after a 1-second delay.
-     * Triggers remote sync only if local state is saved.
-     */
-    scheduleLocalSave() {
-      clearTimeout(this.localSaveTimeout);
-      this.localSaveTimeout = setTimeout(() => {
-        const shouldSyncRemote = this.isLocalStateDirty;
-        this.saveLocalState().then(() => {
-          if (shouldSyncRemote) {
-            this.scheduleRemoteSync();
-          }
-        });
-      }, config.get("stateSaveTimeout"));
-    }
-    /**
-     * Saves the local state and resolves a promise.
-     * @returns {Promise<void>}
-     */
-    async saveLocalState() {
-      console.log("Saving local state...");
-      this.cleanupState();
-      GM_setValue(this.key, JSON.stringify(this.state));
-      console.log("Local state saved.");
-      this.isLocalStateDirty = false;
-      this.notifyListeners();
-    }
-    /**
-     * Schedules a remote state synchronization after a longer delay.
-     */
-    scheduleRemoteSync() {
-      if (!config.get("stateSyncEnabled")) {
-        console.log("sync disabled");
-        return;
-      }
-      clearTimeout(this.remoteSyncTimeout);
-      this.remoteSyncTimeout = setTimeout(() => {
-        this.saveRemoteState(this.state.lastUpdated);
-      }, config.get("stateSyncTimeout"));
-    }
-    /**
-     * Saves the remote state if needed.
-     */
-    async saveRemoteState(since) {
-      const { url, namespace = "bluesky_navigator", database = "state", username, password } = JSON.parse(config.get("stateSyncConfig"));
-      try {
-        const lastUpdated = await this.getRemoteStateUpdated();
-        if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
-          console.log("Not saving because remote state is newer.");
-          return;
-        }
-        console.log("Saving remote state...");
-        this.setSyncStatus("pending");
-        await this.executeRemoteQuery(
-          `UPSERT state:current MERGE {${JSON.stringify(this.state).slice(1, -1)}, created_at: time::now()}`,
-          "success"
-        );
-      } catch (error) {
-        console.error("Failed to save remote state:", error);
-      }
-    }
-    /**
-     * Immediately saves both local and remote states.
-     */
-    saveStateImmediately(saveLocal = true, saveRemote = false) {
-      if (saveLocal) {
-        this.saveLocalState();
-      }
-      if (saveRemote) {
-        this.saveRemoteState(this.state.lastUpdated);
-      }
-    }
-    /**
-     * Keeps only the most recent N entries in the state.
-     */
-    cleanupState() {
-      if (this.state.seen) {
-        this.state.seen = this.keepMostRecentValues(this.state.seen, this.maxEntries);
-      }
-    }
-    /**
-     * Utility to keep only the most recent N entries in an object.
-     * Assumes values are ISO date strings for sorting.
-     * @param {Object} obj - The object to prune.
-     * @param {number} maxEntries - The maximum number of entries to retain.
-     */
-    keepMostRecentValues(obj, maxEntries) {
-      const entries = Object.entries(obj);
-      entries.sort(([, dateA], [, dateB]) => new Date(dateB) - new Date(dateA));
-      return Object.fromEntries(entries.slice(0, maxEntries));
-    }
-    /**
-     * Resets state to the default value.
-     * @param {Object} defaultState - The default state object.
-     */
-    resetState(defaultState = {}) {
-      this.state = defaultState;
-    }
-    /**
-     * Registers a listener for state changes.
-     * @param {function} callback - The listener function to invoke on state change.
-     */
-    addListener(callback) {
-      if (typeof callback === "function") {
-        this.listeners.push(callback);
-      }
-    }
-    /**
-     * Notifies all registered listeners of a state change.
-     */
-    notifyListeners() {
-      this.listeners.forEach((callback) => callback(this.state));
-    }
-    handleBlockListResponse(response, responseKey, stateKey) {
-      var jsonResponse = $.parseJSON(response.response);
-      try {
-        this.state.blocks[stateKey].handles = jsonResponse.data[responseKey].map(
-          (entry) => entry.Handle
-        );
-        this.state.blocks[stateKey].updated = Date.now();
-      } catch (error) {
-        console.warn("couldn't fetch block list");
-      }
-    }
-    updateBlockList() {
-      const blockConfig = {
-        all: {
-          url: "https://api.clearsky.services/api/v1/anon/lists/fun-facts",
-          responseKey: "blocked"
-        },
-        recent: {
-          url: "https://api.clearsky.services/api/v1/anon/lists/funer-facts",
-          responseKey: "blocked24"
-        }
-      };
-      for (const [stateKey, cfg] of Object.entries(blockConfig)) {
-        if (this.state.blocks[stateKey].updated == null || Date.now() + constants.CLEARSKY_LIST_REFRESH_INTERVAL > this.state.blocks[stateKey].updated) {
-          GM_xmlhttpRequest({
-            method: "GET",
-            url: cfg.url,
-            headers: {
-              Accept: "application/json"
-            },
-            onload: (response) => this.handleBlockListResponse(response, cfg.responseKey, stateKey)
-          });
-        }
-      }
-    }
-  }
-  function waitForElement(selector, onAdd, onRemove, onChange, ignoreExisting) {
-    const processExistingElements = () => {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach((el) => onAdd(el));
-    };
-    if (onAdd && true) {
-      processExistingElements();
-    }
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (onAdd) {
-          mutation.addedNodes.forEach((node) => {
-            if (node.matches && node.matches(selector)) onAdd(node);
-            node.querySelectorAll?.(selector).forEach((el) => onAdd(el));
-          });
-        }
-        if (onRemove) {
-          mutation.removedNodes.forEach((node) => {
-            if (node.matches && node.matches(selector)) onRemove(node);
-            node.querySelectorAll?.(selector).forEach((el) => onRemove(el));
-          });
-        }
-      });
-    });
-    observer.observe(document.body, { childList: true, subtree: true, attributes: false });
-    return observer;
-  }
-  function observeVisibilityChange($element, callback) {
-    const target = $element[0];
-    const observer = new MutationObserver(() => {
-      const isVisible = $element.is(":visible");
-      callback(isVisible);
-    });
-    observer.observe(target, {
-      attributes: true,
-      childList: true,
-      subtree: false
-      // Only observe the target element
-    });
-    return () => observer.disconnect();
-  }
-  function splitTerms(input) {
-    return input.split(/\s+/).filter((term) => term.length > 0);
-  }
-  function extractLastTerm(input) {
-    let terms = splitTerms(input);
-    return terms.length > 0 ? terms[terms.length - 1] : "";
-  }
   class Handler {
     constructor(name) {
       this.name = name;
@@ -2181,7 +2257,7 @@
       this.observer = waitForElement(safeSelector, (element) => {
         this.onItemAdded(element), this.onItemRemoved(element);
       });
-      this.loadNewerObserver = waitForElement(constants.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
+      this.loadNewerObserver = waitForElement(constants$1.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
         this.loadNewerButton = $(button)[0];
         $("a#loadNewerIndicatorLink").on("click", () => this.loadNewerItems());
         $("img#loadNewerIndicatorImage").css("opacity", "1");
@@ -2286,10 +2362,10 @@
       }
     }
     onIntersection(entries) {
-      console.log("onIntersection");
       if (!this.enableIntersectionObserver || this.loading || this.loadingNew) {
         return;
       }
+      console.log("onIntersection");
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
           this.visibleItems.add(entry.target);
@@ -2435,10 +2511,10 @@
       }
       const handle = this.handleFromItem(element);
       if (stateManager.state.blocks.all.includes(handle)) {
-        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_ALL_CSS);
+        $(element).find(constants$1.PROFILE_SELECTOR).css(constants$1.CLEARSKY_BLOCKED_ALL_CSS);
       }
       if (stateManager.state.blocks.recent.includes(handle)) {
-        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_RECENT_CSS);
+        $(element).find(constants$1.PROFILE_SELECTOR).css(constants$1.CLEARSKY_BLOCKED_RECENT_CSS);
       }
     }
     didMouseMove(event) {
@@ -2680,10 +2756,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
     handleFromItem(item) {
-      return $.trim($(item).find(constants.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1);
+      return $.trim($(item).find(constants$1.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1);
     }
     displayNameFromItem(item) {
-      return $.trim($(item).find(constants.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""));
+      return $.trim($(item).find(constants$1.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""));
     }
     getHandles() {
       return Array.from(new Set(this.items.map((i, item) => this.handleFromItem(item))));
@@ -2713,6 +2789,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     setIndex(index, mark, update) {
       let oldIndex = this.index;
+      this.enableIntersectionObserver = false;
       if (oldIndex != null) {
         if (mark) {
           this.markItemRead(oldIndex, true);
@@ -2727,6 +2804,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (update) {
         this.updateItems();
       }
+      setTimeout(
+        () => this.enableIntersectionObserver = true,
+        500
+      );
       return true;
     }
     jumpToPost(postId) {
@@ -3045,7 +3126,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     refreshToolbars() {
       waitForElement(
-        constants.TOOLBAR_CONTAINER_SELECTOR,
+        constants$1.TOOLBAR_CONTAINER_SELECTOR,
         (indicatorContainer) => {
           waitForElement(
             'div[data-testid="homeScreenFeedTabs"]',
@@ -3057,7 +3138,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           );
         }
       );
-      waitForElement(constants.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
+      waitForElement(constants$1.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
         if (!$("#statusBar").length) {
           this.addStatusBar(statusBarContainer);
         }
@@ -3315,7 +3396,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     handleInput(event) {
       var item = this.items[this.index];
       if (event.key == "a") {
-        $(item).find(constants.PROFILE_SELECTOR)[0].click();
+        $(item).find(constants$1.PROFILE_SELECTOR)[0].click();
       } else if (event.key == "u") {
         this.loadNewerItems();
       } else if (event.key == ":") {
@@ -3454,9 +3535,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     var current_url = null;
     var context = null;
     var handlers = {
-      feed: new FeedItemHandler("feed", constants.FEED_ITEM_SELECTOR),
-      post: new PostItemHandler("post", constants.POST_ITEM_SELECTOR),
-      profile: new ProfileItemHandler("profile", constants.FEED_ITEM_SELECTOR),
+      feed: new FeedItemHandler("feed", constants$1.FEED_ITEM_SELECTOR),
+      post: new PostItemHandler("post", constants$1.POST_ITEM_SELECTOR),
+      profile: new ProfileItemHandler("profile", constants$1.FEED_ITEM_SELECTOR),
       input: new Handler("input")
     };
     function parseRulesConfig(configText) {
@@ -3488,7 +3569,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return rules;
     }
     function onConfigInit() {
-      StateManager.create(constants.STATE_KEY, constants.DEFAULT_STATE, config.get("historyMax")).then((initializedStateManager) => {
+      const stateManagerConfig = {
+        stateSyncEnabled: config.get("stateSyncEnabled"),
+        stateSyncConfig: config.get("stateSyncConfig"),
+        stateSaveTimeout: config.get("stateSaveTimeout"),
+        maxEntries: config.get("historyMax")
+      };
+      StateManager.create(constants$1.STATE_KEY, DEFAULT_STATE, stateManagerConfig).then((initializedStateManager) => {
         stateManager = initializedStateManager;
         console.log("State initialized");
         console.dir(stateManager.state);
@@ -3527,12 +3614,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const stylesheet = `
 
         /* Feed itmes may be sorted, so we hide them visually and show them later */
-        div[data-testid$="FeedPage"] ${constants.FEED_ITEM_SELECTOR} {
+        div[data-testid$="FeedPage"] ${constants$1.FEED_ITEM_SELECTOR} {
            opacity: 0%;
         }
 
         ${config.get("hideLoadNewButton") ? `
-            ${constants.LOAD_NEW_BUTTON_SELECTOR} {
+            ${constants$1.LOAD_NEW_BUTTON_SELECTOR} {
                 display: none;
             }
             ` : ``}
@@ -3594,7 +3681,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       styleElement.type = "text/css";
       styleElement.textContent = stylesheet;
       document.head.appendChild(styleElement);
-      waitForElement(constants.SCREEN_SELECTOR, (element) => {
+      waitForElement(constants$1.SCREEN_SELECTOR, (element) => {
         setScreen(getScreenFromElement(element));
         observeVisibilityChange($(element), (isVisible) => {
           if (isVisible) {
@@ -3679,7 +3766,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (window.location.href !== current_url) {
             setContextFromUrl();
           }
-        }, constants.URL_MONITOR_INTERVAL);
+        }, constants$1.URL_MONITOR_INTERVAL);
       }
       startMonitor();
       setContextFromUrl();

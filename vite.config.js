@@ -1,12 +1,12 @@
 import { defineConfig } from 'vite'
 import Userscript from 'vite-userscript-plugin'
-import { execSync } from "child_process";
+// import { execSync } from "child_process";
 import { name, version } from './package.json'
 
-const gitHash = execSync("git rev-parse --short HEAD").toString().trim();
-const commitCount = execSync("git rev-list --count HEAD").toString().trim();
-const isDev = process.env.NODE_ENV === "development" || process.argv.includes("serve");
-const fullVersion = `${version}+${commitCount}.${gitHash}${isDev ? "-dev" : ""}`;
+// const gitHash = execSync("git rev-parse --short HEAD").toString().trim();
+// const commitCount = execSync("git rev-list --count HEAD").toString().trim();
+// const isDev = process.env.NODE_ENV === "development" || process.argv.includes("serve");
+// const fullVersion = `${version}+${commitCount}.${gitHash}${isDev ? "-dev" : ""}`;
 
 export default defineConfig((config) => {
   return {
@@ -16,7 +16,7 @@ export default defineConfig((config) => {
         header: {
             name: "bluesky-navigator",
             description: "Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky",
-            version: fullVersion,
+            version: version,
             author: "https://bsky.app/profile/tonyc.org",
             namespace: "https://tonyc.org/",
             match: "https://bsky.app/*",

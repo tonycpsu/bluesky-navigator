@@ -1,5 +1,4 @@
 const constants = {
-  DEFAULT_HISTORY_MAX: 5000,
   DEFAULT_STATE_SAVE_TIMEOUT: 5000,
   URL_MONITOR_INTERVAL: 500,
   STATE_KEY: "bluesky_state",

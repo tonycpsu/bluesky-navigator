@@ -8,8 +8,8 @@
 // @require     https://code.jquery.com/jquery-3.7.1.min.js
 // @require     https://openuserjs.org/src/libs/sizzle/GM_config.js
 // @require     https:code.jquery.com/ui/1.12.1/jquery-ui.min.js
-// @downloadURL https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
-// @updateURL   https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js
+// @downloadURL https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/dist/bluesky-navigator.user.js
+// @updateURL   https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/dist/bluesky-navigator.user.js
 // @connect     clearsky.services
 // @connect     surreal.cloud
 // @grant       GM_setValue

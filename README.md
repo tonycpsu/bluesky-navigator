@@ -9,7 +9,7 @@ Usage
 
 1. Install [TamperMonkey](https://en.wikipedia.org/wiki/Tampermonkey) on your
    favorite browser
-2. Install [the script](https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/bluesky-navigator.user.js)
+2. Install [the script](https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/dist/bluesky-navigator.user.js)
 
 
 Features

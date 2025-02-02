@@ -1415,15 +1415,12 @@ export class FeedItemHandler extends ItemHandler {
         $(`#${bar}LoadIndicator`).empty();
         $(`#${bar}LoadIndicator`).append(`
 <div id="load${which}Indicator" title="Load ${which.toLowerCase()} items" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
-      <span id="load${which}IndicatorText">
       <a id="load${which}IndicatorLink">
 <img id="load${which}IndicatorImage" class="indicator-image" src="${img}"/>
+<img id="loadTime${which}IndicatorImage" class="indicator-image load-time-icon ${which == 'Newer' ? 'image-flip-x' : ''}" src="${this.INDICATOR_IMAGES.loadTime[0]}"/>
 </a>
-      </span>
-    <img id="loadTime${which}IndicatorImage" class="indicator-image load-time-icon ${which == 'Newer' ? 'image-flip-x' : ''}" src="${this.INDICATOR_IMAGES.loadTime[0]}"/>
 </div>
-`
-                                        );
+`);
       }
     )
     // $('img#loadOlderIndicatorImage').css("opacity", "1");

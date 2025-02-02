@@ -1021,7 +1021,7 @@ this.itemStats.oldest
           const ruleName = Object.keys(this.state.rules)[num];
           console.log(ruleName);
           // const rule = this.state.rules[ruleName];
-          $("#bsky-navigator-search").val(`${event.shiftKey ? "!" : ""}${ruleName}`);
+          $("#bsky-navigator-search").val(`${event.shiftKey ? "!" : ""}\$${ruleName}`);
         } else {
           $("#bsky-navigator-search").val(null);
         }

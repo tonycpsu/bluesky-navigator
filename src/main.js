@@ -4,7 +4,10 @@
 import constants from './constants.js'
 import { state } from "./state.js";
 import * as utils from "./utils.js";
-import configCss from "./config.css?raw";
+import * as configjs from "./config.js";
+
+import style from './assets/css/style.css?raw'
+import configCss from "./assets/css/config.css?raw";
 
 const {
     debounce,
@@ -12,7 +15,6 @@ const {
     observeChanges,
     observeVisibilityChange,
 } = utils;
-import style from './style.css?raw'
 
 import {
     Handler,

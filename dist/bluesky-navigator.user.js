@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.29+241.a21af2e7
+// @version     1.0.30+244.bc79fa4e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -449,11 +449,11 @@
     });
     return () => observer.disconnect();
   }
-  function splitTerms$1(input) {
+  function splitTerms(input) {
     return input.split(/\s+/).filter((term) => term.length > 0);
   }
   function extractLastTerm(input) {
-    let terms = splitTerms$1(input);
+    let terms = splitTerms(input);
     return terms.length > 0 ? terms[terms.length - 1] : "";
   }
   const utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -462,7 +462,7 @@
     extractLastTerm,
     observeChanges,
     observeVisibilityChange: observeVisibilityChange$1,
-    splitTerms: splitTerms$1,
+    splitTerms,
     waitForElement: waitForElement$2
   }, Symbol.toStringTag, { value: "Module" }));
   const configCss = "h1 {\n    font-size: 18pt;\n}\n\nh2 {\n    font-size: 14pt;\n}\n.config_var textarea {\n    width: 100%;\n    height: 1.5em;\n}\n\n#GM_config_rulesConfig_var textarea {\n    height: 10em;\n}\n\n#GM_config_stateSyncConfig_var textarea {\n    height: 10em;\n}\n";
@@ -2573,7 +2573,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return Array.from(new Set(this.items.map((i, item) => this.displayNameFromItem(item))));
     }
     getAuthors() {
-      const authors = this.items.get().map((item) => ({
+      const authors = $(this.items).get().map((item) => ({
         handle: this.handleFromItem(item),
         displayName: this.displayNameFromItem(item)
       })).filter(
@@ -2746,7 +2746,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (num >= 0) {
             const ruleName = Object.keys(this.state.rules)[num];
             console.log(ruleName);
-            $("#bsky-navigator-search").val("$" + ruleName);
+            $("#bsky-navigator-search").val(`${event.shiftKey ? "!" : ""}${ruleName}`);
           } else {
             $("#bsky-navigator-search").val(null);
           }
@@ -2899,7 +2899,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (firstItem.length) {
             let uiItem = firstItem.data("ui-autocomplete-item");
             $(this).autocomplete("close");
-            let terms = splitTerms$1(this.value);
+            let terms = splitTerms(this.value);
             terms.pop();
             terms.push(uiItem.value);
             this.value = terms.join(" ") + " ";
@@ -2910,17 +2910,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.onSearchUpdate = debounce((event) => {
         console.log($(event.target).val().trim());
         this.setFilter($(event.target).val().trim());
-        this.filterItems();
+        this.loadItems();
       }, 300);
+      this.onSearchUpdate = this.onSearchUpdate.bind(this);
       $(this.searchField).on("input", this.onSearchUpdate);
       $(this.searchField).on("focus", function() {
         $(this).autocomplete("search", "");
       });
       $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
-      $(this.searchField).on("autocompleteselect", function(event, ui) {
-        this.onSearchUpdate();
-      });
-      this.onSearchUpdate = this.onSearchUpdate.bind(this);
+      $(this.searchField).on("autocompleteselect", this.onSearchUpdate);
       waitForElement$1(
         "#bsky-navigator-toolbar",
         null,
@@ -2967,31 +2965,27 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     onSearchAutocomplete(request, response) {
       const authors = this.getAuthors().sort((a, b) => a.handle.localeCompare(b.handle, void 0, { sensitivity: "base" }));
       const rules = Object.keys(this.state.rules);
-      let term = extractLastTerm(request.term);
+      let term = extractLastTerm(request.term).toLowerCase();
+      let isNegation = term.startsWith("!");
+      if (isNegation) term = term.substring(1);
       let results = [];
       if (term === "") {
-        results = rules.map((f) => ({ label: `$${f}`, value: `$${f}` }));
-      } else if (term.startsWith("@")) {
+        results = rules.map((r) => ({ label: `$${r}`, value: `$${r}` }));
+      } else if (term.startsWith("@") || term.startsWith("$")) {
+        let type = term.charAt(0);
         let search = term.substring(1).toLowerCase();
-        results = authors.filter(
-          (a) => a.handle.toLowerCase().includes(search) || a.displayName.toLowerCase().includes(search)
-        ).map((a) => ({
-          label: `@${a.handle} (${a.displayName})`,
-          // Show as @handle (Display Name)
-          value: `@${a.handle}`
-          // Insert only @handle
-        }));
-      } else if (term.startsWith("$")) {
-        let search = term.substring(1).toLowerCase();
-        results = rules.filter((f) => f.toLowerCase().includes(search)).map((f) => ({ label: `$${f}`, value: `$${f}` }));
-      } else {
-        results = [
-          ...authors.filter(
-            (a) => a.handle.toLowerCase().includes(term) || a.displayName.toLowerCase().includes(term)
-          ).map((a) => ({ label: `@${a.handle} (${a.displayName})`, value: `@${a.handle}` })),
-          ...rules.filter((f) => f.toLowerCase().includes(term)).map((f) => ({ label: `$${f}`, value: `$${f}` })),
-          { label: `Search: "${term}"`, value: term }
-        ];
+        if (type === "@") {
+          results = authors.filter(
+            (a) => a.handle.toLowerCase().includes(search) || a.displayName.toLowerCase().includes(search)
+          ).map((a) => ({
+            label: `${isNegation ? "!" : ""}@${a.handle} (${a.displayName})`,
+            value: `${isNegation ? "!" : ""}@${a.handle}`
+          }));
+        } else if (type === "$") {
+          results = rules.filter((r) => r.toLowerCase().includes(search)).map((r) => ({
+            label: `${isNegation ? "!" : ""}$${r}`
+          }));
+        }
       }
       response(results);
     }
@@ -3766,16 +3760,26 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       <h2>Configuration</h2>
     </div>
   `;
-    config = new GM_config({
-      id: "GM_config",
-      title: configTitleDiv,
-      fields: CONFIG_FIELDS,
-      "events": {
-        "init": onConfigInit,
-        "save": () => config.close(),
-        "close": () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
-      },
-      "css": configCss
+    function waitForGMConfig(callback) {
+      if (typeof GM_config !== "undefined") {
+        callback();
+      } else {
+        console.warn("GM_config not available yet. Retrying...");
+        setTimeout(() => waitForGMConfig(callback), 100);
+      }
+    }
+    waitForGMConfig(() => {
+      config = new GM_config({
+        id: "GM_config",
+        title: configTitleDiv,
+        fields: CONFIG_FIELDS,
+        "events": {
+          "init": onConfigInit,
+          "save": () => config.close(),
+          "close": () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
+        },
+        "css": configCss
+      });
     });
     $(document).ready(function(e) {
       const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;

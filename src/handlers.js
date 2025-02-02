@@ -1016,7 +1016,7 @@ this.itemStats.oldest
           const ruleName = Object.keys(this.state.rules)[num];
           console.log(ruleName);
           // const rule = this.state.rules[ruleName];
-          $("#bsky-navigator-search").val("$" + ruleName);
+          $("#bsky-navigator-search").val(`${event.shiftKey ? "!" : ""}${ruleName}`);
         } else {
           $("#bsky-navigator-search").val(null);
         }
@@ -1192,7 +1192,7 @@ export class FeedItemHandler extends ItemHandler {
         event.preventDefault(); // Prevent default selection behavior
 
         let input = this;
-        let terms = splitTerms(input.value);
+        let terms = utils.splitTerms(input.value);
         terms.pop(); // Remove the last typed term
         terms.push(ui.item.value); // Add the selected suggestion
         input.value = terms.join(" ") + " "; // Ensure a space after selection
@@ -1223,8 +1223,9 @@ export class FeedItemHandler extends ItemHandler {
     this.onSearchUpdate = utils.debounce( (event) => {
       console.log($(event.target).val().trim());
       this.setFilter($(event.target).val().trim());
-      this.filterItems();
-      this.updateInfoIndicator();
+      this.loadItems();
+      // this.filterItems();
+      // this.updateInfoIndicator();
     }, 300);
     this.onSearchUpdate = this.onSearchUpdate.bind(this)
     $(this.searchField).on("input", this.onSearchUpdate);

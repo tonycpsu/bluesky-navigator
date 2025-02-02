@@ -29,7 +29,6 @@ GM_addStyle(style)
 let config;
 let handlers;
 let enableLoadMoreItems = false;
-let loadOlderItemsCallback;
 
 const CONFIG_FIELDS = {
     'styleSection': {
@@ -547,6 +546,90 @@ function setScreen(screen) {
                 $("div.r-sa2ff0").css("padding-top", "0px");
             }
         );
+
+        function proxyIntersectionObserver() {
+            const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
+
+            // Create a proxy class
+            class ProxyIntersectionObserver {
+                constructor(callback, options) {
+                    // Store the callback and options
+                    this.callback = callback;
+                    this.options = options;
+                    this.enabled = true
+                    handlers["feed"].loadOlderItemsCallback = this.callback;
+                    // Create the "real" IntersectionObserver instance
+                    this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
+                        // filter thread divs out
+                        const filteredEntries = entries.filter(
+                            (entry) => !(
+                                $(entry.target).hasClass("thread")
+                                ||
+                                $(entry.target).hasClass("item")
+                                ||
+                                $(entry.target).find('div[data-testid^="feedItem"]').length
+                                ||
+                                $(entry.target).next()?.attr("style") == "height: 32px;"
+                            )
+                        )
+
+                        // if(filteredEntries.length) {
+                        //     debugger;
+                        // }
+
+                        callback(
+                            filteredEntries,
+                            observer
+                        )
+                    }, options);
+                }
+
+                enable() {
+                    this.enabled = true
+                }
+
+                disable() {
+                    this.enabled = false
+                }
+
+                // Custom logic to decide when to override
+                shouldOverride(entries, observer) {
+                    return !enableLoadMoreItems;
+                }
+
+                // Custom override behavior
+                overrideBehavior(entries, observer) {
+                    // Example: Do nothing or log the entries
+                    // console.log("Overridden entries:", entries);
+                }
+
+                // Proxy all methods to the real IntersectionObserver
+                observe(target) {
+                    // console.log("Observing:", target);
+                    this.realObserver.observe(target);
+                }
+
+                unobserve(target) {
+                    // console.log("Unobserving:", target);
+                    this.realObserver.unobserve(target);
+                }
+
+                disconnect() {
+                    // console.log("Disconnecting observer");
+                    this.realObserver.disconnect();
+                }
+
+                takeRecords() {
+                    return this.realObserver.takeRecords();
+                }
+            }
+
+            // Replace the global IntersectionObserver with the proxy
+            unsafeWindow.IntersectionObserver = ProxyIntersectionObserver;
+
+        }
+        proxyIntersectionObserver();
+        
     }
 
     const configTitleDiv = `
@@ -581,84 +664,6 @@ function setScreen(screen) {
 
     $(document).ready(function(e) {
 
-        const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
-
-        // Create a proxy class
-        class ProxyIntersectionObserver {
-            constructor(callback, options) {
-                // Store the callback and options
-                this.callback = callback;
-                this.options = options;
-                this.enabled = true
-                loadOlderItemsCallback = this.callback;
-                // Create the "real" IntersectionObserver instance
-                this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
-                    // filter thread divs out
-                    const filteredEntries = entries.filter(
-                        (entry) => !(
-                            $(entry.target).hasClass("thread")
-                            ||
-                            $(entry.target).hasClass("item")
-                            ||
-                            $(entry.target).find('div[data-testid^="feedItem"]').length
-                            ||
-                            $(entry.target).next()?.attr("style") == "height: 32px;"
-                        )
-                    )
-
-                    // if(filteredEntries.length) {
-                    //     debugger;
-                    // }
-
-                    callback(
-                        filteredEntries,
-                        observer
-                    )
-                }, options);
-            }
-
-            enable() {
-                this.enabled = true
-            }
-
-            disable() {
-                this.enabled = false
-            }
-
-            // Custom logic to decide when to override
-            shouldOverride(entries, observer) {
-                return !enableLoadMoreItems;
-            }
-
-            // Custom override behavior
-            overrideBehavior(entries, observer) {
-                // Example: Do nothing or log the entries
-                // console.log("Overridden entries:", entries);
-            }
-
-            // Proxy all methods to the real IntersectionObserver
-            observe(target) {
-                // console.log("Observing:", target);
-                this.realObserver.observe(target);
-            }
-
-            unobserve(target) {
-                // console.log("Unobserving:", target);
-                this.realObserver.unobserve(target);
-            }
-
-            disconnect() {
-                // console.log("Disconnecting observer");
-                this.realObserver.disconnect();
-            }
-
-            takeRecords() {
-                return this.realObserver.takeRecords();
-            }
-        }
-
-        // Replace the global IntersectionObserver with the proxy
-        unsafeWindow.IntersectionObserver = ProxyIntersectionObserver;
 
         // Store the original play method
         const originalPlay = HTMLMediaElement.prototype.play;

@@ -732,7 +732,7 @@ this.itemStats.oldest
     $(this.loadNewerButton).click()
     setTimeout( () => {
       this.loadItems(oldPostId);
-      $('img#loadNewerIndicatorImage').css("opacity", "0.2");
+      // $('img#loadNewerIndicatorImage').css("opacity", "0.2");
       $('img#loadNewerIndicatorImage').removeClass("image-highlight");
       $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
       $('#loadNewerAction').remove();
@@ -761,7 +761,7 @@ this.itemStats.oldest
     );
     var loadElement = this.items.length ? this.items[this.items.length-1] : $(this.selector).first()[0];
     $(indicatorElement).closest("div.thread").addClass(this.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse");
-    loadOlderItemsCallback(
+    this.loadOlderItemsCallback(
       [
         {
           time: performance.now(),

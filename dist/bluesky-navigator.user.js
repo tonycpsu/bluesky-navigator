@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+247.146f4e91
+// @version     1.0.30+248.dd0f1f8f
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2529,7 +2529,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       $(this.loadNewerButton).click();
       setTimeout(() => {
         this.loadItems(oldPostId);
-        $("img#loadNewerIndicatorImage").css("opacity", "0.2");
         $("img#loadNewerIndicatorImage").removeClass("image-highlight");
         $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
         $("#loadNewerAction").remove();
@@ -2551,7 +2550,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       var indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
       var loadElement = this.items.length ? this.items[this.items.length - 1] : $(this.selector).first()[0];
       $(indicatorElement).closest("div.thread").addClass(this.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse");
-      loadOlderItemsCallback(
+      this.loadOlderItemsCallback(
         [
           {
             time: performance.now(),
@@ -3769,6 +3768,54 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           $("div.r-sa2ff0").css("padding-top", "0px");
         }
       );
+      function proxyIntersectionObserver() {
+        const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
+        class ProxyIntersectionObserver {
+          constructor(callback, options) {
+            this.callback = callback;
+            this.options = options;
+            this.enabled = true;
+            handlers["feed"].loadOlderItemsCallback = this.callback;
+            this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
+              const filteredEntries = entries.filter(
+                (entry) => !($(entry.target).hasClass("thread") || $(entry.target).hasClass("item") || $(entry.target).find('div[data-testid^="feedItem"]').length || $(entry.target).next()?.attr("style") == "height: 32px;")
+              );
+              callback(
+                filteredEntries,
+                observer
+              );
+            }, options);
+          }
+          enable() {
+            this.enabled = true;
+          }
+          disable() {
+            this.enabled = false;
+          }
+          // Custom logic to decide when to override
+          shouldOverride(entries, observer) {
+            return true;
+          }
+          // Custom override behavior
+          overrideBehavior(entries, observer) {
+          }
+          // Proxy all methods to the real IntersectionObserver
+          observe(target2) {
+            this.realObserver.observe(target2);
+          }
+          unobserve(target2) {
+            this.realObserver.unobserve(target2);
+          }
+          disconnect() {
+            this.realObserver.disconnect();
+          }
+          takeRecords() {
+            return this.realObserver.takeRecords();
+          }
+        }
+        unsafeWindow.IntersectionObserver = ProxyIntersectionObserver;
+      }
+      proxyIntersectionObserver();
     }
     const configTitleDiv = `
     <div class="config-title">
@@ -3798,51 +3845,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
     });
     $(document).ready(function(e) {
-      const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
-      class ProxyIntersectionObserver {
-        constructor(callback, options) {
-          this.callback = callback;
-          this.options = options;
-          this.enabled = true;
-          this.callback;
-          this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
-            const filteredEntries = entries.filter(
-              (entry) => !($(entry.target).hasClass("thread") || $(entry.target).hasClass("item") || $(entry.target).find('div[data-testid^="feedItem"]').length || $(entry.target).next()?.attr("style") == "height: 32px;")
-            );
-            callback(
-              filteredEntries,
-              observer
-            );
-          }, options);
-        }
-        enable() {
-          this.enabled = true;
-        }
-        disable() {
-          this.enabled = false;
-        }
-        // Custom logic to decide when to override
-        shouldOverride(entries, observer) {
-          return true;
-        }
-        // Custom override behavior
-        overrideBehavior(entries, observer) {
-        }
-        // Proxy all methods to the real IntersectionObserver
-        observe(target2) {
-          this.realObserver.observe(target2);
-        }
-        unobserve(target2) {
-          this.realObserver.unobserve(target2);
-        }
-        disconnect() {
-          this.realObserver.disconnect();
-        }
-        takeRecords() {
-          return this.realObserver.takeRecords();
-        }
-      }
-      unsafeWindow.IntersectionObserver = ProxyIntersectionObserver;
       const originalPlay = HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play = function() {
         const isUserInitiated = this.dataset.allowPlay === "true";

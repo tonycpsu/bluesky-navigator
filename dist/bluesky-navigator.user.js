@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.13+233.97140c90
+// @version     1.0.14+234.78769731
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -13,14 +13,53 @@
 // @connect     clearsky.services
 // @connect     surreal.cloud
 // @grant       GM_setValue
-// @grant       GM_getValue
-// @grant       GM_addStyle
-// @grant       GM_xmlhttpRequest
-// @grant       GM_info
-// @grant       unsafeWindow
-// @grant       GM.getValue
 // @grant       GM.setValue
+// @grant       GM_getValue
+// @grant       GM.getValue
+// @grant       GM_deleteValue
+// @grant       GM.deleteValue
+// @grant       GM_listValues
+// @grant       GM.listValues
+// @grant       GM_setClipboard
+// @grant       GM.setClipboard
+// @grant       GM_addStyle
+// @grant       GM.addStyle
+// @grant       GM_addElement
+// @grant       GM.addElement
+// @grant       GM_addValueChangeListener
+// @grant       GM.addValueChangeListener
+// @grant       GM_removeValueChangeListener
+// @grant       GM.removeValueChangeListener
+// @grant       GM_registerMenuCommand
+// @grant       GM.registerMenuCommand
+// @grant       GM_unregisterMenuCommand
+// @grant       GM.unregisterMenuCommand
+// @grant       GM_download
+// @grant       GM.download
+// @grant       GM_getTab
+// @grant       GM.getTab
+// @grant       GM_getTabs
+// @grant       GM.getTabs
+// @grant       GM_saveTab
+// @grant       GM.saveTab
+// @grant       GM_openInTab
+// @grant       GM.openInTab
+// @grant       GM_notification
+// @grant       GM.notification
+// @grant       GM_getResourceURL
+// @grant       GM.getResourceURL
+// @grant       GM_getResourceText
+// @grant       GM.getResourceText
+// @grant       GM_xmlhttpRequest
 // @grant       GM.xmlhttpRequest
+// @grant       GM_log
+// @grant       GM.log
+// @grant       GM_info
+// @grant       GM.info
+// @grant       unsafeWindow
+// @grant       window.onurlchange
+// @grant       window.focus
+// @grant       window.close
 // ==/UserScript==
 
 (function() {
@@ -34,6 +73,7 @@
     get LOAD_NEW_INDICATOR_SELECTOR() {
       return `${constants$1.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
     },
+    FEED_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div',
     FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
     POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
     PROFILE_SELECTOR: 'a[aria-label="View profile"]',
@@ -370,6 +410,7 @@
       return true;
     }
   });
+  let debounceTimeout;
   function debounce(func, delay) {
     return function(...args) {
       clearTimeout(debounceTimeout);
@@ -433,28 +474,6 @@
     });
     return observer;
   }
-  function onVisibilityChange(selector, callback) {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === "attributes") {
-          const target2 = mutation.target;
-          const isVisible = $(target2).is(":visible");
-          callback($(target2), isVisible);
-        }
-      });
-    });
-    $(selector).each((_, el) => {
-      observer.observe(el, {
-        attributes: true,
-        // Observe attribute changes
-        attributeFilter: ["style", "class"],
-        // Filter for relevant attributes
-        subtree: false
-        // Do not observe children
-      });
-    });
-    return observer;
-  }
   function observeVisibilityChange$1($element, callback) {
     const target2 = $element[0];
     const observer = new MutationObserver(() => {
@@ -472,17 +491,16 @@
   function splitTerms$1(input) {
     return input.split(/\s+/).filter((term) => term.length > 0);
   }
-  function extractLastTerm$1(input) {
+  function extractLastTerm(input) {
     let terms = splitTerms$1(input);
     return terms.length > 0 ? terms[terms.length - 1] : "";
   }
   const utils = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
     __proto__: null,
     debounce,
-    extractLastTerm: extractLastTerm$1,
+    extractLastTerm,
     observeChanges,
     observeVisibilityChange: observeVisibilityChange$1,
-    onVisibilityChange,
     splitTerms: splitTerms$1,
     waitForElement: waitForElement$2
   }, Symbol.toStringTag, { value: "Module" }));
@@ -1977,8 +1995,10 @@
     waitForElement: waitForElement$1
   } = utils;
   class Handler {
-    constructor(name) {
+    constructor(name, config2, state2) {
       this.name = name;
+      this.config = config2;
+      this.state = state2;
       this.items = [];
       this.handleInput = this.handleInput.bind(this);
     }
@@ -2016,7 +2036,7 @@
         } else if (event.code === "Comma") {
           $("a[aria-label='Settings']")[0].click();
         } else if (event.code === "Period") {
-          config.open();
+          this.config.open();
         }
       }
     }
@@ -2027,11 +2047,11 @@
     // FIXME: this belongs in PostItemHandler
     THREAD_PAGE_SELECTOR = "main > div > div > div";
     MOUSE_MOVEMENT_THRESHOLD = 10;
-    constructor(name, selector, config2, state2) {
+    constructor(name, config2, state2, selector) {
       super(name);
-      this.selector = selector;
       this.config = config2;
       this.state = state2;
+      this.selector = selector;
       this._index = null;
       this.postId = null;
       this.loadNewerCallback = null;
@@ -2392,7 +2412,7 @@
       const messageBody = $('<div class="messageBody">');
       this.messageContainer.append(messageBody);
       $(messageBody).html(message2);
-      $(FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
+      $(constants$1.FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
       window.scrollTo(0, 0);
     }
     hideMessage() {
@@ -2863,8 +2883,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         "https://www.svgrepo.com/show/522236/preferences.svg"
       ]
     };
-    constructor(name, selector, config2, state2) {
-      super(name, selector, config2, state2);
+    constructor(name, config2, state2, selector) {
+      super(name, config2, state2, selector);
       this.toggleSortOrder = this.toggleSortOrder.bind(this);
       this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
       this.setFilter = this.setFilter.bind(this);
@@ -2917,7 +2937,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (firstItem.length) {
             let uiItem = firstItem.data("ui-autocomplete-item");
             $(this).autocomplete("close");
-            let terms = splitTerms(this.value);
+            let terms = splitTerms$1(this.value);
             terms.pop();
             terms.push(uiItem.value);
             this.value = terms.join(" ") + " ";
@@ -3046,7 +3066,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
         $(this.preferencesIcon).on("click", () => {
           $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1]);
-          config.open();
+          this.config.open();
         });
         $(this.statusBarRight).append(this.preferencesIcon);
       }
@@ -3237,8 +3257,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
   }
   class PostItemHandler extends ItemHandler {
-    constructor(name, selector, config2, state2) {
-      super(name, selector, config2);
+    constructor(name, config2, state2, selector) {
+      super(name, config2, state2, selector);
       this.indexMap = {};
       this.handleInput = this.handleInput.bind(this);
     }
@@ -3286,8 +3306,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
   }
   class ProfileItemHandler extends ItemHandler {
-    constructor(name, selector, config2, state2) {
-      super(name, selector, config2);
+    constructor(name, config2, state2, selector) {
+      super(name, config2, state2, selector);
     }
     activate() {
       this.setIndex(0);
@@ -3338,7 +3358,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     observeVisibilityChange
   } = utils;
   GM_addStyle(style);
-  let config$1;
+  let config;
+  let handlers;
   const CONFIG_FIELDS = {
     "styleSection": {
       "section": [GM_config.create("Display Preferences"), "Customize how items are displayed"],
@@ -3559,22 +3580,22 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     function onConfigInit() {
       const stateManagerConfig = {
-        stateSyncEnabled: config$1.get("stateSyncEnabled"),
-        stateSyncConfig: config$1.get("stateSyncConfig"),
-        stateSaveTimeout: config$1.get("stateSaveTimeout"),
-        maxEntries: config$1.get("historyMax")
+        stateSyncEnabled: config.get("stateSyncEnabled"),
+        stateSyncConfig: config.get("stateSyncConfig"),
+        stateSaveTimeout: config.get("stateSaveTimeout"),
+        maxEntries: config.get("historyMax")
       };
       state.init(constants$1.STATE_KEY, stateManagerConfig, onStateInit);
     }
     function onStateInit() {
-      var handlers2 = {
-        feed: new FeedItemHandler("feed", constants$1.FEED_ITEM_SELECTOR, config$1, state),
-        post: new PostItemHandler("post", constants$1.POST_ITEM_SELECTOR, config$1, state),
-        profile: new ProfileItemHandler("profile", constants$1.FEED_ITEM_SELECTOR, config$1, state),
-        input: new Handler("input")
+      handlers = {
+        feed: new FeedItemHandler("feed", config, state, constants$1.FEED_ITEM_SELECTOR),
+        post: new PostItemHandler("post", config, state, constants$1.POST_ITEM_SELECTOR),
+        profile: new ProfileItemHandler("profile", config, state, constants$1.FEED_ITEM_SELECTOR),
+        input: new Handler("input", config, state)
       };
-      state.rules = parseRulesConfig(config$1.get("rulesConfig"));
-      if (config$1.get("showDebuggingInfo")) {
+      state.rules = parseRulesConfig(config.get("rulesConfig"));
+      if (config.get("showDebuggingInfo")) {
         let appendLog = function(type, args) {
           const message2 = `[${type.toUpperCase()}] ${args.map((arg) => typeof arg === "object" ? JSON.stringify(arg, null, 2) : arg).join(" ")}`;
           $("#logContent").append(`<div style="margin-bottom: 5px;">${message2}</div>`);
@@ -3606,62 +3627,62 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
            opacity: 0%;
         }
 
-        ${config$1.get("hideLoadNewButton") ? `
+        ${config.get("hideLoadNewButton") ? `
             ${constants$1.LOAD_NEW_BUTTON_SELECTOR} {
                 display: none;
             }
             ` : ``}
 
         .item {
-            ${config$1.get("posts")}
+            ${config.get("posts")}
         }
 
         .item-selection-active {
-            ${config$1.get("selectionActive")}
+            ${config.get("selectionActive")}
         }
 
         .item-selection-inactive {
-            ${config$1.get("selectionInactive")}
+            ${config.get("selectionInactive")}
         }
 
         @media (prefers-color-scheme:light){
             .item-unread {
-                ${config$1.get("unreadPosts")};
-                ${config$1.get("unreadPostsLightMode")};
+                ${config.get("unreadPosts")};
+                ${config.get("unreadPostsLightMode")};
             }
 
             .item-read {
-                ${config$1.get("readPosts")};
-                ${config$1.get("readPostsLightMode")};
+                ${config.get("readPosts")};
+                ${config.get("readPostsLightMode")};
             }
 
         }
 
         @media (prefers-color-scheme:dark){
             .item-unread {
-                ${config$1.get("unreadPosts")};
-                ${config$1.get("unreadPostsDarkMode")};
+                ${config.get("unreadPosts")};
+                ${config.get("unreadPostsDarkMode")};
             }
 
             .item-read {
-                ${config$1.get("readPosts")};
-                ${config$1.get("readPostsDarkMode")};
+                ${config.get("readPosts")};
+                ${config.get("readPostsDarkMode")};
             }
         }
 
         .thread-first {
-            margin-top: ${config$1.get("threadMargin")};
+            margin-top: ${config.get("threadMargin")};
             border-bottom: none;
         }
 
         .thread-last {
-            margin-bottom: ${config$1.get("threadMargin")};
+            margin-bottom: ${config.get("threadMargin")};
             border-top: none;
         }
 
         div.r-m5arl1 {
-            width: ${config$1.get("threadIndicatorWidth")}px;
-            background-color: ${config$1.get("threadIndicatorColor")} !important;
+            width: ${config.get("threadIndicatorWidth")}px;
+            background-color: ${config.get("threadIndicatorColor")} !important;
         }
 
 `;
@@ -3683,16 +3704,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         context = ctx;
         console.log(`context: ${context}`);
-        for (const [name, handler] of Object.entries(handlers2)) {
+        for (const [name, handler] of Object.entries(handlers)) {
           handler.deactivate();
         }
-        if (handlers2[context]) {
-          handlers2[context].activate();
+        if (handlers[context]) {
+          handlers[context].activate();
         }
       }
       function setContextFromUrl() {
         current_url = window.location.href;
-        for (const [name, handler] of Object.entries(handlers2)) {
+        for (const [name, handler] of Object.entries(handlers)) {
           if (handler.isActive()) {
             setContext(name);
             break;
@@ -3779,13 +3800,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       <h2>Configuration</h2>
     </div>
   `;
-    config$1 = new GM_config({
+    config = new GM_config({
       id: "GM_config",
       title: configTitleDiv,
       fields: CONFIG_FIELDS,
       "events": {
         "init": onConfigInit,
-        "save": () => config$1.close(),
+        "save": () => config.close(),
         "close": () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
       },
       "css": `
@@ -3859,7 +3880,7 @@ h2 {
       const originalPlay = HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play = function() {
         const isUserInitiated = this.dataset.allowPlay === "true";
-        if (isUserInitiated || config$1.get("videoPreviewPlayback") == "Play all") {
+        if (isUserInitiated || config.get("videoPreviewPlayback") == "Play all") {
           console.log("Allowing play:", this);
           delete this.dataset.allowPlay;
           return originalPlay.apply(this, arguments);

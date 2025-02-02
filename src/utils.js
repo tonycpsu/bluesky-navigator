@@ -1,5 +1,7 @@
 // utils.js
 
+let debounceTimeout;
+
 export function debounce(func, delay) {
     return function (...args) {
         clearTimeout(debounceTimeout);
@@ -72,31 +74,6 @@ export function observeChanges(target, callback, subtree) {
         attributes: true,
         attributeOldValue: true,
         subtree: !!subtree,
-    });
-
-    return observer;
-}
-
-
-export function onVisibilityChange(selector, callback) {
-    const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            // console.log(`mutation: ${mutation}`)
-            if (mutation.type === "attributes") {
-                const target = mutation.target;
-                const isVisible = $(target).is(":visible");
-                callback($(target), isVisible);
-            }
-        });
-    });
-
-    $(selector).each((_, el) => {
-        // console.log(`observe: ${el}`)
-        observer.observe(el, {
-            attributes: true, // Observe attribute changes
-            attributeFilter: ["style", "class"], // Filter for relevant attributes
-            subtree: false // Do not observe children
-        });
     });
 
     return observer;

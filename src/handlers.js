@@ -1,4 +1,4 @@
-// handlers.js
+;// handlers.js
 
 import constants from './constants.js'
 import * as utils from "./utils.js";
@@ -10,9 +10,11 @@ const {
 
 export class Handler {
 
-  constructor(name) {
+  constructor(name, config, state) {
     //console.log(name)
     this.name = name
+    this.config = config
+    this.state = state
     this.items = []
     this.handleInput = this.handleInput.bind(this)
   }
@@ -68,7 +70,7 @@ export class Handler {
         $("a[aria-label='Settings']")[0].click()
       }
       else if (event.code === "Period") {
-        config.open()
+        this.config.open()
       }
     }
   }
@@ -84,11 +86,11 @@ export class ItemHandler extends Handler {
 
   MOUSE_MOVEMENT_THRESHOLD = 10
 
-  constructor(name, selector, config, state) {
+  constructor(name, config, state, selector) {
     super(name);
-    this.selector = selector;
     this.config = config;
     this.state = state;
+    this.selector = selector;
     this._index = null;
     this.postId = null;
     this.loadNewerCallback = null;
@@ -545,7 +547,7 @@ export class ItemHandler extends Handler {
     const messageBody = $('<div class="messageBody">');
     this.messageContainer.append(messageBody);
     $(messageBody).html(message);
-    $(FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
+    $(constants.FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
     window.scrollTo(0, 0);
 
   }
@@ -1141,8 +1143,8 @@ export class FeedItemHandler extends ItemHandler {
     ]
   }
 
-  constructor(name, selector, config, state) {
-    super(name, selector, config, state)
+  constructor(name, config, state, selector) {
+    super(name, config, state, selector)
     this.toggleSortOrder = this.toggleSortOrder.bind(this);
     this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
     this.setFilter = this.setFilter.bind(this);
@@ -1209,7 +1211,7 @@ export class FeedItemHandler extends ItemHandler {
           let uiItem = firstItem.data("ui-autocomplete-item"); // Get the first suggested item
           $(this).autocomplete("close"); // Close autocomplete after selection
 
-          let terms = splitTerms(this.value);
+          let terms = utils.splitTerms(this.value);
           terms.pop(); // Remove the last typed term
           terms.push(uiItem.value); // Add the selected suggestion
           this.value = terms.join(" ") + " "; // Ensure a space after selection
@@ -1278,10 +1280,11 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   onSearchAutocomplete(request, response) {
+    // debugger;
     const authors = this.getAuthors().sort((a, b) => a.handle.localeCompare(b.handle, undefined, {sensitivity: 'base'}));;
     const rules = Object.keys(this.state.rules);
 
-    let term = extractLastTerm(request.term); // Get the last word being typed
+    let term = utils.extractLastTerm(request.term); // Get the last word being typed
     let results = [];
 
     if (term === "") {
@@ -1358,7 +1361,7 @@ export class FeedItemHandler extends ItemHandler {
       this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
       $(this.preferencesIcon).on("click", () => {
         $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1])
-        config.open()
+        this.config.open()
       });
       $(this.statusBarRight).append(this.preferencesIcon);
     }
@@ -1583,8 +1586,8 @@ export class FeedItemHandler extends ItemHandler {
 
 export class PostItemHandler extends ItemHandler {
 
-  constructor(name, selector, config, state) {
-    super(name, selector, config)
+  constructor(name, config, state, selector) {
+    super(name, config, state, selector)
     this.indexMap = {}
     this.handleInput = this.handleInput.bind(this)
   }
@@ -1650,8 +1653,8 @@ export class PostItemHandler extends ItemHandler {
 
 export class ProfileItemHandler extends ItemHandler {
 
-  constructor(name, selector, config, state) {
-    super(name, selector, config)
+  constructor(name, config, state, selector) {
+    super(name, config, state, selector)
   }
 
   activate() {

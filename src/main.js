@@ -9,8 +9,6 @@ const {
     waitForElement,
     observeChanges,
     observeVisibilityChange,
-    splitTerms,
-    extractLastTerm
 } = utils;
 import style from './style.css?raw'
 
@@ -24,9 +22,8 @@ import {
 
 GM_addStyle(style)
 
-let debounceTimeout;
-// let stateManager;
 let config;
+let handlers;
 let enableLoadMoreItems = false;
 let loadOlderItemsCallback;
 
@@ -293,11 +290,11 @@ function setScreen(screen) {
     function onStateInit() {
 
         // FIXME: ordering of these is important since posts can be in profiles
-        var handlers = {
-            feed: new FeedItemHandler("feed", constants.FEED_ITEM_SELECTOR, config, state),
-            post: new PostItemHandler("post", constants.POST_ITEM_SELECTOR, config, state),
-            profile: new ProfileItemHandler("profile", constants.FEED_ITEM_SELECTOR, config, state),
-            input: new Handler("input")
+        handlers = {
+            feed: new FeedItemHandler("feed", config, state, constants.FEED_ITEM_SELECTOR),
+            post: new PostItemHandler("post", config, state, constants.POST_ITEM_SELECTOR),
+            profile: new ProfileItemHandler("profile", config, state, constants.FEED_ITEM_SELECTOR),
+            input: new Handler("input", config, state)
         }
 
         // FIXME: find a better place for this

@@ -302,7 +302,7 @@ div.item-banner {
     width: 24px;
     height: 24px;
     opacity: 0.8;
-    filter: invert(95%) sepia(0%) saturate(7499%) hue-rotate(326deg) brightness(107%) contrast(100%) drop-shadow( 0.2px  0px 0px black)
+    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)
         drop-shadow(-0.2px  0px 0px black)
         drop-shadow( 0px  0.2px 0px black)
         drop-shadow( 0px -0.2px 0px black);

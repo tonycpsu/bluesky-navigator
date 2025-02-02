@@ -1,0 +1,19 @@
+h1 {
+    font-size: 18pt;
+}
+
+h2 {
+    font-size: 14pt;
+}
+.config_var textarea {
+    width: 100%;
+    height: 1.5em;
+}
+
+#GM_config_rulesConfig_var textarea {
+    height: 10em;
+}
+
+#GM_config_stateSyncConfig_var textarea {
+    height: 10em;
+}

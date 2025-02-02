@@ -4,6 +4,8 @@
 import constants from './constants.js'
 import { state } from "./state.js";
 import * as utils from "./utils.js";
+import configCss from "./config.css?raw";
+
 const {
     debounce,
     waitForElement,
@@ -545,12 +547,13 @@ function setScreen(screen) {
         );
     }
 
-        const configTitleDiv = `
+    const configTitleDiv = `
     <div class="config-title">
       <h1><a href="https://github.com/tonycpsu/bluesky-navigator" target="_blank">Bluesky Navigator</a> v${GM_info.script.version}</h1>
       <h2>Configuration</h2>
     </div>
   `;
+
         config = new GM_config({
             id: 'GM_config',
             title: configTitleDiv,
@@ -560,27 +563,7 @@ function setScreen(screen) {
                 'save': () => config.close(),
                 'close': () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
             },
-            'css':  `
-h1 {
-    font-size: 18pt;
-}
-
-h2 {
-    font-size: 14pt;
-}
-.config_var textarea {
-    width: 100%;
-    height: 1.5em;
-}
-
-#GM_config_rulesConfig_var textarea {
-    height: 10em;
-}
-
-#GM_config_stateSyncConfig_var textarea {
-    height: 10em;
-}
-`,
+            'css': configCss
         });
 
     $(document).ready(function(e) {

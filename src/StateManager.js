@@ -1,3 +1,5 @@
+// StateManager.js
+
 const DEFAULT_HISTORY_MAX = 5000
 
 export class StateManager {

@@ -68,7 +68,6 @@
     URL_MONITOR_INTERVAL: 500,
     STATE_KEY: "bluesky_state",
     TOOLBAR_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] > div > div > div:first-child',
-    STATUS_BAR_CONTAINER_SELECTOR: "div.r-sa2ff0",
     LOAD_NEW_BUTTON_SELECTOR: "button[aria-label^='Load new']",
     get LOAD_NEW_INDICATOR_SELECTOR() {
       return `${constants$1.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
@@ -2981,7 +2980,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           );
         }
       );
-      waitForElement$1(constants$1.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer) => {
+      waitForElement$1(constants$1.FEED_CONTAINER_SELECTOR, (statusBarContainer) => {
         if (!$("#statusBar").length) {
           this.addStatusBar(statusBarContainer);
         }

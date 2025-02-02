@@ -1128,6 +1128,9 @@ export class FeedItemHandler extends ItemHandler {
     loadBottom: [
       "https://www.svgrepo.com/show/502338/circledownmajor.svg"
     ],
+    loadTime: [
+      "https://www.svgrepo.com/show/446075/time-history.svg"
+    ],
     filter: [
       "https://www.svgrepo.com/show/347140/mail.svg",
       "https://www.svgrepo.com/show/347147/mail-unread.svg"
@@ -1411,10 +1414,13 @@ export class FeedItemHandler extends ItemHandler {
         const img = this.INDICATOR_IMAGES[`load${bar.toLowerCase().replace(/\b\w/g, char => char.toUpperCase())}`][0];
         $(`#${bar}LoadIndicator`).empty();
         $(`#${bar}LoadIndicator`).append(`
-<div id="load${which}Indicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
+<div id="load${which}Indicator" title="Load ${which.toLowerCase()} items" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
       <span id="load${which}IndicatorText">
-      <a id="load${which}IndicatorLink" title="Load ${which.toLowerCase()} items"><img id="load${which}IndicatorImage" class="indicator-image" src="${img}"/></a>
+      <a id="load${which}IndicatorLink">
+<img id="load${which}IndicatorImage" class="indicator-image" src="${img}"/>
+</a>
       </span>
+    <img id="loadTime${which}IndicatorImage" class="indicator-image load-time-icon ${which == 'Newer' ? 'image-flip-x' : ''}" src="${this.INDICATOR_IMAGES.loadTime[0]}"/>
 </div>
 `
                                         );

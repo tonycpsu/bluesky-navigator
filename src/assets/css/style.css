@@ -73,13 +73,13 @@ div#bsky-navigator-toolbar {
     height: 24px;
 }
 
-img#loadNewerIndicatorImage {
-    opacity: 0.2;
-}
+/* img#loadNewerIndicatorImage { */
+/*     opacity: 0.2; */
+/* } */
 
-img#loadOlderIndicatorImage {
-    opacity: 0.2;
-}
+/* img#loadOlderIndicatorImage { */
+/*     opacity: 0.2; */
+/* } */
 
 div#infoIndicator {
     flex: 3;
@@ -290,4 +290,8 @@ div.item-banner {
     background: rgba(128, 192, 192, 0.3);
     padding: 3px;
     border-radius: 4px;
+}
+
+.image-highlight {
+    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);
 }

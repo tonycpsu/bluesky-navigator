@@ -147,7 +147,8 @@ export class ItemHandler extends Handler {
       this.loadNewerButton = $(button)[0];
       $('a#loadNewerIndicatorLink').on("click", () => this.loadNewerItems())
 
-      $('img#loadNewerIndicatorImage').css("opacity", "1");
+      // $('img#loadNewerIndicatorImage').css("opacity", "1");
+      $('img#loadNewerIndicatorImage').addClass("image-highlight");
       $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
       if ($('#loadNewerAction').length == 0) {
         $('#messageActions').append($('<div id="loadNewerAction"><a> Load newer posts</a></div>'));
@@ -650,7 +651,8 @@ export class ItemHandler extends Handler {
     this.refreshItems();
 
     this.loading = false;
-    $('img#loadOlderIndicatorImage').css("opacity", "1");
+    // $('img#loadOlderIndicatorImage').css("opacity", "1");
+    $('img#loadOlderIndicatorImage').addClass("image-highlight");
     $('img#loadOlderIndicatorImage').removeClass("toolbar-icon-pending");
     $(this.items).css("opacity", "100%")
     if(focusedPostId) {
@@ -673,7 +675,8 @@ You're all caught up.
         $('#messageActions').append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
         $('#loadOlderAction > a').on("click", () => this.loadOlderItems());
       }
-      if ($('img#loadNewerIndicatorImage').css("opacity") == "1") {
+      // if ($('img#loadNewerIndicatorImage').css("opacity") == "1") {
+      if ($('img#loadNewerIndicatorImage').hasClass("image-highlight")) {
         $('#messageActions').append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
         $('#loadNewerAction > a').on("click", () => this.loadNewerItems());
       }
@@ -730,6 +733,7 @@ this.itemStats.oldest
     setTimeout( () => {
       this.loadItems(oldPostId);
       $('img#loadNewerIndicatorImage').css("opacity", "0.2");
+      $('img#loadNewerIndicatorImage').removeClass("image-highlight");
       $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
       $('#loadNewerAction').remove();
       this.loadingNew = false;
@@ -742,7 +746,8 @@ this.itemStats.oldest
       return;
     }
     console.log("loading more");
-    $('img#loadOlderIndicatorImage').css("opacity", "0.2");
+    // $('img#loadOlderIndicatorImage').css("opacity", "0.2");
+    $('img#loadOlderIndicatorImage').removeClass("image-highlight");
     $('img#loadOlderIndicatorImage').addClass("toolbar-icon-pending");
     this.loading = true;
     const reversed = this.state.feedSortReverse;
@@ -1163,6 +1168,7 @@ export class FeedItemHandler extends ItemHandler {
 
     this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
     $(this.toolbarDiv).append(this.sortIndicator);
+    $(".indicator-image path").attr("fill", "currentColor");
     $('#sortIndicator').on("click", (event) => {
       event.preventDefault();
       this.toggleSortOrder();
@@ -1414,7 +1420,8 @@ export class FeedItemHandler extends ItemHandler {
                                         );
       }
     )
-    $('img#loadOlderIndicatorImage').css("opacity", "1");
+    // $('img#loadOlderIndicatorImage').css("opacity", "1");
+    $('img#loadOlderIndicatorImage').addClass("image-highlight");
     $('a#loadOlderIndicatorLink').on("click", () => this.loadOlderItems());
   }
 

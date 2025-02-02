@@ -801,7 +801,7 @@ this.itemStats.oldest
   }
 
   getAuthors() {
-    const authors = this.items.get().map( (item) => ({
+    const authors = $(this.items).get().map( (item) => ({
       handle: this.handleFromItem(item),
       displayName: this.displayNameFromItem(item)
     })).filter(
@@ -1224,7 +1224,9 @@ export class FeedItemHandler extends ItemHandler {
       console.log($(event.target).val().trim());
       this.setFilter($(event.target).val().trim());
       this.filterItems();
+      this.updateInfoIndicator();
     }, 300);
+    this.onSearchUpdate = this.onSearchUpdate.bind(this)
     $(this.searchField).on("input", this.onSearchUpdate);
     $(this.searchField).on("focus", function() {
       $(this).autocomplete("search", ""); // Trigger search with an empty string
@@ -1233,12 +1235,9 @@ export class FeedItemHandler extends ItemHandler {
     $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
 
     // Also trigger when an item is selected from autocomplete
-    $(this.searchField).on("autocompleteselect", function(event, ui) {
-      this.onSearchUpdate();
-    });
+    $(this.searchField).on("autocompleteselect", this.onSearchUpdate);
 
     // $(this.searchField).on("input", this.onSearchUpdate);
-    this.onSearchUpdate = this.onSearchUpdate.bind(this)
 
     waitForElement(
       "#bsky-navigator-toolbar",
@@ -1286,38 +1285,38 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   onSearchAutocomplete(request, response) {
+
+
     // debugger;
     const authors = this.getAuthors().sort((a, b) => a.handle.localeCompare(b.handle, undefined, {sensitivity: 'base'}));;
     const rules = Object.keys(this.state.rules);
 
-    let term = utils.extractLastTerm(request.term); // Get the last word being typed
+    let term = utils.extractLastTerm(request.term).toLowerCase();
+    let isNegation = term.startsWith("!"); // Check if `!` is present
+    if (isNegation) term = term.substring(1); // Strip `!`
+
     let results = [];
 
     if (term === "") {
-      results = rules.map(f => ({ label: `$${f}`, value: `$${f}` }));
-    }
-    else if (term.startsWith("@")) {
-      let search = term.substring(1).toLowerCase();
-      results = authors.filter(a =>
-        a.handle.toLowerCase().includes(search) ||
-          a.displayName.toLowerCase().includes(search)
-      ).map(a => ({
-        label: `@${a.handle} (${a.displayName})`, // Show as @handle (Display Name)
-        value: `@${a.handle}` // Insert only @handle
-      }));
-    } else if (term.startsWith("$")) {
-      let search = term.substring(1).toLowerCase();
-      results = rules.filter(f => f.toLowerCase().includes(search))
-                     .map(f => ({ label: `$${f}`, value: `$${f}` }));
-    } else {
-      results = [
-        ...authors.filter(a =>
-          a.handle.toLowerCase().includes(term) ||
-            a.displayName.toLowerCase().includes(term)
-        ).map(a => ({ label: `@${a.handle} (${a.displayName})`, value: `@${a.handle}` })),
-        ...rules.filter(f => f.toLowerCase().includes(term)).map(f => ({ label: `$${f}`, value: `$${f}` })),
-        { label: `Search: "${term}"`, value: term }
-      ];
+      results = rules.map(r => ({ label: `$${r}`, value: `$${r}` }));
+    } else if (term.startsWith("@") || term.startsWith("$")) {
+      let type = term.charAt(0);
+      let search = term.substring(1).toLowerCase(); // Remove prefix for matching
+
+      if (type === "@") {
+        results = authors.filter(a =>
+          a.handle.toLowerCase().includes(search) ||
+            a.displayName.toLowerCase().includes(search)
+        ).map(a => ({
+          label: `${isNegation ? "!" : ""}@${a.handle} (${a.displayName})`,
+          value: `${isNegation ? "!" : ""}@${a.handle}`
+        }));
+      } else if (type === "$") {
+        results = rules.filter(r => r.toLowerCase().includes(search))
+                       .map(r => ({
+                         label: `${isNegation ? "!" : ""}$${r}`,
+                       }));
+      }
     }
     response(results);
   }

@@ -60,7 +60,7 @@ Keyboard Shortcuts
  | :            | toggle between forward/reverse order (feed view)   |
  | "            | toggle show all or only unread posts (feed view)   |
  | /            | filter posts (feed view)                           |
- | Option+1...9 | activate rule N                                    |
+ | Option+1...9 | activate rule N (Option+Shift-1...9 negates)       |
  | f            | follow author (profile view)                       |
  | F            | unfollow author (profile view)                     |
  | L            | add author to list (profile view)                  |

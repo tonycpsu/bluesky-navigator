@@ -1264,11 +1264,17 @@ export class FeedItemHandler extends ItemHandler {
       }
     )
 
-    waitForElement(constants.FEED_CONTAINER_SELECTOR, (statusBarContainer) => {
-      if (!$('#statusBar').length) {
-        this.addStatusBar(statusBarContainer);
+
+    waitForElement(
+      constants.FEED_CONTAINER_SELECTOR,
+      (statusBarContainer, observer) => {
+        if (!$('#statusBar').length) {
+          this.addStatusBar(statusBarContainer);
+          observer.disconnect();
+        }
       }
-    });
+    );
+
     waitForElement(
       '#bsky-navigator-toolbar',
       (div) => {

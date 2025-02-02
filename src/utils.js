@@ -10,28 +10,19 @@ export function debounce(func, delay) {
 }
 
 export function waitForElement(selector, onAdd, onRemove, onChange, ignoreExisting) {
-    const processExistingElements = () => {
-        const elements = document.querySelectorAll(selector);
-        elements.forEach(el => onAdd(el));
-    };
-
-    if (onAdd && !ignoreExisting) {
-        processExistingElements();
-    }
-
     const observer = new MutationObserver(mutations => {
         mutations.forEach(mutation => {
             if (onAdd) {
                 mutation.addedNodes.forEach(node => {
                     if (node.matches && node.matches(selector)) onAdd(node);
-                    node.querySelectorAll?.(selector).forEach(el => onAdd(el));
+                    node.querySelectorAll?.(selector).forEach(el => onAdd(el, observer));
                 });
             }
 
             if (onRemove) {
                 mutation.removedNodes.forEach(node => {
                     if (node.matches && node.matches(selector)) onRemove(node);
-                    node.querySelectorAll?.(selector).forEach(el => onRemove(el));
+                    node.querySelectorAll?.(selector).forEach(el => onRemove(el, observer));
                 });
             }
 
@@ -42,12 +33,21 @@ export function waitForElement(selector, onAdd, onRemove, onChange, ignoreExisti
                     const newValue = mutation.target.getAttribute(attributeName);
 
                     if (oldValue !== newValue) {
-                        onChange(attributeName, oldValue, newValue, mutation.target);
+                        onChange(attributeName, oldValue, newValue, mutation.target, observer);
                     }
                 }
             }
         });
     });
+
+    const processExistingElements = () => {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(el => onAdd(el, observer));
+    };
+
+    if (onAdd && !ignoreExisting) {
+        processExistingElements();
+    }
 
     observer.observe(document.body, { childList: true, subtree: true, attributes: !!onChange });
     return observer;

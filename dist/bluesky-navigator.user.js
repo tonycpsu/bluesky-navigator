@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.24+238.0ed2ea47
+// @version     1.0.18+237.2e29408e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -13,14 +13,53 @@
 // @connect     clearsky.services
 // @connect     surreal.cloud
 // @grant       GM_setValue
-// @grant       GM_getValue
-// @grant       GM_addStyle
-// @grant       GM_xmlhttpRequest
-// @grant       GM_info
-// @grant       unsafeWindow
-// @grant       GM.getValue
 // @grant       GM.setValue
+// @grant       GM_getValue
+// @grant       GM.getValue
+// @grant       GM_deleteValue
+// @grant       GM.deleteValue
+// @grant       GM_listValues
+// @grant       GM.listValues
+// @grant       GM_setClipboard
+// @grant       GM.setClipboard
+// @grant       GM_addStyle
+// @grant       GM.addStyle
+// @grant       GM_addElement
+// @grant       GM.addElement
+// @grant       GM_addValueChangeListener
+// @grant       GM.addValueChangeListener
+// @grant       GM_removeValueChangeListener
+// @grant       GM.removeValueChangeListener
+// @grant       GM_registerMenuCommand
+// @grant       GM.registerMenuCommand
+// @grant       GM_unregisterMenuCommand
+// @grant       GM.unregisterMenuCommand
+// @grant       GM_download
+// @grant       GM.download
+// @grant       GM_getTab
+// @grant       GM.getTab
+// @grant       GM_getTabs
+// @grant       GM.getTabs
+// @grant       GM_saveTab
+// @grant       GM.saveTab
+// @grant       GM_openInTab
+// @grant       GM.openInTab
+// @grant       GM_notification
+// @grant       GM.notification
+// @grant       GM_getResourceURL
+// @grant       GM.getResourceURL
+// @grant       GM_getResourceText
+// @grant       GM.getResourceText
+// @grant       GM_xmlhttpRequest
 // @grant       GM.xmlhttpRequest
+// @grant       GM_log
+// @grant       GM.log
+// @grant       GM_info
+// @grant       GM.info
+// @grant       unsafeWindow
+// @grant       window.onurlchange
+// @grant       window.focus
+// @grant       window.close
 // ==/UserScript==
 
 (function() {
@@ -378,25 +417,18 @@
     };
   }
   function waitForElement$2(selector, onAdd, onRemove, onChange, ignoreExisting) {
-    const processExistingElements = () => {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach((el) => onAdd(el));
-    };
-    if (onAdd && !ignoreExisting) {
-      processExistingElements();
-    }
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (onAdd) {
           mutation.addedNodes.forEach((node) => {
             if (node.matches && node.matches(selector)) onAdd(node);
-            node.querySelectorAll?.(selector).forEach((el) => onAdd(el));
+            node.querySelectorAll?.(selector).forEach((el) => onAdd(el, observer));
           });
         }
         if (onRemove) {
           mutation.removedNodes.forEach((node) => {
             if (node.matches && node.matches(selector)) onRemove(node);
-            node.querySelectorAll?.(selector).forEach((el) => onRemove(el));
+            node.querySelectorAll?.(selector).forEach((el) => onRemove(el, observer));
           });
         }
         if (onChange) {
@@ -405,12 +437,19 @@
             const oldValue = mutation.oldValue;
             const newValue = mutation.target.getAttribute(attributeName);
             if (oldValue !== newValue) {
-              onChange(attributeName, oldValue, newValue, mutation.target);
+              onChange(attributeName, oldValue, newValue, mutation.target, observer);
             }
           }
         }
       });
     });
+    const processExistingElements = () => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach((el) => onAdd(el, observer));
+    };
+    if (onAdd && !ignoreExisting) {
+      processExistingElements();
+    }
     observer.observe(document.body, { childList: true, subtree: true, attributes: !!onChange });
     return observer;
   }
@@ -2942,11 +2981,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           );
         }
       );
-      waitForElement$1(constants$1.FEED_CONTAINER_SELECTOR, (statusBarContainer) => {
-        if (!$("#statusBar").length) {
-          this.addStatusBar(statusBarContainer);
+      waitForElement$1(
+        constants$1.FEED_CONTAINER_SELECTOR,
+        (statusBarContainer, observer) => {
+          if (!$("#statusBar").length) {
+            this.addStatusBar(statusBarContainer);
+            observer.disconnect();
+          }
         }
-      });
+      );
       waitForElement$1(
         "#bsky-navigator-toolbar",
         (div) => {

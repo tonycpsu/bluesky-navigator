@@ -554,6 +554,16 @@ function setScreen(screen) {
     </div>
   `;
 
+    function waitForGMConfig(callback) {
+        if (typeof GM_config !== "undefined") {
+            callback();
+        } else {
+            console.warn("GM_config not available yet. Retrying...");
+            setTimeout(() => waitForGMConfig(callback), 100);
+        }
+    }
+
+    waitForGMConfig(() => {
         config = new GM_config({
             id: 'GM_config',
             title: configTitleDiv,
@@ -565,6 +575,7 @@ function setScreen(screen) {
             },
             'css': configCss
         });
+    });
 
     $(document).ready(function(e) {
 

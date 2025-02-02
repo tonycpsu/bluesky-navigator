@@ -73,6 +73,7 @@
       return `${constants$1.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
     },
     FEED_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div',
+    STATUS_BAR_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"]',
     FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
     POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
     PROFILE_SELECTOR: 'a[aria-label="View profile"]',
@@ -2982,7 +2983,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       );
       waitForElement$1(
-        constants$1.FEED_CONTAINER_SELECTOR,
+        constants$1.STATUS_BAR_CONTAINER_SELECTOR,
         (statusBarContainer, observer) => {
           if (!$("#statusBar").length) {
             this.addStatusBar(statusBarContainer);

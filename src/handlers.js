@@ -1266,7 +1266,7 @@ export class FeedItemHandler extends ItemHandler {
 
 
     waitForElement(
-      constants.FEED_CONTAINER_SELECTOR,
+      constants.STATUS_BAR_CONTAINER_SELECTOR,
       (statusBarContainer, observer) => {
         if (!$('#statusBar').length) {
           this.addStatusBar(statusBarContainer);

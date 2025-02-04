@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+253.fd8cda10
+// @version     1.0.30+254.ab76e4b9
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -465,20 +465,172 @@
     splitTerms,
     waitForElement: waitForElement$2
   }, Symbol.toStringTag, { value: "Module" }));
-  ({
+  const CONFIG_FIELDS = {
     "styleSection": {
-      "section": [GM_config.create("Display Preferences"), "Customize how items are displayed"]
+      "section": [GM_config.create("Display Preferences"), "Customize how items are displayed"],
+      "type": "hidden"
+    },
+    "posts": {
+      "label": "All Posts",
+      "type": "textarea",
+      "default": "padding 1px;"
+    },
+    "unreadPosts": {
+      "label": "Unread Posts",
+      "type": "textarea",
+      "default": "opacity: 100% !important;"
+    },
+    "unreadPostsLightMode": {
+      "label": "Unread Posts (Light Mode)",
+      "type": "textarea",
+      "default": "background-color: white;"
+    },
+    "unreadPostsDarkMode": {
+      "label": "Unread Posts (Dark Mode)",
+      "type": "textarea",
+      "default": "background-color: #202020;"
+    },
+    "readPosts": {
+      "label": "Read Posts",
+      "type": "textarea",
+      "default": "opacity: 75% !important;"
+    },
+    "readPostsLightMode": {
+      "label": "Read Posts (Light Mode)",
+      "type": "textarea",
+      "default": "background-color: #f0f0f0;"
+    },
+    "readPostsDarkMode": {
+      "label": "Read Posts (Dark Mode)",
+      "type": "textarea",
+      "default": "background-color: black;"
+    },
+    "selectionActive": {
+      "label": "Selected Post",
+      "type": "textarea",
+      "default": "border: 3px rgba(255, 0, 0, .3) solid !important;"
+    },
+    "selectionInactive": {
+      "label": "Unselected Post",
+      "type": "textarea",
+      "default": "border: 3px solid transparent;"
+    },
+    "threadIndicatorWidth": {
+      "label": "Thread Indicator Width in pixels",
+      "type": "integer",
+      "default": "4"
+    },
+    "threadIndicatorColor": {
+      "label": "Thread Indicator Color",
+      "type": "textarea",
+      "default": "rgb(212, 219, 226)"
+    },
+    "threadMargin": {
+      "label": "Thread Margin",
+      "type": "textarea",
+      "default": "10px"
+    },
+    "postTimestampFormat": {
+      "label": "Post timestamp format",
+      "title": "A format string specifying how post timestamps are displayed",
+      "type": "textarea",
+      "default": "'$age' '('yyyy-MM-dd hh:mmaaa')'"
+    },
+    "videoPreviewPlayback": {
+      "label": "Video Preview Playback",
+      "title": "Control playback of video previews",
+      "type": "select",
+      "options": ["Play all", "Play selected", "Pause all"]
+    },
+    "hideLoadNewButton": {
+      "label": "Hide Load New Button",
+      "title": "If checked, the floating button to load new items will be hidden.",
+      "type": "checkbox",
+      "default": false
+    },
+    "showPostCounts": {
+      "label": "Show Post Counts",
+      "title": "Specify whether post counts are displayed in all, selected, or no posts.",
+      "type": "select",
+      "options": ["All", "Selection", "None"],
+      "default": "All"
+    },
+    "enableSmoothScrolling": {
+      "label": "Enable Smooth Scrolling",
+      "title": "If checked, scrolling using keyboard navigation will be smooth \u{1F6E5}\uFE0F \u{1F3B7}",
+      "type": "checkbox",
+      "default": false
     },
     "stateSyncSection": {
-      "section": [GM_config.create("State Sync"), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.']
+      "section": [GM_config.create("State Sync"), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],
+      "type": "hidden"
+    },
+    "stateSyncEnabled": {
+      "label": "Enable State Sync",
+      "title": "If checked, synchronize state to/from the cloud",
+      "type": "checkbox",
+      "default": false
+    },
+    "stateSyncConfig": {
+      "label": "State Sync Configuration (JSON)",
+      "title": "JSON object containing state information",
+      "type": "textarea"
+    },
+    "stateSyncTimeout": {
+      "label": "State Sync Timeout",
+      "title": "Number of milliseconds of idle time before syncing state",
+      "type": "int",
+      "default": 5e3
     },
     "rulesSection": {
-      "section": [GM_config.create("Rules"), "Post Rules"]
+      "section": [GM_config.create("Rules"), "Post Rules"],
+      "type": "hidden"
+    },
+    "rulesConfig": {
+      "label": "Filters Configuration",
+      "type": "textarea"
     },
     "miscellaneousSection": {
-      "section": [GM_config.create("Miscellaneous"), "Other settings"]
+      "section": [GM_config.create("Miscellaneous"), "Other settings"],
+      "type": "hidden"
+    },
+    "markReadOnScroll": {
+      "label": "Mark Read on Scroll",
+      "title": "If checked, items will be marked read while scrolling",
+      "type": "checkbox",
+      "default": false
+    },
+    "disableLoadMoreOnScroll": {
+      "label": "Disable Load More on Scroll",
+      "title": 'If checked, the default behavior of loading more items when scrolling will be disabled. You can still press "U" to load more manually.',
+      "type": "checkbox",
+      "default": false
+    },
+    "savePostState": {
+      "label": "Save Post State",
+      "title": "If checked, read/unread state is kept for post items in addition to feed items",
+      "type": "checkbox",
+      "default": false
+    },
+    "stateSaveTimeout": {
+      "label": "State Save Timeout",
+      "title": "Number of milliseconds of idle time before saving state locally",
+      "type": "int",
+      "default": 1e3
+    },
+    "historyMax": {
+      "label": "History Max Size",
+      "title": "Maximum number of posts to remember for saving read state",
+      "type": "int",
+      "default": constants$1.DEFAULT_HISTORY_MAX
+    },
+    "showDebuggingInfo": {
+      "label": "Enable Debugging",
+      "title": "If checked, some debugging info will be shown in posts",
+      "type": "checkbox",
+      "default": false
     }
-  });
+  };
   const style = '/* style.css */\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    background-color: rgb(255, 255, 255);\n    width: 100%;\n    height: 32px;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n/* img#loadNewerIndicatorImage { */\n/*     opacity: 0.2; */\n/* } */\n\n/* img#loadOlderIndicatorImage { */\n/*     opacity: 0.2; */\n/* } */\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\nspan#infoIndicatorText {\n    font-size: 0.8em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    bottom: 2px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n';
   const configCss = "h1 {\n    font-size: 18pt;\n}\n\nh2 {\n    font-size: 14pt;\n}\n.config_var textarea {\n    width: 100%;\n    height: 1.5em;\n}\n\n#GM_config_rulesConfig_var textarea {\n    height: 10em;\n}\n\n#GM_config_stateSyncConfig_var textarea {\n    height: 10em;\n}\n";
   const millisecondsInWeek = 6048e5;
@@ -3337,172 +3489,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
   GM_addStyle(style);
   let config;
   let handlers;
-  const CONFIG_FIELDS = {
-    "styleSection": {
-      "section": [GM_config.create("Display Preferences"), "Customize how items are displayed"],
-      "type": "hidden"
-    },
-    "posts": {
-      "label": "All Posts",
-      "type": "textarea",
-      "default": "padding 1px;"
-    },
-    "unreadPosts": {
-      "label": "Unread Posts",
-      "type": "textarea",
-      "default": "opacity: 100% !important;"
-    },
-    "unreadPostsLightMode": {
-      "label": "Unread Posts (Light Mode)",
-      "type": "textarea",
-      "default": "background-color: white;"
-    },
-    "unreadPostsDarkMode": {
-      "label": "Unread Posts (Dark Mode)",
-      "type": "textarea",
-      "default": "background-color: #202020;"
-    },
-    "readPosts": {
-      "label": "Read Posts",
-      "type": "textarea",
-      "default": "opacity: 75% !important;"
-    },
-    "readPostsLightMode": {
-      "label": "Read Posts (Light Mode)",
-      "type": "textarea",
-      "default": "background-color: #f0f0f0;"
-    },
-    "readPostsDarkMode": {
-      "label": "Read Posts (Dark Mode)",
-      "type": "textarea",
-      "default": "background-color: black;"
-    },
-    "selectionActive": {
-      "label": "Selected Post",
-      "type": "textarea",
-      "default": "border: 3px rgba(255, 0, 0, .3) solid !important;"
-    },
-    "selectionInactive": {
-      "label": "Unselected Post",
-      "type": "textarea",
-      "default": "border: 3px solid transparent;"
-    },
-    "threadIndicatorWidth": {
-      "label": "Thread Indicator Width in pixels",
-      "type": "integer",
-      "default": "4"
-    },
-    "threadIndicatorColor": {
-      "label": "Thread Indicator Color",
-      "type": "textarea",
-      "default": "rgb(212, 219, 226)"
-    },
-    "threadMargin": {
-      "label": "Thread Margin",
-      "type": "textarea",
-      "default": "10px"
-    },
-    "postTimestampFormat": {
-      "label": "Post timestamp format",
-      "title": "A format string specifying how post timestamps are displayed",
-      "type": "textarea",
-      "default": "'$age' '('yyyy-MM-dd hh:mmaaa')'"
-    },
-    "videoPreviewPlayback": {
-      "label": "Video Preview Playback",
-      "title": "Control playback of video previews",
-      "type": "select",
-      "options": ["Play all", "Play selected", "Pause all"]
-    },
-    "hideLoadNewButton": {
-      "label": "Hide Load New Button",
-      "title": "If checked, the floating button to load new items will be hidden.",
-      "type": "checkbox",
-      "default": false
-    },
-    "showPostCounts": {
-      "label": "Show Post Counts",
-      "title": "Specify whether post counts are displayed in all, selected, or no posts.",
-      "type": "select",
-      "options": ["All", "Selection", "None"],
-      "default": "All"
-    },
-    "enableSmoothScrolling": {
-      "label": "Enable Smooth Scrolling",
-      "title": "If checked, scrolling using keyboard navigation will be smooth \u{1F6E5}\uFE0F \u{1F3B7}",
-      "type": "checkbox",
-      "default": false
-    },
-    "stateSyncSection": {
-      "section": [GM_config.create("State Sync"), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],
-      "type": "hidden"
-    },
-    "stateSyncEnabled": {
-      "label": "Enable State Sync",
-      "title": "If checked, synchronize state to/from the cloud",
-      "type": "checkbox",
-      "default": false
-    },
-    "stateSyncConfig": {
-      "label": "State Sync Configuration (JSON)",
-      "title": "JSON object containing state information",
-      "type": "textarea"
-    },
-    "stateSyncTimeout": {
-      "label": "State Sync Timeout",
-      "title": "Number of milliseconds of idle time before syncing state",
-      "type": "int",
-      "default": 5e3
-    },
-    "rulesSection": {
-      "section": [GM_config.create("Rules"), "Post Rules"],
-      "type": "hidden"
-    },
-    "rulesConfig": {
-      "label": "Filters Configuration",
-      "type": "textarea"
-    },
-    "miscellaneousSection": {
-      "section": [GM_config.create("Miscellaneous"), "Other settings"],
-      "type": "hidden"
-    },
-    "markReadOnScroll": {
-      "label": "Mark Read on Scroll",
-      "title": "If checked, items will be marked read while scrolling",
-      "type": "checkbox",
-      "default": false
-    },
-    "disableLoadMoreOnScroll": {
-      "label": "Disable Load More on Scroll",
-      "title": 'If checked, the default behavior of loading more items when scrolling will be disabled. You can still press "U" to load more manually.',
-      "type": "checkbox",
-      "default": false
-    },
-    "savePostState": {
-      "label": "Save Post State",
-      "title": "If checked, read/unread state is kept for post items in addition to feed items",
-      "type": "checkbox",
-      "default": false
-    },
-    "stateSaveTimeout": {
-      "label": "State Save Timeout",
-      "title": "Number of milliseconds of idle time before saving state locally",
-      "type": "int",
-      "default": 1e3
-    },
-    "historyMax": {
-      "label": "History Max Size",
-      "title": "Maximum number of posts to remember for saving read state",
-      "type": "int",
-      "default": constants$1.DEFAULT_HISTORY_MAX
-    },
-    "showDebuggingInfo": {
-      "label": "Enable Debugging",
-      "title": "If checked, some debugging info will be shown in posts",
-      "type": "checkbox",
-      "default": false
-    }
-  };
   const screenPredicateMap = {
     search: (element) => $(element).find('div[data-testid="searchScreen"]').length,
     notifications: (element) => $(element).find('div[data-testid="notificationsScreen"]').length,

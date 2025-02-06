@@ -93,6 +93,7 @@ span#infoIndicatorText {
     flex: 1;
     margin: 0px 8px;
     z-index: 10;
+    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;
 }
 
 .ui-autocomplete {
@@ -103,6 +104,7 @@ span#infoIndicatorText {
     max-height: 200px !important;
     overflow-y: auto !important;
     list-style-type: none !important;
+    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;
     padding: 2px !important;
 }
 

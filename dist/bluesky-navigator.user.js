@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+259.84822887
+// @version     1.0.30+260.0dbaa9f8
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -251,7 +251,7 @@
       if (saveLocal) {
         this.saveLocalState();
       }
-      if (saveRemote) {
+      if (this.config.get("stateSyncEnabled") && saveRemote) {
         this.saveRemoteState(this.state.lastUpdated);
       }
     }

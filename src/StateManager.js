@@ -237,7 +237,7 @@ export class StateManager {
     if (saveLocal) {
       this.saveLocalState();
     }
-    if (saveRemote) {
+    if (this.config.get("stateSyncEnabled") && saveRemote) {
       this.saveRemoteState(this.state.lastUpdated);
     }
   }

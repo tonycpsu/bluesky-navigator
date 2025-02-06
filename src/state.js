@@ -46,7 +46,7 @@ const state = new Proxy(target, {
   },
   set(target, prop, value) {
     console.log(`State Update: ${prop} = ${value}`);
-    stateManager[prop] = value;
+    stateManager.state[prop] = value;
     return true;
   }
 });

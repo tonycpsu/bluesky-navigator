@@ -207,6 +207,9 @@ export class ItemHandler extends Handler {
 
     $(this.selector).off("mouseover mouseleave");
     $(document).off("scroll", this.onScroll);
+    document.addEventListener("scrollend", () => {
+      this.enableScrollMonitor = false;
+    });
     super.deactivate()
   }
 
@@ -287,11 +290,10 @@ export class ItemHandler extends Handler {
     if(!this.enableIntersectionObserver || this.loading || this.loadingNew) {
       return;
     }
-    console.log("onIntersection");
     let focusedElement = null;
 
     entries.forEach(entry => {
-      if (entry.isIntersecting) {
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
         this.visibleItems.add(entry.target);
       } else {
         this.visibleItems.delete(entry.target);
@@ -305,6 +307,7 @@ export class ItemHandler extends Handler {
     if (! visibleItems.length) {
       return;
     }
+
     const target = visibleItems[0]
 
     if (target) {
@@ -319,7 +322,7 @@ export class ItemHandler extends Handler {
   onFooterIntersection(entries) {
     entries.forEach((entry) => {
       if (entry.isIntersecting) {
-        console.log("footer")
+        // console.log("footer")
         const target = entry.target;
         this.disableFooterObserver();
         this.loadOlderItems();
@@ -504,7 +507,8 @@ export class ItemHandler extends Handler {
 
   onItemMouseOver(event) {
     var target = $(event.target).closest(this.selector)
-    if (this.ignoreMouseMovement || ! this.didMouseMove(event)) {
+    if (this.ignoreMouseMovement) {
+    // if (this.ignoreMouseMovement || ! this.didMouseMove(event)) {
       return
     }
     this.setIndex(this.getIndexFromItem(target))
@@ -516,7 +520,6 @@ export class ItemHandler extends Handler {
 
 
   handleInput(event) {
-    this.enableScrollMonitor = false;
     if (this.handleMovementKey(event)) {
       return event.key
     } else if (this.handleItemKey(event)) {
@@ -686,7 +689,8 @@ You're all caught up.
     }
 
     this.ignoreMouseMovement = false;
-    this.enableScrollMonitor = false;
+    // console.log("this.enableScrollMonitor = false;")
+    // this.enableScrollMonitor = false;
     // else if (this.index == null) {
     //     this.setIndex(0);
     // }
@@ -829,7 +833,7 @@ this.itemStats.oldest
     } else {
       // console.log(this.index, this.items.length)
     }
-
+    this.ignoreMouseMovement = false;
   }
 
   setIndex(index, mark, update) {
@@ -850,10 +854,7 @@ this.itemStats.oldest
     if(update) {
       this.updateItems();
     }
-    setTimeout(
-      () => this.enableIntersectionObserver = true,
-      500
-    );
+    this.enableIntersectionObserver = true;
     return true;
     // this.updateItems();
   }
@@ -911,7 +912,7 @@ this.itemStats.oldest
 
   // FIXME: move to PostItemHanler
   handleNewThreadPage(element) {
-    console.log(`new page: ${element}`)
+    // console.log(`new page: ${element}`)
     console.log(this.items.length)
     this.loadPageObserver.disconnect()
   }
@@ -929,7 +930,7 @@ this.itemStats.oldest
       var next = $(this.items[this.index]).parent().parent().parent().next()
       // console.log(next.text())
       if (next && $.trim(next.text()) == "Continue thread...") {
-        console.log("click")
+        // console.log("click")
         this.loadPageObserver = waitForElement(
           this.THREAD_PAGE_SELECTOR,
           this.handleNewThreadPage
@@ -942,14 +943,14 @@ this.itemStats.oldest
   }
 
   handleMovementKey(event) {
-    var moved = false
-    var mark = false
-    var old_index = this.index
+    var moved = false;
+    var mark = false;
+    var old_index = this.index;
     if (this.isPopupVisible) {
       return
     }
     // mouse movement may be triggered, so ignore it
-    this.ignoreMouseMovement = true
+    this.ignoreMouseMovement = true;
 
     if (this.keyState.length == 0) {
       if (["j", "k", "ArrowDown", "ArrowUp", "J", "G"].includes(event.key))

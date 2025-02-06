@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+264.b22a9074
+// @version     1.0.30+265.9897527b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2276,6 +2276,9 @@
       this.disableFooterObserver();
       $(this.selector).off("mouseover mouseleave");
       $(document).off("scroll", this.onScroll);
+      document.addEventListener("scrollend", () => {
+        this.enableScrollMonitor = false;
+      });
       super.deactivate();
     }
     get index() {
@@ -2337,9 +2340,8 @@
       if (!this.enableIntersectionObserver || this.loading || this.loadingNew) {
         return;
       }
-      console.log("onIntersection");
       entries.forEach((entry) => {
-        if (entry.isIntersecting) {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
           this.visibleItems.add(entry.target);
         } else {
           this.visibleItems.delete(entry.target);
@@ -2363,7 +2365,6 @@
     onFooterIntersection(entries) {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          console.log("footer");
           entry.target;
           this.disableFooterObserver();
           this.loadOlderItems();
@@ -2506,13 +2507,12 @@
     }
     onItemMouseOver(event) {
       var target2 = $(event.target).closest(this.selector);
-      if (this.ignoreMouseMovement || !this.didMouseMove(event)) {
+      if (this.ignoreMouseMovement) {
         return;
       }
       this.setIndex(this.getIndexFromItem(target2));
     }
     handleInput(event) {
-      this.enableScrollMonitor = false;
       if (this.handleMovementKey(event)) {
         return event.key;
       } else if (this.handleItemKey(event)) {
@@ -2648,7 +2648,6 @@ You're all caught up.
         this.hideMessage();
       }
       this.ignoreMouseMovement = false;
-      this.enableScrollMonitor = false;
     }
     refreshItems() {
       $(this.items).each(
@@ -2758,6 +2757,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       } else if (this.items[this.index]) {
         this.scrollToElement($(this.items[this.index])[0]);
       } else ;
+      this.ignoreMouseMovement = false;
     }
     setIndex(index, mark, update) {
       let oldIndex = this.index;
@@ -2776,10 +2776,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (update) {
         this.updateItems();
       }
-      setTimeout(
-        () => this.enableIntersectionObserver = true,
-        500
-      );
+      this.enableIntersectionObserver = true;
       return true;
     }
     jumpToPost(postId) {
@@ -2824,7 +2821,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     // FIXME: move to PostItemHanler
     handleNewThreadPage(element) {
-      console.log(`new page: ${element}`);
       console.log(this.items.length);
       this.loadPageObserver.disconnect();
     }
@@ -2838,7 +2834,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       } else {
         var next = $(this.items[this.index]).parent().parent().parent().next();
         if (next && $.trim(next.text()) == "Continue thread...") {
-          console.log("click");
           this.loadPageObserver = waitForElement$1(
             this.THREAD_PAGE_SELECTOR,
             this.handleNewThreadPage

@@ -252,13 +252,13 @@ export class ItemHandler extends Handler {
   }
 
   scrollToElement(target) {
-    this.enableScrollMonitor = false;
+    // this.enableScrollMonitor = false;
     target.scrollIntoView(
       {behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"}
     );
-    setTimeout(() => {
-      this.enableScrollMonitor = true;
-    }, 250);
+    // setTimeout(() => {
+    //   this.enableScrollMonitor = true;
+    // }, 250);
   }
 
   // Function to programmatically play a video from the userscript
@@ -689,8 +689,6 @@ You're all caught up.
     }
 
     this.ignoreMouseMovement = false;
-    // console.log("this.enableScrollMonitor = false;")
-    // this.enableScrollMonitor = false;
     // else if (this.index == null) {
     //     this.setIndex(0);
     // }
@@ -838,7 +836,7 @@ this.itemStats.oldest
 
   setIndex(index, mark, update) {
     let oldIndex = this.index;
-    this.enableIntersectionObserver = false;
+    // this.enableIntersectionObserver = false;
     if (oldIndex != null) {
       if (mark)
       {
@@ -854,7 +852,7 @@ this.itemStats.oldest
     if(update) {
       this.updateItems();
     }
-    this.enableIntersectionObserver = true;
+    // this.enableIntersectionObserver = true;
     return true;
     // this.updateItems();
   }

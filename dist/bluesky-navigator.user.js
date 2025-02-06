@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+265.9897527b
+// @version     1.0.30+266.7e9b6b08
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2308,13 +2308,9 @@
       this.enableIntersectionObserver = true;
     }
     scrollToElement(target2) {
-      this.enableScrollMonitor = false;
       target2.scrollIntoView(
         { behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant" }
       );
-      setTimeout(() => {
-        this.enableScrollMonitor = true;
-      }, 250);
     }
     // Function to programmatically play a video from the userscript
     playVideo(video) {
@@ -2761,7 +2757,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     setIndex(index, mark, update) {
       let oldIndex = this.index;
-      this.enableIntersectionObserver = false;
       if (oldIndex != null) {
         if (mark) {
           this.markItemRead(oldIndex, true);
@@ -2776,7 +2771,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (update) {
         this.updateItems();
       }
-      this.enableIntersectionObserver = true;
       return true;
     }
     jumpToPost(postId) {

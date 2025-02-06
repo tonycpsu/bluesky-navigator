@@ -1278,7 +1278,9 @@ export class FeedItemHandler extends ItemHandler {
       constants.STATUS_BAR_CONTAINER_SELECTOR,
       (statusBarContainer, observer) => {
         if (!$('#statusBar').length) {
-          this.addStatusBar(statusBarContainer);
+          // FIXME: it would be easier to match from top down, but HTML changes
+          // between desktop/mobile viewport size, so this works better.
+          this.addStatusBar($(statusBarContainer).parent().parent().parent().parent().parent());
           observer.disconnect();
         }
       }

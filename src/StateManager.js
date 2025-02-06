@@ -17,6 +17,7 @@ export class StateManager {
     this.localSaveTimeout = null; // Timer for local state save
     this.remoteSyncTimeout = null; // Timer for remote state sync
     this.handleBlockListResponse = this.handleBlockListResponse.bind(this);
+    this.saveStateImmediately = this.saveStateImmediately.bind(this);
     window.addEventListener("beforeunload", () => this.saveStateImmediately());
   }
 
@@ -237,7 +238,8 @@ export class StateManager {
     if (saveLocal) {
       this.saveLocalState();
     }
-    if (this.config.get("stateSyncEnabled") && saveRemote) {
+    debugger;
+    if (this.config.stateSyncEnabled && saveRemote) {
       this.saveRemoteState(this.state.lastUpdated);
     }
   }

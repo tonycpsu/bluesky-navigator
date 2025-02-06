@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+258.9a1dac28
+// @version     1.0.30+259.84822887
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -3520,34 +3520,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
   (function() {
     var current_url = null;
     var context = null;
-    function parseRulesConfig(configText) {
-      const lines = configText.split("\n");
-      const rules = {};
-      let rulesName = null;
-      for (let line of lines) {
-        line = line.trim();
-        if (!line || line.startsWith(";") || line.startsWith("#")) continue;
-        const sectionMatch = line.match(/^\[(.+)\]$/);
-        if (sectionMatch) {
-          rulesName = sectionMatch[1];
-          rules[rulesName] = [];
-          continue;
-        }
-        if (!rulesName) continue;
-        const ruleMatch = line.match(/(allow|deny) (all|from|content) "?([^"]+)"?/);
-        if (ruleMatch) {
-          const [_, action, type, value] = ruleMatch;
-          rules[rulesName].push({ action, type, value });
-          continue;
-        }
-        if (line.startsWith("@")) {
-          rules[rulesName].push({ action: "allow", type: "from", value: line });
-        } else {
-          rules[rulesName].push({ action: "allow", type: "content", value: line });
-        }
-      }
-      return rules;
-    }
     function onConfigInit() {
       const stateManagerConfig = {
         stateSyncEnabled: config.get("stateSyncEnabled"),
@@ -3557,6 +3529,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       };
       state.init(constants$1.STATE_KEY, stateManagerConfig, onStateInit);
     }
+    function onConfigSave() {
+      state.rulesConfig = config.get("rulesConfig");
+      state.stateManager.saveStateImmediately(true, true);
+      config.close();
+    }
     function onStateInit() {
       handlers = {
         feed: new FeedItemHandler("feed", config, state, constants$1.FEED_ITEM_SELECTOR),
@@ -3564,7 +3541,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         profile: new ProfileItemHandler("profile", config, state, constants$1.FEED_ITEM_SELECTOR),
         input: new Handler("input", config, state)
       };
-      state.rules = parseRulesConfig(config.get("rulesConfig"));
+      if (state.rulesConfig) {
+        config.set("rulesConfig", state.rulesConfig);
+      }
       if (config.get("showDebuggingInfo")) {
         let appendLog = function(type, args) {
           const message2 = `[${type.toUpperCase()}] ${args.map((arg) => typeof arg === "object" ? JSON.stringify(arg, null, 2) : arg).join(" ")}`;
@@ -3833,7 +3812,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         fields: CONFIG_FIELDS,
         "events": {
           "init": onConfigInit,
-          "save": () => config.close(),
+          "save": () => onConfigSave,
           "close": () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
         },
         "css": configCss

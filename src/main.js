@@ -121,8 +121,15 @@ function setScreen(screen) {
         state.init(constants.STATE_KEY, stateManagerConfig, onStateInit);
     }
 
+    function onConfigSave() {
+
+        state.rulesConfig = config.get("rulesConfig");
+        state.stateManager.saveStateImmediately(true, true);
+        config.close();
+    }
 
     function onStateInit() {
+
 
         // FIXME: ordering of these is important since posts can tbe in profiles
         handlers = {
@@ -133,7 +140,10 @@ function setScreen(screen) {
         }
 
         // FIXME: find a better place for this
-        state.rules = parseRulesConfig(config.get("rulesConfig"));
+        if(state.rulesConfig) {
+            config.set("rulesConfig", state.rulesConfig);
+        }
+        // state.rules = parseRulesConfig(config.get("rulesConfig"));
 
         if(config.get("showDebuggingInfo")) {
             const logContainer = $(`<div id="logContainer"></div>`);
@@ -487,7 +497,7 @@ function setScreen(screen) {
             fields: configjs.CONFIG_FIELDS,
             'events': {
                 'init': onConfigInit,
-                'save': () => config.close(),
+                'save': () => onConfigSave,
                 'close': () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
             },
             'css': configCss

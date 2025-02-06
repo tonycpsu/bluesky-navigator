@@ -1155,6 +1155,7 @@ export class FeedItemHandler extends ItemHandler {
     super(name, config, state, selector)
     this.toggleSortOrder = this.toggleSortOrder.bind(this);
     this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
+    this.onSearchKeydown = this.onSearchKeydown.bind(this);
     this.setFilter = this.setFilter.bind(this);
   }
 
@@ -1237,6 +1238,8 @@ export class FeedItemHandler extends ItemHandler {
       // this.updateInfoIndicator();
     }, 300);
     this.onSearchUpdate = this.onSearchUpdate.bind(this)
+    $(this.searchField).on("keydown", this.onSearchKeydown);
+
     $(this.searchField).on("input", this.onSearchUpdate);
     $(this.searchField).on("focus", function() {
       $(this).autocomplete("search", ""); // Trigger search with an empty string
@@ -1257,6 +1260,14 @@ export class FeedItemHandler extends ItemHandler {
       }
     )
 
+  }
+
+  onSearchKeydown(event) {
+      if (event.altKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.handleInput(event);
+    }
   }
 
   refreshToolbars() {

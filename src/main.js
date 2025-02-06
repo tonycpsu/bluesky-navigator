@@ -124,7 +124,7 @@ function setScreen(screen) {
 
     function onStateInit() {
 
-        // FIXME: ordering of these is important since posts can be in profiles
+        // FIXME: ordering of these is important since posts can tbe in profiles
         handlers = {
             feed: new FeedItemHandler("feed", config, state, constants.FEED_ITEM_SELECTOR),
             post: new PostItemHandler("post", config, state, constants.POST_ITEM_SELECTOR),

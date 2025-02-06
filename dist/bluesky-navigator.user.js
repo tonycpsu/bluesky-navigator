@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+257.7c97b418
+// @version     1.0.30+258.9a1dac28
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -3204,6 +3204,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     activate() {
       super.activate();
       this.refreshToolbars();
+      waitForElement$1(
+        "#bsky-navigator-search",
+        (el) => {
+          $(el).val(this.state.filter);
+        }
+      );
     }
     deactivate() {
       super.deactivate();
@@ -3242,7 +3248,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.loadItems();
     }
     setFilter(text) {
-      this.filter = text;
+      this.state.stateManager.saveStateImmediately(true, true);
+      this.state.filter = text;
     }
     filterItem(item, thread) {
       if (this.state.feedHideRead) {
@@ -3250,8 +3257,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           return false;
         }
       }
-      if (this.filter && this.state.rules) {
-        const activeRules = this.filter.split(/[ ]+/).map(
+      if (this.state.filter && this.state.rules) {
+        const activeRules = this.state.filter.split(/[ ]+/).map(
           (ruleStatement) => {
             const [_, invert, matchType, query] = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
             return {

@@ -1388,6 +1388,12 @@ export class FeedItemHandler extends ItemHandler {
   activate() {
     super.activate();
     this.refreshToolbars();
+    waitForElement(
+      "#bsky-navigator-search",
+      (el) => {
+        $(el).val(this.state.filter);
+      }
+    );
   }
 
   deactivate() {
@@ -1437,7 +1443,8 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   setFilter(text) {
-    this.filter = text;
+    this.state.stateManager.saveStateImmediately(true, true);
+    this.state.filter = text;
   }
 
   filterItem(item, thread) {
@@ -1448,8 +1455,8 @@ export class FeedItemHandler extends ItemHandler {
       }
     }
 
-    if(this.filter && this.state.rules) {
-      const activeRules = this.filter.split(/[ ]+/).map(
+    if(this.state.filter && this.state.rules) {
+      const activeRules = this.state.filter.split(/[ ]+/).map(
         (ruleStatement) => {
           const [_, invert, matchType, query] = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
           return {

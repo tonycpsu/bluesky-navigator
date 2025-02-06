@@ -3,52 +3,52 @@
 import constants from './constants.js'
 
 export const CONFIG_FIELDS = {
-    'styleSection': {
+    'displaySection': {
         'section': [GM_config.create('Display Preferences'), 'Customize how items are displayed'],
         'type': 'hidden',
     },
     'posts': {
-        'label': 'All Posts',
+        'label': 'CSS Style: All Posts',
         'type': 'textarea',
         'default': 'padding 1px;'
     },
     'unreadPosts': {
-        'label': 'Unread Posts',
+        'label': 'CSS Style: Unread Posts',
         'type': 'textarea',
         'default': 'opacity: 100% !important;'
     },
     'unreadPostsLightMode': {
-        'label': 'Unread Posts (Light Mode)',
+        'label': 'CSS Style: Unread Posts (Light Mode)',
         'type': 'textarea',
         'default': 'background-color: white;'
     },
     'unreadPostsDarkMode': {
-        'label': 'Unread Posts (Dark Mode)',
+        'label': 'CSS Style: Unread Posts (Dark Mode)',
         'type': 'textarea',
         'default': 'background-color: #202020;'
     },
     'readPosts': {
-        'label': 'Read Posts',
+        'label': 'CSS Style: Read Posts',
         'type': 'textarea',
         'default': 'opacity: 75% !important;'
     },
     'readPostsLightMode': {
-        'label': 'Read Posts (Light Mode)',
+        'label': 'CSS Style: Read Posts (Light Mode)',
         'type': 'textarea',
         'default': 'background-color: #f0f0f0;'
     },
     'readPostsDarkMode': {
-        'label': 'Read Posts (Dark Mode)',
+        'label': 'CSS Style: Read Posts (Dark Mode)',
         'type': 'textarea',
         'default': 'background-color: black;'
     },
     'selectionActive': {
-        'label': 'Selected Post',
+        'label': 'CSS Style: Selected Post',
         'type': 'textarea',
         'default': 'border: 3px rgba(255, 0, 0, .3) solid !important;'
     },
     'selectionInactive': {
-        'label': 'Unselected Post',
+        'label': 'CSS Style: Unselected Post',
         'type': 'textarea',
         'default': 'border: 3px solid transparent;'
     },

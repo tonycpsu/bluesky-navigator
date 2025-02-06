@@ -238,7 +238,6 @@ export class StateManager {
     if (saveLocal) {
       this.saveLocalState();
     }
-    debugger;
     if (this.config.stateSyncEnabled && saveRemote) {
       this.saveRemoteState(this.state.lastUpdated);
     }

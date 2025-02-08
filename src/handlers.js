@@ -310,6 +310,7 @@ export class ItemHandler extends Handler {
     let target = null;
 
     entries.forEach(entry => {
+
       if (entry.isIntersecting) {
         if( ! this.visibleItems.filter( (item) => item.target == entry.target  ).length){
           this.visibleItems.push(entry)
@@ -325,6 +326,7 @@ export class ItemHandler extends Handler {
 
     const visibleItems = this.visibleItems.filter(
       (item) => {
+        // console.log(item.target.getBoundingClientRect().top, this.scrollMargin);
         return item.target.getBoundingClientRect().top > this.scrollMargin
       }
     ).sort(
@@ -334,6 +336,7 @@ export class ItemHandler extends Handler {
           :  a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
       )
     )
+    console.log(visibleItems);
 
     if (! visibleItems.length) {
       return;
@@ -392,9 +395,10 @@ export class ItemHandler extends Handler {
 
   get scrollMargin() {
     var margin;
-    var el = $('div[data-testid="HomeScreen"] > div > div').eq(2);
     if(this.state.mobileView) {
-      el = el.first().first();
+      // debugger;
+      var el = $('div[data-testid="HomeScreen"] > div > div > div');
+      el = el.first().children().filter(":visible").first();
       if(this.index) {
         var transform = el[0].style.transform
         var translateY = transform.indexOf("(") == -1 ? 0 : parseInt(transform.split("(")[1].split("px")[0])
@@ -404,6 +408,7 @@ export class ItemHandler extends Handler {
       }
 
     } else {
+      var el = $('div[data-testid="HomeScreen"] > div > div').eq(2);
       margin = el.outerHeight();
     }
     return margin;
@@ -545,7 +550,7 @@ export class ItemHandler extends Handler {
     var target = $(event.target).closest(this.selector)
     if (this.ignoreMouseMovement) {
     // if (this.ignoreMouseMovement || ! this.didMouseMove(event)) {
-      return
+      return;
     }
     this.setIndex(this.getIndexFromItem(target))
     // this.applyItemStyle(this.items[this.index], false)

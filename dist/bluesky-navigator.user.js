@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+268.e78321c2
+// @version     1.0.30+268.73be069b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2371,6 +2371,7 @@
       ).sort(
         (a, b) => this.scrollDirection == 1 ? b.target.getBoundingClientRect().top - a.target.getBoundingClientRect().top : a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
       );
+      console.log(visibleItems);
       if (!visibleItems.length) {
         return;
       }
@@ -2419,9 +2420,9 @@
     }
     get scrollMargin() {
       var margin;
-      var el = $('div[data-testid="HomeScreen"] > div > div').eq(2);
       if (this.state.mobileView) {
-        el = el.first().first();
+        var el = $('div[data-testid="HomeScreen"] > div > div > div');
+        el = el.first().children().filter(":visible").first();
         if (this.index) {
           var transform = el[0].style.transform;
           var translateY = transform.indexOf("(") == -1 ? 0 : parseInt(transform.split("(")[1].split("px")[0]);
@@ -2430,6 +2431,7 @@
           margin = el.outerHeight();
         }
       } else {
+        var el = $('div[data-testid="HomeScreen"] > div > div').eq(2);
         margin = el.outerHeight();
       }
       return margin;

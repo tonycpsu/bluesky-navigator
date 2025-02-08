@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+268.73be069b
+// @version     1.0.30+269.c942859b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2200,7 +2200,6 @@
       this.getTimestampForItem = this.getTimestampForItem.bind(this);
       this.loading = false;
       this.loadingNew = false;
-      this.enableScrollMonitor = false;
       this.enableIntersectionObserver = false;
       this.handlingClick = false;
       this.itemStats = {};
@@ -2261,9 +2260,11 @@
           // Capture phase
         );
       });
-      this.enableScrollMonitor = true;
       this.enableIntersectionObserver = true;
       $(document).on("scroll", this.onScroll);
+      $(document).on("scrollend", () => {
+        this.ignoreMouseMovement = false;
+      });
       super.activate();
     }
     deactivate() {
@@ -2279,9 +2280,6 @@
       this.disableFooterObserver();
       $(this.selector).off("mouseover mouseleave");
       $(document).off("scroll", this.onScroll);
-      document.addEventListener("scrollend", () => {
-        this.enableScrollMonitor = false;
-      });
       super.deactivate();
     }
     get index() {
@@ -2305,6 +2303,7 @@
       }
     }
     onScroll(event) {
+      this.ignoreMouseMovement = true;
       if (!this.scrollTick) {
         requestAnimationFrame(() => {
           let currentScroll = $(window).scrollTop();
@@ -2318,15 +2317,15 @@
         });
         this.scrollTick = true;
       }
-      if (!this.enableScrollMonitor) {
-        return;
-      }
-      this.enableIntersectionObserver = true;
     }
     scrollToElement(target2) {
+      this.enableIntersectionObserver = false;
       target2.scrollIntoView(
         { behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant" }
       );
+      setTimeout(() => {
+        this.enableIntersectionObserver = true;
+      }, 1e3);
     }
     // Function to programmatically play a video from the userscript
     playVideo(video) {
@@ -2371,7 +2370,6 @@
       ).sort(
         (a, b) => this.scrollDirection == 1 ? b.target.getBoundingClientRect().top - a.target.getBoundingClientRect().top : a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
       );
-      console.log(visibleItems);
       if (!visibleItems.length) {
         return;
       }

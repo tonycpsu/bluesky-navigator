@@ -110,7 +110,6 @@ export class ItemHandler extends Handler {
     this.getTimestampForItem = this.getTimestampForItem.bind(this);
     this.loading = false;
     this.loadingNew = false;
-    this.enableScrollMonitor = false;
     this.enableIntersectionObserver = false;
     this.handlingClick = false;
     this.itemStats = {}
@@ -187,10 +186,11 @@ export class ItemHandler extends Handler {
       );
     });
 
-    this.enableScrollMonitor = true;
     this.enableIntersectionObserver = true;
     $(document).on("scroll", this.onScroll);
-    // this.loadItems();
+    $(document).on("scrollend", () => {
+      this.ignoreMouseMovement = false;
+    });
     super.activate()
   }
 
@@ -211,9 +211,6 @@ export class ItemHandler extends Handler {
 
     $(this.selector).off("mouseover mouseleave");
     $(document).off("scroll", this.onScroll);
-    document.addEventListener("scrollend", () => {
-      this.enableScrollMonitor = false;
-    });
     super.deactivate()
   }
 
@@ -249,6 +246,7 @@ export class ItemHandler extends Handler {
   }
 
   onScroll(event) {
+    this.ignoreMouseMovement = true;
     if (!this.scrollTick) {
       requestAnimationFrame(() => {
         let currentScroll = $(window).scrollTop();
@@ -262,20 +260,16 @@ export class ItemHandler extends Handler {
       });
       this.scrollTick = true;
     }
-    if(!this.enableScrollMonitor) {
-      return;
-    }
-    this.enableIntersectionObserver = true;
   }
 
   scrollToElement(target) {
-    // this.enableScrollMonitor = false;
+    this.enableIntersectionObserver = false;
     target.scrollIntoView(
       {behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"}
     );
-    // setTimeout(() => {
-    //   this.enableScrollMonitor = true;
-    // }, 250);
+    setTimeout(() => {
+      this.enableIntersectionObserver = true;
+    }, 1000);
   }
 
   // Function to programmatically play a video from the userscript
@@ -336,7 +330,7 @@ export class ItemHandler extends Handler {
           :  a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
       )
     )
-    console.log(visibleItems);
+    // console.log(visibleItems);
 
     if (! visibleItems.length) {
       return;
@@ -877,7 +871,6 @@ this.itemStats.oldest
 
   setIndex(index, mark, update) {
     let oldIndex = this.index;
-    // this.enableIntersectionObserver = false;
     if (oldIndex != null) {
       if (mark)
       {
@@ -893,7 +886,6 @@ this.itemStats.oldest
     if(update) {
       this.updateItems();
     }
-    // this.enableIntersectionObserver = true;
     return true;
     // this.updateItems();
   }

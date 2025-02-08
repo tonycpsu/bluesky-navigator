@@ -15,22 +15,25 @@ Usage
 Features
 --------
 
-- navigate between posts with Vim-like keyboard shortcuts (`j`/`k` for
-  next/previous, `gg` / `G` to go to top/bottom of page)
-- keyboard shortcuts for post actions, e.g. like, reply, repost
-- keyboard shortcuts to switch between feeds
-- keyboard shortcuts to switch between home, search, notifications, chat, etc.
-- optionally reverse sorting of feeds to browse them in chronological order
-  (currently only works on "Following" feed)
-- optionally show only unread posts
-- optionally disable built-in behavior of loading more items when scrolling (can
-  still load more using toolbar button or keyboard shortcut)
-- visual indicator for post read/unread status
-- dynamically filter posts by authors, keywords, etc. using configurable rules
-- configurable formatting of post timestamps
-- optionally disable embedded video previews
-- sync read/unread state between multiple browsers via cloud service(s)
-
+- Navigation:
+    - navigate between posts with Vim-like keyboard shortcuts (`j`/`k` for
+      next/previous, `gg` / `G` to go to top/bottom of page)
+    - keyboard shortcuts for post actions, e.g. like, reply, repost
+    - keyboard shortcuts to switch between feeds
+    - keyboard shortcuts to switch between home, search, notifications, chat, etc.
+- Display features:
+    - visual indicator for post read/unread status
+    - configurable override of main content width
+    - optionally reverse sorting of feeds to browse them in chronological order
+      (currently only works on "Following" feed)
+    - optionally show only unread posts
+    - configurable formatting of post timestamps
+- Additional functionality:
+    - dynamically filter posts by authors, keywords, etc. using configurable rules
+    - optionally disable embedded video previews
+    - sync read/unread state between multiple browsers via cloud service(s)
+    - optionally disable built-in behavior of loading more items when scrolling
+      (can still load more using toolbar button or keyboard shortcut)
 
 
 Keyboard Shortcuts

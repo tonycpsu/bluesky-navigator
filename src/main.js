@@ -419,6 +419,7 @@ function setScreen(screen) {
             }
             $(constants.WIDTH_SELECTOR).css("max-width", `${width}px`, "!important");
             $('div[role="tablist"]').css("width", `${width}px`);
+            $('#statusBar').css("max-width", `${width}px`);
         }
 
         state.leftSidebarMinimized = false;

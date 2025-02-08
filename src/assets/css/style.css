@@ -131,7 +131,6 @@ div#itemTimestampStats {
         height: 32px;
         margin-left: auto;
         margin-right: auto;
-        max-width: 600px;
         position: sticky;
         z-index: 10;
         align-items: center;
@@ -150,7 +149,6 @@ div#itemTimestampStats {
         height: 32px;
         margin-left: auto;
         margin-right: auto;
-        max-width: 600px;
         position: sticky;
         z-index: 10;
         align-items: center;

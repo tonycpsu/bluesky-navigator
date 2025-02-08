@@ -85,8 +85,12 @@ div#infoIndicator {
     flex: 3;
 }
 
-span#infoIndicatorText {
+div#infoIndicatorText {
     font-size: 0.8em;
+}
+
+div#itemTimestampStats {
+    font-size: 0.7em;
 }
 
 #bsky-navigator-search {

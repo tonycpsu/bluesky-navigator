@@ -788,11 +788,11 @@ You're all caught up.
     this.itemStats.filteredCount = this.items.filter(".filtered").length;
     this.itemStats.shownCount = this.items.length - this.itemStats.filteredCount
     const index = this.itemStats.shownCount ? this.index+1 : 0;
-    $("span#infoIndicatorText").html(`
-<div>
+    $("div#infoIndicatorText").html(`
+<div id="itemCountStats">
 <strong>${index}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
 </div>
-<div>
+<div id="itemTimestampStats">
 ${
 this.itemStats.oldest
 ?
@@ -1446,7 +1446,7 @@ export class FeedItemHandler extends ItemHandler {
 
 
     if (!this.infoIndicator) {
-      this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><span id="infoIndicatorText"/></div>`);
+      this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="infoIndicatorText"/></div>`);
       $(this.statusBarCenter).append(this.infoIndicator);
     }
 

@@ -7,6 +7,11 @@ export const CONFIG_FIELDS = {
         'section': [GM_config.create('Display Preferences'), 'Customize how items are displayed'],
         'type': 'hidden',
     },
+    'postWidthDesktop': {
+        'label': 'Width of posts in pixels when in desktop mode',
+        'type': 'integer',
+        'default': '600'
+    },
     'posts': {
         'label': 'CSS Style: All Posts',
         'type': 'textarea',

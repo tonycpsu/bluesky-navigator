@@ -376,46 +376,118 @@ function setScreen(screen) {
             }
         );
 
-        /*
-        const viewportChangeObserver = waitForElement(
-            constants.DRAWER_MENU_SELECTOR,
-            (el) => {
-                console.log("mobile");
-                state.mobileView = true;
-                console.log("found");
-                console.log($('#bsky-navigator-toolbar').outerHeight());
-                $("div.r-sa2ff0").css("padding-top", $('#bsky-navigator-toolbar').outerHeight() + "px");
-                waitForElement(
-                    '#prevButton',
-                    () => {
-                        $("#prevButton").addClass("mobile");
-                    }
-                );
-                waitForElement(
-                    '#nextButton',
-                    () => {
-                        $("#nextButton").addClass("mobile");
+        // const LEFT_SIDEBAR_SELECTOR = "nav.r-pgf20v"
+        const RIGHT_SIDEBAR_WIDTH = 328
+        const LEFT_TRANSLATE_X_DEFAULT = -540
+        const RIGHT_TRANSLATE_X_DEFAULT = 300
+
+        function setWidth(leftSidebar, width) {
+            const rightSidebar = $(leftSidebar).next();
+            const sidebarDiff = (width - 600)/2;
+            if(state.leftSidebarMinimized) {
+                console.log("remove", leftSidebar);
+                $(leftSidebar).css("transform", "");
+            }
+            else if(sidebarDiff) {
+                const leftTransform = $(leftSidebar).css("transform")
+                if (!leftTransform) {
+                    console.log("!leftTransform");
+                    return;
+                }
+                const leftMatrix = leftTransform.match(/matrix\(([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,]+)\)/);
+                if (!leftMatrix) {
+                    console.log("!leftMatrix");
+                    return;
+                }
+                const leftTranslateX = parseInt(leftMatrix[5]);
+                console.log(`leftTranslateX = ${leftTranslateX}`)
+                $(leftSidebar).css("transform", `translateX(${LEFT_TRANSLATE_X_DEFAULT - sidebarDiff}px)`);
+                const rightTransform = $(rightSidebar).css("transform");
+                if(!rightTransform) {
+                    console.log("!rightTransform");
+                    return;
+                }
+                const rightMatrix = rightTransform.match(/matrix\(([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,]+)\)/);
+                const rightTranslateX = parseInt(rightMatrix[5]);
+                console.log(`rightTranslateX = ${rightTranslateX}`)
+                $(rightSidebar).css("transform", `translateX(${RIGHT_TRANSLATE_X_DEFAULT + sidebarDiff}px)`);
+            } else {
+                console.log("reset sidebars");
+                $(leftSidebar).css("transform", `translateX(${LEFT_TRANSLATE_X_DEFAULT}px)`);
+                $(rightSidebar).css("transform", `translateX(${RIGHT_TRANSLATE_X_DEFAULT}px)`);
+
+            }
+            $(constants.WIDTH_SELECTOR).css("max-width", `${width}px`, "!important");
+            $('div[role="tablist"]').css("width", `${width}px`);
+        }
+
+        state.leftSidebarMinimized = false;
+        waitForElement(
+            constants.LEFT_SIDEBAR_SELECTOR,
+            (leftSidebar) => {
+                state.leftSidebarMinimized = !$(leftSidebar).hasClass("r-y46g1k");
+                observeChanges(
+                    leftSidebar,
+                    (attributeName, oldValue, newValue, target) => {
+                        if($(leftSidebar).hasClass("r-y46g1k")) {
+                            state.leftSidebarMinimized = false;
+                        } else {
+                            state.leftSidebarMinimized = true;
+                        }
+                        console.log(state.leftSidebarMinimized);
                     }
                 );
             },
-            (el) => {
-                state.mobileView = false;
-                $("div.r-sa2ff0").css("padding-top", "0px");
-                waitForElement(
-                    '#prevButton',
-                    () => {
-                        $("#prevButton").removeClass("mobile");
-                    }
-                );
-                waitForElement(
-                    '#nextButton',
-                    () => {
-                        $("#nextButton").removeClass("mobile");
-                    }
-                );
+            (leftSidebar) => {
+                console.log("removed");
             }
+
         );
-        */
+
+        let resizeTimer;
+
+        function onWindowResize() {
+            console.log("Resized to: " + $(window).width() + "x" + $(window).height());
+            if(state.mobileView) {
+                return;
+            } else {
+                const leftSidebarWidth = $(constants.LEFT_SIDEBAR_SELECTOR).outerWidth();
+                const remainingWidth = (
+                    $(window).width()
+                        - leftSidebarWidth
+                        - (!state.leftSidebarMinimized ? RIGHT_SIDEBAR_WIDTH : 0)
+                        - 10
+                );
+                console.log("remainingWidth", remainingWidth);
+                if(remainingWidth >= config.get("postWidthDesktop")) {
+                    setWidth($(constants.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
+                } else {
+                    console.log("too narrow");
+                    setWidth($(constants.LEFT_SIDEBAR_SELECTOR), remainingWidth);
+                }
+            }
+            // if ($(window).width() < 1300) {
+            //     console.log("minimized");
+            //     setWidth($(constants.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
+            // } else {
+            //     console.log("full");
+            //     state.mobileView = false;
+            //     $("div.r-sa2ff0").css("padding-top", "0px");
+            //     if(remainingWidth >= config.get("postWidthDesktop")) {
+            //         setWidth($(constants.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
+            //     } else {
+            //         console.log("too narrow");
+            //         setWidth($(constants.LEFT_SIDEBAR_SELECTOR), remainingWidth);
+            //     }
+            // }
+        }
+
+        $(window).resize(function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(onWindowResize, 500); // Adjust delay as needed
+        });
+
+        onWindowResize();
 
         function proxyIntersectionObserver() {
             const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;

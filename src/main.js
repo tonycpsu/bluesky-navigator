@@ -362,32 +362,60 @@ function setScreen(screen) {
         }
 
 
-        startMonitor()
-        setContextFromUrl()
-
         // set up observer to detect if mobile interface is active
         state.mobileView = false;
+
         const viewportChangeObserver = waitForElement(
-            'button[aria-label="Open drawer menu"]',
+            `${constants.DRAWER_MENU_SELECTOR}, ${constants.LEFT_SIDEBAR_SELECTOR}`,
+            (element) => {
+                console.log("viewport");
+                state.mobileView = $(element).is(constants.DRAWER_MENU_SELECTOR);
+                console.log(state.mobileView);
+                startMonitor()
+                setContextFromUrl()
+            }
+        );
+
+        /*
+        const viewportChangeObserver = waitForElement(
+            constants.DRAWER_MENU_SELECTOR,
             (el) => {
+                console.log("mobile");
                 state.mobileView = true;
                 console.log("found");
                 console.log($('#bsky-navigator-toolbar').outerHeight());
                 $("div.r-sa2ff0").css("padding-top", $('#bsky-navigator-toolbar').outerHeight() + "px");
-                // waitForElement(
-                //     '#bsky-navigator-toolbar',
-                //     (toolbar) => {
-                //         console.log("found");
-                //         console.log($(toolbar).outerHeight());
-                //         $("div.r-sa2ff0").css("padding-top", $(toolbar).outerHeight());
-                //     }
-                // );
+                waitForElement(
+                    '#prevButton',
+                    () => {
+                        $("#prevButton").addClass("mobile");
+                    }
+                );
+                waitForElement(
+                    '#nextButton',
+                    () => {
+                        $("#nextButton").addClass("mobile");
+                    }
+                );
             },
             (el) => {
                 state.mobileView = false;
                 $("div.r-sa2ff0").css("padding-top", "0px");
+                waitForElement(
+                    '#prevButton',
+                    () => {
+                        $("#prevButton").removeClass("mobile");
+                    }
+                );
+                waitForElement(
+                    '#nextButton',
+                    () => {
+                        $("#nextButton").removeClass("mobile");
+                    }
+                );
             }
         );
+        */
 
         function proxyIntersectionObserver() {
             const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;

@@ -178,6 +178,38 @@ div#statusBarRight {
     padding: 1px;
 }
 
+#prevButton {
+    z-index: 1000;
+    position: absolute;
+    top: 30%;
+    right: -10px;
+    opacity: 20%;
+}
+
+#prevButton.mobile {
+    position: fixed;
+    left: 1%;
+    top: 25%;
+}
+
+#nextButton {
+    z-index: 1000;
+    position: absolute;
+    bottom: 30%;
+    right: -10px;
+    opacity: 20%;
+}
+
+#nextButton.mobile {
+    position: fixed;
+    left: 1%;
+    bottom: 20%;
+}
+
+nav.r-1wyvozj {
+    overflow: inherit;
+}
+
 @keyframes oscillateBorderBottom {
     0% {
         border-bottom-color: rgba(0, 128, 0, 1);

@@ -86,6 +86,17 @@ export class ItemHandler extends Handler {
 
   MOUSE_MOVEMENT_THRESHOLD = 10
 
+  FLOATING_BUTTON_IMAGES = {
+    prev: [
+      // 'https://www.svgrepo.com/show/491060/prev.svg'
+      'https://www.svgrepo.com/show/238452/up-arrow.svg'
+    ],
+    next: [
+      // 'https://www.svgrepo.com/show/491054/next.svg'
+      'https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg'
+    ]
+  }
+
   constructor(name, config, state, selector) {
     super(name);
     this.config = config;
@@ -191,10 +202,47 @@ export class ItemHandler extends Handler {
     $(document).on("scrollend", () => {
       this.ignoreMouseMovement = false;
     });
+
+    console.log(this.state.mobileView);
+    this.floatingButtonsObserver = waitForElement(
+      this.state.mobileView ? constants.HOME_SCREEN_SELECTOR : constants.LEFT_SIDEBAR_SELECTOR,
+      (container) => {
+        // debugger;
+        console.log(container);
+        if (!this.prevButton) {
+          this.prevButton = $(`<div id="prevButton" title="previous post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`);
+          $(container).append(this.prevButton);
+          if(this.state.mobileView) {
+            $("#prevButton").addClass("mobile");
+          }
+          $('#prevButton').on("click", (event) => {
+            event.preventDefault();
+            this.jumpToPrev(true);
+          });
+        }
+
+        if (!this.nextButton) {
+          this.nextButton = $(`<div id="nextButton" title="next post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.next[0]}"/></div>`);
+          $(this.prevButton).after(this.nextButton);
+          if(this.state.mobileView) {
+            $("#nextButton").addClass("mobile");
+          }
+          $('#nextButton').on("click", (event) => {
+            event.preventDefault();
+            this.jumpToNext(true);
+          });
+        }
+      }
+    );
+
     super.activate()
   }
 
   deactivate() {
+
+    if(this.floatingButtonsObserver) {
+      this.floatingButtonsObserver.disconnect()
+    }
     if(this.observer)
     {
       this.observer.disconnect()
@@ -391,7 +439,7 @@ export class ItemHandler extends Handler {
     var margin;
     if(this.state.mobileView) {
       // debugger;
-      var el = $('div[data-testid="HomeScreen"] > div > div > div');
+      var el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
       el = el.first().children().filter(":visible").first();
       if(this.index) {
         var transform = el[0].style.transform
@@ -402,7 +450,7 @@ export class ItemHandler extends Handler {
       }
 
     } else {
-      var el = $('div[data-testid="HomeScreen"] > div > div').eq(2);
+      var el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
       margin = el.outerHeight();
     }
     return margin;
@@ -618,7 +666,6 @@ export class ItemHandler extends Handler {
     let threadIndex = 0;
 
     this.ignoreMouseMovement = true;
-    // console.log("loadItems");
     $(this.selector).filter(":visible").each( (i, item) => {
       // console.log(item);
       $(item).attr("data-bsky-navigator-item-index", itemIndex++);
@@ -692,7 +739,6 @@ export class ItemHandler extends Handler {
     // $('img#loadOlderIndicatorImage').css("opacity", "1");
     $('img#loadOlderIndicatorImage').addClass("image-highlight");
     $('img#loadOlderIndicatorImage').removeClass("toolbar-icon-pending");
-    $(this.items).css("opacity", "100%")
     if(focusedPostId) {
       this.jumpToPost(focusedPostId);
     } else if (!this.jumpToPost(this.postId)) {
@@ -724,10 +770,6 @@ You're all caught up.
     }
 
     this.ignoreMouseMovement = false;
-    // else if (this.index == null) {
-    //     this.setIndex(0);
-    // }
-    // this.updateItems();
   }
 
   refreshItems() {
@@ -736,6 +778,7 @@ You're all caught up.
         this.applyItemStyle(this.items[index], index == this.index);
       }
     )
+    $(this.items).css("opacity", "100%")
   }
 
   updateInfoIndicator() {
@@ -1171,12 +1214,6 @@ export class FeedItemHandler extends ItemHandler {
       "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg",
       "https://www.svgrepo.com/show/506582/sort-numeric-up.svg"
     ],
-    prev: [
-      'https://www.svgrepo.com/show/491060/prev.svg'
-    ],
-    next: [
-      'https://www.svgrepo.com/show/491054/next.svg'
-    ],
     preferences: [
       "https://www.svgrepo.com/show/522235/preferences.svg",
       "https://www.svgrepo.com/show/522236/preferences.svg"
@@ -1189,6 +1226,22 @@ export class FeedItemHandler extends ItemHandler {
     this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
     this.onSearchKeydown = this.onSearchKeydown.bind(this);
     this.setFilter = this.setFilter.bind(this);
+    this.feedTabObserver = waitForElement(
+      constants.FEED_TAB_SELECTOR,
+      (tab) => {
+        utils.observeChanges(
+          tab,
+          (attributeName, oldValue, newValue, target) => {
+            // console.log(attributeName, oldValue, newValue, target);
+            if(attributeName == "class" && newValue.includes("r-13awgt0")) {
+              console.log("refresh");
+              this.refreshItems();
+            }
+          },
+          false
+        );
+      }
+    )
   }
 
   addToolbar(beforeDiv) {
@@ -1316,7 +1369,6 @@ export class FeedItemHandler extends ItemHandler {
       }
     )
 
-
     waitForElement(
       constants.STATUS_BAR_CONTAINER_SELECTOR,
       (statusBarContainer, observer) => {
@@ -1340,7 +1392,6 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   onSearchAutocomplete(request, response) {
-
 
     // debugger;
     const authors = this.getAuthors().sort((a, b) => a.handle.localeCompare(b.handle, undefined, {sensitivity: 'base'}));;
@@ -1392,24 +1443,6 @@ export class FeedItemHandler extends ItemHandler {
 <div id="bottomLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"/>
 `);
     $(this.statusBarLeft).append(this.bottomLoadIndicator);
-
-    if (!this.prevButton) {
-      this.prevButton = $(`<div id="prevButton" title="previous post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.prev[0]}"/></div>`);
-      $(this.statusBarLeft).append(this.prevButton);
-      $('#prevButton').on("click", (event) => {
-        event.preventDefault();
-        this.jumpToPrev(true);
-      });
-    }
-
-    if (!this.nextButton) {
-      this.nextButton = $(`<div id="nextButton" title="next post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.next[0]}"/></div>`);
-      $(this.statusBarLeft).append(this.nextButton);
-      $('#nextButton').on("click", (event) => {
-        event.preventDefault();
-        this.jumpToNext(true);
-      });
-    }
 
 
     if (!this.infoIndicator) {

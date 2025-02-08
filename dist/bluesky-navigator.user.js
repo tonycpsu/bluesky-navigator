@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+269.c942859b
+// @version     1.0.30+270.061fc975
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -28,14 +28,26 @@
   const constants$1 = {
     URL_MONITOR_INTERVAL: 500,
     STATE_KEY: "bluesky_state",
-    TOOLBAR_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] > div > div > div:first-child',
+    DRAWER_MENU_SELECTOR: 'button[aria-label="Open drawer menu"]',
+    HOME_SCREEN_SELECTOR: 'div[data-testid="HomeScreen"]',
+    get FEED_TAB_SELECTOR() {
+      return `${constants$1.HOME_SCREEN_SELECTOR} > div > div`;
+    },
+    get TOOLBAR_CONTAINER_SELECTOR() {
+      return `${constants$1.FEED_TAB_SELECTOR} > div:first-child`;
+    },
     LOAD_NEW_BUTTON_SELECTOR: "button[aria-label^='Load new']",
     get LOAD_NEW_INDICATOR_SELECTOR() {
       return `${constants$1.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
     },
-    FEED_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div',
-    STATUS_BAR_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"]',
+    get FEED_CONTAINER_SELECTOR() {
+      return `${constants$1.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div`;
+    },
+    get STATUS_BAR_CONTAINER_SELECTOR() {
+      return `${constants$1.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"]`;
+    },
     FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
+    LEFT_SIDEBAR_SELECTOR: "nav.r-pgf20v",
     POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
     PROFILE_SELECTOR: 'a[aria-label="View profile"]',
     CLEARSKY_BLOCKED_ALL_CSS: { "background-color": "#ff8080" },
@@ -632,7 +644,7 @@
       "default": false
     }
   };
-  const style = '/* style.css */\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    background-color: rgb(255, 255, 255);\n    width: 100%;\n    height: 32px;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n/* img#loadNewerIndicatorImage { */\n/*     opacity: 0.2; */\n/* } */\n\n/* img#loadOlderIndicatorImage { */\n/*     opacity: 0.2; */\n/* } */\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\nspan#infoIndicatorText {\n    font-size: 0.8em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    bottom: 2px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n';
+  const style = '/* style.css */\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    background-color: rgb(255, 255, 255);\n    width: 100%;\n    height: 32px;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n/* img#loadNewerIndicatorImage { */\n/*     opacity: 0.2; */\n/* } */\n\n/* img#loadOlderIndicatorImage { */\n/*     opacity: 0.2; */\n/* } */\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\nspan#infoIndicatorText {\n    font-size: 0.8em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        max-width: 600px;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: rgb(255, 255, 255);\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n#prevButton {\n    z-index: 1000;\n    position: absolute;\n    top: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#prevButton.mobile {\n    position: fixed;\n    left: 1%;\n    top: 25%;\n}\n\n#nextButton {\n    z-index: 1000;\n    position: absolute;\n    bottom: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#nextButton.mobile {\n    position: fixed;\n    left: 1%;\n    bottom: 20%;\n}\n\nnav.r-1wyvozj {\n    overflow: inherit;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    bottom: 2px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n';
   const configCss = "h1 {\n    font-size: 18pt;\n}\n\nh2 {\n    font-size: 14pt;\n}\n.config_var textarea {\n    width: 100%;\n    height: 1.5em;\n}\n\n#GM_config_rulesConfig_var textarea {\n    height: 10em;\n}\n\n#GM_config_stateSyncConfig_var textarea {\n    height: 10em;\n}\n";
   const millisecondsInWeek = 6048e5;
   const millisecondsInDay = 864e5;
@@ -2176,6 +2188,16 @@
     // FIXME: this belongs in PostItemHandler
     THREAD_PAGE_SELECTOR = "main > div > div > div";
     MOUSE_MOVEMENT_THRESHOLD = 10;
+    FLOATING_BUTTON_IMAGES = {
+      prev: [
+        // 'https://www.svgrepo.com/show/491060/prev.svg'
+        "https://www.svgrepo.com/show/238452/up-arrow.svg"
+      ],
+      next: [
+        // 'https://www.svgrepo.com/show/491054/next.svg'
+        "https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg"
+      ]
+    };
     constructor(name, config2, state2, selector) {
       super(name);
       this.config = config2;
@@ -2265,9 +2287,41 @@
       $(document).on("scrollend", () => {
         this.ignoreMouseMovement = false;
       });
+      console.log(this.state.mobileView);
+      this.floatingButtonsObserver = waitForElement$1(
+        this.state.mobileView ? constants$1.HOME_SCREEN_SELECTOR : constants$1.LEFT_SIDEBAR_SELECTOR,
+        (container) => {
+          console.log(container);
+          if (!this.prevButton) {
+            this.prevButton = $(`<div id="prevButton" title="previous post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`);
+            $(container).append(this.prevButton);
+            if (this.state.mobileView) {
+              $("#prevButton").addClass("mobile");
+            }
+            $("#prevButton").on("click", (event) => {
+              event.preventDefault();
+              this.jumpToPrev(true);
+            });
+          }
+          if (!this.nextButton) {
+            this.nextButton = $(`<div id="nextButton" title="next post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.next[0]}"/></div>`);
+            $(this.prevButton).after(this.nextButton);
+            if (this.state.mobileView) {
+              $("#nextButton").addClass("mobile");
+            }
+            $("#nextButton").on("click", (event) => {
+              event.preventDefault();
+              this.jumpToNext(true);
+            });
+          }
+        }
+      );
       super.activate();
     }
     deactivate() {
+      if (this.floatingButtonsObserver) {
+        this.floatingButtonsObserver.disconnect();
+      }
       if (this.observer) {
         this.observer.disconnect();
       }
@@ -2419,7 +2473,7 @@
     get scrollMargin() {
       var margin;
       if (this.state.mobileView) {
-        var el = $('div[data-testid="HomeScreen"] > div > div > div');
+        var el = $(`${constants$1.HOME_SCREEN_SELECTOR} > div > div > div`);
         el = el.first().children().filter(":visible").first();
         if (this.index) {
           var transform = el[0].style.transform;
@@ -2429,7 +2483,7 @@
           margin = el.outerHeight();
         }
       } else {
-        var el = $('div[data-testid="HomeScreen"] > div > div').eq(2);
+        var el = $(`${constants$1.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
         margin = el.outerHeight();
       }
       return margin;
@@ -2647,7 +2701,6 @@
       this.loading = false;
       $("img#loadOlderIndicatorImage").addClass("image-highlight");
       $("img#loadOlderIndicatorImage").removeClass("toolbar-icon-pending");
-      $(this.items).css("opacity", "100%");
       if (focusedPostId) {
         this.jumpToPost(focusedPostId);
       } else if (!this.jumpToPost(this.postId)) {
@@ -2682,6 +2735,7 @@ You're all caught up.
           this.applyItemStyle(this.items[index], index == this.index);
         }
       );
+      $(this.items).css("opacity", "100%");
     }
     updateInfoIndicator() {
       this.itemStats.unreadCount = this.items.filter(
@@ -3024,12 +3078,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg",
         "https://www.svgrepo.com/show/506582/sort-numeric-up.svg"
       ],
-      prev: [
-        "https://www.svgrepo.com/show/491060/prev.svg"
-      ],
-      next: [
-        "https://www.svgrepo.com/show/491054/next.svg"
-      ],
       preferences: [
         "https://www.svgrepo.com/show/522235/preferences.svg",
         "https://www.svgrepo.com/show/522236/preferences.svg"
@@ -3041,6 +3089,21 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
       this.onSearchKeydown = this.onSearchKeydown.bind(this);
       this.setFilter = this.setFilter.bind(this);
+      this.feedTabObserver = waitForElement$1(
+        constants$1.FEED_TAB_SELECTOR,
+        (tab) => {
+          observeChanges(
+            tab,
+            (attributeName, oldValue, newValue, target2) => {
+              if (attributeName == "class" && newValue.includes("r-13awgt0")) {
+                console.log("refresh");
+                this.refreshItems();
+              }
+            },
+            false
+          );
+        }
+      );
     }
     addToolbar(beforeDiv) {
       this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
@@ -3202,22 +3265,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
 <div id="bottomLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"/>
 `);
       $(this.statusBarLeft).append(this.bottomLoadIndicator);
-      if (!this.prevButton) {
-        this.prevButton = $(`<div id="prevButton" title="previous post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.prev[0]}"/></div>`);
-        $(this.statusBarLeft).append(this.prevButton);
-        $("#prevButton").on("click", (event) => {
-          event.preventDefault();
-          this.jumpToPrev(true);
-        });
-      }
-      if (!this.nextButton) {
-        this.nextButton = $(`<div id="nextButton" title="next post" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.INDICATOR_IMAGES.next[0]}"/></div>`);
-        $(this.statusBarLeft).append(this.nextButton);
-        $("#nextButton").on("click", (event) => {
-          event.preventDefault();
-          this.jumpToNext(true);
-        });
-      }
       if (!this.infoIndicator) {
         this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><span id="infoIndicatorText"/></div>`);
         $(this.statusBarCenter).append(this.infoIndicator);
@@ -3756,20 +3803,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         }, constants$1.URL_MONITOR_INTERVAL);
       }
-      startMonitor();
-      setContextFromUrl();
       state.mobileView = false;
       waitForElement(
-        'button[aria-label="Open drawer menu"]',
-        (el) => {
-          state.mobileView = true;
-          console.log("found");
-          console.log($("#bsky-navigator-toolbar").outerHeight());
-          $("div.r-sa2ff0").css("padding-top", $("#bsky-navigator-toolbar").outerHeight() + "px");
-        },
-        (el) => {
-          state.mobileView = false;
-          $("div.r-sa2ff0").css("padding-top", "0px");
+        `${constants$1.DRAWER_MENU_SELECTOR}, ${constants$1.LEFT_SIDEBAR_SELECTOR}`,
+        (element) => {
+          console.log("viewport");
+          state.mobileView = $(element).is(constants$1.DRAWER_MENU_SELECTOR);
+          console.log(state.mobileView);
+          startMonitor();
+          setContextFromUrl();
         }
       );
       function proxyIntersectionObserver() {

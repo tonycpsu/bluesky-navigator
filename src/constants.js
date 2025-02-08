@@ -2,14 +2,26 @@ const constants = {
   DEFAULT_STATE_SAVE_TIMEOUT: 5000,
   URL_MONITOR_INTERVAL: 500,
   STATE_KEY: "bluesky_state",
-  TOOLBAR_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] > div > div > div:first-child',
+  DRAWER_MENU_SELECTOR: 'button[aria-label="Open drawer menu"]',
+  HOME_SCREEN_SELECTOR: 'div[data-testid="HomeScreen"]',
+  get FEED_TAB_SELECTOR() {
+    return `${constants.HOME_SCREEN_SELECTOR} > div > div`;
+  },
+  get TOOLBAR_CONTAINER_SELECTOR() {
+    return `${constants.FEED_TAB_SELECTOR} > div:first-child`;
+  },
   LOAD_NEW_BUTTON_SELECTOR: "button[aria-label^='Load new']",
   get LOAD_NEW_INDICATOR_SELECTOR() {
     return `${constants.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
   },
-  FEED_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div',
-  STATUS_BAR_CONTAINER_SELECTOR: 'div[data-testid="HomeScreen"] div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"]',
+  get FEED_CONTAINER_SELECTOR() {
+    return `${constants.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div`;
+  },
+  get STATUS_BAR_CONTAINER_SELECTOR() {
+    return `${constants.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"]`;
+  },
   FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
+  LEFT_SIDEBAR_SELECTOR: 'nav.r-pgf20v',
   POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
   PROFILE_SELECTOR: 'a[aria-label="View profile"]',
   LINK_SELECTOR: 'a[target="_blank"]',

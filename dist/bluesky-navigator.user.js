@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+266.7e9b6b08
+// @version     1.0.30+268.e78321c2
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2204,7 +2204,10 @@
       this.enableIntersectionObserver = false;
       this.handlingClick = false;
       this.itemStats = {};
-      this.visibleItems = /* @__PURE__ */ new Set();
+      this.visibleItems = [];
+      this.scrollTick = false;
+      this.scrollTop = 0;
+      this.scrollDirection = 0;
     }
     isActive() {
       return false;
@@ -2302,6 +2305,19 @@
       }
     }
     onScroll(event) {
+      if (!this.scrollTick) {
+        requestAnimationFrame(() => {
+          let currentScroll = $(window).scrollTop();
+          if (currentScroll > this.scrollTop) {
+            this.scrollDirection = -1;
+          } else if (currentScroll < this.scrollTop) {
+            this.scrollDirection = 1;
+          }
+          this.scrollTop = currentScroll;
+          this.scrollTick = false;
+        });
+        this.scrollTick = true;
+      }
       if (!this.enableScrollMonitor) {
         return;
       }
@@ -2336,27 +2352,42 @@
       if (!this.enableIntersectionObserver || this.loading || this.loadingNew) {
         return;
       }
+      let target2 = null;
       entries.forEach((entry) => {
-        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-          this.visibleItems.add(entry.target);
+        if (entry.isIntersecting) {
+          if (!this.visibleItems.filter((item) => item.target == entry.target).length) {
+            this.visibleItems.push(entry);
+          }
         } else {
-          this.visibleItems.delete(entry.target);
+          this.visibleItems = this.visibleItems.filter(
+            (item) => item.target != entry.target
+          );
         }
       });
-      const visibleItems = Array.from(this.visibleItems).sort(
-        (a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top
+      const visibleItems = this.visibleItems.filter(
+        (item) => {
+          return item.target.getBoundingClientRect().top > this.scrollMargin;
+        }
+      ).sort(
+        (a, b) => this.scrollDirection == 1 ? b.target.getBoundingClientRect().top - a.target.getBoundingClientRect().top : a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
       );
       if (!visibleItems.length) {
         return;
       }
-      const target2 = visibleItems[0];
-      if (target2) {
-        var index = this.getIndexFromItem(target2);
-        if (this.config.get("markReadOnScroll")) {
-          this.markItemRead(index, true);
+      for (const [i, item] of visibleItems.entries()) {
+        if (item.intersectionRatio == 1) {
+          target2 = item.target;
+          break;
         }
-        this.setIndex(index);
       }
+      if (target2 == null) {
+        target2 = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
+      }
+      var index = this.getIndexFromItem(target2);
+      if (this.config.get("markReadOnScroll")) {
+        this.markItemRead(index, true);
+      }
+      this.setIndex(index);
     }
     onFooterIntersection(entries) {
       entries.forEach((entry) => {

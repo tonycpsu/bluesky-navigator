@@ -114,7 +114,11 @@ export class ItemHandler extends Handler {
     this.enableIntersectionObserver = false;
     this.handlingClick = false;
     this.itemStats = {}
-    this.visibleItems = new Set();
+    // this.visibleItems = new Set();
+    this.visibleItems = [];
+    this.scrollTick = false;
+    this.scrollTop = 0;
+    this.scrollDirection = 0;
   }
 
   isActive() {
@@ -245,6 +249,19 @@ export class ItemHandler extends Handler {
   }
 
   onScroll(event) {
+    if (!this.scrollTick) {
+      requestAnimationFrame(() => {
+        let currentScroll = $(window).scrollTop();
+        if (currentScroll > this.scrollTop) {
+          this.scrollDirection = -1;
+        } else if (currentScroll < this.scrollTop) {
+          this.scrollDirection = 1;
+        }
+        this.scrollTop = currentScroll;
+        this.scrollTick = false;
+      });
+      this.scrollTick = true;
+    }
     if(!this.enableScrollMonitor) {
       return;
     }
@@ -290,33 +307,52 @@ export class ItemHandler extends Handler {
     if(!this.enableIntersectionObserver || this.loading || this.loadingNew) {
       return;
     }
-    let focusedElement = null;
+    let target = null;
 
     entries.forEach(entry => {
-      if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-        this.visibleItems.add(entry.target);
+      if (entry.isIntersecting) {
+        if( ! this.visibleItems.filter( (item) => item.target == entry.target  ).length){
+          this.visibleItems.push(entry)
+        }
+        // this.visibleItems.add(entry.target);
       } else {
-        this.visibleItems.delete(entry.target);
+        this.visibleItems = this.visibleItems.filter(
+          (item) => item.target != entry.target
+        )
+        // this.visibleItems.delete(entry.target);
       }
     });
 
-    const visibleItems = Array.from(this.visibleItems).sort(
-      (a, b) =>  a.getBoundingClientRect().top - b.getBoundingClientRect().top
+    const visibleItems = this.visibleItems.filter(
+      (item) => {
+        return item.target.getBoundingClientRect().top > this.scrollMargin
+      }
+    ).sort(
+      (a, b) => (
+        this.scrollDirection == 1
+          ? b.target.getBoundingClientRect().top - a.target.getBoundingClientRect().top
+          :  a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
+      )
     )
 
     if (! visibleItems.length) {
       return;
     }
 
-    const target = visibleItems[0]
-
-    if (target) {
-      var index = this.getIndexFromItem(target);
-      if (this.config.get("markReadOnScroll")) {
-        this.markItemRead(index, true);
+    for (const [i, item] of visibleItems.entries()) {
+      if (item.intersectionRatio == 1) {
+        target = item.target;
+        break;
       }
-      this.setIndex(index);
     }
+    if (target == null) {
+      target = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
+    }
+    var index = this.getIndexFromItem(target);
+    if (this.config.get("markReadOnScroll")) {
+      this.markItemRead(index, true);
+    }
+    this.setIndex(index);
   }
 
   onFooterIntersection(entries) {

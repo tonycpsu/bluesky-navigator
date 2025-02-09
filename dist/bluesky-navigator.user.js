@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+283.49ddef96
+// @version     1.0.30+284.9b704020
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -52,6 +52,7 @@
     POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
     WIDTH_SELECTOR: 'div[style*="removed-body-scroll-bar-size"][style*="width: 100%"]',
     PROFILE_SELECTOR: 'a[aria-label="View profile"]',
+    LINK_SELECTOR: 'a[target="_blank"]',
     CLEARSKY_BLOCKED_ALL_CSS: { "background-color": "#ff8080" },
     CLEARSKY_BLOCKED_RECENT_CSS: { "background-color": "#cc4040" }
   };
@@ -3037,8 +3038,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           var inner = $(item).find("div[aria-label^='Post by']");
           inner.click();
         } else if (event.key == "i") {
-          if ($(item).find(LINK_SELECTOR).length) {
-            $(item).find(LINK_SELECTOR)[0].click();
+          if ($(item).find(constants$1.LINK_SELECTOR).length) {
+            $(item).find(constants$1.LINK_SELECTOR)[0].click();
           }
         } else if (event.key == "m") {
           var media = $(item).find("img[src*='feed_thumbnail']");
@@ -4004,10 +4005,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               console.log(state.leftSidebarMinimized);
             }
           );
-        },
-        (leftSidebar) => {
-          console.log("removed");
         }
+        // (leftSidebar) => {
+        //     console.log("removed");
+        // }
       );
       let resizeTimer;
       function onWindowResize() {
@@ -4019,11 +4020,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const rightSidebar = $(leftSidebar).next();
           const leftSidebarWidth = $(leftSidebar).outerWidth();
           const remainingWidth = $(window).width() - leftSidebarWidth - (!state.leftSidebarMinimized ? $(rightSidebar).outerWidth() : 0) - 10;
-          console.log("remainingWidth", remainingWidth);
           if (remainingWidth >= config.get("postWidthDesktop")) {
             setWidth($(constants$1.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
           } else {
-            console.log("too narrow");
             setWidth($(constants$1.LEFT_SIDEBAR_SELECTOR), remainingWidth);
           }
         }

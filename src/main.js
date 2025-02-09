@@ -456,9 +456,9 @@ function setScreen(screen) {
                     }
                 );
             },
-            (leftSidebar) => {
-                console.log("removed");
-            }
+            // (leftSidebar) => {
+            //     console.log("removed");
+            // }
 
         );
 
@@ -479,11 +479,11 @@ function setScreen(screen) {
                         - (!state.leftSidebarMinimized ? $(rightSidebar).outerWidth() : 0)
                         - 10
                 );
-                console.log("remainingWidth", remainingWidth);
+                // console.log("remainingWidth", remainingWidth);
                 if(remainingWidth >= config.get("postWidthDesktop")) {
                     setWidth($(constants.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
                 } else {
-                    console.log("too narrow");
+                    // console.log("too narrow");
                     setWidth($(constants.LEFT_SIDEBAR_SELECTOR), remainingWidth);
                 }
             }

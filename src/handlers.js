@@ -1149,9 +1149,9 @@ this.itemStats.oldest
       else if(event.key == "i")
       {
         // i = open link
-        if($(item).find(LINK_SELECTOR).length)
+        if($(item).find(constants.LINK_SELECTOR).length)
         {
-          $(item).find(LINK_SELECTOR)[0].click()
+          $(item).find(constants.LINK_SELECTOR)[0].click()
         }
       }
       else if(event.key == "m")

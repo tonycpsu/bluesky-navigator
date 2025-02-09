@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+274.30d3befe
+// @version     1.0.30+275.afa5536e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -488,6 +488,13 @@
       "label": "Width of posts in pixels when in desktop mode",
       "type": "integer",
       "default": "600"
+    },
+    "postActionButtonPosition": {
+      "label": "Post actino button position",
+      "title": "Where to position reply, repost, like, etc. buttons",
+      "type": "select",
+      "options": ["Bottom", "Left"],
+      "default": "Bottom"
     },
     "posts": {
       "label": "CSS Style: All Posts",
@@ -3111,6 +3118,94 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       );
     }
+    applyItemStyle(element, selected) {
+      super.applyItemStyle(element, selected);
+      const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
+      if (this.config.get("postActionButtonPosition") == "Left") {
+        const buttonsDiv = $(element).find('button[data-testid="postDropdownBtn"]').parent().parent().parent();
+        buttonsDiv.css(
+          {
+            "display": "flex",
+            "flex-direction": "column",
+            "align-items": "flex-start",
+            "margin-top": "10px"
+          }
+        );
+        $(buttonsDiv).find("> div").css(
+          {
+            "margin-left": "0px",
+            "width": "100%"
+          }
+        );
+        $(buttonsDiv).find("> div > div").css(
+          {
+            "width": "100%"
+          }
+        );
+        const buttons = $(buttonsDiv).find('button[data-testid!="postDropdownBtn"]');
+        buttons.each(
+          (i, button) => {
+            $(button).css(
+              {
+                "display": "flex",
+                "align-items": "center",
+                /* Ensures vertical alignment */
+                "justify-content": "space-between",
+                /* Pushes text to the right */
+                "gap": "12px",
+                /* Space between the icon and text */
+                "width": "100%",
+                "padding": "5px 2px"
+              }
+            );
+            const div = $(button).find("> div").first();
+            if (div.length) {
+              $(div).css({
+                "display": "flex",
+                "align-items": "center",
+                /* Ensures vertical alignment */
+                "justify-content": "space-between",
+                /* Pushes text to the right */
+                "gap": "12px",
+                /* Space between the icon and text */
+                // "width": "100%",
+                "padding": "0px"
+              });
+            }
+            if ($(button).attr("aria-label").startsWith("Repost")) {
+              $(div).css(
+                "width",
+                "100%"
+              );
+            }
+            const svg = $(button).find("svg").first();
+            $(svg).css({
+              "flex-shrink": "0",
+              /* Prevents icon from resizing */
+              // "vertical-align": "middle", /* Ensures SVG is aligned with the text */
+              "display": "block"
+              /* Removes inline spacing issues */
+            });
+            if (!$(svg).next().length) {
+              const emptyCountDiv = $('<div dir="auto" class="css-146c3p1" style="color: rgb(111, 134, 159); font-size: 14px; letter-spacing: 0px; font-weight: 400; user-select: none; font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, Helvetica, Arial, sans-serif, &quot;Apple Color Emoji&quot;, &quot;Segoe UI Emoji&quot;; font-variant: no-contextual;">0</div>');
+              $(svg).after(emptyCountDiv);
+              $(emptyCountDiv).css({
+                "display": "flex",
+                "align-items": "center",
+                /* Ensures vertical alignment */
+                "justify-content": "space-between",
+                /* Pushes text to the right */
+                "gap": "12px",
+                /* Space between the icon and text */
+                // "width": "100%",
+                "padding": "0px"
+              });
+            }
+          }
+        );
+        avatarDiv.closest("div.r-c97pre").children().eq(0).after(buttonsDiv);
+      }
+    }
     addToolbar(beforeDiv) {
       this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
       $(beforeDiv).before(this.toolbarDiv);
@@ -3657,7 +3752,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
 
         /* Feed itmes may be sorted, so we hide them visually and show them later */
         div[data-testid$="FeedPage"] ${constants$1.FEED_ITEM_SELECTOR} {
-           opacity: 0%;
+           /* opacity: 0%;  */
         }
 
         ${config.get("hideLoadNewButton") ? `

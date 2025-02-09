@@ -12,6 +12,13 @@ export const CONFIG_FIELDS = {
         'type': 'integer',
         'default': '600'
     },
+    'postActionButtonPosition': {
+        'label': 'Post actino button position',
+        'title': 'Where to position reply, repost, like, etc. buttons',
+        'type': 'select',
+        'options': ['Bottom', 'Left'],
+        'default': "Bottom"
+    },
     'posts': {
         'label': 'CSS Style: All Posts',
         'type': 'textarea',

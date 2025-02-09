@@ -378,8 +378,6 @@ export class ItemHandler extends Handler {
           :  a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
       )
     )
-    // console.log(visibleItems);
-
     if (! visibleItems.length) {
       return;
     }
@@ -1242,6 +1240,89 @@ export class FeedItemHandler extends ItemHandler {
         );
       }
     )
+  }
+
+  applyItemStyle(element, selected) {
+    super.applyItemStyle(element, selected);
+    const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
+    if (this.config.get("postActionButtonPosition") == "Left") {
+      const buttonsDiv = $(element).find('button[data-testid="postDropdownBtn"]').parent().parent().parent();
+      // buttonsDiv.css("flex-direction", "column");
+      buttonsDiv.css(
+        {
+          "display": "flex",
+          "flex-direction": "column",
+          "align-items": "flex-start",
+          "margin-top": "10px"
+        }
+      )
+      $(buttonsDiv).find("> div").css(
+        {
+          "margin-left": "0px",
+          "width": "100%"
+        }
+      )
+      $(buttonsDiv).find("> div > div").css(
+        {
+          "width": "100%"
+        }
+      )
+      const buttons = $(buttonsDiv).find('button[data-testid!="postDropdownBtn"]');
+      buttons.each(
+        (i, button) => {
+          $(button).css(
+            {
+              "display": "flex",
+              "align-items": "center", /* Ensures vertical alignment */
+              "justify-content": "space-between", /* Pushes text to the right */
+              "gap": "12px", /* Space between the icon and text */
+              "width": "100%",
+              "padding": "5px 2px"
+            }
+          );
+          const div = $(button).find('> div').first();
+          if(div.length) {
+            $(div).css({
+              "display": "flex",
+              "align-items": "center", /* Ensures vertical alignment */
+              "justify-content": "space-between", /* Pushes text to the right */
+              "gap": "12px", /* Space between the icon and text */
+              // "width": "100%",
+              "padding": "0px"
+            });
+          }
+          if ($(button).attr('aria-label').startsWith("Repost")) {
+            $(div).css(
+              "width", "100%"
+            );
+          }
+
+          const svg = $(button).find('svg').first();
+          // $(button).append(svg);
+          $(svg).css({
+            "flex-shrink": "0", /* Prevents icon from resizing */
+            // "vertical-align": "middle", /* Ensures SVG is aligned with the text */
+            "display": "block" /* Removes inline spacing issues */
+          });
+
+          if(!$(svg).next().length) {
+            const emptyCountDiv = $('<div dir="auto" class="css-146c3p1" style="color: rgb(111, 134, 159); font-size: 14px; letter-spacing: 0px; font-weight: 400; user-select: none; font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, Helvetica, Arial, sans-serif, &quot;Apple Color Emoji&quot;, &quot;Segoe UI Emoji&quot;; font-variant: no-contextual;">0</div>')
+            $(svg).after(emptyCountDiv);
+            $(emptyCountDiv).css({
+              "display": "flex",
+              "align-items": "center", /* Ensures vertical alignment */
+              "justify-content": "space-between", /* Pushes text to the right */
+              "gap": "12px", /* Space between the icon and text */
+              // "width": "100%",
+              "padding": "0px"
+            });
+          }
+          // $(button).children().filter( (i, el) => $(el).is("div")).remove();
+        }
+      )
+
+      avatarDiv.closest('div.r-c97pre').children().eq(0).after(buttonsDiv);
+    }
   }
 
   addToolbar(beforeDiv) {

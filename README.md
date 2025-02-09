@@ -27,6 +27,7 @@ Features
     - optionally reverse sorting of feeds to browse them in chronological order
       (currently only works on "Following" feed)
     - optionally show only unread posts
+    - optionally move position of like/reply/repost buttons
     - configurable formatting of post timestamps
 - Additional functionality:
     - dynamically filter posts by authors, keywords, etc. using configurable rules

@@ -182,7 +182,7 @@ function setScreen(screen) {
 
         /* Feed itmes may be sorted, so we hide them visually and show them later */
         div[data-testid$="FeedPage"] ${constants.FEED_ITEM_SELECTOR} {
-           opacity: 0%;
+           /* opacity: 0%;  */
         }
 
         ${

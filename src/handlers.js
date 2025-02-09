@@ -507,10 +507,10 @@ export class ItemHandler extends Handler {
 
     if (selected) {
       $(element).parent().parent().addClass("thread-selection-active")
-      $(element).parent().parent().removeClass("thread-selection-inactive")
+      // $(element).parent().parent().removeClass("thread-selection-inactive")
     } else {
       $(element).parent().parent().removeClass("thread-selection-active")
-      $(element).parent().parent().addClass("thread-selection-inactive")
+      // $(element).parent().parent().addClass("thread-selection-inactive")
     }
 
     if (threadIndicator.length) {

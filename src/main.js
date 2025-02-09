@@ -201,6 +201,10 @@ function setScreen(screen) {
             ${config.get("posts")}
         }
 
+        .item > div {
+            border: none;
+        }
+
         .item-selection-active {
             ${config.get("selectionActive")}
         }
@@ -236,12 +240,11 @@ function setScreen(screen) {
 
         .thread-first {
             margin-top: ${config.get("threadMargin")};
-            border-bottom: none;
+            border-top: 1px rgb(212, 219, 226) solid;
         }
 
         .thread-last {
             margin-bottom: ${config.get("threadMargin")};
-            border-top: none;
         }
 
         div.r-m5arl1 {
@@ -386,11 +389,11 @@ function setScreen(screen) {
         );
 
         // const LEFT_SIDEBAR_SELECTOR = "nav.r-pgf20v"
-        const RIGHT_SIDEBAR_WIDTH = 328
-        const LEFT_TRANSLATE_X_DEFAULT = -540
-        const RIGHT_TRANSLATE_X_DEFAULT = 300
 
         function setWidth(leftSidebar, width) {
+            const LEFT_TRANSLATE_X_DEFAULT = -540
+            const RIGHT_TRANSLATE_X_DEFAULT = 300
+
             const rightSidebar = $(leftSidebar).next();
             const sidebarDiff = (width - 600)/2;
             if(state.leftSidebarMinimized) {
@@ -429,6 +432,7 @@ function setScreen(screen) {
             $(constants.WIDTH_SELECTOR).css("max-width", `${width}px`, "!important");
             $('div[role="tablist"]').css("width", `${width}px`);
             $('#statusBar').css("max-width", `${width}px`);
+            $('div[style^="position: fixed; inset: 0px 0px 0px 50%;"]').css("width", `${width}px`);
         }
 
         state.leftSidebarMinimized = false;
@@ -461,11 +465,14 @@ function setScreen(screen) {
             if(state.mobileView) {
                 return;
             } else {
-                const leftSidebarWidth = $(constants.LEFT_SIDEBAR_SELECTOR).outerWidth();
+                const leftSidebar = $(constants.LEFT_SIDEBAR_SELECTOR)
+                const rightSidebar = $(leftSidebar).next();
+
+                const leftSidebarWidth = $(leftSidebar).outerWidth();
                 const remainingWidth = (
                     $(window).width()
                         - leftSidebarWidth
-                        - (!state.leftSidebarMinimized ? RIGHT_SIDEBAR_WIDTH : 0)
+                        - (!state.leftSidebarMinimized ? $(rightSidebar).outerWidth() : 0)
                         - 10
                 );
                 console.log("remainingWidth", remainingWidth);

@@ -1,5 +1,9 @@
 /* style.css */
 
+div[style^="position: fixed; inset: 0px 0px 0px 50%;"] {
+    border: none;
+}
+
 div#logContainer {
     width: 100%;
     bottom: 0;

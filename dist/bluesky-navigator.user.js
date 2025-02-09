@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+275.afa5536e
+// @version     1.0.30+276.3bb87a0f
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -3123,6 +3123,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
       if (this.config.get("postActionButtonPosition") == "Left") {
         const buttonsDiv = $(element).find('button[data-testid="postDropdownBtn"]').parent().parent().parent();
+        $(buttonsDiv).parent().css(
+          "min-width",
+          "80px"
+        );
         buttonsDiv.css(
           {
             "display": "flex",

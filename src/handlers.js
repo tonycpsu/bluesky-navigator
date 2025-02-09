@@ -1247,13 +1247,16 @@ export class FeedItemHandler extends ItemHandler {
     const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
     if (this.config.get("postActionButtonPosition") == "Left") {
       const buttonsDiv = $(element).find('button[data-testid="postDropdownBtn"]').parent().parent().parent();
+      $(buttonsDiv).parent().css(
+        "min-width", "80px"
+      );
       // buttonsDiv.css("flex-direction", "column");
       buttonsDiv.css(
         {
           "display": "flex",
           "flex-direction": "column",
           "align-items": "flex-start",
-          "margin-top": "10px"
+          "margin-top": "10px",
         }
       )
       $(buttonsDiv).find("> div").css(

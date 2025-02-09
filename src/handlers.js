@@ -121,6 +121,7 @@ export class ItemHandler extends Handler {
     this.getTimestampForItem = this.getTimestampForItem.bind(this);
     this.loading = false;
     this.loadingNew = false;
+    this.enableScrollMonitor = false;
     this.enableIntersectionObserver = false;
     this.handlingClick = false;
     this.itemStats = {}
@@ -294,6 +295,10 @@ export class ItemHandler extends Handler {
   }
 
   onScroll(event) {
+    if (!this.enableScrollMonitor) {
+      console.log('!this.enableScrollMonitor');
+      return;
+    }
     this.ignoreMouseMovement = true;
     if (!this.scrollTick) {
       requestAnimationFrame(() => {
@@ -315,21 +320,18 @@ export class ItemHandler extends Handler {
     target.scrollIntoView(
       {behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"}
     );
-    setTimeout(() => {
-      this.enableIntersectionObserver = true;
-    }, 1000);
   }
 
   // Function to programmatically play a video from the userscript
   playVideo(video) {
     video.dataset.allowPlay = 'true'; // Set the custom flag
-    console.log('Userscript playing video:', video);
+    // console.log('Userscript playing video:', video);
     video.play(); // Call the overridden play method
   }
 
   pauseVideo(video) {
     video.dataset.allowPlay = 'true'; // Set the custom flag
-    console.log('Userscript playing video:', video);
+    // console.log('Userscript playing video:', video);
     video.pause(); // Call the overridden play method
   }
 
@@ -354,10 +356,11 @@ export class ItemHandler extends Handler {
     entries.forEach(entry => {
 
       if (entry.isIntersecting) {
-        if( ! this.visibleItems.filter( (item) => item.target == entry.target  ).length){
-          this.visibleItems.push(entry)
-        }
-        // this.visibleItems.add(entry.target);
+        // remove existing so intersectionRatio can be updated
+        this.visibleItems = this.visibleItems.filter(
+          (item) => item.target != entry.target
+        )
+        this.visibleItems.push(entry)
       } else {
         const oldLength = this.visibleItems.length;
         this.visibleItems = this.visibleItems.filter(
@@ -370,16 +373,16 @@ export class ItemHandler extends Handler {
             this.markItemRead(index, true);
           }
         }
-        // this.visibleItems.delete(entry.target);
       }
     });
 
-    const visibleItems = this.visibleItems.filter(
-      (item) => {
-        // console.log(item.target.getBoundingClientRect().top, this.scrollMargin);
-        return item.target.getBoundingClientRect().top > this.scrollMargin
-      }
-    ).sort(
+    const visibleItems = this.visibleItems
+    //                          .filter(
+    //   (item) => {
+    //     return item.target.getBoundingClientRect().top > 0
+    //   }
+    // )
+                             .sort(
       (a, b) => (
         this.scrollDirection == 1
           ? b.target.getBoundingClientRect().top - a.target.getBoundingClientRect().top
@@ -391,13 +394,18 @@ export class ItemHandler extends Handler {
     }
 
     for (const [i, item] of visibleItems.entries()) {
+      var index = this.getIndexFromItem(item.target);
+      console.log("foo", index, item.intersectionRatio)
       if (item.intersectionRatio == 1) {
         target = item.target;
+        console.log("bar", index)
         break;
       }
     }
     if (target == null) {
       target = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
+      var index = this.getIndexFromItem(target);
+      console.log("baz", index)
     }
     var index = this.getIndexFromItem(target);
     this.setIndex(index);
@@ -912,6 +920,8 @@ this.itemStats.oldest
 
   updateItems() {
 
+    this.enableScrollMonitor = false;
+    this.ignoreMouseMovement = true;
     if (this.index == 0)
     {
       window.scrollTo(0, 0)
@@ -920,7 +930,10 @@ this.itemStats.oldest
     } else {
       // console.log(this.index, this.items.length)
     }
-    this.ignoreMouseMovement = false;
+    setTimeout(() => {
+      this.ignoreMouseMovement = false;
+      this.enableScrollMonitor = true;
+    }, 2000);
   }
 
   setIndex(index, mark, update) {
@@ -1265,7 +1278,7 @@ export class FeedItemHandler extends ItemHandler {
         {
           "min-height": "160px",
           "min-width": "80px",
-          "margin-left": "10px"
+          // "margin-left": "10px"
         }
       );
       // buttonsDiv.css("flex-direction", "column");
@@ -1327,20 +1340,6 @@ export class FeedItemHandler extends ItemHandler {
             // "vertical-align": "middle", /* Ensures SVG is aligned with the text */
             "display": "block" /* Removes inline spacing issues */
           });
-
-          if(!$(svg).next().length) {
-            const emptyCountDiv = $('<div dir="auto" class="css-146c3p1" style="color: rgb(111, 134, 159); font-size: 14px; letter-spacing: 0px; font-weight: 400; user-select: none; font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, Helvetica, Arial, sans-serif, &quot;Apple Color Emoji&quot;, &quot;Segoe UI Emoji&quot;; font-variant: no-contextual;">0</div>')
-            $(svg).after(emptyCountDiv);
-            $(emptyCountDiv).css({
-              "display": "flex",
-              "align-items": "center", /* Ensures vertical alignment */
-              "justify-content": "space-between", /* Pushes text to the right */
-              "gap": "12px", /* Space between the icon and text */
-              // "width": "100%",
-              "padding": "0px"
-            });
-          }
-          // $(button).children().filter( (i, el) => $(el).is("div")).remove();
         }
       )
 

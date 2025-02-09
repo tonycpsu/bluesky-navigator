@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+282.6dca66b8
+// @version     1.0.30+283.49ddef96
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2236,6 +2236,7 @@
       this.getTimestampForItem = this.getTimestampForItem.bind(this);
       this.loading = false;
       this.loadingNew = false;
+      this.enableScrollMonitor = false;
       this.enableIntersectionObserver = false;
       this.handlingClick = false;
       this.itemStats = {};
@@ -2371,6 +2372,10 @@
       }
     }
     onScroll(event) {
+      if (!this.enableScrollMonitor) {
+        console.log("!this.enableScrollMonitor");
+        return;
+      }
       this.ignoreMouseMovement = true;
       if (!this.scrollTick) {
         requestAnimationFrame(() => {
@@ -2391,19 +2396,14 @@
       target2.scrollIntoView(
         { behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant" }
       );
-      setTimeout(() => {
-        this.enableIntersectionObserver = true;
-      }, 1e3);
     }
     // Function to programmatically play a video from the userscript
     playVideo(video) {
       video.dataset.allowPlay = "true";
-      console.log("Userscript playing video:", video);
       video.play();
     }
     pauseVideo(video) {
       video.dataset.allowPlay = "true";
-      console.log("Userscript playing video:", video);
       video.pause();
     }
     setupIntersectionObserver(entries) {
@@ -2422,9 +2422,10 @@
       let target2 = null;
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          if (!this.visibleItems.filter((item) => item.target == entry.target).length) {
-            this.visibleItems.push(entry);
-          }
+          this.visibleItems = this.visibleItems.filter(
+            (item) => item.target != entry.target
+          );
+          this.visibleItems.push(entry);
         } else {
           const oldLength = this.visibleItems.length;
           this.visibleItems = this.visibleItems.filter(
@@ -2439,24 +2440,25 @@
           }
         }
       });
-      const visibleItems = this.visibleItems.filter(
-        (item) => {
-          return item.target.getBoundingClientRect().top > this.scrollMargin;
-        }
-      ).sort(
+      const visibleItems = this.visibleItems.sort(
         (a, b) => this.scrollDirection == 1 ? b.target.getBoundingClientRect().top - a.target.getBoundingClientRect().top : a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
       );
       if (!visibleItems.length) {
         return;
       }
       for (const [i, item] of visibleItems.entries()) {
+        var index = this.getIndexFromItem(item.target);
+        console.log("foo", index, item.intersectionRatio);
         if (item.intersectionRatio == 1) {
           target2 = item.target;
+          console.log("bar", index);
           break;
         }
       }
       if (target2 == null) {
         target2 = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
+        var index = this.getIndexFromItem(target2);
+        console.log("baz", index);
       }
       var index = this.getIndexFromItem(target2);
       this.setIndex(index);
@@ -2858,12 +2860,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return Array.from(uniqueMap.values());
     }
     updateItems() {
+      this.enableScrollMonitor = false;
+      this.ignoreMouseMovement = true;
       if (this.index == 0) {
         window.scrollTo(0, 0);
       } else if (this.items[this.index]) {
         this.scrollToElement($(this.items[this.index])[0]);
       } else ;
-      this.ignoreMouseMovement = false;
+      setTimeout(() => {
+        this.ignoreMouseMovement = false;
+        this.enableScrollMonitor = true;
+      }, 2e3);
     }
     setIndex(index, mark, update) {
       let oldIndex = this.index;
@@ -3138,8 +3145,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $(buttonsDiv).parent().css(
           {
             "min-height": "160px",
-            "min-width": "80px",
-            "margin-left": "10px"
+            "min-width": "80px"
+            // "margin-left": "10px"
           }
         );
         buttonsDiv.css(
@@ -3207,21 +3214,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               "display": "block"
               /* Removes inline spacing issues */
             });
-            if (!$(svg).next().length) {
-              const emptyCountDiv = $('<div dir="auto" class="css-146c3p1" style="color: rgb(111, 134, 159); font-size: 14px; letter-spacing: 0px; font-weight: 400; user-select: none; font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, Helvetica, Arial, sans-serif, &quot;Apple Color Emoji&quot;, &quot;Segoe UI Emoji&quot;; font-variant: no-contextual;">0</div>');
-              $(svg).after(emptyCountDiv);
-              $(emptyCountDiv).css({
-                "display": "flex",
-                "align-items": "center",
-                /* Ensures vertical alignment */
-                "justify-content": "space-between",
-                /* Pushes text to the right */
-                "gap": "12px",
-                /* Space between the icon and text */
-                // "width": "100%",
-                "padding": "0px"
-              });
-            }
           }
         );
         avatarDiv.closest("div.r-c97pre").children().eq(0).after(buttonsDiv);
@@ -4122,14 +4114,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       HTMLMediaElement.prototype.play = function() {
         const isUserInitiated = this.dataset.allowPlay === "true";
         if (isUserInitiated || config.get("videoPreviewPlayback") == "Play all") {
-          console.log("Allowing play:", this);
           delete this.dataset.allowPlay;
           return originalPlay.apply(this, arguments);
         } else if ($(document.activeElement).is('button[aria-label^="Play"]')) {
-          console.log("Allowing play from user interaction:", this);
           return originalPlay.apply(this, arguments);
         } else {
-          console.log("Blocking play call from app:", this);
           return Promise.resolve();
         }
       };

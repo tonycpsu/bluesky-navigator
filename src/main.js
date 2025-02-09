@@ -637,20 +637,20 @@ function setScreen(screen) {
 
             // Allow user-initiated playback or userscript playback
             if (isUserInitiated || config.get("videoPreviewPlayback") == "Play all") {
-                console.log('Allowing play:', this);
+                // console.log('Allowing play:', this);
                 delete this.dataset.allowPlay; // Clear the flag after use
                 return originalPlay.apply(this, arguments);
             }
 
             // Check if play is triggered by a user click
             else if ($(document.activeElement).is('button[aria-label^="Play"]')) {
-                console.log('Allowing play from user interaction:', this);
+                // console.log('Allowing play from user interaction:', this);
                 return originalPlay.apply(this, arguments);
             }
 
             else  {
                 // Block all other play calls (likely from the app)
-                console.log('Blocking play call from app:', this);
+                // console.log('Blocking play call from app:', this);
                 return Promise.resolve(); // Return a resolved promise to prevent errors
             }
         };

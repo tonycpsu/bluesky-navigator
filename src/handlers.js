@@ -1836,7 +1836,7 @@ export class PostItemHandler extends ItemHandler {
   }
 }
 
-export class ProfileItemHandler extends ItemHandler {
+export class ProfileItemHandler extends FeedItemHandler {
 
   constructor(name, config, state, selector) {
     super(name, config, state, selector)

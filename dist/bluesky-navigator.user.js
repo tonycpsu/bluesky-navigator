@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+276.3bb87a0f
+// @version     1.0.30+277.9ed51ddc
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -29,6 +29,7 @@
     URL_MONITOR_INTERVAL: 500,
     STATE_KEY: "bluesky_state",
     DRAWER_MENU_SELECTOR: 'button[aria-label="Open drawer menu"]',
+    SCREEN_SELECTOR: "main > div > div > div",
     HOME_SCREEN_SELECTOR: 'div[data-testid="HomeScreen"]',
     get FEED_TAB_SELECTOR() {
       return `${constants$1.HOME_SCREEN_SELECTOR} > div > div`;
@@ -3822,11 +3823,21 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       styleElement.type = "text/css";
       styleElement.textContent = stylesheet;
       document.head.appendChild(styleElement);
+      function updateScreen(screen) {
+        setScreen(screen);
+        waitForElement(
+          constants$1.WIDTH_SELECTOR,
+          onWindowResize
+        );
+      }
       waitForElement(constants$1.SCREEN_SELECTOR, (element) => {
-        setScreen(getScreenFromElement(element));
+        console.log("foo");
+        updateScreen(getScreenFromElement(element));
         observeVisibilityChange($(element), (isVisible) => {
+          console.log("bar");
           if (isVisible) {
-            setScreen(getScreenFromElement(element));
+            console.log("baz");
+            updateScreen(getScreenFromElement(element));
           }
         });
       });

@@ -257,14 +257,23 @@ function setScreen(screen) {
         styleElement.textContent = stylesheet;
         document.head.appendChild(styleElement);
 
+        function updateScreen(screen) {
+            setScreen(screen);
+            waitForElement(
+                constants.WIDTH_SELECTOR, onWindowResize
+            );
+        }
+
         waitForElement(constants.SCREEN_SELECTOR, (element) => {
-            setScreen(getScreenFromElement(element))
+            console.log("foo");
+            updateScreen(getScreenFromElement(element));
             observeVisibilityChange($(element), (isVisible) => {
+                console.log("bar");
                 if (isVisible) {
-                    setScreen(getScreenFromElement(element))
+                    console.log("baz");
+                    updateScreen(getScreenFromElement(element));
                 }
             });
-
         })
 
         function setContext(ctx) {

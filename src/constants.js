@@ -3,6 +3,7 @@ const constants = {
   URL_MONITOR_INTERVAL: 500,
   STATE_KEY: "bluesky_state",
   DRAWER_MENU_SELECTOR: 'button[aria-label="Open drawer menu"]',
+  SCREEN_SELECTOR: "main > div > div > div",
   HOME_SCREEN_SELECTOR: 'div[data-testid="HomeScreen"]',
   get FEED_TAB_SELECTOR() {
     return `${constants.HOME_SCREEN_SELECTOR} > div > div`;

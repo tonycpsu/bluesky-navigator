@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+280.cc499851
+// @version     1.0.30+281.67188f88
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2509,6 +2509,12 @@
     }
     applyItemStyle(element, selected) {
       $(element).addClass("item");
+      if (this.config.get("postActionButtonPosition") == "Left") {
+        const postContainer = $(element).find('div[data-testid="contentHider-post"]').prev();
+        if (postContainer.length) {
+          postContainer.css("flex", "");
+        }
+      }
       const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
       if (!postTimestampElement.attr("data-bsky-navigator-age")) {
         postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text());
@@ -2545,8 +2551,10 @@
       );
       if (selected) {
         $(element).parent().parent().addClass("thread-selection-active");
+        $(element).parent().parent().removeClass("thread-selection-inactive");
       } else {
         $(element).parent().parent().removeClass("thread-selection-active");
+        $(element).parent().parent().addClass("thread-selection-inactive");
       }
       if (threadIndicator.length) {
         var parent = threadIndicator.parents().has(avatarDiv).first();
@@ -3128,15 +3136,20 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.config.get("postActionButtonPosition") == "Left") {
         const buttonsDiv = $(element).find('button[data-testid="postDropdownBtn"]').parent().parent().parent();
         $(buttonsDiv).parent().css(
-          "min-width",
-          "80px"
+          {
+            "min-height": "160px",
+            "min-width": "80px",
+            "margin-left": "10px"
+          }
         );
         buttonsDiv.css(
           {
             "display": "flex",
             "flex-direction": "column",
             "align-items": "flex-start",
-            "margin-top": "10px"
+            "position": "absolute",
+            "bottom": "0px",
+            "z-index": "10"
           }
         );
         $(buttonsDiv).find("> div").css(
@@ -3817,6 +3830,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
 
         .thread-last {
             margin-bottom: ${config.get("threadMargin")};
+        }
+
+        /* hack to fix last thread item indicator being offset */
+        .thread-last div.r-lchren {
+            left: 10px;
         }
 
         div.r-m5arl1 {

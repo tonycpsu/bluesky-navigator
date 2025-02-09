@@ -461,6 +461,14 @@ export class ItemHandler extends Handler {
 
   applyItemStyle(element, selected) {
     $(element).addClass("item");
+
+    // the flex property here creates problems if post actions are on the left
+    if (this.config.get("postActionButtonPosition") == "Left") {
+      const postContainer = $(element).find('div[data-testid="contentHider-post"]').prev();
+      if(postContainer.length) {
+        postContainer.css("flex", "");
+      }
+    }
     const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first()
     if (!postTimestampElement.attr("data-bsky-navigator-age")) {
       postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text())
@@ -512,10 +520,10 @@ export class ItemHandler extends Handler {
 
     if (selected) {
       $(element).parent().parent().addClass("thread-selection-active")
-      // $(element).parent().parent().removeClass("thread-selection-inactive")
+      $(element).parent().parent().removeClass("thread-selection-inactive")
     } else {
       $(element).parent().parent().removeClass("thread-selection-active")
-      // $(element).parent().parent().addClass("thread-selection-inactive")
+      $(element).parent().parent().addClass("thread-selection-inactive")
     }
 
     if (threadIndicator.length) {
@@ -1252,8 +1260,13 @@ export class FeedItemHandler extends ItemHandler {
     const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
     if (this.config.get("postActionButtonPosition") == "Left") {
       const buttonsDiv = $(element).find('button[data-testid="postDropdownBtn"]').parent().parent().parent();
+
       $(buttonsDiv).parent().css(
-        "min-width", "80px"
+        {
+          "min-height": "160px",
+          "min-width": "80px",
+          "margin-left": "10px"
+        }
       );
       // buttonsDiv.css("flex-direction", "column");
       buttonsDiv.css(
@@ -1261,7 +1274,9 @@ export class FeedItemHandler extends ItemHandler {
           "display": "flex",
           "flex-direction": "column",
           "align-items": "flex-start",
-          "margin-top": "10px",
+          "position": "absolute",
+          "bottom": "0px",
+          "z-index": "10",
         }
       )
       $(buttonsDiv).find("> div").css(

@@ -246,6 +246,11 @@ function setScreen(screen) {
             margin-bottom: ${config.get("threadMargin")};
         }
 
+        /* hack to fix last thread item indicator being offset */
+        .thread-last div.r-lchren {
+            left: 10px;
+        }
+
         div.r-m5arl1 {
             width: ${config.get("threadIndicatorWidth")}px;
             background-color: ${config.get("threadIndicatorColor")} !important;

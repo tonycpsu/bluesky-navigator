@@ -122,7 +122,6 @@ function setScreen(screen) {
     }
 
     function onConfigSave() {
-
         state.rulesConfig = config.get("rulesConfig");
         state.stateManager.saveStateImmediately(true, true);
         config.close();
@@ -614,7 +613,7 @@ function setScreen(screen) {
             fields: configjs.CONFIG_FIELDS,
             'events': {
                 'init': onConfigInit,
-                'save': () => onConfigSave,
+                'save': onConfigSave,
                 'close': () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
             },
             'css': configCss

@@ -359,9 +359,17 @@ export class ItemHandler extends Handler {
         }
         // this.visibleItems.add(entry.target);
       } else {
+        const oldLength = this.visibleItems.length;
         this.visibleItems = this.visibleItems.filter(
           (item) => item.target != entry.target
         )
+        if(this.visibleItems.length < oldLength) {
+          console.log("removed", entry.target);
+          if (this.config.get("markReadOnScroll")) {
+            var index = this.getIndexFromItem(entry.target);
+            this.markItemRead(index, true);
+          }
+        }
         // this.visibleItems.delete(entry.target);
       }
     });
@@ -392,9 +400,6 @@ export class ItemHandler extends Handler {
       target = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
     }
     var index = this.getIndexFromItem(target);
-    if (this.config.get("markReadOnScroll")) {
-      this.markItemRead(index, true);
-    }
     this.setIndex(index);
   }
 

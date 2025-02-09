@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+279.94481a56
+// @version     1.0.30+280.cc499851
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2426,9 +2426,17 @@
             this.visibleItems.push(entry);
           }
         } else {
+          const oldLength = this.visibleItems.length;
           this.visibleItems = this.visibleItems.filter(
             (item) => item.target != entry.target
           );
+          if (this.visibleItems.length < oldLength) {
+            console.log("removed", entry.target);
+            if (this.config.get("markReadOnScroll")) {
+              var index2 = this.getIndexFromItem(entry.target);
+              this.markItemRead(index2, true);
+            }
+          }
         }
       });
       const visibleItems = this.visibleItems.filter(
@@ -2451,9 +2459,6 @@
         target2 = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
       }
       var index = this.getIndexFromItem(target2);
-      if (this.config.get("markReadOnScroll")) {
-        this.markItemRead(index, true);
-      }
       this.setIndex(index);
     }
     onFooterIntersection(entries) {
@@ -4088,7 +4093,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         fields: CONFIG_FIELDS,
         "events": {
           "init": onConfigInit,
-          "save": () => onConfigSave,
+          "save": onConfigSave,
           "close": () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
         },
         "css": configCss

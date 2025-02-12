@@ -46,30 +46,39 @@ export class Handler {
     //console.dir(event)
     if (event.altKey && !event.metaKey) {
       if (event.code === "KeyH") {
-        $("a[aria-label='Home']")[0].click()
+        event.preventDefault();
+        $("a[aria-label='Home']")[0].click();
       }
       else if (event.code === "KeyS") {
-        $("a[aria-label='Search']")[0].click()
+        event.preventDefault();
+        $("a[aria-label='Search']")[0].click();
       }
       else if (event.code === "KeyN") {
-        $("a[aria-label='Notifications']")[0].click()
+        event.preventDefault();
+        $("a[aria-label='Notifications']")[0].click();
       }
       else if (event.code === "KeyM") {
-        $("a[aria-label='Chat']")[0].click()
+        event.preventDefault();
+        $("a[aria-label='Chat']")[0].click();
       }
       else if (event.code === "KeyF") {
-        $("a[aria-label='Feeds']")[0].click()
+        event.preventDefault();
+        $("a[aria-label='Feeds']")[0].click();
       }
       else if (event.code === "KeyL") {
-        $("a[aria-label='Lists']")[0].click()
+        event.preventDefault();
+        $("a[aria-label='Lists']")[0].click();
       }
       else if (event.code === "KeyP") {
-        $("a[aria-label='Profile']")[0].click()
+        event.preventDefault();
+        $("a[aria-label='Profile']")[0].click();
       }
       else if (event.code === "Comma") {
-        $("a[aria-label='Settings']")[0].click()
+        event.preventDefault();
+        $("a[aria-label='Settings']")[0].click();
       }
       else if (event.code === "Period") {
+        event.preventDefault();
         this.config.open()
       }
     }
@@ -1429,13 +1438,29 @@ export class FeedItemHandler extends ItemHandler {
       }
     });
 
-    this.onSearchUpdate = utils.debounce( (event) => {
-      console.log($(event.target).val().trim());
-      this.setFilter($(event.target).val().trim());
+    this.onSearchUpdate = (event) => {
+      const val = $(event.target).val();
+      console.log(val);
+
+      if (val === "/") {
+        // Handle "/" case immediately
+        $("#bsky-navigator-search").val("");
+        $(this.searchField).autocomplete("close");
+        $("a[aria-label='Search']")[0].click();
+        return;
+      }
+
+      // Apply debounce for other cases
+      this.debouncedSearchUpdate(event);
+    };
+
+    // Use the improved debounce function
+    this.debouncedSearchUpdate = utils.debounce((event) => {
+      const val = $(event.target).val();
+      this.setFilter(val.trim());
       this.loadItems();
-      // this.filterItems();
-      // this.updateInfoIndicator();
     }, 300);
+
     this.onSearchUpdate = this.onSearchUpdate.bind(this)
     $(this.searchField).on("keydown", this.onSearchKeydown);
 

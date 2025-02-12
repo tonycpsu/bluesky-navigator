@@ -266,6 +266,9 @@ function setScreen(screen) {
 
         function updateScreen(screen) {
             setScreen(screen);
+            if(screen == "search") {
+                $('input[role="search"]').focus();
+            }
             waitForElement(
                 constants.WIDTH_SELECTOR, onWindowResize
             );

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+286.48397169
+// @version     1.0.30+287.c8c0bd75
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2176,22 +2176,31 @@
     handleInput(event) {
       if (event.altKey && !event.metaKey) {
         if (event.code === "KeyH") {
+          event.preventDefault();
           $("a[aria-label='Home']")[0].click();
         } else if (event.code === "KeyS") {
+          event.preventDefault();
           $("a[aria-label='Search']")[0].click();
         } else if (event.code === "KeyN") {
+          event.preventDefault();
           $("a[aria-label='Notifications']")[0].click();
         } else if (event.code === "KeyM") {
+          event.preventDefault();
           $("a[aria-label='Chat']")[0].click();
         } else if (event.code === "KeyF") {
+          event.preventDefault();
           $("a[aria-label='Feeds']")[0].click();
         } else if (event.code === "KeyL") {
+          event.preventDefault();
           $("a[aria-label='Lists']")[0].click();
         } else if (event.code === "KeyP") {
+          event.preventDefault();
           $("a[aria-label='Profile']")[0].click();
         } else if (event.code === "Comma") {
+          event.preventDefault();
           $("a[aria-label='Settings']")[0].click();
         } else if (event.code === "Period") {
+          event.preventDefault();
           this.config.open();
         }
       }
@@ -3287,9 +3296,20 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         }
       });
-      this.onSearchUpdate = debounce((event) => {
-        console.log($(event.target).val().trim());
-        this.setFilter($(event.target).val().trim());
+      this.onSearchUpdate = (event) => {
+        const val = $(event.target).val();
+        console.log(val);
+        if (val === "/") {
+          $("#bsky-navigator-search").val("");
+          $(this.searchField).autocomplete("close");
+          $("a[aria-label='Search']")[0].click();
+          return;
+        }
+        this.debouncedSearchUpdate(event);
+      };
+      this.debouncedSearchUpdate = debounce((event) => {
+        const val = $(event.target).val();
+        this.setFilter(val.trim());
         this.loadItems();
       }, 300);
       this.onSearchUpdate = this.onSearchUpdate.bind(this);
@@ -3881,6 +3901,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       document.head.appendChild(styleElement);
       function updateScreen(screen) {
         setScreen(screen);
+        if (screen == "search") {
+          $('input[role="search"]').focus();
+        }
         waitForElement(
           constants$1.WIDTH_SELECTOR,
           onWindowResize

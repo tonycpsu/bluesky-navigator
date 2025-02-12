@@ -117,6 +117,7 @@ export class ItemHandler extends Handler {
     this.onScroll = this.onScroll.bind(this);
     this.handleNewThreadPage = this.handleNewThreadPage.bind(this); // FIXME: move to PostItemHandler
     this.onItemMouseOver = this.onItemMouseOver.bind(this);
+    this.onItemMouseLeave = this.onItemMouseLeave.bind(this);
     this.didMouseMove = this.didMouseMove.bind(this);
     this.getTimestampForItem = this.getTimestampForItem.bind(this);
     this.loading = false;
@@ -620,6 +621,15 @@ export class ItemHandler extends Handler {
     // this.applyItemStyle(this.items[this.index], true)
   }
 
+  onItemMouseLeave(event) {
+    var target = $(event.target).closest(this.selector)
+    if (this.ignoreMouseMovement) {
+      return;
+    }
+    console.log("leave");
+    this.applyItemStyle(target, false);
+  }
+
 
   handleInput(event) {
     if (this.handleMovementKey(event)) {
@@ -747,6 +757,7 @@ export class ItemHandler extends Handler {
       }
     )
     $(this.selector).on("mouseover", this.onItemMouseOver)
+    $(this.selector).on("mouseleave", this.onItemMouseLeave)
 
     $(this.selector).closest("div.thread").addClass("bsky-navigator-seen")
     // console.log("set loading false")

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+284.9b704020
+// @version     1.0.30+285.21c43466
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2233,6 +2233,7 @@
       this.onScroll = this.onScroll.bind(this);
       this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
       this.onItemMouseOver = this.onItemMouseOver.bind(this);
+      this.onItemMouseLeave = this.onItemMouseLeave.bind(this);
       this.didMouseMove = this.didMouseMove.bind(this);
       this.getTimestampForItem = this.getTimestampForItem.bind(this);
       this.loading = false;
@@ -2539,8 +2540,13 @@
       const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
       $(element).parent().parent().addClass("thread");
       if (this.config.get("showPostCounts") == "All" || selected && this.config.get("showPostCounts") == "Selection") {
-        const bannerDiv = $(element).find("div.item-banner").first().length ? $(element).find("div.item-banner").first() : $(element).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
+        console.log("banner", selected);
+        const bannerDiv = $(element).find("div.item-banner").first().length ? $(element).find("div.item-banner").first() : $(element).append($('<div class="item-banner"/>')).children(".item-banner").last();
         $(bannerDiv).html(`<strong>${this.getIndexFromItem(element) + 1}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
+        if (this.config.get("showPostCounts") == "Selection") {
+          console.log(selected);
+          $(bannerDiv).css("opacity", selected ? "1.0" : "0", "!important");
+        }
       }
       $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
       $(element).find("video").each(
@@ -2620,6 +2626,14 @@
         return;
       }
       this.setIndex(this.getIndexFromItem(target2));
+    }
+    onItemMouseLeave(event) {
+      var target2 = $(event.target).closest(this.selector);
+      if (this.ignoreMouseMovement) {
+        return;
+      }
+      console.log("leave");
+      this.applyItemStyle(target2, false);
     }
     handleInput(event) {
       if (this.handleMovementKey(event)) {
@@ -2723,6 +2737,7 @@
         }
       );
       $(this.selector).on("mouseover", this.onItemMouseOver);
+      $(this.selector).on("mouseleave", this.onItemMouseLeave);
       $(this.selector).closest("div.thread").addClass("bsky-navigator-seen");
       $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
       this.refreshItems();
@@ -3713,6 +3728,34 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
   (function() {
     var current_url = null;
     var context = null;
+    function parseRulesConfig(configText) {
+      const lines = configText.split("\n");
+      const rules = {};
+      let rulesName = null;
+      for (let line of lines) {
+        line = line.trim();
+        if (!line || line.startsWith(";") || line.startsWith("#")) continue;
+        const sectionMatch = line.match(/^\[(.+)\]$/);
+        if (sectionMatch) {
+          rulesName = sectionMatch[1];
+          rules[rulesName] = [];
+          continue;
+        }
+        if (!rulesName) continue;
+        const ruleMatch = line.match(/(allow|deny) (all|from|content) "?([^"]+)"?/);
+        if (ruleMatch) {
+          const [_, action, type, value] = ruleMatch;
+          rules[rulesName].push({ action, type, value });
+          continue;
+        }
+        if (line.startsWith("@")) {
+          rules[rulesName].push({ action: "allow", type: "from", value: line });
+        } else {
+          rules[rulesName].push({ action: "allow", type: "content", value: line });
+        }
+      }
+      return rules;
+    }
     function onConfigInit() {
       const stateManagerConfig = {
         stateSyncEnabled: config.get("stateSyncEnabled"),
@@ -3737,6 +3780,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (state.rulesConfig) {
         config.set("rulesConfig", state.rulesConfig);
       }
+      state.rules = parseRulesConfig(config.get("rulesConfig"));
       if (config.get("showDebuggingInfo")) {
         let appendLog = function(type, args) {
           const message2 = `[${type.toUpperCase()}] ${args.map((arg) => typeof arg === "object" ? JSON.stringify(arg, null, 2) : arg).join(" ")}`;

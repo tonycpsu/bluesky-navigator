@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+285.21c43466
+// @version     1.0.30+286.48397169
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2540,13 +2540,8 @@
       const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
       $(element).parent().parent().addClass("thread");
       if (this.config.get("showPostCounts") == "All" || selected && this.config.get("showPostCounts") == "Selection") {
-        console.log("banner", selected);
-        const bannerDiv = $(element).find("div.item-banner").first().length ? $(element).find("div.item-banner").first() : $(element).append($('<div class="item-banner"/>')).children(".item-banner").last();
+        const bannerDiv = $(element).find("div.item-banner").first().length ? $(element).find("div.item-banner").first() : $(element).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
         $(bannerDiv).html(`<strong>${this.getIndexFromItem(element) + 1}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
-        if (this.config.get("showPostCounts") == "Selection") {
-          console.log(selected);
-          $(bannerDiv).css("opacity", selected ? "1.0" : "0", "!important");
-        }
       }
       $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
       $(element).find("video").each(

@@ -142,7 +142,7 @@ function setScreen(screen) {
         if(state.rulesConfig) {
             config.set("rulesConfig", state.rulesConfig);
         }
-        // state.rules = parseRulesConfig(config.get("rulesConfig"));
+        state.rules = parseRulesConfig(config.get("rulesConfig"));
 
         if(config.get("showDebuggingInfo")) {
             const logContainer = $(`<div id="logContainer"></div>`);

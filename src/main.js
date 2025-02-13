@@ -37,7 +37,7 @@ const screenPredicateMap = {
     feeds: (element) => $(element).find('div[data-testid="FeedsScreen"]').length,
     lists: (element) => $(element).find('div[data-testid="listsScreen"]').length,
     profile: (element) => $(element).find('div[data-testid="profileScreen"]').length,
-    settings: (element) => $(element).find('div[data-testid="userAvatarImage"]').length,
+    settings: (element) => $(element).find('a[aria-label="Account"]').length,
     home: (element) => true,
 }
 
@@ -54,7 +54,7 @@ function getScreenFromElement(element) {
 
 function setScreen(screen) {
     state.screen = screen
-    // console.log(`screen: ${state.screen}`)
+    console.log(`screen: ${state.screen}`)
 }
 
 
@@ -129,6 +129,7 @@ function setScreen(screen) {
 
     function onStateInit() {
 
+        let widthWatcher;
 
         // FIXME: ordering of these is important since posts can tbe in profiles
         handlers = {
@@ -269,18 +270,17 @@ function setScreen(screen) {
             if(screen == "search") {
                 $('input[role="search"]').focus();
             }
-            waitForElement(
-                constants.WIDTH_SELECTOR, onWindowResize
-            );
+            if(!widthWatcher) {
+                widthWatcher = waitForElement(
+                    constants.WIDTH_SELECTOR, onWindowResize
+                );
+            }
         }
 
         waitForElement(constants.SCREEN_SELECTOR, (element) => {
-            console.log("foo");
             updateScreen(getScreenFromElement(element));
             observeVisibilityChange($(element), (isVisible) => {
-                console.log("bar");
                 if (isVisible) {
-                    console.log("baz");
                     updateScreen(getScreenFromElement(element));
                 }
             });
@@ -404,7 +404,7 @@ function setScreen(screen) {
             const rightSidebar = $(leftSidebar).next();
             const sidebarDiff = (width - 600)/2;
             if(state.leftSidebarMinimized) {
-                console.log("remove", leftSidebar);
+                // console.log("remove", leftSidebar);
                 $(leftSidebar).css("transform", "");
             }
             else if(sidebarDiff) {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+287.c8c0bd75
+// @version     1.0.30+288.a28f1386
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -3726,7 +3726,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     feeds: (element) => $(element).find('div[data-testid="FeedsScreen"]').length,
     lists: (element) => $(element).find('div[data-testid="listsScreen"]').length,
     profile: (element) => $(element).find('div[data-testid="profileScreen"]').length,
-    settings: (element) => $(element).find('div[data-testid="userAvatarImage"]').length,
+    settings: (element) => $(element).find('a[aria-label="Account"]').length,
     home: (element) => true
   };
   function getScreenFromElement(element) {
@@ -3739,6 +3739,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
   }
   function setScreen(screen) {
     state.screen = screen;
+    console.log(`screen: ${state.screen}`);
   }
   (function() {
     var current_url = null;
@@ -3786,6 +3787,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       config.close();
     }
     function onStateInit() {
+      let widthWatcher;
       handlers = {
         feed: new FeedItemHandler("feed", config, state, constants$1.FEED_ITEM_SELECTOR),
         post: new PostItemHandler("post", config, state, constants$1.POST_ITEM_SELECTOR),
@@ -3904,18 +3906,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (screen == "search") {
           $('input[role="search"]').focus();
         }
-        waitForElement(
-          constants$1.WIDTH_SELECTOR,
-          onWindowResize
-        );
+        if (!widthWatcher) {
+          widthWatcher = waitForElement(
+            constants$1.WIDTH_SELECTOR,
+            onWindowResize
+          );
+        }
       }
       waitForElement(constants$1.SCREEN_SELECTOR, (element) => {
-        console.log("foo");
         updateScreen(getScreenFromElement(element));
         observeVisibilityChange($(element), (isVisible) => {
-          console.log("bar");
           if (isVisible) {
-            console.log("baz");
             updateScreen(getScreenFromElement(element));
           }
         });
@@ -4016,7 +4017,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const rightSidebar = $(leftSidebar).next();
         const sidebarDiff = (width - 600) / 2;
         if (state.leftSidebarMinimized) {
-          console.log("remove", leftSidebar);
           $(leftSidebar).css("transform", "");
         } else if (sidebarDiff) {
           const leftTransform = $(leftSidebar).css("transform");

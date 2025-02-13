@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+288.a28f1386
+// @version     1.0.30+289.f86d9185
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2242,7 +2242,6 @@
       this.onScroll = this.onScroll.bind(this);
       this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
       this.onItemMouseOver = this.onItemMouseOver.bind(this);
-      this.onItemMouseLeave = this.onItemMouseLeave.bind(this);
       this.didMouseMove = this.didMouseMove.bind(this);
       this.getTimestampForItem = this.getTimestampForItem.bind(this);
       this.loading = false;
@@ -2625,19 +2624,15 @@
       return false;
     }
     onItemMouseOver(event) {
-      var target2 = $(event.target).closest(this.selector);
       if (this.ignoreMouseMovement) {
         return;
       }
-      this.setIndex(this.getIndexFromItem(target2));
-    }
-    onItemMouseLeave(event) {
       var target2 = $(event.target).closest(this.selector);
-      if (this.ignoreMouseMovement) {
-        return;
+      var index = this.getIndexFromItem(target2);
+      if (index != this.index) {
+        this.applyItemStyle(this.items[this.index], false);
       }
-      console.log("leave");
-      this.applyItemStyle(target2, false);
+      this.setIndex(index);
     }
     handleInput(event) {
       if (this.handleMovementKey(event)) {

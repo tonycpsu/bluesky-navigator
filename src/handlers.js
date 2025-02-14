@@ -47,35 +47,35 @@ export class Handler {
     if (event.altKey && !event.metaKey) {
       if (event.code === "KeyH") {
         event.preventDefault();
-        $("a[aria-label='Home']")[0].click();
+        $("nav a[aria-label='Home']")[0].click();
       }
       else if (event.code === "KeyS") {
         event.preventDefault();
-        $("a[aria-label='Search']")[0].click();
+        $("nav a[aria-label='Search']")[0].click();
       }
       else if (event.code === "KeyN") {
         event.preventDefault();
-        $("a[aria-label='Notifications']")[0].click();
+        $("nav a[aria-label='Notifications']")[0].click();
       }
       else if (event.code === "KeyM") {
         event.preventDefault();
-        $("a[aria-label='Chat']")[0].click();
+        $("nav a[aria-label='Chat']")[0].click();
       }
       else if (event.code === "KeyF") {
         event.preventDefault();
-        $("a[aria-label='Feeds']")[0].click();
+        $("nav a[aria-label='Feeds']")[0].click();
       }
       else if (event.code === "KeyL") {
         event.preventDefault();
-        $("a[aria-label='Lists']")[0].click();
+        $("nav a[aria-label='Lists']")[0].click();
       }
       else if (event.code === "KeyP") {
         event.preventDefault();
-        $("a[aria-label='Profile']")[0].click();
+        $("nav a[aria-label='Profile']")[0].click();
       }
       else if (event.code === "Comma") {
         event.preventDefault();
-        $("a[aria-label='Settings']")[0].click();
+        $("nav a[aria-label='Settings']")[0].click();
       }
       else if (event.code === "Period") {
         event.preventDefault();

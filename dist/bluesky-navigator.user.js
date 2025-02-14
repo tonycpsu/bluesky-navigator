@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.30+289.f86d9185
+// @version     1.0.31+290.0ff01f5f
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2177,28 +2177,28 @@
       if (event.altKey && !event.metaKey) {
         if (event.code === "KeyH") {
           event.preventDefault();
-          $("a[aria-label='Home']")[0].click();
+          $("nav a[aria-label='Home']")[0].click();
         } else if (event.code === "KeyS") {
           event.preventDefault();
-          $("a[aria-label='Search']")[0].click();
+          $("nav a[aria-label='Search']")[0].click();
         } else if (event.code === "KeyN") {
           event.preventDefault();
-          $("a[aria-label='Notifications']")[0].click();
+          $("nav a[aria-label='Notifications']")[0].click();
         } else if (event.code === "KeyM") {
           event.preventDefault();
-          $("a[aria-label='Chat']")[0].click();
+          $("nav a[aria-label='Chat']")[0].click();
         } else if (event.code === "KeyF") {
           event.preventDefault();
-          $("a[aria-label='Feeds']")[0].click();
+          $("nav a[aria-label='Feeds']")[0].click();
         } else if (event.code === "KeyL") {
           event.preventDefault();
-          $("a[aria-label='Lists']")[0].click();
+          $("nav a[aria-label='Lists']")[0].click();
         } else if (event.code === "KeyP") {
           event.preventDefault();
-          $("a[aria-label='Profile']")[0].click();
+          $("nav a[aria-label='Profile']")[0].click();
         } else if (event.code === "Comma") {
           event.preventDefault();
-          $("a[aria-label='Settings']")[0].click();
+          $("nav a[aria-label='Settings']")[0].click();
         } else if (event.code === "Period") {
           event.preventDefault();
           this.config.open();

@@ -182,11 +182,9 @@ export class ItemHandler extends Handler {
         "click",
         (event) => {
           if (this.loadingNew) {
-            console.log("handling click, returning")
             return; // Avoid re-entry
           }
 
-          console.log("Intercepted click in capture phase", event.target);
           // Save the target and event details for later
           const target = event.target;
           // const originalHandler = target.onclick;
@@ -196,12 +194,9 @@ export class ItemHandler extends Handler {
 
           // // Call the application's original handler if necessary
           setTimeout(() => {
-            console.log("Calling original handler");
             this.loadNewerItems();
           }, 0);
 
-          // Add custom logic
-          console.log("Custom logic executed");
         },
         true // Capture phase
       );
@@ -210,7 +205,10 @@ export class ItemHandler extends Handler {
     this.enableIntersectionObserver = true;
     $(document).on("scroll", this.onScroll);
     $(document).on("scrollend", () => {
-      this.ignoreMouseMovement = false;
+      setTimeout(
+        () => this.ignoreMouseMovement = false,
+        500
+      );
     });
 
     console.log(this.state.mobileView);
@@ -404,17 +402,14 @@ export class ItemHandler extends Handler {
 
     for (const [i, item] of visibleItems.entries()) {
       var index = this.getIndexFromItem(item.target);
-      console.log("foo", index, item.intersectionRatio)
       if (item.intersectionRatio == 1) {
         target = item.target;
-        console.log("bar", index)
         break;
       }
     }
     if (target == null) {
       target = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
       var index = this.getIndexFromItem(target);
-      console.log("baz", index)
     }
     var index = this.getIndexFromItem(target);
     this.setIndex(index);
@@ -635,7 +630,6 @@ export class ItemHandler extends Handler {
     } else if (this.handleItemKey(event)) {
       return event.key
     } else if (event.key == "U") {
-      console.log("Update")
       this.loadOlderItems();
     } else {
       return super.handleInput(event)
@@ -692,9 +686,7 @@ export class ItemHandler extends Handler {
     let itemIndex = 0;
     let threadIndex = 0;
 
-    this.ignoreMouseMovement = true;
     $(this.selector).filter(":visible").each( (i, item) => {
-      // console.log(item);
       $(item).attr("data-bsky-navigator-item-index", itemIndex++);
       $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
 
@@ -940,6 +932,7 @@ this.itemStats.oldest
       // console.log(this.index, this.items.length)
     }
     setTimeout(() => {
+      console.log("enable");
       this.ignoreMouseMovement = false;
       this.enableScrollMonitor = true;
     }, 2000);
@@ -963,7 +956,6 @@ this.itemStats.oldest
       this.updateItems();
     }
     return true;
-    // this.updateItems();
   }
 
   jumpToPost(postId) {
@@ -1078,7 +1070,7 @@ this.itemStats.oldest
           this.jumpToNextUnseenItem(mark);
         }
         moved = true
-        console.log(this.postIdForItem(this.items[this.index]))
+        // console.log(this.postIdForItem(this.items[this.index]))
       } else if (event.key == "g") {
         this.keyState.push(event.key)
       }
@@ -1143,7 +1135,7 @@ this.itemStats.oldest
       // console.log(event.key)
       var item = this.items[this.index]
       //if(event.key == "o")
-      if (["o", "Enter"].includes(event.key))
+      if (["o", "Enter"].includes(event.key) && !this.isPopupVisible)
       {
         // o = open
         $(item).click()

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+290.0ff01f5f
+// @version     1.0.31+291.ed8d6793
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -2291,17 +2291,13 @@
           "click",
           (event) => {
             if (this.loadingNew) {
-              console.log("handling click, returning");
               return;
             }
-            console.log("Intercepted click in capture phase", event.target);
             event.target;
             event.stopImmediatePropagation();
             setTimeout(() => {
-              console.log("Calling original handler");
               this.loadNewerItems();
             }, 0);
-            console.log("Custom logic executed");
           },
           true
           // Capture phase
@@ -2310,7 +2306,10 @@
       this.enableIntersectionObserver = true;
       $(document).on("scroll", this.onScroll);
       $(document).on("scrollend", () => {
-        this.ignoreMouseMovement = false;
+        setTimeout(
+          () => this.ignoreMouseMovement = false,
+          500
+        );
       });
       console.log(this.state.mobileView);
       this.floatingButtonsObserver = waitForElement$1(
@@ -2458,17 +2457,14 @@
       }
       for (const [i, item] of visibleItems.entries()) {
         var index = this.getIndexFromItem(item.target);
-        console.log("foo", index, item.intersectionRatio);
         if (item.intersectionRatio == 1) {
           target2 = item.target;
-          console.log("bar", index);
           break;
         }
       }
       if (target2 == null) {
         target2 = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
         var index = this.getIndexFromItem(target2);
-        console.log("baz", index);
       }
       var index = this.getIndexFromItem(target2);
       this.setIndex(index);
@@ -2640,7 +2636,6 @@
       } else if (this.handleItemKey(event)) {
         return event.key;
       } else if (event.key == "U") {
-        console.log("Update");
         this.loadOlderItems();
       } else {
         return super.handleInput(event);
@@ -2686,7 +2681,6 @@
       $(this.items).css("opacity", "0%");
       let itemIndex = 0;
       let threadIndex = 0;
-      this.ignoreMouseMovement = true;
       $(this.selector).filter(":visible").each((i, item) => {
         $(item).attr("data-bsky-navigator-item-index", itemIndex++);
         $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
@@ -2883,6 +2877,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.scrollToElement($(this.items[this.index])[0]);
       } else ;
       setTimeout(() => {
+        console.log("enable");
         this.ignoreMouseMovement = false;
         this.enableScrollMonitor = true;
       }, 2e3);
@@ -2993,7 +2988,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             this.jumpToNextUnseenItem(mark);
           }
           moved = true;
-          console.log(this.postIdForItem(this.items[this.index]));
         } else if (event.key == "g") {
           this.keyState.push(event.key);
         }
@@ -3046,7 +3040,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       } else if (!event.metaKey) {
         var item = this.items[this.index];
-        if (["o", "Enter"].includes(event.key)) {
+        if (["o", "Enter"].includes(event.key) && !this.isPopupVisible) {
           $(item).click();
         } else if (event.key == "O") {
           var inner = $(item).find("div[aria-label^='Post by']");

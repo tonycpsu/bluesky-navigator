@@ -151,7 +151,7 @@ div#itemTimestampStats {
         position: sticky;
         z-index: 10;
         align-items: center;
-        background-color: #29333d;
+        background-color: #ffffff;
         bottom: 0;
         font-size: 1em;
         padding: 1px;
@@ -169,10 +169,16 @@ div#itemTimestampStats {
         position: sticky;
         z-index: 10;
         align-items: center;
-        background-color: #29333d;
+        background-color: #ffffff;
         bottom: 58px;
         font-size: 1em;
         padding: 1px;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    div#statusBar {
+        background-color: #29333d;
     }
 }
 

@@ -1361,7 +1361,7 @@ export class FeedItemHandler extends ItemHandler {
 </div>`);
     $(this.toolbarDiv).append(this.topLoadIndicator);
 
-    this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[0]}"/></div>`);
+    this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[+this.state.feedSortReverse]}"/></div>`);
     $(this.toolbarDiv).append(this.sortIndicator);
     $(".indicator-image path").attr("fill", "currentColor");
     $('#sortIndicator').on("click", (event) => {
@@ -1369,7 +1369,7 @@ export class FeedItemHandler extends ItemHandler {
       this.toggleSortOrder();
     });
 
-    this.filterIndicator = $(`<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[0]}"/></div>`);
+    this.filterIndicator = $(`<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[+this.state.feedHideRead]}"/></div>`);
     $(this.toolbarDiv).append(this.filterIndicator);
     $('#filterIndicator').on("click", (event) => {
       event.preventDefault();

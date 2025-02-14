@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+292.55e02c85
+// @version     1.0.31+293.0ab27e84
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -563,6 +563,12 @@
       "title": "A format string specifying how post timestamps are displayed",
       "type": "textarea",
       "default": "'$age' '('yyyy-MM-dd hh:mmaaa')'"
+    },
+    "postTimestampFormatMobile": {
+      "label": "Post timestamp format (mobile)",
+      "title": "A format string specifying how post timestamps are displayed on small screens",
+      "type": "textarea",
+      "default": "'$age'"
     },
     "videoPreviewPlayback": {
       "label": "Video Preview Playback",
@@ -2527,7 +2533,9 @@
       if (!postTimestampElement.attr("data-bsky-navigator-age")) {
         postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text());
       }
-      const userFormat = this.config.get("postTimestampFormat");
+      const userFormat = this.config.get(
+        this.state.mobileView ? "postTimestampFormatMobile" : "postTimestampFormat"
+      );
       const postTimeString = postTimestampElement.attr("aria-label");
       if (postTimeString && userFormat) {
         const postTimestamp = new Date(postTimeString.replace(" at", ""));
@@ -3627,7 +3635,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return window.location.pathname.match(/\/post\//);
     }
     get scrollMargin() {
-      return $('div[data-testid="postThreadScreen"] > div').eq(0).outerHeight();
+      return $('div[data-testid="postThreadScreen"] > div:visible').eq(0).outerHeight();
     }
     // getIndexFromItem(item) {
     //     return $(item).parent().parent().parent().parent().index() - 3

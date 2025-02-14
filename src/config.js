@@ -85,6 +85,12 @@ export const CONFIG_FIELDS = {
         'type': 'textarea',
         'default': "'$age' '('yyyy-MM-dd hh:mmaaa')'"
     },
+    'postTimestampFormatMobile': {
+        'label': 'Post timestamp format (mobile)',
+        'title': 'A format string specifying how post timestamps are displayed on small screens',
+        'type': 'textarea',
+        'default': "'$age'"
+    },
     'videoPreviewPlayback': {
         'label': 'Video Preview Playback',
         'title': 'Control playback of video previews',

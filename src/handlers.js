@@ -485,7 +485,9 @@ export class ItemHandler extends Handler {
     if (!postTimestampElement.attr("data-bsky-navigator-age")) {
       postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text())
     }
-    const userFormat = this.config.get("postTimestampFormat");
+    const userFormat = this.config.get(
+      this.state.mobileView ? "postTimestampFormatMobile" : "postTimestampFormat"
+    );
     const postTimeString = postTimestampElement.attr("aria-label")
     if (postTimeString && userFormat) {
       // console.log(postTimeString)
@@ -1838,7 +1840,7 @@ export class PostItemHandler extends ItemHandler {
   }
 
   get scrollMargin() {
-    return $('div[data-testid="postThreadScreen"] > div').eq(0).outerHeight();
+    return $('div[data-testid="postThreadScreen"] > div:visible').eq(0).outerHeight();
   }
 
   // getIndexFromItem(item) {

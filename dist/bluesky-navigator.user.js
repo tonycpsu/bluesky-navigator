@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+291.ed8d6793
+// @version     1.0.31+292.55e02c85
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -3726,10 +3726,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     return "unknown";
   }
-  function setScreen(screen) {
-    state.screen = screen;
-    console.log(`screen: ${state.screen}`);
-  }
   (function() {
     var current_url = null;
     var context = null;
@@ -3891,9 +3887,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       styleElement.textContent = stylesheet;
       document.head.appendChild(styleElement);
       function updateScreen(screen) {
-        setScreen(screen);
+        if (state.screen == screen) {
+          return;
+        }
+        state.screen = screen;
         if (screen == "search") {
-          $('input[role="search"]').focus();
+          if ($(":focus") != $('input[role="search"]')) {
+            $('input[role="search"]').focus();
+          }
         }
         if (!widthWatcher) {
           widthWatcher = waitForElement(

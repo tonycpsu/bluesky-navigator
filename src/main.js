@@ -52,12 +52,6 @@ function getScreenFromElement(element) {
     return "unknown"
 }
 
-function setScreen(screen) {
-    state.screen = screen
-    console.log(`screen: ${state.screen}`)
-}
-
-
 (function() {
 
     var monitor_interval = null
@@ -266,9 +260,14 @@ function setScreen(screen) {
         document.head.appendChild(styleElement);
 
         function updateScreen(screen) {
-            setScreen(screen);
+            if(state.screen == screen) {
+                return;
+            }
+            state.screen = screen;
             if(screen == "search") {
-                $('input[role="search"]').focus();
+                if($(":focus") != $('input[role="search"]')) {
+                    $('input[role="search"]').focus();
+                }
             }
             if(!widthWatcher) {
                 widthWatcher = waitForElement(

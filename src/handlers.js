@@ -905,7 +905,7 @@ this.itemStats.oldest
 
   async apiResultForItem(item) {
     const uri = await this.api.getAtprotoUri(this.urlForItem(item));
-    console.log(uri);
+    // console.log(uri);
     const post = await this.api.getPost(uri);
     return post;
     // debugger;
@@ -1234,10 +1234,7 @@ this.itemStats.oldest
         }
         this.apiResultForItem(item).then(
           (post) => {
-            console.log(post);
-        // Inject post data into the popup
             const author = post.author;
-            console.log(author);
             $("#avatar").attr("src", author.avatar || "https://via.placeholder.com/40");
             $("#displayName").text(author.displayName || "Unknown");
             $("#handle").text("@" + author.handle);

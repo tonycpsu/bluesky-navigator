@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+300.e1184fbf
+// @version     1.0.31+301.ba199d91
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47084,7 +47084,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     async apiResultForItem(item) {
       const uri = await this.api.getAtprotoUri(this.urlForItem(item));
-      console.log(uri);
       const post2 = await this.api.getPost(uri);
       return post2;
     }
@@ -47341,9 +47340,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
           this.apiResultForItem(item).then(
             (post2) => {
-              console.log(post2);
               const author = post2.author;
-              console.log(author);
               $("#avatar").attr("src", author.avatar || "https://via.placeholder.com/40");
               $("#displayName").text(author.displayName || "Unknown");
               $("#handle").text("@" + author.handle);
@@ -48382,6 +48379,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(onWindowResize, 500);
       });
+      waitForElement(constants$1.WIDTH_SELECTOR, onWindowResize);
       function proxyIntersectionObserver() {
         const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
         class ProxyIntersectionObserver {

@@ -58,7 +58,8 @@ export class BlueskyAPI {
     async getPost(uri) {
         const res = await this.agent.getPostThread({uri: uri});
         const { thread } = res.data;
-        console.log(thread);
-        debugger;
+        // console.log(thread);
+        // debugger;
+        return thread.post;
     }
 }

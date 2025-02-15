@@ -9,6 +9,7 @@ import * as configjs from "./config.js";
 
 import style from './assets/css/style.css?raw'
 import configCss from "./assets/css/config.css?raw";
+import postHtml from "./post.html?raw"; // Import popup as a raw string
 
 const {
     debounce,
@@ -139,6 +140,24 @@ function getScreenFromElement(element) {
             );
             // FIXME: async race condition
             api.login();
+
+            async function loadPostPopup(selector) {
+                try {
+                    // Fetch the popup HTML file from the public directory
+                    // Append the popup to the body
+                    const popupContainer = $(selector).append(postHtml);
+                    // $(popupContainer).append($(html));
+                    // Close button functionality
+                    $(".close-btn").on("click", function() {
+                        $("#bluesky-popup").hide();
+                    });
+
+                    console.log("Popup loaded successfully!");
+                } catch (error) {
+                    console.error("Failed to load popup:", error);
+                }
+            }
+            loadPostPopup('body');
         }
 
         // FIXME: ordering of these is important since posts can tbe in profiles
@@ -395,7 +414,6 @@ function getScreenFromElement(element) {
             }, constants.URL_MONITOR_INTERVAL)
         }
 
-
         // set up observer to detect if mobile interface is active
         state.mobileView = false;
 
@@ -526,7 +544,7 @@ function getScreenFromElement(element) {
             resizeTimer = setTimeout(onWindowResize, 500); // Adjust delay as needed
         });
 
-        waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
+        // waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
 
         function proxyIntersectionObserver() {
             const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;

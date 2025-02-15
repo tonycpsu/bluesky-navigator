@@ -122,6 +122,26 @@ export const CONFIG_FIELDS = {
         'type': 'textarea',
         'default': '10px'
     },
+    'atprotoSection': {
+        'section': [GM_config.create('AT Protocol Agent'), 'Enables additional functionality'],
+        'type': 'hidden',
+    },
+    'atprotoService': {
+        'label': 'Service',
+        'title': 'AT Protocol Service',
+        'type': 'textarea',
+        'default': 'https://bsky.social'
+    },
+    'atprotoIdentifier': {
+        'label': 'Identifier (Handle)',
+        'title': 'AT Protocol Identifier (Handle)',
+        'type': 'textarea'
+    },
+    'atprotoPassword': {
+        'label': 'Password',
+        'title': 'AT Protocol Password',
+        'type': 'textarea'
+    },
     'stateSyncSection': {
         'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],
         'type': 'hidden',

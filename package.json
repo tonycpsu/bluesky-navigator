@@ -1,7 +1,7 @@
 {
   "name": "bluesky-navigator",
   "private": true,
-  "version": "1.0.31+298.c57fbecf",
+  "version": "1.0.31+299.30efc21b",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch --mode development",
@@ -12,6 +12,7 @@
     "vite-userscript-plugin": "^1.11.0"
   },
   "dependencies": {
+    "@atproto/api": "^0.14.1",
     "date-fns": "^4.1.0",
     "lock": "^1.1.0"
   }

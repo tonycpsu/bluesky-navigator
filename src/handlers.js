@@ -10,21 +10,22 @@ const {
 
 export class Handler {
 
-  constructor(name, config, state) {
+  constructor(name, config, state, api) {
     //console.log(name)
-    this.name = name
-    this.config = config
-    this.state = state
-    this.items = []
-    this.handleInput = this.handleInput.bind(this)
+    this.name = name;
+    this.config = config;
+    this.state = state;
+    this.api = api;
+    this.items = [];
+    this.handleInput = this.handleInput.bind(this);
   }
 
   activate() {
-    this.bindKeys()
+    this.bindKeys();
   }
 
   deactivate() {
-    this.unbindKeys()
+    this.unbindKeys();
   }
 
   isActive() {
@@ -83,6 +84,7 @@ export class Handler {
       }
     }
   }
+
 }
 
 export class ItemHandler extends Handler {
@@ -106,10 +108,8 @@ export class ItemHandler extends Handler {
     ]
   }
 
-  constructor(name, config, state, selector) {
-    super(name);
-    this.config = config;
-    this.state = state;
+  constructor(name, config, state, api, selector) {
+    super(name, config, state, api);
     this.selector = selector;
     this._index = null;
     this.postId = null;
@@ -887,16 +887,28 @@ this.itemStats.oldest
     return window.location.href.split("/")[6]
   }
 
+  urlForItem(item) {
+    return `https://bsky.app${$(item).find("a[href*='/post/']").attr("href")}`;
+  }
+
   postIdForItem(item) {
     try {
-      return $(item).find("a[href*='/post/']").attr("href").split("/")[4]
+      return this.urlForItem(item).split("/")[4];
     } catch (e) {
-      return this.postIdFromUrl()
+      return this.postIdFromUrl();
     }
   }
 
   handleFromItem(item) {
     return $.trim($(item).find(constants.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1)
+  }
+
+  async apiResultForItem(item) {
+    const uri = await this.api.getAtprotoUri(this.urlForItem(item));
+    console.log(uri);
+    post = await this.api.getPost(uri);
+    return post;
+    // debugger;
   }
 
   displayNameFromItem(item) {
@@ -1216,6 +1228,15 @@ this.itemStats.oldest
         }
       } else if(!isNaN(parseInt(event.key))) {
         $("div[role='tablist'] > div > div > div").filter(":visible")[parseInt(event.key)-1].click()
+      } else if (event.key == ";") {
+        if(!this.api) {
+          return;
+        }
+        this.apiResultForItem(item).then(
+          (post) => {
+            console.log(post);
+          }
+        );
       } else {
         return false
       }
@@ -1251,8 +1272,8 @@ export class FeedItemHandler extends ItemHandler {
     ]
   }
 
-  constructor(name, config, state, selector) {
-    super(name, config, state, selector)
+  constructor(name, config, state, api, selector) {
+    super(name, config, state, api, selector)
     this.toggleSortOrder = this.toggleSortOrder.bind(this);
     this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
     this.onSearchKeydown = this.onSearchKeydown.bind(this);
@@ -1765,11 +1786,11 @@ export class FeedItemHandler extends ItemHandler {
         $(thread).find(".item").each(
           (i, item) => {
             const offset = parseInt($(item).data("bsky-navigator-thread-offset"));
-            console.log(offset);
+            // console.log(offset);
             if (offset > 0 && this.config.get("showReplyContext")) {
               const index = parseInt($(thread).data("bsky-navigator-thread-index"));
               const prev = $(`div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset-1}"]`);
-              console.log("prev", prev);
+              // console.log("prev", prev);
               $(prev).removeClass("filtered");
               $(prev).closest(".thread").removeClass("filtered");
             }
@@ -1833,8 +1854,8 @@ export class FeedItemHandler extends ItemHandler {
 
 export class PostItemHandler extends ItemHandler {
 
-  constructor(name, config, state, selector) {
-    super(name, config, state, selector)
+  constructor(name, config, state, api, selector) {
+    super(name, config, state, api, selector)
     this.indexMap = {}
     this.handleInput = this.handleInput.bind(this)
   }
@@ -1900,8 +1921,8 @@ export class PostItemHandler extends ItemHandler {
 
 export class ProfileItemHandler extends FeedItemHandler {
 
-  constructor(name, config, state, selector) {
-    super(name, config, state, selector)
+  constructor(name, config, state, api, selector) {
+    super(name, config, state, api, selector)
   }
 
   activate() {
@@ -1957,3 +1978,4 @@ export class ProfileItemHandler extends FeedItemHandler {
     }
   }
 }
+;

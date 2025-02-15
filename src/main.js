@@ -3,6 +3,7 @@
 
 import constants from './constants.js'
 import { state } from "./state.js";
+import { BlueskyAPI } from "./api.js";
 import * as utils from "./utils.js";
 import * as configjs from "./config.js";
 
@@ -124,13 +125,28 @@ function getScreenFromElement(element) {
     function onStateInit() {
 
         let widthWatcher;
+        let api;
+
+        if (
+            config.get("atprotoService")
+                && config.get("atprotoIdentifier")
+                && config.get("atprotoPassword")
+        ) {
+            api = new BlueskyAPI(
+                config.get("atprotoService"),
+                config.get("atprotoIdentifier"),
+                config.get("atprotoPassword")
+            );
+            // FIXME: async race condition
+            api.login();
+        }
 
         // FIXME: ordering of these is important since posts can tbe in profiles
         handlers = {
-            feed: new FeedItemHandler("feed", config, state, constants.FEED_ITEM_SELECTOR),
-            post: new PostItemHandler("post", config, state, constants.POST_ITEM_SELECTOR),
-            profile: new ProfileItemHandler("profile", config, state, constants.FEED_ITEM_SELECTOR),
-            input: new Handler("input", config, state)
+            feed: new FeedItemHandler("feed", config, state, api, constants.FEED_ITEM_SELECTOR),
+            post: new PostItemHandler("post", config, state, api, constants.POST_ITEM_SELECTOR),
+            profile: new ProfileItemHandler("profile", config, state, api, constants.FEED_ITEM_SELECTOR),
+            input: new Handler("input", config, state, api)
         }
 
         // FIXME: find a better place for this
@@ -594,7 +610,6 @@ function getScreenFromElement(element) {
 
         }
         proxyIntersectionObserver();
-        
     }
 
     const configTitleDiv = `

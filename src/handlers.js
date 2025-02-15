@@ -1284,6 +1284,9 @@ export class FeedItemHandler extends ItemHandler {
           // "margin-left": "10px"
         }
       );
+      $(buttonsDiv).parent().children().first().css(
+        "flex", ""
+      );
       // buttonsDiv.css("flex-direction", "column");
       buttonsDiv.css(
         {

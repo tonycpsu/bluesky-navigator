@@ -387,13 +387,46 @@ div.item-banner {
     width: 400px;
     z-index: 1000;
 }
-.popup-avatar {
+
+.item {
+    display: flex;
+    flex-direction: row;
+}
+
+.item > div {
+    flex: 1;
+}
+
+.item > div:first-of-type {
+    flex: 2;
+}
+.sidecar-post-avatar {
     width: 42px;
     height: 42px;
 }
-.popup-content {
-    text-align: center;
+
+.sidecar-replies {
+    max-height: 50vH;
+    overflow-y: scroll;
+    font-size: 0.6em;
+    padding-left: 10px;
 }
+.sidecar-reply {
+    display: flex;
+    flex-direction: column;
+    padding: 5px;
+}
+
+.sidecar-reply-user-info {
+    display: flex;
+    flex-direction: row;
+}
+
+.sidecar-reply-avatar {
+    width: 24px;
+    height: 24px;
+}
+
 .close-btn {
     position: absolute;
     top: 10px;
@@ -401,3 +434,4 @@ div.item-banner {
     font-size: 20px;
     cursor: pointer;
 }
+

@@ -1,0 +1,38 @@
+<script id="sidecar-post-template" type="text/x-handlebars-template">
+  <div id="{{postId}}" class="sidecar-post">
+  <div class="sidecar-post-content">
+  <span class="close-btn">&times;</span>
+  <div class="user-info">
+  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar">
+  <div>
+  <div class="sidecar-post-username">{{displayName}}</div>
+  <div class="sidecar-post-handle">@{{handle}}</div>
+  </div>
+  </div>
+  <div class="sidecar-post-content">{{content}}</div>
+  <div class="sidecar-post-timestamp">{{timestamp}}</div>
+  </div>
+  </div>
+</script>
+
+<script id="sidecar-replies-template" type="text/x-handlebars-template">
+    <div class="sidecar-replies">
+        {{#each replies}}
+        {{> replyTemplate this}}
+        {{/each}}
+    </div>
+</script>
+
+<script id="sidecar-reply-template" type="text/x-handlebars-template">
+  <div id="{{replyId}}" class="sidecar-reply">
+  <div class="sidecar-reply-user-info">
+  <img id="avatar-{{postid}}" class="sidecar-reply-avatar" src="{{avatar}}" alt="User Avatar">
+  <div>
+  <div class="sidecar-reply-username">{{displayName}}</div>
+  <div class="sidecar-reply-handle">@{{handle}}</div>
+  </div>
+  </div>
+  <div class="sidecar-reply-content">{{content}}</div>
+  <div class="sidecar-reply-timestamp">{{timestamp}}</div>
+  </div>
+</script>

@@ -9,7 +9,7 @@ import * as configjs from "./config.js";
 
 import style from './assets/css/style.css?raw'
 import configCss from "./assets/css/config.css?raw";
-import postHtml from "./post.html?raw"; // Import popup as a raw string
+import sidecarTemplatesHtml from "./sidecar.html?raw";
 
 const {
     debounce,
@@ -141,11 +141,11 @@ function getScreenFromElement(element) {
             // FIXME: async race condition
             api.login();
 
-            async function loadPostPopup(selector) {
+            async function loadSidecarTemplate(selector, html) {
                 try {
                     // Fetch the popup HTML file from the public directory
                     // Append the popup to the body
-                    const popupContainer = $(selector).append(postHtml);
+                    const popupContainer = $(selector).append(html);
                     // $(popupContainer).append($(html));
                     // Close button functionality
                     $(".close-btn").on("click", function() {
@@ -157,7 +157,7 @@ function getScreenFromElement(element) {
                     console.error("Failed to load popup:", error);
                 }
             }
-            loadPostPopup('body');
+            loadSidecarTemplate('body', sidecarTemplatesHtml);
         }
 
         // FIXME: ordering of these is important since posts can tbe in profiles
@@ -226,7 +226,7 @@ function getScreenFromElement(element) {
             ``
         }
 
-        .item {
+        .item  {
             ${config.get("posts")}
         }
 

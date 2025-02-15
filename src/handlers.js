@@ -1233,48 +1233,54 @@ this.itemStats.oldest
         if(!this.api) {
           return;
         }
-        this.getThreadForItem(item).then(
-          (thread) => {
-            const post = thread.post;
-            // debugger;
-            // const template = Handlebars.compile($("#sidecar-post-template").html());
-            const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
-            const replyTemplate = Handlebars.compile($("#sidecar-reply-template").html());
-            Handlebars.registerPartial("replyTemplate", replyTemplate);
-            const replies = thread.replies.filter(
-              (reply) => reply.post
-            ).map(
-              (reply) => {
-                // debugger;
-                return {
-                  postId: reply.post.cid,
-                  avatar: reply.post.author.avatar || "https://via.placeholder.com/40",
-                  displayName: reply.post.author.displayName || "Unknown",
-                  handle: reply.post.author.handle || "unknown",
-                  content: reply.post.record.text || "No content available",
-                  timestamp: new Date(reply.post.record.createdAt).toLocaleString(),
+        if(!this.sidecar) {
+          this.getThreadForItem(item).then(
+            (thread) => {
+              const post = thread.post;
+              // debugger;
+              // const template = Handlebars.compile($("#sidecar-post-template").html());
+              const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
+              const replyTemplate = Handlebars.compile($("#sidecar-reply-template").html());
+              Handlebars.registerPartial("replyTemplate", replyTemplate);
+              const replies = thread.replies.filter(
+                (reply) => reply.post
+              ).map(
+                (reply) => {
+                  // debugger;
+                  return {
+                    postId: reply.post.cid,
+                    avatar: reply.post.author.avatar || "https://via.placeholder.com/40",
+                    displayName: reply.post.author.displayName || "Unknown",
+                    handle: reply.post.author.handle || "unknown",
+                    content: reply.post.record.text || "No content available",
+                    timestamp: new Date(reply.post.record.createdAt).toLocaleString(),
+                  }
                 }
-              }
-            );
-            console.log(replies);
-            const sidecarHtml = repliesTemplate(
-              {
-                // postId: post.cid,
-                replies: replies
-              }
-            );
-            // const author = post.author;
-            // $("#avatar").attr("src", author.avatar);
-            // $("#displayName").text(author.displayName || "Unknown");
-            // $("#handle").text("@" + author.handle);
-            // $("#popup-post-content").text(post.record.text);
-            // $("#popup-post-timestamp").text(new Date(post.record.createdAt).toLocaleString());
-            // $(item).css("width", "70%");
-            $(item).append(sidecarHtml);
-            // Show the popup
-            // $("#bluesky-popup").show();
-          }
-        );
+              );
+              console.log(replies);
+              const sidecarHtml = repliesTemplate(
+                {
+                  // postId: post.cid,
+                  replies: replies
+                }
+              );
+              // const author = post.author;
+              // $("#avatar").attr("src", author.avatar);
+              // $("#displayName").text(author.displayName || "Unknown");
+              // $("#handle").text("@" + author.handle);
+              // $("#popup-post-content").text(post.record.text);
+              // $("#popup-post-timestamp").text(new Date(post.record.createdAt).toLocaleString());
+              // $(item).css("width", "70%");
+              this.sidecar = $(sidecarHtml);
+              $(item).append(this.sidecar);
+              // Show the popup
+              // $("#bluesky-popup").show();
+            }
+          );
+        } else {
+          $(this.sidecar).css("display", "none");
+          this.sidecar = null;
+        }
       } else {
         return false
       }

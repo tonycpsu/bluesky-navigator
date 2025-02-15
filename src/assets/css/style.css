@@ -391,10 +391,7 @@ div.item-banner {
 .item {
     display: flex;
     flex-direction: row;
-}
-
-.item > div {
-    flex: 1;
+    max-height: 80vH;
 }
 
 .item > div:first-of-type {
@@ -406,15 +403,21 @@ div.item-banner {
 }
 
 .sidecar-replies {
-    max-height: 50vH;
-    overflow-y: scroll;
+    flex: 1;
+    min-height: 0;
+    max-height: 100vH;
+    overflow-y: auto;
     font-size: 0.6em;
     padding-left: 10px;
+    display: flex;
+    flex-direction: column;
 }
+
 .sidecar-reply {
     display: flex;
     flex-direction: column;
     padding: 5px;
+    flex-shrink: 0;
 }
 
 .sidecar-reply-user-info {

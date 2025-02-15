@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+301.ba199d91
+// @version     1.0.31+302.7b3eaa1c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44576,10 +44576,22 @@ if (cid) {
         return null;
       }
     }
-    async getPost(uri) {
+    async getThread(uri) {
       const res = await this.agent.getPostThread({ uri });
       const { thread } = res.data;
-      return thread.post;
+      return thread;
+    }
+    // async getPost(uri) {
+    //     const thread = this.getThread(uri);
+    //     return thread.post;
+    // }
+    async getReplies(uri) {
+      const thread = this.getThread(uri);
+      return thread.replies.map(
+        (i, reply) => {
+          return reply.post.record.text;
+        }
+      );
     }
   }
   let debounceTimeout;
@@ -44888,7 +44900,7 @@ if (cid) {
   };
   const style = '/* style.css */\n\ndiv[style^="position: fixed; inset: 0px 0px 0px 50%;"] {\n    border: none;\n}\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    width: 100%;\n    height: 32px;\n    background-color: inherit;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n@media (prefers-color-scheme: dark) {\n    div#bsky-navigator-toolbar {\n        background-color: #29333d\n    }\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n@media (prefers-color-scheme: dark) {\n    .indicator-image {\n        filter: invert(1) brightness(2);\n    }\n}\n\n/* img#loadNewerIndicatorImage { */\n/*     opacity: 0.2; */\n/* } */\n\n/* img#loadOlderIndicatorImage { */\n/*     opacity: 0.2; */\n/* } */\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\ndiv#infoIndicatorText {\n    font-size: 0.8em;\n}\n\ndiv#itemTimestampStats {\n    font-size: 0.7em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    div#statusBar {\n        background-color: #29333d;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n#prevButton {\n    z-index: 1000;\n    position: absolute;\n    top: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#prevButton.mobile {\n    position: fixed;\n    left: 1%;\n    top: 25%;\n}\n\n#nextButton {\n    z-index: 1000;\n    position: absolute;\n    bottom: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#nextButton.mobile {\n    position: fixed;\n    left: 1%;\n    bottom: 20%;\n}\n\nnav.r-1wyvozj {\n    overflow: inherit;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    bottom: 2px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n\n.popup {\n    display: none;\n    position: fixed;\n    max-height: 80vH;\n    top: 50%;\n    left: 50%;\n    transform: translate(-50%, -50%);\n    /* transform: scale(0.25); /\\* Scale down to 75% *\\/ */\n    background: white;\n    padding: 15px;\n    border-radius: 12px;\n    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n    width: 400px;\n    z-index: 1000;\n}\n.popup-avatar {\n    width: 42px;\n    height: 42px;\n}\n.popup-content {\n    text-align: center;\n}\n.close-btn {\n    position: absolute;\n    top: 10px;\n    right: 15px;\n    font-size: 20px;\n    cursor: pointer;\n}\n';
   const configCss = "h1 {\n    font-size: 18pt;\n}\n\nh2 {\n    font-size: 14pt;\n}\n.config_var textarea {\n    width: 100%;\n    height: 1.5em;\n}\n\n#GM_config_rulesConfig_var textarea {\n    height: 10em;\n}\n\n#GM_config_stateSyncConfig_var textarea {\n    height: 10em;\n}\n";
-  const postHtml = '<div id="bluesky-popup" class="popup">\n    <div class="popup-content">\n        <span class="close-btn">&times;</span>\n        <div class="user-info">\n            <img id="avatar" class="popup-avatar" src="" alt="User Avatar">\n            <div>\n                <div class="username" id="displayName"></div>\n                <div class="handle" id="handle"></div>\n            </div>\n        </div>\n        <div class="post-content" id="popup-post-content"></div>\n        <div class="timestamp" id="popup-post-timestamp"></div>\n        <div class="actions">\n            <span>\u2764\uFE0F Like</span>\n            <span>\u{1F501} Repost</span>\n            <span>\u{1F4AC} Reply</span>\n        </div>\n    </div>\n</div>\n';
+  const postHtml = '<div id="bluesky-popup" class="popup">\n    <div class="popup-content">\n        <span class="close-btn">&times;</span>\n        <div class="user-info">\n            <img id="avatar" class="popup-avatar" src="" alt="User Avatar">\n            <div>\n                <div class="username" id="displayName"></div>\n                <div class="handle" id="handle"></div>\n            </div>\n        </div>\n        <div class="post-content" id="popup-post-content"></div>\n        <div class="timestamp" id="popup-post-timestamp"></div>\n    </div>\n</div>\n';
   const millisecondsInWeek = 6048e5;
   const millisecondsInDay = 864e5;
   const constructFromSymbol = Symbol.for("constructDateFrom");
@@ -47082,10 +47094,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     handleFromItem(item) {
       return $.trim($(item).find(constants$1.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1);
     }
-    async apiResultForItem(item) {
+    async getThreadForItem(item) {
       const uri = await this.api.getAtprotoUri(this.urlForItem(item));
-      const post2 = await this.api.getPost(uri);
-      return post2;
+      const thread = await this.api.getThread(uri);
+      return thread;
     }
     displayNameFromItem(item) {
       return $.trim($(item).find(constants$1.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""));
@@ -47338,15 +47350,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (!this.api) {
             return;
           }
-          this.apiResultForItem(item).then(
-            (post2) => {
+          this.getThreadForItem(item).then(
+            (thread) => {
+              const post2 = thread.post;
               const author = post2.author;
               $("#avatar").attr("src", author.avatar || "https://via.placeholder.com/40");
               $("#displayName").text(author.displayName || "Unknown");
               $("#handle").text("@" + author.handle);
               $("#popup-post-content").text(post2.record.text);
               $("#popup-post-timestamp").text(new Date(post2.record.createdAt).toLocaleString());
-              $("#bluesky-popup").show();
+              $(item).css("width", "70%");
+              $(item).closest(".thread").first().append(postHtml);
             }
           );
         } else {

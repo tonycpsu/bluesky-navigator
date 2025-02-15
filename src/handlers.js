@@ -3,6 +3,7 @@
 import constants from './constants.js'
 import * as utils from "./utils.js";
 import * as dateFns from "date-fns";
+import postHtml from "./post.html?raw"; // Import popup as a raw string
 
 const {
   waitForElement
@@ -903,11 +904,11 @@ this.itemStats.oldest
     return $.trim($(item).find(constants.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1)
   }
 
-  async apiResultForItem(item) {
+  async getThreadForItem(item) {
     const uri = await this.api.getAtprotoUri(this.urlForItem(item));
     // console.log(uri);
-    const post = await this.api.getPost(uri);
-    return post;
+    const thread = await this.api.getThread(uri);
+    return thread;
     // debugger;
   }
 
@@ -1232,16 +1233,19 @@ this.itemStats.oldest
         if(!this.api) {
           return;
         }
-        this.apiResultForItem(item).then(
-          (post) => {
+        this.getThreadForItem(item).then(
+          (thread) => {
+            const post = thread.post;
             const author = post.author;
             $("#avatar").attr("src", author.avatar || "https://via.placeholder.com/40");
             $("#displayName").text(author.displayName || "Unknown");
             $("#handle").text("@" + author.handle);
             $("#popup-post-content").text(post.record.text);
             $("#popup-post-timestamp").text(new Date(post.record.createdAt).toLocaleString());
+            $(item).css("width", "70%");
+            $(item).closest(".thread").first().append(postHtml);
             // Show the popup
-            $("#bluesky-popup").show();
+            // $("#bluesky-popup").show();
           }
         );
       } else {

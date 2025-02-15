@@ -687,17 +687,21 @@ export class ItemHandler extends Handler {
     $(this.items).css("opacity", "0%")
     let itemIndex = 0;
     let threadIndex = 0;
+    let threadOffset = 0;
 
     $(this.selector).filter(":visible").each( (i, item) => {
       $(item).attr("data-bsky-navigator-item-index", itemIndex++);
       $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
 
-      const threadDiv = $(item).parent().parent()
+      const threadDiv = $(item).parent().parent();
       // Check if the div contains any of the target classes
       if (classes.some(cls => $(threadDiv).hasClass(cls))) {
         set.push(threadDiv[0]); // Collect the div
+        $(item).attr("data-bsky-navigator-thread-offset", threadOffset);
+        threadOffset++;
         if ($(threadDiv).hasClass("thread-last")) {
           threadIndex++;
+          threadOffset = 0;
         }
       }
     });
@@ -1650,7 +1654,6 @@ export class FeedItemHandler extends ItemHandler {
 
   filterItem(item, thread) {
     if(this.state.feedHideRead) {
-      // console.log($(thread).children().index($(item).parent()));
       if($(item).hasClass("item-read")) {
         return false;
       }
@@ -1754,7 +1757,25 @@ export class FeedItemHandler extends ItemHandler {
         }
 
       }
-    )
+    );
+
+    // FIXME: pretty inefficient to loop over these again
+    $(unseenThreads).map(
+      (i, thread) => {
+        $(thread).find(".item").each(
+          (i, item) => {
+            const offset = parseInt($(item).data("bsky-navigator-thread-offset"));
+            console.log(offset);
+            if (offset > 0 && this.config.get("showReplyContext")) {
+              const index = parseInt($(thread).data("bsky-navigator-thread-index"));
+              const prev = $(`div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset-1}"]`);
+              console.log("prev", prev);
+              $(prev).removeClass("filtered");
+              $(prev).closest(".thread").removeClass("filtered");
+            }
+          });
+      });
+
     this.refreshItems();
     if(hideRead && $(this.items[this.index]).hasClass("item-read")) {
       console.log("jumping")

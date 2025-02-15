@@ -13,11 +13,54 @@ export const CONFIG_FIELDS = {
         'default': '600'
     },
     'postActionButtonPosition': {
-        'label': 'Post actino button position',
+        'label': 'Post action button position',
         'title': 'Where to position reply, repost, like, etc. buttons',
         'type': 'select',
         'options': ['Bottom', 'Left'],
         'default': "Bottom"
+    },
+    'postTimestampFormat': {
+        'label': 'Post timestamp format',
+        'title': 'A format string specifying how post timestamps are displayed',
+        'type': 'textarea',
+        'default': "'$age' '('yyyy-MM-dd hh:mmaaa')'"
+    },
+    'postTimestampFormatMobile': {
+        'label': 'Post timestamp format (mobile)',
+        'title': 'A format string specifying how post timestamps are displayed on small screens',
+        'type': 'textarea',
+        'default': "'$age'"
+    },
+    'videoPreviewPlayback': {
+        'label': 'Video Preview Playback',
+        'title': 'Control playback of video previews',
+        'type': 'select',
+        'options': ['Play all', 'Play selected', 'Pause all'],
+    },
+    'showReplyContext':  {
+        'label': 'Show Reply Context',
+        'title': 'If checked, reply context will be shown even if it was previously marked as read.',
+        'type': 'checkbox',
+        'default': false
+    },
+    'hideLoadNewButton':  {
+        'label': 'Hide Load New Button',
+        'title': 'If checked, the floating button to load new items will be hidden.',
+        'type': 'checkbox',
+        'default': false
+    },
+    'showPostCounts':  {
+        'label': 'Show Post Counts',
+        'title': 'Specify whether post counts are displayed in all, selected, or no posts.',
+        'type': 'select',
+        'options': ['All', 'Selection', 'None'],
+        'default': "All"
+    },
+    'enableSmoothScrolling':  {
+        'label': 'Enable Smooth Scrolling',
+        'title': 'If checked, scrolling using keyboard navigation will be smooth 🛥️ 🎷',
+        'type': 'checkbox',
+        'default': false
     },
     'posts': {
         'label': 'CSS Style: All Posts',
@@ -78,43 +121,6 @@ export const CONFIG_FIELDS = {
         'label': 'Thread Margin',
         'type': 'textarea',
         'default': '10px'
-    },
-    'postTimestampFormat': {
-        'label': 'Post timestamp format',
-        'title': 'A format string specifying how post timestamps are displayed',
-        'type': 'textarea',
-        'default': "'$age' '('yyyy-MM-dd hh:mmaaa')'"
-    },
-    'postTimestampFormatMobile': {
-        'label': 'Post timestamp format (mobile)',
-        'title': 'A format string specifying how post timestamps are displayed on small screens',
-        'type': 'textarea',
-        'default': "'$age'"
-    },
-    'videoPreviewPlayback': {
-        'label': 'Video Preview Playback',
-        'title': 'Control playback of video previews',
-        'type': 'select',
-        'options': ['Play all', 'Play selected', 'Pause all'],
-    },
-    'hideLoadNewButton':  {
-        'label': 'Hide Load New Button',
-        'title': 'If checked, the floating button to load new items will be hidden.',
-        'type': 'checkbox',
-        'default': false
-    },
-    'showPostCounts':  {
-        'label': 'Show Post Counts',
-        'title': 'Specify whether post counts are displayed in all, selected, or no posts.',
-        'type': 'select',
-        'options': ['All', 'Selection', 'None'],
-        'default': "All"
-    },
-    'enableSmoothScrolling':  {
-        'label': 'Enable Smooth Scrolling',
-        'title': 'If checked, scrolling using keyboard navigation will be smooth 🛥️ 🎷',
-        'type': 'checkbox',
-        'default': false
     },
     'stateSyncSection': {
         'section': [GM_config.create('State Sync'), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],

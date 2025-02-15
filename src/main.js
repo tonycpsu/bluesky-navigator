@@ -510,7 +510,7 @@ function getScreenFromElement(element) {
             resizeTimer = setTimeout(onWindowResize, 500); // Adjust delay as needed
         });
 
-        onWindowResize();
+        waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
 
         function proxyIntersectionObserver() {
             const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;

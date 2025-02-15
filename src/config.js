@@ -39,7 +39,13 @@ export const CONFIG_FIELDS = {
     },
     'showReplyContext':  {
         'label': 'Show Reply Context',
-        'title': 'If checked, reply context will be shown even if it was previously marked as read.',
+        'title': 'If checked, the post being replied to will be shown even if it was previously marked as read.',
+        'type': 'checkbox',
+        'default': false
+    },
+    'showReplySidecar':  {
+        'label': 'Show Replies Inline',
+        'title': 'If checked, replies to the selected post will be displayed  (requires atproto settings below).',
         'type': 'checkbox',
         'default': false
     },

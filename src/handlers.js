@@ -622,8 +622,8 @@ export class ItemHandler extends Handler {
     var index = this.getIndexFromItem(target);
     if (index != this.index) {
       this.applyItemStyle(this.items[this.index], false);
+      this.setIndex(index);
     }
-    this.setIndex(index);
   }
 
 
@@ -959,6 +959,10 @@ this.itemStats.oldest
 
   setIndex(index, mark, update) {
     let oldIndex = this.index;
+    if(index == oldIndex) {
+      console.log("unnecessary setIndex");
+      return;
+    }
     if (oldIndex != null) {
       if (mark)
       {
@@ -968,9 +972,12 @@ this.itemStats.oldest
     if (index < 0 || index >= this.items.length) {
       return;
     }
-    this.applyItemStyle(this.items[oldIndex], false)
+    this.applyItemStyle(this.items[oldIndex], false);
     this.index = index;
-    this.applyItemStyle(this.items[this.index], true)
+    this.applyItemStyle(this.items[this.index], true);
+    if (this.config.get("showReplySidecar")) {
+      this.showSidecar(this.items[this.index], true);
+    }
     if(update) {
       this.updateItems();
     }
@@ -1128,6 +1135,68 @@ this.itemStats.oldest
     //return $(item).parent().parent().index()-1
   }
 
+  async getSidecarContent(item) {
+    const thread = await this.getThreadForItem(item);
+    const post = thread.post;
+    // debugger;
+    // const template = Handlebars.compile($("#sidecar-post-template").html());
+    const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
+    const replyTemplate = Handlebars.compile($("#sidecar-reply-template").html());
+    Handlebars.registerPartial("replyTemplate", replyTemplate);
+    const replies = thread.replies.filter(
+      (reply) => reply.post
+    ).map(
+      (reply) => {
+        // debugger;
+        return {
+          postId: reply.post.cid,
+          avatar: reply.post.author.avatar,
+          displayName: reply.post.author.displayName,
+          handle: reply.post.author.handle,
+          content: reply.post.record.text,
+          timestamp: new Date(reply.post.record.createdAt).toLocaleString(),
+        }
+      }
+    );
+    console.log(replies);
+    return repliesTemplate(
+      {
+        // postId: post.cid,
+        replies: replies
+      }
+    );
+  }
+
+  async showSidecar(item, action=null) {
+    console.log("showSidecar", item);
+    let sidecar = $(item).find('.sidecar-replies')[0];
+    if(!sidecar) {
+      sidecar = await this.getSidecarContent(item);
+      $(item).append(sidecar);
+    }
+    const display = (
+      (action == null)
+        ?
+        (
+          sidecar && $(sidecar).is(":visible")
+            ?
+            "none"
+            : "flex"
+        )
+        : (
+          action ? "flex" : "none"
+        )
+    );
+    console.log(display);
+    $(sidecar).css("display", display);
+
+    // if ($(sidecar).filter(":visible").length){
+    //   $(sidecar).css("display", "none");
+    // } else {
+    //   $(sidecar).css("display", "flex");
+    // }
+  }
+
   handleItemKey(event) {
 
     if(this.isPopupVisible) {
@@ -1233,54 +1302,7 @@ this.itemStats.oldest
         if(!this.api) {
           return;
         }
-        if(!this.sidecar) {
-          this.getThreadForItem(item).then(
-            (thread) => {
-              const post = thread.post;
-              // debugger;
-              // const template = Handlebars.compile($("#sidecar-post-template").html());
-              const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
-              const replyTemplate = Handlebars.compile($("#sidecar-reply-template").html());
-              Handlebars.registerPartial("replyTemplate", replyTemplate);
-              const replies = thread.replies.filter(
-                (reply) => reply.post
-              ).map(
-                (reply) => {
-                  // debugger;
-                  return {
-                    postId: reply.post.cid,
-                    avatar: reply.post.author.avatar || "https://via.placeholder.com/40",
-                    displayName: reply.post.author.displayName || "Unknown",
-                    handle: reply.post.author.handle || "unknown",
-                    content: reply.post.record.text || "No content available",
-                    timestamp: new Date(reply.post.record.createdAt).toLocaleString(),
-                  }
-                }
-              );
-              console.log(replies);
-              const sidecarHtml = repliesTemplate(
-                {
-                  // postId: post.cid,
-                  replies: replies
-                }
-              );
-              // const author = post.author;
-              // $("#avatar").attr("src", author.avatar);
-              // $("#displayName").text(author.displayName || "Unknown");
-              // $("#handle").text("@" + author.handle);
-              // $("#popup-post-content").text(post.record.text);
-              // $("#popup-post-timestamp").text(new Date(post.record.createdAt).toLocaleString());
-              // $(item).css("width", "70%");
-              this.sidecar = $(sidecarHtml);
-              $(item).append(this.sidecar);
-              // Show the popup
-              // $("#bluesky-popup").show();
-            }
-          );
-        } else {
-          $(this.sidecar).css("display", "none");
-          this.sidecar = null;
-        }
+        this.showSidecar(item);
       } else {
         return false
       }

@@ -713,6 +713,7 @@ export class ItemHandler extends Handler {
     this.items = $(this.selector).filter(":visible")
 
     this.itemStats.oldest = this.itemStats.newest = null;
+    // const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
     $(this.selector).filter(":visible").each( (i, item) => {
 
       const timestamp = this.getTimestampForItem(item);
@@ -722,6 +723,15 @@ export class ItemHandler extends Handler {
       if(!this.itemStats.newest || timestamp > this.itemStats.newest) {
         this.itemStats.newest = timestamp;
       }
+
+      // debugger;
+      this.getSidecarContent().then(
+        (content) => {
+          if(!$(item).parent().find(".sidecar-replies").length) {
+            $(item).parent().append(content);
+          }
+        }
+      );
     });
 
     this.setupIntersectionObserver();
@@ -1136,25 +1146,37 @@ this.itemStats.oldest
   }
 
   async getSidecarContent(item) {
-    const thread = await this.getThreadForItem(item);
-    const post = thread.post;
     // debugger;
     // const template = Handlebars.compile($("#sidecar-post-template").html());
     const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
+    if(!item) {
+      // render empty div
+      return repliesTemplate({});
+    }
+    const thread = await this.getThreadForItem(item);
+    const post = thread.post;
     const replyTemplate = Handlebars.compile($("#sidecar-reply-template").html());
     Handlebars.registerPartial("replyTemplate", replyTemplate);
     const replies = thread.replies.filter(
       (reply) => reply.post
     ).map(
       (reply) => {
+        const formatter = Intl.NumberFormat('en', { notation: 'compact' });
         // debugger;
         return {
           postId: reply.post.cid,
+          postUrl: `https://bsky.app/profile/${reply.post.author.handle}/post/${reply.post.uri.split("/").slice(-1)[0]}`,
           avatar: reply.post.author.avatar,
-          displayName: reply.post.author.displayName,
+          displayName: reply.post.author.displayName || reply.post.author.handle,
           handle: reply.post.author.handle,
           content: reply.post.record.text,
           timestamp: new Date(reply.post.record.createdAt).toLocaleString(),
+          replySvg: $(item).find('button[data-testid="replyBtn"] svg')[0].outerHTML,
+          replyCount: formatter.format(reply.post.replyCount),
+          repostSvg: $(item).find('button[aria-label^="Repost"] svg')[0].outerHTML,
+          repostCount: formatter.format(reply.post.repostCount),
+          likeSvg: $(item).find('button[data-testid="likeBtn"] svg')[0].outerHTML,
+          likeCount: formatter.format(reply.post.likeCount)
         }
       }
     );
@@ -1169,17 +1191,19 @@ this.itemStats.oldest
 
   async showSidecar(item, action=null) {
 
-    return;
-    // const container = $(item);
-    const container = $(constants.LEFT_SIDEBAR_SELECTOR).next();
-    console.log("showSidecar", container);
-    // let sidecar = $(container).find('.sidecar-replies')[0];
-    const sidecar = await this.getSidecarContent(item);
-    $(container).html(sidecar);
-    $('.sidecar-replies').css('scroll-margin-top', this.scrollMargin);
-    // if(!sidecar) {
-    //   $(container).append(sidecar);
-    // }
+    // return;
+    const container = $(item).parent();
+    const emptyContent = await this.getSidecarContent();
+    let sidecar = $(container).find('.sidecar-replies')[0];
+    // $(container).html(sidecar);
+    if(!sidecar) {
+      $(container).append(emptyContent);
+    }
+
+    const sidecarContent = await this.getSidecarContent(item);
+    // console.log(sidecarContent);
+    container.find('.sidecar-replies').replaceWith($(sidecarContent));
+
     const display = (
       (action == null)
         ?
@@ -1194,7 +1218,7 @@ this.itemStats.oldest
         )
     );
     console.log(display);
-    $(sidecar).css("display", display);
+    container.find('.sidecar-replies').css("display", display);
 
     // if ($(sidecar).filter(":visible").length){
     //   $(sidecar).css("display", "none");

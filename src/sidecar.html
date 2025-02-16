@@ -4,7 +4,7 @@
   <span class="close-btn">&times;</span>
   <div class="user-info">
   <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar">
-  <div>
+  <div class="sidecar-post-author">
   <div class="sidecar-post-username">{{displayName}}</div>
   <div class="sidecar-post-handle">@{{handle}}</div>
   </div>
@@ -16,23 +16,48 @@
 </script>
 
 <script id="sidecar-replies-template" type="text/x-handlebars-template">
+  {{#if postId}}
   <div id="sidecar-replies-{{postId}}" class="sidecar-replies">
   {{#each replies}}
   {{> replyTemplate this}}
   {{/each}}
   </div>
+  {{else}}
+  <div class="sidecar-replies-empty sidecar-replies">
+  </div>    
+  {{/if}}
 </script>
 
 <script id="sidecar-reply-template" type="text/x-handlebars-template">
-  <div id="{{replyId}}" class="sidecar-reply">
+  {{#if postId}}
+  <div id="sidecar-reply-{{postId}}" class="sidecar-reply">
   <div class="sidecar-reply-user-info">
-  <img id="avatar-{{postid}}" class="sidecar-reply-avatar" src="{{avatar}}" alt="User Avatar">
-  <div>
+  <img id="avatar-{{postId}}" class="sidecar-reply-avatar" src="{{avatar}}" alt="User Avatar">
+  <div class="sidecar-reply-author">
+  <a href="https://bsky.app/profile/{{handle}}">
   <div class="sidecar-reply-username">{{displayName}}</div>
+  </a>
+  <a href="https://bsky.app/profile/{{handle}}">
   <div class="sidecar-reply-handle">@{{handle}}</div>
+  </a>
   </div>
   </div>
   <div class="sidecar-reply-content">{{content}}</div>
-  <div class="sidecar-reply-timestamp">{{timestamp}}</div>
+  <div class="sidecar-reply-footer">
+  <div class="sidecar-reply-timestamp">
+  <a href="{{postUrl}}">
+  {{timestamp}}
+  </a>
   </div>
+  <div class="sidecar-reply-counts">
+  <span>{{{replySvg}}} {{replyCount}}</span>
+  <span>{{{repostSvg}}} {{repostCount}}</span>
+  <span>{{{likeSvg}}} {{likeCount}}</span>
+  </div>
+  </div>
+  </div>
+  {{else}}
+  <div class="sidecar-reply-empty" class="sidecar-reply">
+  </div>
+  {{/if}}
 </script>

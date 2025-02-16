@@ -49,6 +49,12 @@ export const CONFIG_FIELDS = {
         'type': 'checkbox',
         'default': false
     },
+    'hideRightSidebar':  {
+        'label': 'Hide Right Sidebar',
+        'title': 'If checked, the right sidebar will be hidden.',
+        'type': 'checkbox',
+        'default': false
+    },
     'hideLoadNewButton':  {
         'label': 'Hide Load New Button',
         'title': 'If checked, the floating button to load new items will be hidden.',

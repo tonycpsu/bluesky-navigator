@@ -435,7 +435,10 @@ function getScreenFromElement(element) {
             const RIGHT_TRANSLATE_X_DEFAULT = 300
 
             const rightSidebar = $(leftSidebar).next();
-            const sidebarDiff = (width - 600)/2;
+            if(config.get("hideRightSidebar")) {
+                $(rightSidebar).css("display", "none");
+            }
+            const sidebarDiff = (width - 600)/ (1 + !!config.get("hideRightSidebar"));
             if(state.leftSidebarMinimized) {
                 // console.log("remove", leftSidebar);
                 $(leftSidebar).css("transform", "");

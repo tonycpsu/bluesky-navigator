@@ -430,6 +430,19 @@ function getScreenFromElement(element) {
 
         // const LEFT_SIDEBAR_SELECTOR = "nav.r-pgf20v"
 
+        const WIDTH_OFFSET = 32;
+        function adjustTransformX(el, offset) {
+            // debugger;
+            var transform = $(el).css("transform");
+            var translateX = 0;
+            if (!transform || transform == "none") {
+                $(el).css("transform", "translateX(0px);");
+                transform = $(el).css("transform");
+            }
+            console.log(`translateX = ${translateX}`)
+            $(el).css("transform", `translateX(${translateX + offset}px)`);
+        }
+
         function setWidth(leftSidebar, width) {
             const LEFT_TRANSLATE_X_DEFAULT = -540
             const RIGHT_TRANSLATE_X_DEFAULT = 300
@@ -439,33 +452,15 @@ function getScreenFromElement(element) {
                 $(rightSidebar).css("display", "none");
             }
             const sidebarDiff = (width - 600)/ (1 + !!config.get("hideRightSidebar"));
+            // debugger;
+            console.log("sidebarDiff", sidebarDiff);
             if(state.leftSidebarMinimized) {
                 // console.log("remove", leftSidebar);
                 $(leftSidebar).css("transform", "");
             }
             else if(sidebarDiff) {
-                const leftTransform = $(leftSidebar).css("transform")
-                if (!leftTransform) {
-                    console.log("!leftTransform");
-                    return;
-                }
-                const leftMatrix = leftTransform.match(/matrix\(([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,]+)\)/);
-                if (!leftMatrix) {
-                    console.log("!leftMatrix");
-                    return;
-                }
-                const leftTranslateX = parseInt(leftMatrix[5]);
-                console.log(`leftTranslateX = ${leftTranslateX}`)
-                $(leftSidebar).css("transform", `translateX(${LEFT_TRANSLATE_X_DEFAULT - sidebarDiff}px)`);
-                const rightTransform = $(rightSidebar).css("transform");
-                if(!rightTransform) {
-                    console.log("!rightTransform");
-                    return;
-                }
-                const rightMatrix = rightTransform.match(/matrix\(([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,]+)\)/);
-                const rightTranslateX = parseInt(rightMatrix[5]);
-                console.log(`rightTranslateX = ${rightTranslateX}`)
-                $(rightSidebar).css("transform", `translateX(${RIGHT_TRANSLATE_X_DEFAULT + sidebarDiff}px)`);
+                adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT-sidebarDiff);
+                adjustTransformX(rightSidebar, RIGHT_TRANSLATE_X_DEFAULT+sidebarDiff);
             } else {
                 console.log("reset sidebars");
                 $(leftSidebar).css("transform", `translateX(${LEFT_TRANSLATE_X_DEFAULT}px)`);
@@ -476,6 +471,7 @@ function getScreenFromElement(element) {
             $('div[role="tablist"]').css("width", `${width}px`);
             $('#statusBar').css("max-width", `${width}px`);
             $('div[style^="position: fixed; inset: 0px 0px 0px 50%;"]').css("width", `${width}px`);
+            adjustTransformX($('main'), WIDTH_OFFSET);
         }
 
         state.leftSidebarMinimized = false;
@@ -515,10 +511,12 @@ function getScreenFromElement(element) {
                 const remainingWidth = (
                     $(window).width()
                         - leftSidebarWidth
-                        - (!state.leftSidebarMinimized ? $(rightSidebar).outerWidth() : 0)
-                        - 10
+                        // - (!state.leftSidebarMinimized ? $(rightSidebar).outerWidth() : 0)
+                        - ($(rightSidebar).outerWidth() || 0)
+                        - WIDTH_OFFSET
                 );
-                // console.log("remainingWidth", remainingWidth);
+                // debugger;
+                console.log("remainingWidth", remainingWidth, "leftSidebarWidth", leftSidebarWidth);
                 if(remainingWidth >= config.get("postWidthDesktop")) {
                     setWidth($(constants.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
                 } else {

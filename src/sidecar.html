@@ -16,11 +16,11 @@
 </script>
 
 <script id="sidecar-replies-template" type="text/x-handlebars-template">
-    <div class="sidecar-replies">
-        {{#each replies}}
-        {{> replyTemplate this}}
-        {{/each}}
-    </div>
+  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">
+  {{#each replies}}
+  {{> replyTemplate this}}
+  {{/each}}
+  </div>
 </script>
 
 <script id="sidecar-reply-template" type="text/x-handlebars-template">

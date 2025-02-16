@@ -1161,19 +1161,25 @@ this.itemStats.oldest
     console.log(replies);
     return repliesTemplate(
       {
-        // postId: post.cid,
+        postId: post.cid,
         replies: replies
       }
     );
   }
 
   async showSidecar(item, action=null) {
-    console.log("showSidecar", item);
-    let sidecar = $(item).find('.sidecar-replies')[0];
-    if(!sidecar) {
-      sidecar = await this.getSidecarContent(item);
-      $(item).append(sidecar);
-    }
+
+    return;
+    // const container = $(item);
+    const container = $(constants.LEFT_SIDEBAR_SELECTOR).next();
+    console.log("showSidecar", container);
+    // let sidecar = $(container).find('.sidecar-replies')[0];
+    const sidecar = await this.getSidecarContent(item);
+    $(container).html(sidecar);
+    $('.sidecar-replies').css('scroll-margin-top', this.scrollMargin);
+    // if(!sidecar) {
+    //   $(container).append(sidecar);
+    // }
     const display = (
       (action == null)
         ?

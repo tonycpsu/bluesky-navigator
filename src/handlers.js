@@ -1147,7 +1147,6 @@ this.itemStats.oldest
 
   async getSidecarContent(item) {
     // debugger;
-    // const template = Handlebars.compile($("#sidecar-post-template").html());
     const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
     if(!item) {
       // render empty div
@@ -1155,8 +1154,8 @@ this.itemStats.oldest
     }
     const thread = await this.getThreadForItem(item);
     const post = thread.post;
-    const replyTemplate = Handlebars.compile($("#sidecar-reply-template").html());
-    Handlebars.registerPartial("replyTemplate", replyTemplate);
+    const postTemplate = Handlebars.compile($("#sidecar-post-template").html());
+    Handlebars.registerPartial("postTemplate", postTemplate);
     const replies = thread.replies.filter(
       (reply) => reply.post
     ).map(

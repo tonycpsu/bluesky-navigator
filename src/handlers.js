@@ -1881,7 +1881,7 @@ export class FeedItemHandler extends ItemHandler {
           (i, item) => {
             const offset = parseInt($(item).data("bsky-navigator-thread-offset"));
             // console.log(offset);
-            if (offset > 0 && this.config.get("showReplyContext")) {
+            if (offset > 0 && $(item).hasClass("item-unread") && this.config.get("showReplyContext")) {
               const index = parseInt($(thread).data("bsky-navigator-thread-index"));
               const prev = $(`div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset-1}"]`);
               // console.log("prev", prev);

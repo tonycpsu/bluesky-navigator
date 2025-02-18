@@ -30,7 +30,10 @@ Features
     - optionally move position of like/reply/repost buttons
     - configurable formatting of post timestamps
 - Additional functionality:
-    - dynamically filter posts by authors, keywords, etc. using configurable rules
+    - show replies in a "sidecar" next to each post (desktop only, requires
+      enabling the AT Protocol agent, see the relevant section below for details)   
+    - dynamically filter posts by authors, keywords, etc. using configurable
+      rules
     - optionally disable embedded video previews
     - sync read/unread state between multiple browsers via cloud service(s)
     - optionally disable built-in behavior of loading more items when scrolling
@@ -113,11 +116,23 @@ weather forecast
 ```
 
 With this configuration, you can type `$music` to show posts from `@thecure.com`
-or that contain the phrase `Pearl Jam`, or `$news` to match posts from `@cnn.com` or that contain the phrase "weather forecast". This matching is not case sensitive.
+or that contain the phrase `Pearl Jam`, or `$news` to match posts from
+`@cnn.com` or that contain the phrase "weather forecast". This matching is not
+case sensitive.
 
 These searches can be combined, and any search can be negated by prefixing it
 with `!`.
 
+
+AT Protocol Agent (beta)
+------------------------
+
+To enable additional functionality, such as showing post replies inline, you can
+generate a Bluesky [app password](https://bsky.app/settings/app-passwords) and
+enter it into the script's configuration dialog in the AT Protocol Agent
+section. This means the script has access to do anything with your account for
+as long as the app password is active, so you'll have to either trust that it's
+not doing anything malicious or leave this functionality disabled.
 
 Remote State Sync (beta)
 ------------------------

@@ -82,6 +82,15 @@ export class Handler {
       else if (event.code === "Period") {
         event.preventDefault();
         this.config.open()
+      } else if (event.code === "Enter" && $("#GM_config").is(":visible")) {
+        event.preventDefault();
+        this.config.save()
+      }
+
+    } else if (!event.altKey && !event.metaKey) {
+      if (event.code == "Escape" && $("#GM_config").is(":visible")) {
+        event.preventDefault();
+        this.config.close();
       }
     }
   }

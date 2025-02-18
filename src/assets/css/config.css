@@ -17,3 +17,34 @@ h2 {
 #GM_config_stateSyncConfig_var textarea {
     height: 10em;
 }
+
+
+
+#GM_config_header {
+    position: fixed;
+    background-color: inherit;
+    top: -10px;
+    width: 100%;
+}
+
+@media (prefers-color-scheme: light) {
+    #GM_config_header {
+        background-color: #ffffff;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    #GM_config_header {
+        background-color: #29333d;
+    }
+}
+
+#GM_config_section_0 {
+    padding-top: 100px;
+}
+
+#GM_config_buttons_holder {
+    position: fixed;
+    top: 0;
+    right: 0;
+}

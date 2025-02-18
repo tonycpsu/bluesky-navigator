@@ -392,29 +392,27 @@ nav + div {
     display: none;
 }
 
-/* .item { */
-/*     display: flex; */
-/*     max-height: 80vH; */
-/* } */
-
 div:has(>div.item) {
     display: flex;
     flex-direction: row;
+    align-items: stretch;
 }
 
 .item {
     flex: 2;
+    max-height: 100%;
 }
 
 .sidecar-replies {
     flex: 1 1 0;
     min-height: 0;
-    max-height: 80vH;
+    max-height: 100%;
     overflow-y: auto;
     font-size: 0.8em;
     padding-left: 10px;
     display: flex;
     flex-direction: column;
+    max-height: 80vH;
 }
 
 .sidecar-post {

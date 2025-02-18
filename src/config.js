@@ -8,7 +8,7 @@ export const CONFIG_FIELDS = {
         'type': 'hidden',
     },
     'postWidthDesktop': {
-        'label': 'Width of posts in pixels when in desktop mode',
+        'label': 'Maximum width of posts in pixels when in desktop mode',
         'type': 'integer',
         'default': '600'
     },
@@ -44,14 +44,20 @@ export const CONFIG_FIELDS = {
         'default': false
     },
     'showReplySidecar':  {
-        'label': 'Show Replies Inline',
-        'title': 'If checked, replies to the selected post will be displayed  (requires atproto settings below).',
+        'label': 'Show Replies Sidecar',
+        'title': 'If checked, replies to the selected post (and, where applicable, the post being replied to) will be displayed in a sidecar next to each post (requires atproto settings below).',
         'type': 'checkbox',
         'default': false
     },
+    'showReplySidecarMinimumWidth':  {
+        'label': 'Show Replies Sidecar Minimum Width',
+        'title': 'Set a minimum post width in pixels for showing the reply sidecar',
+        'type': 'int',
+        'default': 600
+    },
     'hideRightSidebar':  {
         'label': 'Hide Right Sidebar',
-        'title': 'If checked, the right sidebar will be hidden.',
+        'title': 'If checked, the right sidebar with the search box, following/trending displays, etc. will be hidden (useful when overriding max width above).',
         'type': 'checkbox',
         'default': false
     },

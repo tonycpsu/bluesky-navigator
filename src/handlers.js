@@ -723,7 +723,7 @@ export class ItemHandler extends Handler {
         this.itemStats.newest = timestamp;
       }
 
-      if (this.config.get("showReplySidecar")) {
+      if (this.config.get("showReplySidecar") && $(this.items[this.index]).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
         this.getSidecarContent().then(
           (content) => {
             if(!$(item).parent().find(".sidecar-replies").length) {
@@ -986,7 +986,7 @@ this.itemStats.oldest
     this.index = index;
     this.applyItemStyle(this.items[this.index], true);
     // if (!this.state.mobileView && this.config.get("showReplySidecar")) {
-    if (this.config.get("showReplySidecar")) {
+    if (this.config.get("showReplySidecar") && $(this.items[this.index]).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
       this.showSidecar(this.items[this.index], true);
     }
     if(update) {
@@ -1208,7 +1208,6 @@ this.itemStats.oldest
     const sidecarContent = await this.getSidecarContent(item);
     // console.log(sidecarContent);
     container.find('.sidecar-replies').replaceWith($(sidecarContent));
-    $(container).append(line);
     const display = (
       (action == null)
         ?

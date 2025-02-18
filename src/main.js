@@ -504,7 +504,7 @@ function getScreenFromElement(element) {
         let resizeTimer;
 
         function onWindowResize() {
-            if(this.state.mobileView) {
+            if(state.mobileView) {
                 return;
             }
             console.log("Resized to: " + $(window).width() + "x" + $(window).height());

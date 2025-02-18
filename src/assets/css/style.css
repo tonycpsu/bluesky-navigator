@@ -409,6 +409,10 @@ div:has(>div.item) {
     max-height: 80vH;
 }
 
+.sidecar-parent-indicator {
+    position: absolute;
+}
+
 .sidecar-post {
     display: flex;
     flex-direction: column;

@@ -400,7 +400,6 @@ nav + div {
 div:has(>div.item) {
     display: flex;
     flex-direction: row;
-    max-height: 80vH;
 }
 
 .item {
@@ -408,8 +407,9 @@ div:has(>div.item) {
 }
 
 .sidecar-replies {
-    flex: 1;
+    flex: 1 1 0;
     min-height: 0;
+    max-height: 80vH;
     overflow-y: auto;
     font-size: 0.8em;
     padding-left: 10px;
@@ -453,33 +453,50 @@ div:has(>div.item) {
 
 .sidecar-post-handle {
     color: rgb(66, 87, 108);
-    font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
     font-variant: no-contextual;
+}
+
+.sidecar-post-content {
+    padding: 5px 0px;
 }
 
 .sidecar-post-footer {
     color: rgb(66, 87, 108);
     display: flex;
     flex-direction: row;
+    font-size: 11px;
 }
 
 .sidecar-post-footer svg, .sidecar-post-footer span {
     display: inline-flex;
     vertical-align: middle;
-    flex: 1;
+    /* flex: 1; */
     color: rgb(111, 134, 159);
 }
 
 .sidecar-post-timestamp {
     display: inline-flex;
     vertical-align: middle;
-    flex: 1;
+    flex: 3;
 }
 
-/* .close-btn { */
-/*     position: absolute; */
-/*     top: 10px; */
-/*     right: 15px; */
-/*     font-size: 20px; */
-/*     cursor: pointer; */
-/* } */
+.sidecar-parent .sidecar-post {
+    border: 3px dashed rgb(111, 134, 159);
+    padding: 5px;
+}
+
+.sidecar-post-counts {
+    display: flex;
+    flex: 2;
+}
+
+.sidecar-count {
+    display: flex;
+    flex: 1;
+    justify-content: right;
+    align-items: center;
+}
+
+.sidecar-count-icon > svg {
+  height: 1em;
+}

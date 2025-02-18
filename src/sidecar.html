@@ -1,6 +1,11 @@
 <script id="sidecar-replies-template" type="text/x-handlebars-template">
-  {{#if postId}}
+  {{#if this.postId}}
   <div id="sidecar-replies-{{postId}}" class="sidecar-replies">
+  {{#if parent}}
+  <div class="sidecar-parent">
+  {{> postTemplate parent}}
+  </div>
+  {{/if}}
   {{#each replies}}
   {{> postTemplate this}}
   {{/each}}
@@ -33,9 +38,21 @@
   </a>
   </div>
   <div class="sidecar-post-counts">
-  <span>{{{replySvg}}} {{replyCount}}</span>
-  <span>{{{repostSvg}}} {{repostCount}}</span>
-  <span>{{{likeSvg}}} {{likeCount}}</span>
+  <div class="sidecar-count">
+  <div class="sidecar-count-icon">{{{replySvg}}}</div>
+  <div class="sidecar-count-label">{{replyCount}}</div>
+  </div>
+
+  <div class="sidecar-count">
+  <div class="sidecar-count-icon">{{{repostSvg}}}</div>
+  <div class="sidecar-count-label">{{repostCount}}</div>
+  </div>
+
+  <div class="sidecar-count">
+  <div class="sidecar-count-icon">{{{likeSvg}}}</div>
+  <div class="sidecar-count-label">{{likeCount}}</div>
+  </div>
+
   </div>
   </div>
   </div>

@@ -713,7 +713,6 @@ export class ItemHandler extends Handler {
     this.items = $(this.selector).filter(":visible")
 
     this.itemStats.oldest = this.itemStats.newest = null;
-    // const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
     $(this.selector).filter(":visible").each( (i, item) => {
 
       const timestamp = this.getTimestampForItem(item);
@@ -724,14 +723,15 @@ export class ItemHandler extends Handler {
         this.itemStats.newest = timestamp;
       }
 
-      // debugger;
-      this.getSidecarContent().then(
-        (content) => {
-          if(!$(item).parent().find(".sidecar-replies").length) {
-            $(item).parent().append(content);
+      if (this.config.get("showReplySidecar")) {
+        this.getSidecarContent().then(
+          (content) => {
+            if(!$(item).parent().find(".sidecar-replies").length) {
+              $(item).parent().append(content);
+            }
           }
-        }
-      );
+        );
+      }
     });
 
     this.setupIntersectionObserver();
@@ -1146,6 +1146,26 @@ this.itemStats.oldest
   }
 
   async getSidecarContent(item) {
+
+    function formatPost(post) {
+        const formatter = Intl.NumberFormat('en', { notation: 'compact' });
+        return {
+          postId: post.cid,
+          postUrl: `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split("/").slice(-1)[0]}`,
+          avatar: post.author.avatar,
+          displayName: post.author.displayName || post.author.handle,
+          handle: post.author.handle,
+          content: post.record.text,
+          timestamp: new Date(post.record.createdAt).toLocaleString(),
+          replySvg: constants.SIDECAR_SVG_REPLY,
+          replyCount: formatter.format(post.replyCount),
+          repostSvg: constants.SIDECAR_SVG_REPOST,
+          repostCount: formatter.format(post.repostCount),
+          likeSvg: constants.SIDECAR_SVG_LIKE,
+          likeCount: formatter.format(post.likeCount)
+        }
+    }
+
     // debugger;
     const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
     if(!item) {
@@ -1158,31 +1178,17 @@ this.itemStats.oldest
     Handlebars.registerPartial("postTemplate", postTemplate);
     const replies = thread.replies.filter(
       (reply) => reply.post
-    ).map(
-      (reply) => {
-        const formatter = Intl.NumberFormat('en', { notation: 'compact' });
-        // debugger;
-        return {
-          postId: reply.post.cid,
-          postUrl: `https://bsky.app/profile/${reply.post.author.handle}/post/${reply.post.uri.split("/").slice(-1)[0]}`,
-          avatar: reply.post.author.avatar,
-          displayName: reply.post.author.displayName || reply.post.author.handle,
-          handle: reply.post.author.handle,
-          content: reply.post.record.text,
-          timestamp: new Date(reply.post.record.createdAt).toLocaleString(),
-          replySvg: $(item).find('button[data-testid="replyBtn"] svg')[0].outerHTML,
-          replyCount: formatter.format(reply.post.replyCount),
-          repostSvg: $(item).find('button[aria-label^="Repost"] svg')[0].outerHTML,
-          repostCount: formatter.format(reply.post.repostCount),
-          likeSvg: $(item).find('button[data-testid="likeBtn"] svg')[0].outerHTML,
-          likeCount: formatter.format(reply.post.likeCount)
-        }
-      }
-    );
+    ).map( (reply) => {
+      return formatPost(reply.post);
+    });
     console.log(replies);
+    // if(thread.parent) {
+    //   debugger;
+    // }
     return repliesTemplate(
       {
         postId: post.cid,
+        parent: thread.parent ? formatPost(thread.parent.post) : null,
         replies: replies
       }
     );
@@ -1190,11 +1196,10 @@ this.itemStats.oldest
 
   async showSidecar(item, action=null) {
 
-    // return;
     const container = $(item).parent();
     const emptyContent = await this.getSidecarContent();
     let sidecar = $(container).find('.sidecar-replies')[0];
-    // $(container).html(sidecar);
+
     if(!sidecar) {
       $(container).append(emptyContent);
     }
@@ -1202,7 +1207,7 @@ this.itemStats.oldest
     const sidecarContent = await this.getSidecarContent(item);
     // console.log(sidecarContent);
     container.find('.sidecar-replies').replaceWith($(sidecarContent));
-
+    $(container).append(line);
     const display = (
       (action == null)
         ?
@@ -1218,12 +1223,6 @@ this.itemStats.oldest
     );
     console.log(display);
     container.find('.sidecar-replies').css("display", display);
-
-    // if ($(sidecar).filter(":visible").length){
-    //   $(sidecar).css("display", "none");
-    // } else {
-    //   $(sidecar).css("display", "flex");
-    // }
   }
 
   handleItemKey(event) {
@@ -1965,7 +1964,7 @@ export class PostItemHandler extends ItemHandler {
   activate() {
     super.activate()
     this.postId = this.postIdFromUrl()
-    this.markPostRead(this.postId, null)
+    // this.markPostRead(this.postId, null)
 
     // console.log(`postId: ${this.postId} ${this.index}`)
   }

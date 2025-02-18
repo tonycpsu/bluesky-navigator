@@ -985,6 +985,7 @@ this.itemStats.oldest
     this.applyItemStyle(this.items[oldIndex], false);
     this.index = index;
     this.applyItemStyle(this.items[this.index], true);
+    // if (!this.state.mobileView && this.config.get("showReplySidecar")) {
     if (this.config.get("showReplySidecar")) {
       this.showSidecar(this.items[this.index], true);
     }

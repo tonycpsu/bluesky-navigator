@@ -286,6 +286,10 @@ function getScreenFromElement(element) {
             background-color: ${config.get("threadIndicatorColor")} !important;
         }
 
+        ${constants.HOME_SCREEN_SELECTOR} {
+            overflow: clip;
+        }
+
 `
 
         // Inject the style into the page
@@ -500,6 +504,9 @@ function getScreenFromElement(element) {
         let resizeTimer;
 
         function onWindowResize() {
+            if(this.state.mobileView) {
+                return;
+            }
             console.log("Resized to: " + $(window).width() + "x" + $(window).height());
             if(state.mobileView) {
                 return;
@@ -524,20 +531,6 @@ function getScreenFromElement(element) {
                     setWidth($(constants.LEFT_SIDEBAR_SELECTOR), remainingWidth);
                 }
             }
-            // if ($(window).width() < 1300) {
-            //     console.log("minimized");
-            //     setWidth($(constants.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
-            // } else {
-            //     console.log("full");
-            //     state.mobileView = false;
-            //     $("div.r-sa2ff0").css("padding-top", "0px");
-            //     if(remainingWidth >= config.get("postWidthDesktop")) {
-            //         setWidth($(constants.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
-            //     } else {
-            //         console.log("too narrow");
-            //         setWidth($(constants.LEFT_SIDEBAR_SELECTOR), remainingWidth);
-            //     }
-            // }
         }
 
         $(window).resize(function() {

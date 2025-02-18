@@ -90,14 +90,6 @@ div#bsky-navigator-toolbar {
     }
 }
 
-/* img#loadNewerIndicatorImage { */
-/*     opacity: 0.2; */
-/* } */
-
-/* img#loadOlderIndicatorImage { */
-/*     opacity: 0.2; */
-/* } */
-
 div#infoIndicator {
     flex: 3;
 }
@@ -156,6 +148,7 @@ div#itemTimestampStats {
         font-size: 1em;
         padding: 1px;
         border-top: 1px solid rgb(192, 192, 192);
+        overflow: clip;
     }
 }
 
@@ -173,6 +166,7 @@ div#itemTimestampStats {
         bottom: 58px;
         font-size: 1em;
         padding: 1px;
+        overflow: clip;
     }
 }
 

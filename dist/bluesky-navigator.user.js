@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+319.ede6295d
+// @version     1.0.31+320.d21ef0b7
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44811,7 +44811,12 @@ if (cid) {
     "selectionActive": {
       "label": "CSS Style: Selected Post",
       "type": "textarea",
-      "default": "border: 3px rgba(255, 0, 0, .3) solid !important;"
+      "default": "border: 3px rgba(128, 0, 0, .6) solid !important;"
+    },
+    "selectionChildActive": {
+      "label": "CSS Style: Selected Child Post Active",
+      "type": "textarea",
+      "default": "border: 3px rgba(128, 0, 0, .2) solid !important;"
     },
     "selectionInactive": {
       "label": "CSS Style: Unselected Post",
@@ -52172,6 +52177,7 @@ if (cid) {
       super(name, config2, state2, api);
       this.selector = selector;
       this._index = null;
+      this._childIndex = null;
       this.postId = null;
       this.loadNewerCallback = null;
       this.debounceTimeout = null;
@@ -52304,6 +52310,11 @@ if (cid) {
       $(document).off("scroll", this.onScroll);
       super.deactivate();
     }
+    set index(value) {
+      this._index = value;
+      this.postId = this.postIdForItem(this.items[this.index]);
+      this.updateInfoIndicator();
+    }
     get index() {
       return this._index;
     }
@@ -52311,6 +52322,34 @@ if (cid) {
       this._index = value;
       this.postId = this.postIdForItem(this.items[this.index]);
       this.updateInfoIndicator();
+    }
+    get childIndex() {
+      return this._childIndex;
+    }
+    set childIndex(value) {
+      let oldIndex = this._childIndex;
+      if (value == oldIndex) {
+        return;
+      }
+      if (oldIndex != null) {
+        $(this.items[this.index]).parent().find("div.sidecar-post").eq(oldIndex).addClass("item-selection-inactive");
+      }
+      this._childIndex = value;
+      console.log(this.childIndex);
+      if (this.childIndex == null) {
+        console.log("active");
+        $(this.items[this.index]).addClass("item-selection-active");
+        $(this.items[this.index]).removeClass("item-selection-child-active");
+        $(this.items[this.index]).parent().find("div.sidecar-post").removeClass("item-selection-active");
+      } else {
+        console.log("child");
+        $(this.items[this.index]).addClass("item-selection-child-active");
+        $(this.items[this.index]).removeClass("item-selection-active");
+      }
+      if (this.childIndex != null) {
+        console.log($(this.items[this.index]).parent().find("div.sidecar-post").eq(this.childIndex));
+        $(this.items[this.index]).parent().find("div.sidecar-post").eq(this.childIndex).addClass("item-selection-active");
+      }
     }
     onItemAdded(element) {
       this.applyItemStyle(element);
@@ -52874,6 +52913,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       return true;
     }
+    setChildIndex(index, mark, update) {
+    }
     jumpToPost(postId) {
       for (const [i, item] of $(this.items).get().entries()) {
         const other = this.postIdForItem(item);
@@ -52939,6 +52980,25 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       return true;
     }
+    jumpToNextUnseenItem(mark) {
+      var i;
+      for (i = this.index + 1; i < this.items.length - 1; i++) {
+        var postId = this.postIdForItem(this.items[i]);
+        if (!this.state.seen[postId]) {
+          break;
+        }
+      }
+      this.setIndex(i, mark);
+      this.updateItems();
+    }
+    toggleFocus() {
+      console.log(this.childIndex);
+      if (this.childIndex == null) {
+        this.childIndex = 0;
+      } else {
+        this.childIndex = null;
+      }
+    }
     handleMovementKey(event) {
       var moved = false;
       var mark = false;
@@ -52948,13 +53008,30 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.ignoreMouseMovement = true;
       if (this.keyState.length == 0) {
-        if (["j", "k", "ArrowDown", "ArrowUp", "J", "G"].includes(event.key)) {
+        if (["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"].includes(event.key)) {
           if (["j", "ArrowDown"].indexOf(event.key) != -1) {
             event.preventDefault();
             moved = this.jumpToNext(event.key == "j");
           } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
             event.preventDefault();
             moved = this.jumpToPrev(event.key == "k");
+          } else if (event.key == "h") {
+            var back_button = $("button[aria-label^='Back' i]").filter(":visible");
+            if (back_button.length) {
+              back_button.click();
+            } else {
+              history.back(1);
+            }
+          } else if (event.key == "ArrowLeft") {
+            if (this.childIndex == null) {
+              return;
+            }
+            this.toggleFocus();
+          } else if (event.key == "ArrowRight") {
+            if (this.childIndex != null) {
+              return;
+            }
+            this.toggleFocus();
           } else if (event.key == "G") {
             moved = this.setIndex(this.items.length - 1, false, true);
           } else if (event.key == "J") {
@@ -52977,17 +53054,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (moved) {
         this.lastMousePosition = null;
       }
-    }
-    jumpToNextUnseenItem(mark) {
-      var i;
-      for (i = this.index + 1; i < this.items.length - 1; i++) {
-        var postId = this.postIdForItem(this.items[i]);
-        if (!this.state.seen[postId]) {
-          break;
-        }
-      }
-      this.setIndex(i, mark);
-      this.updateItems();
     }
     getIndexFromItem(item) {
       return $(".item").filter(":visible").index(item);
@@ -53112,13 +53178,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           this.markItemRead(this.index, null);
         } else if (event.key == "A") {
           this.markVisibleRead();
-        } else if (event.key == "h") {
-          var back_button = $("button[aria-label^='Back' i]").filter(":visible");
-          if (back_button.length) {
-            back_button.click();
-          } else {
-            history.back(1);
-          }
         } else if (!isNaN(parseInt(event.key))) {
           $("div[role='tablist'] > div > div > div").filter(":visible")[parseInt(event.key) - 1].click();
         } else if (event.key == ";") {
@@ -53907,6 +53966,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
 
         .item-selection-inactive {
             ${config.get("selectionInactive")}
+        }
+
+        .item-selection-child-active {
+            ${config.get("selectionChildActive")}
         }
 
         @media (prefers-color-scheme:light){

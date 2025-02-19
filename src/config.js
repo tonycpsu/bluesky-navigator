@@ -118,7 +118,12 @@ export const CONFIG_FIELDS = {
     'selectionActive': {
         'label': 'CSS Style: Selected Post',
         'type': 'textarea',
-        'default': 'border: 3px rgba(255, 0, 0, .3) solid !important;'
+        'default': 'border: 3px rgba(128, 0, 0, .6) solid !important;'
+    },
+    'selectionChildActive': {
+        'label': 'CSS Style: Selected Child Post Active',
+        'type': 'textarea',
+        'default': 'border: 3px rgba(128, 0, 0, .2) solid !important;'
     },
     'selectionInactive': {
         'label': 'CSS Style: Unselected Post',

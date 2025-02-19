@@ -122,6 +122,7 @@ export class ItemHandler extends Handler {
     super(name, config, state, api);
     this.selector = selector;
     this._index = null;
+    this._childIndex = null;
     this.postId = null;
     this.loadNewerCallback = null;
     this.debounceTimeout = null;
@@ -280,14 +281,52 @@ export class ItemHandler extends Handler {
     super.deactivate()
   }
 
+  set index(value) {
+    this._index = value;
+    this.postId = this.postIdForItem(this.items[this.index]);
+    this.updateInfoIndicator();
+  }
+
   get index() {
-    return this._index
+    return this._index;
   }
 
   set index(value) {
-    this._index = value
+    this._index = value;
     this.postId = this.postIdForItem(this.items[this.index]);
     this.updateInfoIndicator();
+  }
+
+  get childIndex() {
+    return this._childIndex;
+  }
+
+  set childIndex(value) {
+    let oldIndex = this._childIndex;
+    if(value == oldIndex) {
+      return;
+    }
+    if(oldIndex != null) {
+      $(this.items[this.index]).parent().find('div.sidecar-post').eq(oldIndex).addClass("item-selection-inactive");
+    }
+    this._childIndex = value;
+    console.log(this.childIndex);
+    if(this.childIndex == null) {
+      console.log("active");
+      $(this.items[this.index]).addClass("item-selection-active");
+      $(this.items[this.index]).removeClass("item-selection-child-active");
+      $(this.items[this.index]).parent().find('div.sidecar-post').removeClass("item-selection-active");
+    } else {
+      console.log("child");
+      $(this.items[this.index]).addClass("item-selection-child-active");
+      $(this.items[this.index]).removeClass("item-selection-active");
+    }
+    if(this.childIndex != null) {
+      console.log($(this.items[this.index]).parent().find('div.sidecar-post').eq(this.childIndex));
+      $(this.items[this.index]).parent().find('div.sidecar-post').eq(this.childIndex).addClass("item-selection-active");
+    }
+    // this.postId = this.postIdForItem(this.items[this.index]);
+    // this.updateInfoIndicator();
   }
 
   onItemAdded(element) {
@@ -1004,6 +1043,11 @@ this.itemStats.oldest
     return true;
   }
 
+  setChildIndex(index, mark, update) {
+
+  }
+
+
   jumpToPost(postId) {
     for (const [i, item] of $(this.items).get().entries()) {
       const other = this.postIdForItem(item);
@@ -1087,6 +1131,29 @@ this.itemStats.oldest
     return true;
   }
 
+  jumpToNextUnseenItem(mark) {
+    var i
+    for (i = this.index+1; i < this.items.length-1; i++)
+    {
+      //var item = this.items[i]
+      var postId = this.postIdForItem(this.items[i])
+      if (! this.state.seen[postId]) {
+        break;
+      }
+    }
+    this.setIndex(i, mark)
+    this.updateItems();
+  }
+
+  toggleFocus() {
+    console.log(this.childIndex);
+    if(this.childIndex == null) {
+      this.childIndex = 0;
+    } else {
+      this.childIndex = null;
+    }
+  }
+
   handleMovementKey(event) {
     var moved = false;
     var mark = false;
@@ -1098,17 +1165,33 @@ this.itemStats.oldest
     this.ignoreMouseMovement = true;
 
     if (this.keyState.length == 0) {
-      if (["j", "k", "ArrowDown", "ArrowUp", "J", "G"].includes(event.key))
+      if (["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"].includes(event.key))
       {
         if (["j", "ArrowDown"].indexOf(event.key) != -1) {
           event.preventDefault()
           moved = this.jumpToNext(event.key == "j");
-        }
-        else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
+        } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
           event.preventDefault()
           moved = this.jumpToPrev(event.key == "k");
-        }
-        else if (event.key == "G") {
+        } else if(event.key == "h") {
+          // h = back
+          var back_button = $("button[aria-label^='Back' i]").filter(":visible")
+          if (back_button.length) {
+            back_button.click()
+          } else {
+            history.back(1)
+          }
+        } else if (event.key == "ArrowLeft") {
+          if(this.childIndex == null) {
+            return;
+          }
+          this.toggleFocus();
+        } else if (event.key == "ArrowRight") {
+          if(this.childIndex != null) {
+            return;
+          }
+          this.toggleFocus();
+        } else if (event.key == "G") {
           // G = end
           moved = this.setIndex(this.items.length-1, false, true);
         } else if (event.key == "J") {
@@ -1134,20 +1217,6 @@ this.itemStats.oldest
     if (moved) {
       this.lastMousePosition = null;
     }
-  }
-
-  jumpToNextUnseenItem(mark) {
-    var i
-    for (i = this.index+1; i < this.items.length-1; i++)
-    {
-      //var item = this.items[i]
-      var postId = this.postIdForItem(this.items[i])
-      if (! this.state.seen[postId]) {
-        break;
-      }
-    }
-    this.setIndex(i, mark)
-    this.updateItems();
   }
 
   getIndexFromItem(item) {
@@ -1324,15 +1393,6 @@ this.itemStats.oldest
       } else if (event.key == "A") {
         // mark all visible items read
         this.markVisibleRead();
-      } else if(event.key == "h") {
-        // h = back?
-        //data-testid="profileHeaderBackBtn"
-        var back_button = $("button[aria-label^='Back' i]").filter(":visible")
-        if (back_button.length) {
-          back_button.click()
-        } else {
-          history.back(1)
-        }
       } else if(!isNaN(parseInt(event.key))) {
         $("div[role='tablist'] > div > div > div").filter(":visible")[parseInt(event.key)-1].click()
       } else if (event.key == ";") {

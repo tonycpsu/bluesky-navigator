@@ -242,6 +242,10 @@ function getScreenFromElement(element) {
             ${config.get("selectionInactive")}
         }
 
+        .item-selection-child-active {
+            ${config.get("selectionChildActive")}
+        }
+
         @media (prefers-color-scheme:light){
             .item-unread {
                 ${config.get("unreadPosts")};

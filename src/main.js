@@ -286,8 +286,8 @@ function getScreenFromElement(element) {
             background-color: ${config.get("threadIndicatorColor")} !important;
         }
 
-        ${constants.HOME_SCREEN_SELECTOR} {
-            overflow: clip;
+        div:has(main) {
+            overflow-x: clip;
         }
 
 `

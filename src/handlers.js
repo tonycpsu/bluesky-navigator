@@ -303,30 +303,25 @@ export class ItemHandler extends Handler {
 
   set childIndex(value) {
     let oldIndex = this._childIndex;
-    if(value == oldIndex) {
+    const replies = $(this.items[this.index]).parent().find('div.sidecar-post');
+    if(value == oldIndex || value < 0 || value >= console.log(replies.length )) {
       return;
     }
     if(oldIndex != null) {
-      $(this.items[this.index]).parent().find('div.sidecar-post').eq(oldIndex).addClass("item-selection-inactive");
+      replies.eq(oldIndex).removeClass("reply-selection-active");
     }
     this._childIndex = value;
-    console.log(this.childIndex);
     if(this.childIndex == null) {
-      console.log("active");
       $(this.items[this.index]).addClass("item-selection-active");
-      $(this.items[this.index]).removeClass("item-selection-child-active");
-      $(this.items[this.index]).parent().find('div.sidecar-post').removeClass("item-selection-active");
+      $(this.items[this.index]).removeClass("item-selection-child-focused");
+      replies.removeClass("reply-selection-active");
     } else {
-      console.log("child");
-      $(this.items[this.index]).addClass("item-selection-child-active");
+      const selectedReply = replies.eq(this.childIndex);
+      $(this.items[this.index]).addClass("item-selection-child-focused");
       $(this.items[this.index]).removeClass("item-selection-active");
+      selectedReply.addClass("reply-selection-active");
+      this.scrollToElement(selectedReply[0], "nearest");
     }
-    if(this.childIndex != null) {
-      console.log($(this.items[this.index]).parent().find('div.sidecar-post').eq(this.childIndex));
-      $(this.items[this.index]).parent().find('div.sidecar-post').eq(this.childIndex).addClass("item-selection-active");
-    }
-    // this.postId = this.postIdForItem(this.items[this.index]);
-    // this.updateInfoIndicator();
   }
 
   onItemAdded(element) {
@@ -371,10 +366,13 @@ export class ItemHandler extends Handler {
     }
   }
 
-  scrollToElement(target) {
+  scrollToElement(target, block=null) {
     this.enableIntersectionObserver = false;
     target.scrollIntoView(
-      {behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"}
+      {
+        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
+        block: (block == null) ? "start" : block
+      }
     );
   }
 
@@ -1168,11 +1166,19 @@ this.itemStats.oldest
       if (["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"].includes(event.key))
       {
         if (["j", "ArrowDown"].indexOf(event.key) != -1) {
-          event.preventDefault()
-          moved = this.jumpToNext(event.key == "j");
+          event.preventDefault();
+          if(event.key == "ArrowDown" && this.childIndex != null) {
+            this.childIndex += 1;
+          } else {
+            moved = this.jumpToNext(event.key == "j");
+          }
         } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
-          event.preventDefault()
-          moved = this.jumpToPrev(event.key == "k");
+          event.preventDefault();
+          if(event.key == "ArrowUp" && this.childIndex != null) {
+            this.childIndex -= 1;
+          } else {
+            moved = this.jumpToPrev(event.key == "k");
+          }
         } else if(event.key == "h") {
           // h = back
           var back_button = $("button[aria-label^='Back' i]").filter(":visible")
@@ -1182,16 +1188,19 @@ this.itemStats.oldest
             history.back(1)
           }
         } else if (event.key == "ArrowLeft") {
+          event.preventDefault();
           if(this.childIndex == null) {
             return;
           }
           this.toggleFocus();
         } else if (event.key == "ArrowRight") {
+          event.preventDefault()
           if(this.childIndex != null) {
             return;
           }
           this.toggleFocus();
         } else if (event.key == "G") {
+          event.preventDefault();
           // G = end
           moved = this.setIndex(this.items.length-1, false, true);
         } else if (event.key == "J") {

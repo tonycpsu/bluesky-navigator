@@ -118,10 +118,10 @@ export const CONFIG_FIELDS = {
     'selectionActive': {
         'label': 'CSS Style: Selected Post',
         'type': 'textarea',
-        'default': 'border: 3px rgba(128, 0, 0, .6) solid !important;'
+        'default': 'border: 3px rgba(255, 0, 0, .6) solid !important;'
     },
-    'selectionChildActive': {
-        'label': 'CSS Style: Selected Child Post Active',
+    'selectionChildFocused': {
+        'label': 'CSS Style: Selected Child Post Focused',
         'type': 'textarea',
         'default': 'border: 3px rgba(128, 0, 0, .2) solid !important;'
     },
@@ -129,6 +129,16 @@ export const CONFIG_FIELDS = {
         'label': 'CSS Style: Unselected Post',
         'type': 'textarea',
         'default': 'border: 3px solid transparent;'
+    },
+    'replySelectionActive': {
+        'label': 'CSS Style: Selected Reply',
+        'type': 'textarea',
+        'default': 'border: 1px rgba(255, 0, 0, .6) solid !important;'
+    },
+    'replySelectionInactive': {
+        'label': 'CSS Style: Unselected Replies',
+        'type': 'textarea',
+        'default': 'border: 1px rgb(212, 219, 226) solid !important;'
     },
     'threadIndicatorWidth': {
         'label': 'Thread Indicator Width in pixels',

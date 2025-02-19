@@ -242,8 +242,16 @@ function getScreenFromElement(element) {
             ${config.get("selectionInactive")}
         }
 
-        .item-selection-child-active {
-            ${config.get("selectionChildActive")}
+        .item-selection-child-focused {
+            ${config.get("selectionChildFocused")}
+        }
+
+        .reply-selection-active {
+            ${config.get("replySelectionActive")}
+        }
+
+        .sidecar-post {
+            ${config.get("replySelectionInactive")}
         }
 
         @media (prefers-color-scheme:light){

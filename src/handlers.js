@@ -317,10 +317,12 @@ export class ItemHandler extends Handler {
       replies.removeClass("reply-selection-active");
     } else {
       const selectedReply = replies.eq(this.childIndex);
-      $(this.items[this.index]).addClass("item-selection-child-focused");
-      $(this.items[this.index]).removeClass("item-selection-active");
-      selectedReply.addClass("reply-selection-active");
-      this.scrollToElement(selectedReply[0], "nearest");
+      if(selectedReply.length) {
+        $(this.items[this.index]).addClass("item-selection-child-focused");
+        $(this.items[this.index]).removeClass("item-selection-active");
+        selectedReply.addClass("reply-selection-active");
+        this.scrollToElement(selectedReply[0], "nearest");
+      }
     }
   }
 
@@ -1041,11 +1043,6 @@ this.itemStats.oldest
     return true;
   }
 
-  setChildIndex(index, mark, update) {
-
-  }
-
-
   jumpToPost(postId) {
     for (const [i, item] of $(this.items).get().entries()) {
       const other = this.postIdForItem(item);
@@ -1167,14 +1164,14 @@ this.itemStats.oldest
       {
         if (["j", "ArrowDown"].indexOf(event.key) != -1) {
           event.preventDefault();
-          if(event.key == "ArrowDown" && this.childIndex != null) {
+          if(event.key == "ArrowDown" && this.config.get("showReplySidecar") && this.childIndex != null) {
             this.childIndex += 1;
           } else {
             moved = this.jumpToNext(event.key == "j");
           }
         } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
           event.preventDefault();
-          if(event.key == "ArrowUp" && this.childIndex != null) {
+          if(event.key == "ArrowUp" && this.config.get("showReplySidecar") && this.childIndex != null) {
             this.childIndex -= 1;
           } else {
             moved = this.jumpToPrev(event.key == "k");
@@ -1189,13 +1186,13 @@ this.itemStats.oldest
           }
         } else if (event.key == "ArrowLeft") {
           event.preventDefault();
-          if(this.childIndex == null) {
+          if(!this.config.get("showReplySidecar") || this.childIndex == null) {
             return;
           }
           this.toggleFocus();
         } else if (event.key == "ArrowRight") {
           event.preventDefault()
-          if(this.childIndex != null) {
+          if(!this.config.get("showReplySidecar") || this.childIndex != null) {
             return;
           }
           this.toggleFocus();

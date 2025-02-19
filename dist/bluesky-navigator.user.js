@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+321.bf19c180
+// @version     1.0.31+322.aafa2143
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -52352,10 +52352,12 @@ if (cid) {
         replies.removeClass("reply-selection-active");
       } else {
         const selectedReply = replies.eq(this.childIndex);
-        $(this.items[this.index]).addClass("item-selection-child-focused");
-        $(this.items[this.index]).removeClass("item-selection-active");
-        selectedReply.addClass("reply-selection-active");
-        this.scrollToElement(selectedReply[0], "nearest");
+        if (selectedReply.length) {
+          $(this.items[this.index]).addClass("item-selection-child-focused");
+          $(this.items[this.index]).removeClass("item-selection-active");
+          selectedReply.addClass("reply-selection-active");
+          this.scrollToElement(selectedReply[0], "nearest");
+        }
       }
     }
     onItemAdded(element) {
@@ -52923,8 +52925,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       return true;
     }
-    setChildIndex(index, mark, update) {
-    }
     jumpToPost(postId) {
       for (const [i, item] of $(this.items).get().entries()) {
         const other = this.postIdForItem(item);
@@ -53021,14 +53021,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"].includes(event.key)) {
           if (["j", "ArrowDown"].indexOf(event.key) != -1) {
             event.preventDefault();
-            if (event.key == "ArrowDown" && this.childIndex != null) {
+            if (event.key == "ArrowDown" && this.config.get("showReplySidecar") && this.childIndex != null) {
               this.childIndex += 1;
             } else {
               moved = this.jumpToNext(event.key == "j");
             }
           } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
             event.preventDefault();
-            if (event.key == "ArrowUp" && this.childIndex != null) {
+            if (event.key == "ArrowUp" && this.config.get("showReplySidecar") && this.childIndex != null) {
               this.childIndex -= 1;
             } else {
               moved = this.jumpToPrev(event.key == "k");
@@ -53042,13 +53042,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             }
           } else if (event.key == "ArrowLeft") {
             event.preventDefault();
-            if (this.childIndex == null) {
+            if (!this.config.get("showReplySidecar") || this.childIndex == null) {
               return;
             }
             this.toggleFocus();
           } else if (event.key == "ArrowRight") {
             event.preventDefault();
-            if (this.childIndex != null) {
+            if (!this.config.get("showReplySidecar") || this.childIndex != null) {
               return;
             }
             this.toggleFocus();

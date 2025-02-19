@@ -434,7 +434,6 @@ function getScreenFromElement(element) {
 
         // const LEFT_SIDEBAR_SELECTOR = "nav.r-pgf20v"
 
-        const WIDTH_OFFSET = 32;
         function adjustTransformX(el, offset) {
             // debugger;
             var transform = $(el).css("transform");
@@ -475,7 +474,7 @@ function getScreenFromElement(element) {
             $('div[role="tablist"]').css("width", `${width}px`);
             $('#statusBar').css("max-width", `${width}px`);
             $('div[style^="position: fixed; inset: 0px 0px 0px 50%;"]').css("width", `${width}px`);
-            adjustTransformX($('main'), WIDTH_OFFSET);
+            adjustTransformX($('main'), constants.WIDTH_OFFSET);
         }
 
         state.leftSidebarMinimized = false;
@@ -520,7 +519,7 @@ function getScreenFromElement(element) {
                         - leftSidebarWidth
                         // - (!state.leftSidebarMinimized ? $(rightSidebar).outerWidth() : 0)
                         - ($(rightSidebar).outerWidth() || 0)
-                        - WIDTH_OFFSET
+                        - constants.WIDTH_OFFSET
                 );
                 // debugger;
                 console.log("remainingWidth", remainingWidth, "leftSidebarWidth", leftSidebarWidth);

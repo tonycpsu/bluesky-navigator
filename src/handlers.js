@@ -617,6 +617,7 @@ export class ItemHandler extends Handler {
     else
     {
       $(element).removeClass("item-selection-active")
+      $(element).removeClass("item-selection-child-focused")
       $(element).addClass("item-selection-inactive")
     }
 
@@ -671,7 +672,7 @@ export class ItemHandler extends Handler {
     var index = this.getIndexFromItem(target);
     this.childIndex = null;
     if (index != this.index) {
-      this.applyItemStyle(this.items[this.index], false);
+      // this.applyItemStyle(this.items[this.index], false);
       this.setIndex(index);
     }
   }
@@ -682,6 +683,9 @@ export class ItemHandler extends Handler {
     }
     var target = $(event.target).closest(".sidecar-post")
     var index = this.getSidecarIndexFromItem(target);
+    var parent = target.closest(".thread").find(".item");
+    const parentIndex = this.getIndexFromItem(parent);
+    this.setIndex(parentIndex);
     this.childIndex = index;
   }
 

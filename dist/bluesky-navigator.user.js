@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+323.4b86789a
+// @version     1.0.31+324.ca286112
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -52202,6 +52202,7 @@ if (cid) {
       this.onScroll = this.onScroll.bind(this);
       this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
       this.onItemMouseOver = this.onItemMouseOver.bind(this);
+      this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
       this.didMouseMove = this.didMouseMove.bind(this);
       this.getTimestampForItem = this.getTimestampForItem.bind(this);
       this.loading = false;
@@ -52622,10 +52623,19 @@ if (cid) {
       }
       var target2 = $(event.target).closest(this.selector);
       var index = this.getIndexFromItem(target2);
+      this.childIndex = null;
       if (index != this.index) {
         this.applyItemStyle(this.items[this.index], false);
         this.setIndex(index);
       }
+    }
+    onSidecarItemMouseOver(event) {
+      if (this.ignoreMouseMovement) {
+        return;
+      }
+      var target2 = $(event.target).closest(".sidecar-post");
+      var index = this.getSidecarIndexFromItem(target2);
+      this.childIndex = index;
     }
     handleInput(event) {
       if (this.handleMovementKey(event)) {
@@ -52740,7 +52750,6 @@ if (cid) {
         }
       );
       $(this.selector).on("mouseover", this.onItemMouseOver);
-      $(this.selector).on("mouseleave", this.onItemMouseLeave);
       $(this.selector).closest("div.thread").addClass("bsky-navigator-seen");
       $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
       this.refreshItems();
@@ -53079,6 +53088,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     getIndexFromItem(item) {
       return $(".item").filter(":visible").index(item);
     }
+    getSidecarIndexFromItem(item) {
+      return $(item).closest(".thread").find(".sidecar-post").filter(":visible").index(item);
+    }
     async getSidecarContent(item) {
       function formatPost(post3) {
         const formatter = Intl.NumberFormat("en", { notation: "compact" });
@@ -53129,6 +53141,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       const sidecarContent = await this.getSidecarContent(item);
       container.find(".sidecar-replies").replaceWith($(sidecarContent));
+      container.find(".sidecar-post").each(
+        (i, post2) => {
+          $(post2).on("mouseover", this.onSidecarItemMouseOver);
+        }
+      );
       const display = action == null ? sidecar && $(sidecar).is(":visible") ? "none" : "flex" : action ? "flex" : "none";
       console.log(display);
       container.find(".sidecar-replies").css("display", display);

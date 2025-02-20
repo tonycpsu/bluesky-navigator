@@ -137,6 +137,7 @@ export class ItemHandler extends Handler {
     this.onScroll = this.onScroll.bind(this);
     this.handleNewThreadPage = this.handleNewThreadPage.bind(this); // FIXME: move to PostItemHandler
     this.onItemMouseOver = this.onItemMouseOver.bind(this);
+    this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
     this.didMouseMove = this.didMouseMove.bind(this);
     this.getTimestampForItem = this.getTimestampForItem.bind(this);
     this.loading = false;
@@ -668,10 +669,20 @@ export class ItemHandler extends Handler {
     }
     var target = $(event.target).closest(this.selector)
     var index = this.getIndexFromItem(target);
+    this.childIndex = null;
     if (index != this.index) {
       this.applyItemStyle(this.items[this.index], false);
       this.setIndex(index);
     }
+  }
+
+  onSidecarItemMouseOver(event) {
+    if (this.ignoreMouseMovement) {
+      return;
+    }
+    var target = $(event.target).closest(".sidecar-post")
+    var index = this.getSidecarIndexFromItem(target);
+    this.childIndex = index;
   }
 
 
@@ -812,7 +823,7 @@ export class ItemHandler extends Handler {
       }
     )
     $(this.selector).on("mouseover", this.onItemMouseOver)
-    $(this.selector).on("mouseleave", this.onItemMouseLeave)
+    // $(this.selector).on("mouseleave", this.onItemMouseLeave)
 
     $(this.selector).closest("div.thread").addClass("bsky-navigator-seen")
     // console.log("set loading false")
@@ -1230,6 +1241,11 @@ this.itemStats.oldest
     //return $(item).parent().parent().index()-1
   }
 
+  getSidecarIndexFromItem(item) {
+    return $(item).closest(".thread").find(".sidecar-post").filter(":visible").index(item)
+    //return $(item).parent().parent().index()-1
+  }
+
   async getSidecarContent(item) {
 
     function formatPost(post) {
@@ -1292,6 +1308,12 @@ this.itemStats.oldest
     const sidecarContent = await this.getSidecarContent(item);
     // console.log(sidecarContent);
     container.find('.sidecar-replies').replaceWith($(sidecarContent));
+    container.find('.sidecar-post').each(
+      (i, post) => {
+        $(post).on("mouseover", this.onSidecarItemMouseOver)
+      }
+    );
+
     const display = (
       (action == null)
         ?

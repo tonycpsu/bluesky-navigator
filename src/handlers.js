@@ -284,7 +284,7 @@ export class ItemHandler extends Handler {
 
   set index(value) {
     this._index = value;
-    this.postId = this.postIdForItem(this.items[this.index]);
+    this.postId = this.postIdForItem(this.selectedItem);
     this.updateInfoIndicator();
   }
 
@@ -294,8 +294,16 @@ export class ItemHandler extends Handler {
 
   set index(value) {
     this._index = value;
-    this.postId = this.postIdForItem(this.items[this.index]);
+    this.postId = this.postIdForItem(this.selectedItem);
     this.updateInfoIndicator();
+  }
+
+  get selectedItem() {
+    return $(this.items[this.index]);
+  }
+
+  get selectedReply() {
+    return this.selectedItem.closest(".thread").find(".sidecar-post").eq(this.childIndex);
   }
 
   get childIndex() {
@@ -304,7 +312,7 @@ export class ItemHandler extends Handler {
 
   set childIndex(value) {
     let oldIndex = this._childIndex;
-    const replies = $(this.items[this.index]).parent().find('div.sidecar-post');
+    const replies = $(this.selectedItem).parent().find('div.sidecar-post');
     if(value == oldIndex || value < 0 || value >= replies.length) {
       return;
     }
@@ -313,14 +321,14 @@ export class ItemHandler extends Handler {
     }
     this._childIndex = value;
     if(this.childIndex == null) {
-      $(this.items[this.index]).addClass("item-selection-active");
-      $(this.items[this.index]).removeClass("item-selection-child-focused");
+      $(this.selectedItem).addClass("item-selection-active");
+      $(this.selectedItem).removeClass("item-selection-child-focused");
       replies.removeClass("reply-selection-active");
     } else {
       const selectedReply = replies.eq(this.childIndex);
       if(selectedReply.length) {
-        $(this.items[this.index]).addClass("item-selection-child-focused");
-        $(this.items[this.index]).removeClass("item-selection-active");
+        $(this.selectedItem).addClass("item-selection-child-focused");
+        $(this.selectedItem).removeClass("item-selection-active");
         selectedReply.addClass("reply-selection-active");
         this.scrollToElement(selectedReply[0], "nearest");
       }
@@ -672,7 +680,7 @@ export class ItemHandler extends Handler {
     var index = this.getIndexFromItem(target);
     this.childIndex = null;
     if (index != this.index) {
-      // this.applyItemStyle(this.items[this.index], false);
+      // this.applyItemStyle(this.selectedItem, false);
       this.setIndex(index);
     }
   }
@@ -786,7 +794,7 @@ export class ItemHandler extends Handler {
         this.itemStats.newest = timestamp;
       }
 
-      if (this.config.get("showReplySidecar") && $(this.items[this.index]).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
+      if (this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
         this.getSidecarContent().then(
           (content) => {
             if(!$(item).parent().find(".sidecar-replies").length) {
@@ -804,7 +812,7 @@ export class ItemHandler extends Handler {
 
     // console.log(this.items)
     if(this.index != null) {
-      this.applyItemStyle(this.items[this.index], true)
+      this.applyItemStyle(this.selectedItem, true)
     }
     $("div.r-1mhb1uw").each(
       (i, el) => {
@@ -907,8 +915,8 @@ this.itemStats.oldest
       return;
     }
     this.loadingNew = true;
-    this.applyItemStyle(this.items[this.index], false)
-    let oldPostId = this.postIdForItem(this.items[this.index])
+    this.applyItemStyle(this.selectedItem, false)
+    let oldPostId = this.postIdForItem(this.selectedItem)
     $(this.loadNewerButton).click()
     setTimeout( () => {
       this.loadItems(oldPostId);
@@ -1018,8 +1026,8 @@ this.itemStats.oldest
     if (this.index == 0)
     {
       window.scrollTo(0, 0)
-    } else if (this.items[this.index]) {
-      this.scrollToElement($(this.items[this.index])[0]);
+    } else if (this.selectedItem) {
+      this.scrollToElement($(this.selectedItem)[0]);
     } else {
       // console.log(this.index, this.items.length)
     }
@@ -1047,10 +1055,10 @@ this.itemStats.oldest
     }
     this.applyItemStyle(this.items[oldIndex], false);
     this.index = index;
-    this.applyItemStyle(this.items[this.index], true);
+    this.applyItemStyle(this.selectedItem, true);
     // if (!this.state.mobileView && this.config.get("showReplySidecar")) {
-    if (this.config.get("showReplySidecar") && $(this.items[this.index]).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
-      this.showSidecar(this.items[this.index], true);
+    if (this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
+      this.showSidecar(this.selectedItem, true);
     }
     if(update) {
       this.updateItems();
@@ -1126,7 +1134,7 @@ this.itemStats.oldest
       // this.index += 1
       this.setIndex(this.index + 1, mark, true);
     } else {
-      var next = $(this.items[this.index]).parent().parent().parent().next()
+      var next = $(this.selectedItem).parent().parent().parent().next()
       // console.log(next.text())
       if (next && $.trim(next.text()) == "Continue thread...") {
         // console.log("click")
@@ -1156,7 +1164,6 @@ this.itemStats.oldest
   }
 
   toggleFocus() {
-    console.log(this.childIndex);
     if(this.childIndex == null) {
       this.childIndex = 0;
     } else {
@@ -1220,7 +1227,7 @@ this.itemStats.oldest
           this.jumpToNextUnseenItem(mark);
         }
         moved = true
-        // console.log(this.postIdForItem(this.items[this.index]))
+        // console.log(this.postIdForItem(this.selectedItem))
       } else if (event.key == "g") {
         this.keyState.push(event.key)
       }
@@ -1359,12 +1366,17 @@ this.itemStats.oldest
       }
     } else if (!event.metaKey) {
       // console.log(event.key)
-      var item = this.items[this.index]
+      var item = this.selectedItem;
       //if(event.key == "o")
       if (["o", "Enter"].includes(event.key) && !this.isPopupVisible)
       {
         // o = open
-        $(item).click()
+        if(this.childIndex == null) {
+          $(item).click();
+        } else {
+          console.log(this.selectedReply);
+          this.selectedReply.find(".sidecar-post-timestamp a")[0].click();
+        }
         //bindKeys(post_key_event)
       }
       else if(event.key == "O")
@@ -1992,7 +2004,7 @@ export class FeedItemHandler extends ItemHandler {
       });
 
     this.refreshItems();
-    if(hideRead && $(this.items[this.index]).hasClass("item-read")) {
+    if(hideRead && $(this.selectedItem).hasClass("item-read")) {
       console.log("jumping")
       this.jumpToNextUnseenItem();
     }
@@ -2026,7 +2038,7 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   handleInput(event) {
-    var item = this.items[this.index]
+    var item = this.selectedItem
     if(event.key == "a") {
       $(item).find(constants.PROFILE_SELECTOR)[0].click()
     } else if(event.key == "u") {
@@ -2102,7 +2114,7 @@ export class PostItemHandler extends ItemHandler {
       return
     }
 
-    var item = this.items[this.index]
+    var item = this.selectedItem
     if(event.key == "a") {
       var handle = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1])
       $(item).find("div").filter( (i, el) =>

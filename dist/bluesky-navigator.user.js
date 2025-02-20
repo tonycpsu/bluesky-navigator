@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+325.18e0abb3
+// @version     1.0.31+326.12b2f1b1
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -52323,7 +52323,7 @@ if (cid) {
     }
     set index(value) {
       this._index = value;
-      this.postId = this.postIdForItem(this.items[this.index]);
+      this.postId = this.postIdForItem(this.selectedItem);
       this.updateInfoIndicator();
     }
     get index() {
@@ -52331,15 +52331,21 @@ if (cid) {
     }
     set index(value) {
       this._index = value;
-      this.postId = this.postIdForItem(this.items[this.index]);
+      this.postId = this.postIdForItem(this.selectedItem);
       this.updateInfoIndicator();
+    }
+    get selectedItem() {
+      return $(this.items[this.index]);
+    }
+    get selectedReply() {
+      return this.selectedItem.closest(".thread").find(".sidecar-post").eq(this.childIndex);
     }
     get childIndex() {
       return this._childIndex;
     }
     set childIndex(value) {
       let oldIndex = this._childIndex;
-      const replies = $(this.items[this.index]).parent().find("div.sidecar-post");
+      const replies = $(this.selectedItem).parent().find("div.sidecar-post");
       if (value == oldIndex || value < 0 || value >= replies.length) {
         return;
       }
@@ -52348,14 +52354,14 @@ if (cid) {
       }
       this._childIndex = value;
       if (this.childIndex == null) {
-        $(this.items[this.index]).addClass("item-selection-active");
-        $(this.items[this.index]).removeClass("item-selection-child-focused");
+        $(this.selectedItem).addClass("item-selection-active");
+        $(this.selectedItem).removeClass("item-selection-child-focused");
         replies.removeClass("reply-selection-active");
       } else {
         const selectedReply = replies.eq(this.childIndex);
         if (selectedReply.length) {
-          $(this.items[this.index]).addClass("item-selection-child-focused");
-          $(this.items[this.index]).removeClass("item-selection-active");
+          $(this.selectedItem).addClass("item-selection-child-focused");
+          $(this.selectedItem).removeClass("item-selection-active");
           selectedReply.addClass("reply-selection-active");
           this.scrollToElement(selectedReply[0], "nearest");
         }
@@ -52718,7 +52724,7 @@ if (cid) {
         if (!this.itemStats.newest || timestamp > this.itemStats.newest) {
           this.itemStats.newest = timestamp;
         }
-        if (this.config.get("showReplySidecar") && $(this.items[this.index]).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
+        if (this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
           this.getSidecarContent().then(
             (content) => {
               if (!$(item).parent().find(".sidecar-replies").length) {
@@ -52731,7 +52737,7 @@ if (cid) {
       this.setupIntersectionObserver();
       this.enableFooterObserver();
       if (this.index != null) {
-        this.applyItemStyle(this.items[this.index], true);
+        this.applyItemStyle(this.selectedItem, true);
       }
       $("div.r-1mhb1uw").each(
         (i, el) => {
@@ -52815,8 +52821,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return;
       }
       this.loadingNew = true;
-      this.applyItemStyle(this.items[this.index], false);
-      let oldPostId = this.postIdForItem(this.items[this.index]);
+      this.applyItemStyle(this.selectedItem, false);
+      let oldPostId = this.postIdForItem(this.selectedItem);
       $(this.loadNewerButton).click();
       setTimeout(() => {
         this.loadItems(oldPostId);
@@ -52903,8 +52909,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.ignoreMouseMovement = true;
       if (this.index == 0) {
         window.scrollTo(0, 0);
-      } else if (this.items[this.index]) {
-        this.scrollToElement($(this.items[this.index])[0]);
+      } else if (this.selectedItem) {
+        this.scrollToElement($(this.selectedItem)[0]);
       } else ;
       setTimeout(() => {
         console.log("enable");
@@ -52928,9 +52934,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.applyItemStyle(this.items[oldIndex], false);
       this.index = index;
-      this.applyItemStyle(this.items[this.index], true);
-      if (this.config.get("showReplySidecar") && $(this.items[this.index]).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
-        this.showSidecar(this.items[this.index], true);
+      this.applyItemStyle(this.selectedItem, true);
+      if (this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
+        this.showSidecar(this.selectedItem, true);
       }
       if (update) {
         this.updateItems();
@@ -52990,7 +52996,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.index < this.items.length) {
         this.setIndex(this.index + 1, mark, true);
       } else {
-        var next = $(this.items[this.index]).parent().parent().parent().next();
+        var next = $(this.selectedItem).parent().parent().parent().next();
         if (next && $.trim(next.text()) == "Continue thread...") {
           this.loadPageObserver = waitForElement$1(
             this.THREAD_PAGE_SELECTOR,
@@ -53014,7 +53020,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.updateItems();
     }
     toggleFocus() {
-      console.log(this.childIndex);
       if (this.childIndex == null) {
         this.childIndex = 0;
       } else {
@@ -53174,9 +53179,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           return false;
         }
       } else if (!event.metaKey) {
-        var item = this.items[this.index];
+        var item = this.selectedItem;
         if (["o", "Enter"].includes(event.key) && !this.isPopupVisible) {
-          $(item).click();
+          if (this.childIndex == null) {
+            $(item).click();
+          } else {
+            console.log(this.selectedReply);
+            this.selectedReply.find(".sidecar-post-timestamp a")[0].click();
+          }
         } else if (event.key == "O") {
           var inner = $(item).find("div[aria-label^='Post by']");
           inner.click();
@@ -53709,7 +53719,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       );
       this.refreshItems();
-      if (hideRead && $(this.items[this.index]).hasClass("item-read")) {
+      if (hideRead && $(this.selectedItem).hasClass("item-read")) {
         console.log("jumping");
         this.jumpToNextUnseenItem();
       }
@@ -53736,7 +53746,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       reversed ^ this.loadingNew ? parent.prepend(newItems) : parent.children(".thread").last().next().after(newItems);
     }
     handleInput(event) {
-      var item = this.items[this.index];
+      var item = this.selectedItem;
       if (event.key == "a") {
         $(item).find(constants$1.PROFILE_SELECTOR)[0].click();
       } else if (event.key == "u") {
@@ -53794,7 +53804,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.isPopupVisible || event.altKey || event.metaKey) {
         return;
       }
-      var item = this.items[this.index];
+      var item = this.selectedItem;
       if (event.key == "a") {
         var handle2 = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1]);
         $(item).find("div").filter(

@@ -393,8 +393,17 @@ div:has(>div.item) {
 }
 
 .item {
+    display: flex;
     flex: 2;
     max-height: 100%;
+}
+
+.item > div:first-of-type {
+    flex: 1;
+}
+
+.item > div:first-of-type > div:last-of-type {
+    flex: 1;
 }
 
 .sidecar-replies {

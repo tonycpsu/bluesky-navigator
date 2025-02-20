@@ -304,7 +304,7 @@ export class ItemHandler extends Handler {
   set childIndex(value) {
     let oldIndex = this._childIndex;
     const replies = $(this.items[this.index]).parent().find('div.sidecar-post');
-    if(value == oldIndex || value < 0 || value >= console.log(replies.length )) {
+    if(value == oldIndex || value < 0 || value >= replies.length) {
       return;
     }
     if(oldIndex != null) {

@@ -1271,9 +1271,9 @@ this.itemStats.oldest
           timestamp: new Date(post.record.createdAt).toLocaleString(),
           replySvg: constants.SIDECAR_SVG_REPLY,
           replyCount: formatter.format(post.replyCount),
-          repostSvg: constants.SIDECAR_SVG_REPOST,
+          repostSvg: constants.SIDECAR_SVG_REPOST[0],
           repostCount: formatter.format(post.repostCount),
-          likeSvg: constants.SIDECAR_SVG_LIKE,
+          likeSvg: constants.SIDECAR_SVG_LIKE[0],
           likeCount: formatter.format(post.likeCount)
         }
     }
@@ -1382,24 +1382,24 @@ this.itemStats.oldest
       else if(event.key == "O")
       {
         // O = open inner post
-        var inner = $(item).find("div[aria-label^='Post by']")
-        inner.click()
+        var inner = $(item).find("div[aria-label^='Post by']");
+        inner.click();
       }
       else if(event.key == "i")
       {
         // i = open link
         if($(item).find(constants.LINK_SELECTOR).length)
         {
-          $(item).find(constants.LINK_SELECTOR)[0].click()
+          $(item).find(constants.LINK_SELECTOR)[0].click();
         }
       }
       else if(event.key == "m")
       {
         // m = media?
-        var media = $(item).find("img[src*='feed_thumbnail']")
+        var media = $(item).find("img[src*='feed_thumbnail']");
         if (media.length > 0)
         {
-          media[0].click()
+          media[0].click();
         } else {
           const video = $(item).find('video')[0];
           if(video) {
@@ -1410,26 +1410,49 @@ this.itemStats.oldest
             if (video.paused) {
               this.playVideo(video);
             } else {
-              this.pauseVideo(video)
+              this.pauseVideo(video);
             }
           }
         }
       } else if(event.key == "r") {
         // r = reply
         var button = $(item).find("button[aria-label^='Reply']")
-        button.focus()
-        button.click()
+        button.focus();
+        button.click();
       } else if(event.key == "l") {
-        // l = like
-        $(item).find("button[data-testid='likeBtn']").click()
+        if(this.config.get("showReplySidecar") && this.childIndex != null) {
+          this.api.getAtprotoUri(this.urlForItem(this.selectedReply)).then(
+            (uri) => this.api.getThread(uri).then(
+              (thread) => {
+                if (thread.post.viewer.like) {
+                  this.api.agent.deleteLike(thread.post.viewer.like).then(
+                    (response) => {
+                      console.log(response);
+                      $(this.selectedReply).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[0]);
+                    }
+                  )
+                } else {
+                  this.api.agent.like(uri, thread.post.cid).then(
+                    (response) => {
+                      console.log(response);
+                      $(this.selectedReply).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[1]);
+                    }
+                  )
+                }
+              }
+            )
+          );
+        } else {
+          $(item).find("button[data-testid='likeBtn']").click();
+        }
       } else if(event.key == "p") {
         // p = repost menu
-        $(item).find("button[aria-label^='Repost']").click()
+        $(item).find("button[aria-label^='Repost']").click();
       } else if(event.key == "P") {
         // P = repost
-        $(item).find("button[aria-label^='Repost']").click()
+        $(item).find("button[aria-label^='Repost']").click();
         setTimeout(function() {
-          $("div[aria-label^='Repost'][role='menuitem']").click()
+          $("div[aria-label^='Repost'][role='menuitem']").click();
         }, 1000)
       } else if (event.key == ".") {
         // toggle read/unread

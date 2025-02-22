@@ -247,7 +247,7 @@ function getScreenFromElement(element) {
         }
 
         .reply-selection-active {
-            ${config.get("replySelectionActive")}
+            ${config.get("replySelectionActive")};
         }
 
         .sidecar-post {

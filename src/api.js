@@ -17,7 +17,7 @@ export class BlueskyAPI {
     }
 
     async getPost(uri) {
-        const res = await agent.getPostThread({uri: 'at://...'})
+        const res = await this.agent.getPostThread({uri: 'at://...'})
     }
 
     async getTimeline() {
@@ -60,11 +60,6 @@ export class BlueskyAPI {
         const { thread } = res.data;
         return thread;
     }
-
-    // async getPost(uri) {
-    //     const thread = this.getThread(uri);
-    //     return thread.post;
-    // }
 
     async getReplies(uri) {
         const thread = this.getThread(uri);

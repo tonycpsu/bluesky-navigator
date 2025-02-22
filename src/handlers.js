@@ -1271,9 +1271,9 @@ this.itemStats.oldest
           timestamp: new Date(post.record.createdAt).toLocaleString(),
           replySvg: constants.SIDECAR_SVG_REPLY,
           replyCount: formatter.format(post.replyCount),
-          repostSvg: constants.SIDECAR_SVG_REPOST[0],
+          repostSvg: constants.SIDECAR_SVG_REPOST[post.viewer.repost ? 1 : 0],
           repostCount: formatter.format(post.repostCount),
-          likeSvg: constants.SIDECAR_SVG_LIKE[0],
+          likeSvg: constants.SIDECAR_SVG_LIKE[post.viewer.like ? 1 : 0],
           likeCount: formatter.format(post.likeCount)
         }
     }

@@ -1284,19 +1284,39 @@ this.itemStats.oldest
       // render empty div
       return repliesTemplate({});
     }
+
     const thread = await this.getThreadForItem(item);
     const post = thread.post;
     const postTemplate = Handlebars.compile($("#sidecar-post-template").html());
     Handlebars.registerPartial("postTemplate", postTemplate);
+    // FIXME
+    if (thread.replies.map(r => r.post.author.did).includes(thread.post.author.did)) {
+      const unrolledPosts = (await this.api.unrollThread(thread));
+      debugger;
+      unrolledPosts.slice(1).forEach( (p) => {
+        console.log(p);
+        const paragraph = $('<p/>');
+        paragraph.html(p.record.text);
+        const parent = $(item).find('div[data-testid="contentHider-post"]').parent();
+        parent.css({"overflow-y": "scroll", "max-height": "80vH"});
+        parent.append(paragraph);
+      });
+    }
+
     const replies = thread.replies.filter(
       (reply) => reply.post
     ).map( (reply) => {
       return formatPost(reply.post);
     });
-    console.log(replies);
-    // if(thread.parent) {
-    //   debugger;
-    // }
+
+    // const replies = (await this.api.unrollThread(thread)).map(
+    //   (post) => {
+    //     return formatPost(post);
+    //   }
+    // );
+
+    // console.log(replies);
+
     return repliesTemplate(
       {
         postId: post.cid,

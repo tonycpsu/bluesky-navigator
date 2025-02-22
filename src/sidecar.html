@@ -31,7 +31,13 @@
   </a>
   </div>
   </div>
+  {{#if content.entries}}
+  {{#each content}}
+  <div class="sidecar-post-content">{{this}}</div>
+  {{/each}}
+  {{else}}
   <div class="sidecar-post-content">{{content}}</div>
+  {{/if}}
   <div class="sidecar-post-footer">
   <div class="sidecar-post-timestamp">
   <a href="{{postUrl}}">

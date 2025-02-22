@@ -35,6 +35,7 @@ export class BlueskyAPI {
         const match = postUrl.match(/bsky\.app\/profile\/([^\/]+)\/post\/([^\/]+)/);
         if (!match) {
             console.error("Invalid Bluesky post URL format.");
+            debugger;
             return null;
         }
 
@@ -69,4 +70,34 @@ export class BlueskyAPI {
             }
         )
     }
+
+    async unrollThread(thread) {
+
+        const originalAuthor = thread.post.author.did;
+
+        async function collectPosts(threadNode, posts = []) {
+            if(!threadNode.post) {
+                return [];
+            }
+            if (threadNode.post.author.did === originalAuthor) {
+                posts.push(threadNode.post);
+            }
+            if(threadNode.post.replyCount && !threadNode.replies) {
+                threadNode.replies = (await this.getThread(threadNode.post.uri)).replies;
+            }
+            if (threadNode.replies) {
+                for (const reply of threadNode.replies) {
+                    await collectPosts(reply, posts);
+                }
+            }
+            return posts;
+        }
+        collectPosts = collectPosts.bind(this);
+
+        const allPosts = await collectPosts(thread);
+        // allPosts.sort((a, b) => new Date(a.indexedAt) - new Date(b.indexedAt));
+        console.log(allPosts.length);
+        return allPosts;
+    }
+
 }

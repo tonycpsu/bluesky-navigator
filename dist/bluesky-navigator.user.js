@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+329.30d95db1
+// @version     1.0.31+330.ef0ec336
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44763,6 +44763,12 @@ if (cid) {
       "type": "checkbox",
       "default": false
     },
+    "unrollThreads": {
+      "label": "Unroll Threads",
+      "title": 'If checked, threads with one or more replies from the original author will be "unrolled" into the first post.',
+      "type": "checkbox",
+      "default": false
+    },
     "showReplySidecar": {
       "label": "Show Replies Sidecar",
       "title": "If checked, replies to the selected post (and, where applicable, the post being replied to) will be displayed in a sidecar next to each post (requires atproto settings below).",
@@ -44967,7 +44973,7 @@ if (cid) {
   };
   const style = '/* style.css */\n\ndiv[style^="position: fixed; inset: 0px 0px 0px 50%;"] {\n    border: none;\n}\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    width: 100%;\n    height: 32px;\n    background-color: inherit;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n@media (prefers-color-scheme: dark) {\n    div#bsky-navigator-toolbar {\n        background-color: #29333d\n    }\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n@media (prefers-color-scheme: dark) {\n    .indicator-image {\n        filter: invert(1) brightness(2);\n    }\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\ndiv#infoIndicatorText {\n    font-size: 0.8em;\n}\n\ndiv#itemTimestampStats {\n    font-size: 0.7em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n        overflow: clip;\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n        overflow: clip;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    div#statusBar {\n        background-color: #29333d;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n#prevButton {\n    z-index: 1000;\n    position: absolute;\n    top: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#prevButton.mobile {\n    position: fixed;\n    left: 1%;\n    top: 25%;\n}\n\n#nextButton {\n    z-index: 1000;\n    position: absolute;\n    bottom: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#nextButton.mobile {\n    position: fixed;\n    left: 1%;\n    bottom: 20%;\n}\n\nnav.r-1wyvozj {\n    overflow: inherit;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    bottom: 2px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n\n.popup {\n    display: none;\n    position: fixed;\n    max-height: 80vH;\n    top: 50%;\n    left: 50%;\n    transform: translate(-50%, -50%);\n    /* transform: scale(0.25); /\\* Scale down to 75% *\\/ */\n    background: white;\n    padding: 15px;\n    border-radius: 12px;\n    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n    width: 400px;\n    z-index: 1000;\n}\n\nnav + div {\n    display: none;\n}\n\ndiv:has(>div.item) {\n    display: flex;\n    flex-direction: row;\n    align-items: stretch;\n}\n\n.item {\n    display: flex;\n    flex: 2;\n    max-height: 100%;\n}\n\n.item > div:first-of-type {\n    flex: 1;\n}\n\n.item > div:first-of-type > div:last-of-type {\n    flex: 1;\n}\n\n.sidecar-replies {\n    flex: 1 1 0;\n    min-height: 0;\n    max-height: 100%;\n    overflow-y: auto;\n    font-size: 0.8em;\n    padding-left: 10px;\n    display: flex;\n    flex-direction: column;\n    max-height: 80vH;\n}\n\n.sidecar-parent-indicator {\n    position: absolute;\n}\n\n.sidecar-post {\n    display: flex;\n    flex-direction: column;\n    padding: 5px;\n    flex-shrink: 0;\n    font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";\n}\n\n.sidecar-post a {\n    text-decoration: none;\n}\n\n.sidecar-post a:hover {\n    text-decoration: underline;\n}\n\n.sidecar-post-user-info {\n    display: flex;\n    flex-direction: row;\n    font-size: 0.9em;\n}\n\n.sidecar-post-avatar {\n    width: 24px;\n    height: 24px;\n    padding: 2px;\n}\n\n.sidecar-post-username {\n    font-weight: 600;\n    color: rgb(11, 15, 20);\n}\n\n.sidecar-post-handle {\n    color: rgb(66, 87, 108);\n    font-variant: no-contextual;\n}\n\n.sidecar-post-content {\n    padding: 5px 0px;\n}\n\n.sidecar-post-footer {\n    color: rgb(66, 87, 108);\n    display: flex;\n    flex-direction: row;\n    font-size: 11px;\n}\n\n.sidecar-post-footer svg, .sidecar-post-footer span {\n    display: inline-flex;\n    vertical-align: middle;\n    /* flex: 1; */\n    color: rgb(111, 134, 159);\n}\n\n.sidecar-post-timestamp {\n    display: inline-flex;\n    vertical-align: middle;\n    flex: 3;\n}\n\n.sidecar-parent .sidecar-post {\n    border: 3px dashed rgb(111, 134, 159);\n    padding: 5px;\n}\n\n.sidecar-post-counts {\n    display: flex;\n    flex: 2;\n}\n\n.sidecar-count {\n    display: flex;\n    flex: 1;\n    justify-content: right;\n    align-items: center;\n}\n\n.sidecar-count-icon > svg {\n  height: 1em;\n}\n';
   const configCss = "h1 {\n    font-size: 18pt;\n}\n\nh2 {\n    font-size: 14pt;\n}\n.config_var textarea {\n    width: 100%;\n    height: 1.5em;\n}\n\n#GM_config_rulesConfig_var textarea {\n    height: 10em;\n}\n\n#GM_config_stateSyncConfig_var textarea {\n    height: 10em;\n}\n\n\n\n#GM_config_header {\n    position: fixed;\n    background-color: inherit;\n    top: -10px;\n    width: 100%;\n}\n\n@media (prefers-color-scheme: light) {\n    #GM_config_header {\n        background-color: #ffffff;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    #GM_config_header {\n        background-color: #29333d;\n    }\n}\n\n#GM_config_section_0 {\n    padding-top: 100px;\n}\n\n#GM_config_buttons_holder {\n    position: fixed;\n    top: 0;\n    right: 0;\n}\n";
-  const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-parent">\n  <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n  {{> postTemplate parent}}\n  </div>\n  {{/if}}\n  {{#each replies}}\n  {{> postTemplate this}}\n  {{/each}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>    \n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{#if content.entries}}\n  {{#each content}}\n  <div class="sidecar-post-content">{{this}}</div>\n  {{/each}}\n  {{else}}\n  <div class="sidecar-post-content">{{content}}</div>\n  {{/if}}\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label">{{likeCount}}</div>\n  </div>\n\n  </div>\n  </div>\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n';
+  const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-parent">\n  <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n  {{> postTemplate parent}}\n  </div>\n  {{/if}}\n  {{#each replies}}\n  {{> postTemplate this}}\n  {{/each}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>    \n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label">{{likeCount}}</div>\n  </div>\n\n  </div>\n  </div>\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{content}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="alt text" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="alt text" src="{{thumb}}" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title=""></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n';
   const millisecondsInWeek = 6048e5;
   const millisecondsInDay = 864e5;
   const constructFromSymbol = Symbol.for("constructDateFrom");
@@ -52129,6 +52135,25 @@ if (cid) {
   const {
     waitForElement: waitForElement$1
   } = utils$1;
+  function formatPost(post2) {
+    const formatter = Intl.NumberFormat("en", { notation: "compact" });
+    return {
+      postId: post2.cid,
+      postUrl: `https://bsky.app/profile/${post2.author.handle}/post/${post2.uri.split("/").slice(-1)[0]}`,
+      avatar: post2.author.avatar,
+      displayName: post2.author.displayName || post2.author.handle,
+      handle: post2.author.handle,
+      content: post2.record.text,
+      embed: post2.embed,
+      timestamp: new Date(post2.record.createdAt).toLocaleString(),
+      replySvg: constants$1.SIDECAR_SVG_REPLY,
+      replyCount: formatter.format(post2.replyCount),
+      repostSvg: constants$1.SIDECAR_SVG_REPOST[post2.viewer.repost ? 1 : 0],
+      repostCount: formatter.format(post2.repostCount),
+      likeSvg: constants$1.SIDECAR_SVG_LIKE[post2.viewer.like ? 1 : 0],
+      likeCount: formatter.format(post2.likeCount)
+    };
+  }
   class Handler {
     constructor(name, config2, state2, api) {
       this.name = name;
@@ -52906,6 +52931,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     async getThreadForItem(item) {
       const uri = await this.api.getAtprotoUri(this.urlForItem(item));
+      console.log(uri);
       const thread = await this.api.getThread(uri);
       return thread;
     }
@@ -52962,9 +52988,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.applyItemStyle(this.items[oldIndex], false);
       this.index = index;
       this.applyItemStyle(this.selectedItem, true);
-      if (this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
-        this.showSidecar(this.selectedItem, true);
-      }
+      this.expandItem(this.selectedItem);
       if (update) {
         this.updateItems();
       }
@@ -53126,45 +53150,55 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     getSidecarIndexFromItem(item) {
       return $(item).closest(".thread").find(".sidecar-post").filter(":visible").index(item);
     }
-    async getSidecarContent(item) {
-      function formatPost(post3) {
-        const formatter = Intl.NumberFormat("en", { notation: "compact" });
-        return {
-          postId: post3.cid,
-          postUrl: `https://bsky.app/profile/${post3.author.handle}/post/${post3.uri.split("/").slice(-1)[0]}`,
-          avatar: post3.author.avatar,
-          displayName: post3.author.displayName || post3.author.handle,
-          handle: post3.author.handle,
-          content: post3.record.text,
-          timestamp: new Date(post3.record.createdAt).toLocaleString(),
-          replySvg: constants$1.SIDECAR_SVG_REPLY,
-          replyCount: formatter.format(post3.replyCount),
-          repostSvg: constants$1.SIDECAR_SVG_REPOST[post3.viewer.repost ? 1 : 0],
-          repostCount: formatter.format(post3.repostCount),
-          likeSvg: constants$1.SIDECAR_SVG_LIKE[post3.viewer.like ? 1 : 0],
-          likeCount: formatter.format(post3.likeCount)
-        };
+    shouldUnroll(item) {
+      return this.config.get("unrollThreads");
+    }
+    shouldShowSidecar(item) {
+      return this.config.get("showReplySidecar") && $(item).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth");
+    }
+    shouldExpand(item) {
+      return this.shouldUnroll(item) || this.shouldShowSidecar(item);
+    }
+    async expandItem(item) {
+      if (!this.shouldExpand()) {
+        return;
       }
+      const thread = await this.getThreadForItem(item);
+      if (this.shouldUnroll(item)) {
+        await this.unrollThread(item, thread, true);
+      }
+      if (this.shouldShowSidecar(item)) {
+        await this.showSidecar(item, thread, true);
+      }
+    }
+    async unrollThread(item, thread) {
+      const bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
+      Handlebars.registerPartial("bodyTemplate", bodyTemplate);
+      console.log(thread);
+      if (thread.replies.map((r) => r.post && r.post.author.did).includes(thread.post.author.did)) {
+        const unrolledPosts = await this.api.unrollThread(thread);
+        const parent = $(item).find('div[data-testid="contentHider-post"]').parent();
+        parent.css({ "overflow-y": "scroll", "max-height": "80vH" });
+        unrolledPosts.slice(1).forEach((p) => {
+          var div = $("div.unrolled-replies");
+          if (!$(div).length) {
+            div = $('<div class="unrolled-replies"/>');
+            parent.append(div);
+          }
+          div.html(bodyTemplate(formatPost(p)));
+        });
+      }
+    }
+    async getSidecarContent(item, thread) {
       const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
       if (!item) {
         return repliesTemplate({});
       }
-      const thread = await this.getThreadForItem(item);
       const post2 = thread.post;
       const postTemplate = Handlebars.compile($("#sidecar-post-template").html());
       Handlebars.registerPartial("postTemplate", postTemplate);
-      if (thread.replies.map((r) => r.post.author.did).includes(thread.post.author.did)) {
-        const unrolledPosts = await this.api.unrollThread(thread);
-        debugger;
-        unrolledPosts.slice(1).forEach((p) => {
-          console.log(p);
-          const paragraph = $("<p/>");
-          paragraph.html(p.record.text);
-          const parent = $(item).find('div[data-testid="contentHider-post"]').parent();
-          parent.css({ "overflow-y": "scroll", "max-height": "80vH" });
-          parent.append(paragraph);
-        });
-      }
+      const imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
+      Handlebars.registerPartial("imageTemplate", imageTemplate);
       const replies = thread.replies.filter(
         (reply) => reply.post
       ).map((reply) => {
@@ -53178,14 +53212,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       );
     }
-    async showSidecar(item, action = null) {
+    async showSidecar(item, thread, action = null) {
       const container = $(item).parent();
       const emptyContent = await this.getSidecarContent();
       let sidecar = $(container).find(".sidecar-replies")[0];
       if (!sidecar) {
         $(container).append(emptyContent);
       }
-      const sidecarContent = await this.getSidecarContent(item);
+      const sidecarContent = await this.getSidecarContent(item, thread);
+      console.log(sidecarContent);
       container.find(".sidecar-replies").replaceWith($(sidecarContent));
       container.find(".sidecar-post").each(
         (i, post2) => {
@@ -53297,7 +53332,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (!this.api) {
             return;
           }
-          this.showSidecar(item);
+          this.expandItem(this.selectedItem);
         } else {
           return false;
         }

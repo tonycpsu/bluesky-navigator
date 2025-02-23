@@ -43,6 +43,12 @@ export const CONFIG_FIELDS = {
         'type': 'checkbox',
         'default': false
     },
+    'unrollThreads':  {
+        'label': 'Unroll Threads',
+        'title': 'If checked, threads with one or more replies from the original author will be "unrolled" into the first post.',
+        'type': 'checkbox',
+        'default': false
+    },
     'showReplySidecar':  {
         'label': 'Show Replies Sidecar',
         'title': 'If checked, replies to the selected post (and, where applicable, the post being replied to) will be displayed in a sidecar next to each post (requires atproto settings below).',

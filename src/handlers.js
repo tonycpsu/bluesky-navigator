@@ -9,6 +9,28 @@ const {
   waitForElement
 } = utils;
 
+
+function formatPost(post) {
+  const formatter = Intl.NumberFormat('en', { notation: 'compact' });
+  // console.log(post.embed);
+  return {
+    postId: post.cid,
+    postUrl: `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split("/").slice(-1)[0]}`,
+    avatar: post.author.avatar,
+    displayName: post.author.displayName || post.author.handle,
+    handle: post.author.handle,
+    content: post.record.text,
+    embed: post.embed,
+    timestamp: new Date(post.record.createdAt).toLocaleString(),
+    replySvg: constants.SIDECAR_SVG_REPLY,
+    replyCount: formatter.format(post.replyCount),
+    repostSvg: constants.SIDECAR_SVG_REPOST[post.viewer.repost ? 1 : 0],
+    repostCount: formatter.format(post.repostCount),
+    likeSvg: constants.SIDECAR_SVG_LIKE[post.viewer.like ? 1 : 0],
+    likeCount: formatter.format(post.likeCount)
+  }
+}
+
 export class Handler {
 
   constructor(name, config, state, api) {
@@ -987,7 +1009,7 @@ this.itemStats.oldest
 
   async getThreadForItem(item) {
     const uri = await this.api.getAtprotoUri(this.urlForItem(item));
-    // console.log(uri);
+    console.log(uri);
     const thread = await this.api.getThread(uri);
     return thread;
     // debugger;
@@ -1056,10 +1078,7 @@ this.itemStats.oldest
     this.applyItemStyle(this.items[oldIndex], false);
     this.index = index;
     this.applyItemStyle(this.selectedItem, true);
-    // if (!this.state.mobileView && this.config.get("showReplySidecar")) {
-    if (this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
-      this.showSidecar(this.selectedItem, true);
-    }
+    this.expandItem(this.selectedItem);
     if(update) {
       this.updateItems();
     }
@@ -1257,26 +1276,53 @@ this.itemStats.oldest
     //return $(item).parent().parent().index()-1
   }
 
-  async getSidecarContent(item) {
+  shouldUnroll(item) {
+    return this.config.get("unrollThreads");
+  }
 
-    function formatPost(post) {
-        const formatter = Intl.NumberFormat('en', { notation: 'compact' });
-        return {
-          postId: post.cid,
-          postUrl: `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split("/").slice(-1)[0]}`,
-          avatar: post.author.avatar,
-          displayName: post.author.displayName || post.author.handle,
-          handle: post.author.handle,
-          content: post.record.text,
-          timestamp: new Date(post.record.createdAt).toLocaleString(),
-          replySvg: constants.SIDECAR_SVG_REPLY,
-          replyCount: formatter.format(post.replyCount),
-          repostSvg: constants.SIDECAR_SVG_REPOST[post.viewer.repost ? 1 : 0],
-          repostCount: formatter.format(post.repostCount),
-          likeSvg: constants.SIDECAR_SVG_LIKE[post.viewer.like ? 1 : 0],
-          likeCount: formatter.format(post.likeCount)
-        }
+  shouldShowSidecar(item) {
+    return this.config.get("showReplySidecar") && $(item).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")
+  }
+
+  shouldExpand(item) {
+    return this.shouldUnroll(item) || this.shouldShowSidecar(item);
+  }
+
+
+  async expandItem(item) {
+    if (!this.shouldExpand()) {
+      return;
     }
+    const thread = await this.getThreadForItem(item);
+    if (this.shouldUnroll(item)) {
+      await this.unrollThread(item, thread, true);
+
+    }
+    if (this.shouldShowSidecar(item)) {
+      await this.showSidecar(item, thread, true);
+    }
+  }
+
+  async unrollThread(item, thread) {
+    const bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
+    Handlebars.registerPartial("bodyTemplate", bodyTemplate);
+    console.log(thread);
+    if (thread.replies.map(r => r.post && r.post.author.did).includes(thread.post.author.did)) {
+      const unrolledPosts = (await this.api.unrollThread(thread));
+      const parent = $(item).find('div[data-testid="contentHider-post"]').parent();
+      parent.css({"overflow-y": "scroll", "max-height": "80vH"});
+      unrolledPosts.slice(1).forEach( (p) => {
+        var div = $('div.unrolled-replies')
+        if(!$(div).length) {
+          div = $('<div class="unrolled-replies"/>');
+          parent.append(div);
+        }
+        div.html(bodyTemplate(formatPost(p)));
+      });
+    }
+  }
+
+  async getSidecarContent(item, thread) {
 
     // debugger;
     const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
@@ -1285,23 +1331,12 @@ this.itemStats.oldest
       return repliesTemplate({});
     }
 
-    const thread = await this.getThreadForItem(item);
     const post = thread.post;
     const postTemplate = Handlebars.compile($("#sidecar-post-template").html());
     Handlebars.registerPartial("postTemplate", postTemplate);
+    const imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
+    Handlebars.registerPartial("imageTemplate", imageTemplate);
     // FIXME
-    if (thread.replies.map(r => r.post.author.did).includes(thread.post.author.did)) {
-      const unrolledPosts = (await this.api.unrollThread(thread));
-      debugger;
-      unrolledPosts.slice(1).forEach( (p) => {
-        console.log(p);
-        const paragraph = $('<p/>');
-        paragraph.html(p.record.text);
-        const parent = $(item).find('div[data-testid="contentHider-post"]').parent();
-        parent.css({"overflow-y": "scroll", "max-height": "80vH"});
-        parent.append(paragraph);
-      });
-    }
 
     const replies = thread.replies.filter(
       (reply) => reply.post
@@ -1309,13 +1344,6 @@ this.itemStats.oldest
       return formatPost(reply.post);
     });
 
-    // const replies = (await this.api.unrollThread(thread)).map(
-    //   (post) => {
-    //     return formatPost(post);
-    //   }
-    // );
-
-    // console.log(replies);
 
     return repliesTemplate(
       {
@@ -1326,7 +1354,7 @@ this.itemStats.oldest
     );
   }
 
-  async showSidecar(item, action=null) {
+  async showSidecar(item, thread, action=null) {
 
     const container = $(item).parent();
     const emptyContent = await this.getSidecarContent();
@@ -1336,8 +1364,8 @@ this.itemStats.oldest
       $(container).append(emptyContent);
     }
 
-    const sidecarContent = await this.getSidecarContent(item);
-    // console.log(sidecarContent);
+    const sidecarContent = await this.getSidecarContent(item, thread);
+    console.log(sidecarContent);
     container.find('.sidecar-replies').replaceWith($(sidecarContent));
     container.find('.sidecar-post').each(
       (i, post) => {
@@ -1486,7 +1514,7 @@ this.itemStats.oldest
         if(!this.api) {
           return;
         }
-        this.showSidecar(item);
+        this.expandItem(this.selectedItem);
       } else {
         return false
       }

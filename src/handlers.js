@@ -1003,7 +1003,7 @@ this.itemStats.oldest
 
   postIdForItem(item) {
     try {
-      return this.urlForItem(item).split("/")[4];
+      return this.urlForItem(item).match(/post\/([^/]+)/)[1]
     } catch (e) {
       return this.postIdFromUrl();
     }
@@ -1113,7 +1113,7 @@ this.itemStats.oldest
     if (!postId) {
       return
     }
-    this.markPostRead(postId, isRead)
+    this.markPostRead(postId, isRead);
     this.applyItemStyle(this.items[index], index == this.index)
     this.updateInfoIndicator();
   }
@@ -1310,6 +1310,7 @@ this.itemStats.oldest
   }
 
   async unrollThread(item, thread) {
+    // TODO: remove redundant replies after unrolling
     const bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
     Handlebars.registerPartial("bodyTemplate", bodyTemplate);
     console.log(thread);

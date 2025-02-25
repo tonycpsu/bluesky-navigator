@@ -173,6 +173,12 @@ export class ItemHandler extends Handler {
     this.scrollTick = false;
     this.scrollTop = 0;
     this.scrollDirection = 0;
+
+    this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
+    this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
+    Handlebars.registerPartial("postTemplate", this.postTemplate);
+    this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
+    Handlebars.registerPartial("imageTemplate", this.imageTemplate);
   }
 
   isActive() {
@@ -1307,17 +1313,26 @@ this.itemStats.oldest
     const bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
     Handlebars.registerPartial("bodyTemplate", bodyTemplate);
     console.log(thread);
+    if (thread.parent && thread.parent.post && thread.parent.post.author.did == thread.post.author.did) {
+      return;
+    }
     if (thread.replies.map(r => r.post && r.post.author.did).includes(thread.post.author.did)) {
       const unrolledPosts = (await this.api.unrollThread(thread));
       const parent = $(item).find('div[data-testid="contentHider-post"]').parent();
       parent.css({"overflow-y": "scroll", "max-height": "80vH"});
-      unrolledPosts.slice(1).forEach( (p) => {
-        var div = $('div.unrolled-replies')
-        if(!$(div).length) {
-          div = $('<div class="unrolled-replies"/>');
-          parent.append(div);
-        }
-        div.html(bodyTemplate(formatPost(p)));
+      var div = $(parent).find('div.unrolled-replies');
+      if($(div).length) {
+        $(div).empty();
+      } else {
+        div = $('<div class="unrolled-replies"/>');
+        parent.append(div);
+      }
+      unrolledPosts.slice(1).map( (p, i) => {
+        var reply = $('<div class="unrolled-reply" style="position: relative"/>');
+        reply.append($('<hr class="unrolled-divider"/>'));
+        reply.append($(`<div class="unrolled-banner">${i+2}/${unrolledPosts.length}</div>`));
+        reply.append($(bodyTemplate(formatPost(p))));
+        div.append(reply);
       });
     }
   }
@@ -1325,17 +1340,12 @@ this.itemStats.oldest
   async getSidecarContent(item, thread) {
 
     // debugger;
-    const repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
     if(!item) {
       // render empty div
-      return repliesTemplate({});
+      return this.repliesTemplate({});
     }
 
     const post = thread.post;
-    const postTemplate = Handlebars.compile($("#sidecar-post-template").html());
-    Handlebars.registerPartial("postTemplate", postTemplate);
-    const imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
-    Handlebars.registerPartial("imageTemplate", imageTemplate);
     // FIXME
 
     const replies = thread.replies.filter(
@@ -1345,7 +1355,7 @@ this.itemStats.oldest
     });
 
 
-    return repliesTemplate(
+    return this.repliesTemplate(
       {
         postId: post.cid,
         parent: thread.parent ? formatPost(thread.parent.post) : null,

@@ -29,9 +29,9 @@ Features
     - optionally show only unread posts
     - optionally move position of like/reply/repost buttons
     - configurable formatting of post timestamps
-- Additional functionality:
-    - show replies in a "sidecar" next to each post (desktop only, requires
-      enabling the AT Protocol agent, see the relevant section below for details)   
+- Additional functionality (`(*)` = requires AT protocol agent, see below):
+    - automatic "unrolling" of threads (*)
+    - show replies in a "sidecar" next to each post (*)   
     - dynamically filter posts by authors, keywords, etc. using configurable
       rules
     - optionally disable embedded video previews
@@ -127,12 +127,13 @@ with `!`.
 AT Protocol Agent (beta)
 ------------------------
 
-To enable additional functionality, such as showing post replies inline, you can
-generate a Bluesky [app password](https://bsky.app/settings/app-passwords) and
-enter it into the script's configuration dialog in the AT Protocol Agent
-section. This means the script has access to do anything with your account for
-as long as the app password is active, so you'll have to either trust that it's
-not doing anything malicious or leave this functionality disabled.
+To enable additional functionality, such as automatic unrolling of threads and
+showing post replies inline, you can generate a Bluesky [app
+password](https://bsky.app/settings/app-passwords) and enter it into the
+script's configuration dialog in the AT Protocol Agent section. This means the
+script has access to do anything with your account for as long as the app
+password is active, so you'll have to either trust that it's not doing anything
+malicious or leave this functionality disabled.
 
 Remote State Sync (beta)
 ------------------------

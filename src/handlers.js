@@ -1351,9 +1351,26 @@ this.itemStats.oldest
 
     const replies = thread.replies.filter(
       (reply) => reply.post
-    ).map( (reply) => {
-      return formatPost(reply.post);
-    });
+    ).map(
+      (reply) => reply?.post
+    ).sort(
+      (a, b) => {
+        switch (this.config.get('sidecarReplySortOrder')) {
+          case 'Default':
+            return 0;
+          case 'Oldest First':
+            return new Date(a.record.createdAt) - new Date(b.record.createdAt);
+          case 'Newest First':
+            return new Date(b.record.createdAt) - new Date(a.record.createdAt);
+          case "Most Liked First":
+            return b.likeCount - a.likeCount;
+          case "Most Reposted First":
+            return b.repostCount - a.repostCount;
+          default:
+            console.error(`unknown sort order: ${this.config.get('sidecarReplySortOrder')}`)
+        }
+      }
+    ).map(formatPost);
 
 
     return this.repliesTemplate(

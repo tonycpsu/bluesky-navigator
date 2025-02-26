@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+334.dc145ae4
+// @version     1.0.31+335.7139c015
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44781,6 +44781,12 @@ if (cid) {
       "type": "int",
       "default": 600
     },
+    "sidecarReplySortOrder": {
+      "label": "Reply Sidecar Sort Order",
+      "title": "Select an option to determine how replies are sorted in the sidecar",
+      "type": "select",
+      "options": ["Default", "Oldest First", "Newest First", "Most Liked First", "Most Reposted First"]
+    },
     "hideRightSidebar": {
       "label": "Hide Right Sidebar",
       "title": "If checked, the right sidebar with the search box, following/trending displays, etc. will be hidden (useful when overriding max width above).",
@@ -53210,9 +53216,26 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const post2 = thread.post;
       const replies = thread.replies.filter(
         (reply) => reply.post
-      ).map((reply) => {
-        return formatPost(reply.post);
-      });
+      ).map(
+        (reply) => reply?.post
+      ).sort(
+        (a, b) => {
+          switch (this.config.get("sidecarReplySortOrder")) {
+            case "Default":
+              return 0;
+            case "Oldest First":
+              return new Date(a.record.createdAt) - new Date(b.record.createdAt);
+            case "Newest First":
+              return new Date(b.record.createdAt) - new Date(a.record.createdAt);
+            case "Most Liked First":
+              return b.likeCount - a.likeCount;
+            case "Most Reposted First":
+              return b.repostCount - a.repostCount;
+            default:
+              console.error(`unknown sort order: ${this.config.get("sidecarReplySortOrder")}`);
+          }
+        }
+      ).map(formatPost);
       return this.repliesTemplate(
         {
           postId: post2.cid,

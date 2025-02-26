@@ -61,6 +61,12 @@ export const CONFIG_FIELDS = {
         'type': 'int',
         'default': 600
     },
+    'sidecarReplySortOrder':  {
+        'label': 'Reply Sidecar Sort Order',
+        'title': 'Select an option to determine how replies are sorted in the sidecar',
+        'type': 'select',
+        'options': ['Default', 'Oldest First', 'Newest First', "Most Liked First", "Most Reposted First"],
+    },
     'hideRightSidebar':  {
         'label': 'Hide Right Sidebar',
         'title': 'If checked, the right sidebar with the search box, following/trending displays, etc. will be hidden (useful when overriding max width above).',

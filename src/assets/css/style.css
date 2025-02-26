@@ -412,11 +412,13 @@ div:has(>div.item) {
     left: 10px;
     padding: 0px 5px;
     backdrop-filter: blur(10px);
+    color: #ccc;
 }
 
 .unrolled-divider {
     margin-top: 1em;
-    color: #white;
+    border: 1px solid #eee;
+    color: white;
 }
 
 .sidecar-replies {

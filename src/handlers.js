@@ -10,16 +10,63 @@ const {
 } = utils;
 
 
+function formatPostText(post) {
+    let text = post.text;
+    if (!post.facets) return text; // No mentions/links, return as is
+
+    let charOffsets = [];
+
+    // Convert byte-based offsets to character indices
+    let runningByteCount = 0;
+    let utf16CharIndex = 0;
+
+    for (let char of text) {
+        let charSize = new TextEncoder().encode(char).length;
+        charOffsets.push({ byteOffset: runningByteCount, charIndex: utf16CharIndex });
+        runningByteCount += charSize;
+        utf16CharIndex++;
+    }
+
+    // Process facets in **reverse order** to avoid breaking offsets
+    post.facets.slice().reverse().forEach(facet => {
+        const { index, features } = facet;
+        let start = charOffsets.findLast(c => c.byteOffset <= index.byteStart)?.charIndex || 0;
+        let end = charOffsets.findLast(c => c.byteOffset <= index.byteEnd)?.charIndex || text.length;
+
+        let originalSubstring = text.slice(start, end); // Extract original text
+
+        features.forEach(feature => {
+            if (feature.$type === "app.bsky.richtext.facet#mention") {
+                let mentionLink = `<a href="https://bsky.app/profile/${feature.did}" class="mention">${originalSubstring}</a>`;
+                text = text.slice(0, start) + mentionLink + text.slice(end+1);
+            } else if (feature.$type === "app.bsky.richtext.facet#link") {
+                let url = feature.uri;
+                let linkElement = `<a href="${url}" target="_blank" rel="noopener noreferrer">${originalSubstring}</a>`;
+                text = text.slice(0, start) + linkElement + text.slice(end+1);
+            } else if (feature.$type === "app.bsky.richtext.facet#tag") {
+                let hashtagLink = `<a href="https://bsky.app/search?q=${encodeURIComponent(originalSubstring)}" class="hashtag">${originalSubstring}</a>`;
+                text = text.slice(0, start) + hashtagLink + text.slice(end+1);
+            }
+        });
+    });
+
+    return text;
+}
+
 function formatPost(post) {
   const formatter = Intl.NumberFormat('en', { notation: 'compact' });
-  // console.log(post.embed);
+
+  // if(post.record.facets) {
+  //   debugger;
+  // }
   return {
     postId: post.cid,
     postUrl: `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split("/").slice(-1)[0]}`,
     avatar: post.author.avatar,
     displayName: post.author.displayName || post.author.handle,
     handle: post.author.handle,
-    content: post.record.text,
+    content: formatPostText(post.record),
+    // content: post.record.text,
     embed: post.embed,
     timestamp: new Date(post.record.createdAt).toLocaleString(),
     replySvg: constants.SIDECAR_SVG_REPLY,
@@ -1348,8 +1395,16 @@ this.itemStats.oldest
       });
       // hide all other thread items
       const threadIndex = $(item).closest('.thread').data('bsky-navigator-thread-index');
-      $(`div.thread[data-bsky-navigator-thread-index=${threadIndex}] div.item[data-bsky-navigator-thread-offset!=0]`).addClass("filtered");
-      console.log(threadIndex);
+      this.items = this.items.filter(
+        (i, item) => {
+          return (
+            $(item).closest(".thread").data('data-bsky-navigator-thread-index') != threadIndex
+            ||
+            $(item).data('bsky-navigator-thread-offset') == 0
+          );
+        }
+      );
+      // $(`div.thread[data-bsky-navigator-thread-index=${threadIndex}] div.item[data-bsky-navigator-thread-offset!=0]`).addClass("filtered");
     }
   }
 

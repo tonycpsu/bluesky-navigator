@@ -477,6 +477,10 @@ div:has(>div.item) {
     padding: 5px 0px;
 }
 
+.sidecar-post-content a {
+    color: rgb(16, 131, 254);
+}
+
 .sidecar-post-footer {
     color: rgb(66, 87, 108);
     display: flex;

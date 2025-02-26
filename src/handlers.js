@@ -1014,8 +1014,14 @@ this.itemStats.oldest
   }
 
   async getThreadForItem(item) {
-    const uri = await this.api.getAtprotoUri(this.urlForItem(item));
-    console.log(uri);
+    const url = this.urlForItem(item);
+    if(!url) {
+      return;
+    }
+    const uri = await this.api.getAtprotoUri(url);
+    if(!uri) {
+      return;
+    }
     const thread = await this.api.getThread(uri);
     return thread;
     // debugger;
@@ -1300,6 +1306,9 @@ this.itemStats.oldest
       return;
     }
     const thread = await this.getThreadForItem(item);
+    if(!thread) {
+      return;
+    }
     if (this.shouldUnroll(item)) {
       await this.unrollThread(item, thread, true);
 
@@ -1313,7 +1322,8 @@ this.itemStats.oldest
     // TODO: remove redundant replies after unrolling
     const bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
     Handlebars.registerPartial("bodyTemplate", bodyTemplate);
-    console.log(thread);
+    console.log(thread.parent, thread.parent?.post, thread.parent?.post?.author?.did, thread.post?.author?.did);
+
     if (thread.parent && thread.parent.post && thread.parent.post.author.did == thread.post.author.did) {
       return;
     }
@@ -1334,7 +1344,12 @@ this.itemStats.oldest
         reply.append($(`<div class="unrolled-banner">${i+2}/${unrolledPosts.length}</div>`));
         reply.append($(bodyTemplate(formatPost(p))));
         div.append(reply);
+        // $(`div.thread:has(a[href$="${p.uri.split("/").pop()}"])`).addClass("filtered");
       });
+      // hide all other thread items
+      const threadIndex = $(item).closest('.thread').data('bsky-navigator-thread-index');
+      $(`div.thread[data-bsky-navigator-thread-index=${threadIndex}] div.item[data-bsky-navigator-thread-offset!=0]`).addClass("filtered");
+      console.log(threadIndex);
     }
   }
 

@@ -42,6 +42,9 @@ export class BlueskyAPI {
         const handle = match[1]; // The user's handle (e.g., "alice.bsky.social")
         const postId = match[2]; // The post ID (e.g., "xyz123")
 
+        if(handle.startsWith("did:")) {
+            return null;
+        }
         try {
             // Resolve the handle to a DID
             const { data } = await this.agent.resolveHandle({ handle });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+340.bb9f4937
+// @version     1.0.31+341.11ddea82
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44608,22 +44608,22 @@ if (cid) {
     }
     async unrollThread(thread) {
       const originalAuthor = thread.post.author.did;
-      async function collectPosts(threadNode, posts = []) {
+      async function collectPosts(threadNode, posts2 = []) {
         if (!threadNode.post) {
           return [];
         }
         if (threadNode.post.author.did === originalAuthor) {
-          posts.push(threadNode.post);
+          posts2.push(threadNode.post);
         }
         if (threadNode.post.replyCount && !threadNode.replies) {
           threadNode.replies = (await this.getThread(threadNode.post.uri)).replies;
         }
         if (threadNode.replies) {
           for (const reply of threadNode.replies) {
-            await collectPosts(reply, posts);
+            await collectPosts(reply, posts2);
           }
         }
-        return posts;
+        return posts2;
       }
       collectPosts = collectPosts.bind(this);
       const allPosts = await collectPosts(thread);
@@ -52495,21 +52495,19 @@ if (cid) {
     }
     set threadIndex(value) {
       let oldIndex = this._threadIndex;
-      const posts = $(this.selectedItem).find(".unrolled-reply");
       if (value == oldIndex) {
         return;
       } else if (value < 0) {
         this._threadIndex = 0;
         this.setIndex(this.index - 1, false, true);
         return;
-      } else if (value > posts.length) {
+      } else if (value > this.unrolledreplies.length) {
         this._threadIndex = 0;
         this.setIndex(this.index + 1, false, true);
         return;
       }
       if (oldIndex != null) {
-        const oldPost = oldIndex > 0 ? posts.eq(oldIndex - 1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
-        oldPost.removeClass("reply-selection-active");
+        this.getPostForThreadIndex(oldIndex).removeClass("reply-selection-active");
       }
       this._threadIndex = value;
       if (this.threadIndex == null) {
@@ -52517,17 +52515,24 @@ if (cid) {
         $(this.selectedItem).removeClass("item-selection-child-focused");
         posts.removeClass("reply-selection-active");
       } else {
-        const selectedPost = this.threadIndex > 0 ? posts.eq(this.threadIndex - 1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
-        console.log(selectedPost);
-        if (selectedPost.length) {
+        if (this.selectedPost.length) {
           $(this.selectedItem).addClass("item-selection-child-focused");
           $(this.selectedItem).removeClass("item-selection-active");
-          selectedPost.addClass("reply-selection-active");
-          this.scrollToElement(selectedPost[0], "nearest");
+          this.selectedPost.addClass("reply-selection-active");
+          this.scrollToElement(this.selectedPost[0], "nearest");
         } else {
           debugger;
         }
       }
+    }
+    get unrolledreplies() {
+      return $(this.selectedItem).find(".unrolled-reply");
+    }
+    getPostForThreadIndex(index) {
+      return index > 0 ? this.unrolledreplies.eq(index - 1) : $(this.selectedItem).find(constants$1.POST_CONTENT_SELECTOR).first();
+    }
+    get selectedPost() {
+      return this.getPostForThreadIndex(this.threadIndex);
     }
     onItemAdded(element) {
       this.applyItemStyle(element);

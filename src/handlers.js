@@ -440,21 +440,20 @@ export class ItemHandler extends Handler {
   set threadIndex(value) {
     // debugger;
     let oldIndex = this._threadIndex;
-    const posts = $(this.selectedItem).find('.unrolled-reply');
     if(value == oldIndex) {
       return;
     } else if (value < 0) {
       this._threadIndex = 0;
       this.setIndex(this.index - 1, false, true);
       return;
-    } else if (value > posts.length) {
+    } else if (value > this.unrolledreplies.length) {
       this._threadIndex = 0;
       this.setIndex(this.index + 1, false, true);
       return;
     }
     if(oldIndex != null) {
-      const oldPost = oldIndex > 0 ? posts.eq(oldIndex-1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
-      oldPost.removeClass("reply-selection-active");
+      // const oldPost = oldIndex > 0 ? posts.eq(oldIndex-1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
+      this.getPostForThreadIndex(oldIndex).removeClass("reply-selection-active");
     }
     this._threadIndex = value;
     if(this.threadIndex == null) {
@@ -462,18 +461,32 @@ export class ItemHandler extends Handler {
       $(this.selectedItem).removeClass("item-selection-child-focused");
       posts.removeClass("reply-selection-active");
     } else {
-      const selectedPost = this.threadIndex > 0 ? posts.eq(this.threadIndex-1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
-      console.log(selectedPost);
-      if(selectedPost.length) {
+      // const selectedPost = this.threadIndex > 0 ? posts.eq(this.threadIndex-1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
+      // console.log(selectedPost);
+      if(this.selectedPost.length) {
         $(this.selectedItem).addClass("item-selection-child-focused");
         $(this.selectedItem).removeClass("item-selection-active");
-        selectedPost.addClass("reply-selection-active");
-        this.scrollToElement(selectedPost[0], "nearest");
+        this.selectedPost.addClass("reply-selection-active");
+        this.scrollToElement(this.selectedPost[0], "nearest");
       } else {
         debugger;
       }
     }
   }
+
+  get unrolledreplies() {
+    return $(this.selectedItem).find('.unrolled-reply');
+  }
+
+  getPostForThreadIndex(index) {
+    return index > 0 ? this.unrolledreplies.eq(index-1) : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
+  }
+
+  get selectedPost() {
+    return this.getPostForThreadIndex(this.threadIndex);
+    // return this.threadIndex > 0 ? posts.eq(this.threadIndex-1) : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
+  }
+
 
   onItemAdded(element) {
 

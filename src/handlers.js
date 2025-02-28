@@ -237,8 +237,8 @@ export class ItemHandler extends Handler {
       }
     );
     waitForElement(
-      () => {
       '#sidecar-embed-image-template',
+      () => {
         this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
         Handlebars.registerPartial("imageTemplate", this.imageTemplate);
       }
@@ -666,15 +666,18 @@ export class ItemHandler extends Handler {
       var el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
       margin = el.outerHeight();
     }
-    return margin;
+    var itemMargin = parseInt($(this.selector).css("margin-top").replace("px", ""));
+    console.log(itemMargin);
+    return margin + itemMargin;
   }
 
   applyItemStyle(element, selected) {
     $(element).addClass("item");
+    // $(element).find("div").first().children().last().css("flex", "");
 
     // the flex property here creates problems if post actions are on the left
     if (this.config.get("postActionButtonPosition") == "Left") {
-      const postContainer = $(element).find('div[data-testid="contentHider-post"]').prev();
+      const postContainer = $(element).find(constants.POST_CONTENT_SELECTOR).prev();
       if(postContainer.length) {
         postContainer.css("flex", "");
       }

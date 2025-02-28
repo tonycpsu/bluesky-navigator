@@ -24,6 +24,7 @@ const constants = {
   FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
   LEFT_SIDEBAR_SELECTOR: 'nav.r-pgf20v',
   POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
+  POST_CONTENT_SELECTOR: 'div[data-testid="contentHider-post"]',
   WIDTH_SELECTOR: 'div[style*="removed-body-scroll-bar-size"][style*="width: 100%"]',
   PROFILE_SELECTOR: 'a[aria-label="View profile"]',
   LINK_SELECTOR: 'a[target="_blank"]',

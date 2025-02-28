@@ -227,6 +227,7 @@ function getScreenFromElement(element) {
         }
 
         .item  {
+            margin: 3px;
             ${config.get("posts")}
         }
 
@@ -301,6 +302,10 @@ function getScreenFromElement(element) {
 
         div:has(main) {
             overflow-x: clip;
+        }
+
+        ${constants.POST_CONTENT_SELECTOR} {
+            margin: 1px;
         }
 
 `

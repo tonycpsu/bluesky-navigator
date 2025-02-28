@@ -424,7 +424,7 @@ div:has(>div.item) {
 .unrolled-reply {
     /* border: 1px transparent; */
     margin: 1px;
-    outline: 1px solid transparent;
+    border: 1px solid transparent;
     box-sizing: border-box;
 }
 

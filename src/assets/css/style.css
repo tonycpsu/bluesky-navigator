@@ -421,6 +421,13 @@ div:has(>div.item) {
     color: white;
 }
 
+.unrolled-reply {
+    /* border: 1px transparent; */
+    margin: 1px;
+    outline: 1px solid transparent;
+    box-sizing: border-box;
+}
+
 .sidecar-replies {
     flex: 1 1 0;
     min-height: 0;

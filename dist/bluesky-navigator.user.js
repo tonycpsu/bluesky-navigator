@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+338.6639fb34
+// @version     1.0.31+339.f7cb77ff
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44575,7 +44575,6 @@ if (cid) {
       const match2 = postUrl.match(/bsky\.app\/profile\/([^\/]+)\/post\/([^\/]+)/);
       if (!match2) {
         console.error("Invalid Bluesky post URL format.");
-        debugger;
         return null;
       }
       const handle2 = match2[1];
@@ -44772,6 +44771,12 @@ if (cid) {
       "type": "checkbox",
       "default": false
     },
+    "unrolledPostSelection": {
+      "label": "Unrolled Post Selection",
+      "title": "If checked, navigation between/selection of individual unrolled posts will be enabled.",
+      "type": "checkbox",
+      "default": false
+    },
     "showReplySidecar": {
       "label": "Show Replies Sidecar",
       "title": "If checked, replies to the selected post (and, where applicable, the post being replied to) will be displayed in a sidecar next to each post (requires atproto settings below).",
@@ -44853,27 +44858,27 @@ if (cid) {
     "selectionActive": {
       "label": "CSS Style: Selected Post",
       "type": "textarea",
-      "default": "border: 3px rgba(255, 0, 0, .6) solid !important;"
+      "default": "outline: 3px rgba(255, 0, 0, .6) solid !important;"
     },
     "selectionChildFocused": {
       "label": "CSS Style: Selected Child Post Focused",
       "type": "textarea",
-      "default": "border: 3px rgba(128, 0, 0, .2) solid !important;"
+      "default": "outline: 3px rgba(128, 0, 0, .2) solid !important;"
     },
     "selectionInactive": {
       "label": "CSS Style: Unselected Post",
       "type": "textarea",
-      "default": "border: 3px solid transparent;"
+      "default": "outline: 3px solid transparent;"
     },
     "replySelectionActive": {
       "label": "CSS Style: Selected Reply",
       "type": "textarea",
-      "default": "border: 1px rgba(255, 0, 0, .6) solid !important;"
+      "default": "outline: 1px rgba(255, 0, 0, .8) solid !important;"
     },
     "replySelectionInactive": {
       "label": "CSS Style: Unselected Replies",
       "type": "textarea",
-      "default": "border: 1px rgb(212, 219, 226) solid !important;"
+      "default": "outline: 1px rgb(212, 219, 226) solid"
     },
     "threadIndicatorWidth": {
       "label": "Thread Indicator Width in pixels",
@@ -44980,7 +44985,7 @@ if (cid) {
       "default": false
     }
   };
-  const style = '/* style.css */\n\ndiv[style^="position: fixed; inset: 0px 0px 0px 50%;"] {\n    border: none;\n}\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    width: 100%;\n    height: 32px;\n    background-color: inherit;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n@media (prefers-color-scheme: dark) {\n    div#bsky-navigator-toolbar {\n        background-color: #29333d\n    }\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n@media (prefers-color-scheme: dark) {\n    .indicator-image {\n        filter: invert(1) brightness(2);\n    }\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\ndiv#infoIndicatorText {\n    font-size: 0.8em;\n}\n\ndiv#itemTimestampStats {\n    font-size: 0.7em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n        overflow: clip;\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n        overflow: clip;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    div#statusBar {\n        background-color: #29333d;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n#prevButton {\n    z-index: 1000;\n    position: absolute;\n    top: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#prevButton.mobile {\n    position: fixed;\n    left: 1%;\n    top: 25%;\n}\n\n#nextButton {\n    z-index: 1000;\n    position: absolute;\n    bottom: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#nextButton.mobile {\n    position: fixed;\n    left: 1%;\n    bottom: 20%;\n}\n\nnav.r-1wyvozj {\n    overflow: inherit;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    bottom: 2px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n\n.popup {\n    display: none;\n    position: fixed;\n    max-height: 80vH;\n    top: 50%;\n    left: 50%;\n    transform: translate(-50%, -50%);\n    /* transform: scale(0.25); /\\* Scale down to 75% *\\/ */\n    background: white;\n    padding: 15px;\n    border-radius: 12px;\n    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n    width: 400px;\n    z-index: 1000;\n}\n\nnav + div {\n    display: none;\n}\n\ndiv:has(>div.item) {\n    display: flex;\n    flex-direction: row;\n    align-items: stretch;\n}\n\n.item {\n    display: flex;\n    flex: 2;\n    max-height: 100%;\n}\n\n.item > div:first-of-type {\n    flex: 1;\n}\n\n.item > div:first-of-type > div:last-of-type {\n    flex: 1;\n}\n\n.unrolled-banner {\n    position: absolute;\n    top: -0.5em;\n    left: 10px;\n    padding: 0px 5px;\n    backdrop-filter: blur(10px);\n    color: #ccc;\n}\n\n.unrolled-divider {\n    margin-top: 1em;\n    border: 1px solid #eee;\n    color: white;\n}\n\n.sidecar-replies {\n    flex: 1 1 0;\n    min-height: 0;\n    max-height: 100%;\n    overflow-y: auto;\n    font-size: 0.8em;\n    padding-left: 10px;\n    display: flex;\n    flex-direction: column;\n    max-height: 80vH;\n}\n\n.sidecar-parent-indicator {\n    position: absolute;\n}\n\n.sidecar-post {\n    display: flex;\n    flex-direction: column;\n    padding: 5px;\n    flex-shrink: 0;\n    font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";\n}\n\n.sidecar-post a {\n    text-decoration: none;\n}\n\n.sidecar-post a:hover {\n    text-decoration: underline;\n}\n\n.sidecar-post-user-info {\n    display: flex;\n    flex-direction: row;\n    font-size: 0.9em;\n}\n\n.sidecar-post-avatar {\n    width: 24px;\n    height: 24px;\n    padding: 2px;\n}\n\n.sidecar-post-username {\n    font-weight: 600;\n    color: rgb(11, 15, 20);\n}\n\n.sidecar-post-handle {\n    color: rgb(66, 87, 108);\n    font-variant: no-contextual;\n}\n\n.sidecar-post-content {\n    padding: 5px 0px;\n}\n\n.sidecar-post-content a {\n    color: rgb(16, 131, 254);\n}\n\n.sidecar-post-footer {\n    color: rgb(66, 87, 108);\n    display: flex;\n    flex-direction: row;\n    font-size: 11px;\n}\n\n.sidecar-post-footer svg, .sidecar-post-footer span {\n    display: inline-flex;\n    vertical-align: middle;\n    /* flex: 1; */\n    color: rgb(111, 134, 159);\n}\n\n.sidecar-post-timestamp {\n    display: inline-flex;\n    vertical-align: middle;\n    flex: 3;\n}\n\n.sidecar-parent .sidecar-post {\n    border: 3px dashed rgb(111, 134, 159);\n    padding: 5px;\n}\n\n.sidecar-post-counts {\n    display: flex;\n    flex: 2;\n}\n\n.sidecar-count {\n    display: flex;\n    flex: 1;\n    justify-content: right;\n    align-items: center;\n}\n\n.sidecar-count-icon > svg {\n  height: 1em;\n}\n';
+  const style = '/* style.css */\n\ndiv[style^="position: fixed; inset: 0px 0px 0px 50%;"] {\n    border: none;\n}\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    width: 100%;\n    height: 32px;\n    background-color: inherit;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n@media (prefers-color-scheme: dark) {\n    div#bsky-navigator-toolbar {\n        background-color: #29333d\n    }\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n@media (prefers-color-scheme: dark) {\n    .indicator-image {\n        filter: invert(1) brightness(2);\n    }\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\ndiv#infoIndicatorText {\n    font-size: 0.8em;\n}\n\ndiv#itemTimestampStats {\n    font-size: 0.7em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n        overflow: clip;\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n        overflow: clip;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    div#statusBar {\n        background-color: #29333d;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n#prevButton {\n    z-index: 1000;\n    position: absolute;\n    top: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#prevButton.mobile {\n    position: fixed;\n    left: 1%;\n    top: 25%;\n}\n\n#nextButton {\n    z-index: 1000;\n    position: absolute;\n    bottom: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#nextButton.mobile {\n    position: fixed;\n    left: 1%;\n    bottom: 20%;\n}\n\nnav.r-1wyvozj {\n    overflow: inherit;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    bottom: 2px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n\n.popup {\n    display: none;\n    position: fixed;\n    max-height: 80vH;\n    top: 50%;\n    left: 50%;\n    transform: translate(-50%, -50%);\n    /* transform: scale(0.25); /\\* Scale down to 75% *\\/ */\n    background: white;\n    padding: 15px;\n    border-radius: 12px;\n    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n    width: 400px;\n    z-index: 1000;\n}\n\nnav + div {\n    display: none;\n}\n\ndiv:has(>div.item) {\n    display: flex;\n    flex-direction: row;\n    align-items: stretch;\n}\n\n.item {\n    display: flex;\n    flex: 2;\n    max-height: 100%;\n}\n\n.item > div:first-of-type {\n    flex: 1;\n}\n\n.item > div:first-of-type > div:last-of-type {\n    flex: 1;\n}\n\n.unrolled-banner {\n    position: absolute;\n    top: -0.5em;\n    left: 10px;\n    padding: 0px 5px;\n    backdrop-filter: blur(10px);\n    color: #ccc;\n}\n\n.unrolled-divider {\n    margin-top: 1em;\n    border: 1px solid #eee;\n    color: white;\n}\n\n.unrolled-reply {\n    /* border: 1px transparent; */\n    margin: 1px;\n    outline: 1px solid transparent;\n    box-sizing: border-box;\n}\n\n.sidecar-replies {\n    flex: 1 1 0;\n    min-height: 0;\n    max-height: 100%;\n    overflow-y: auto;\n    font-size: 0.8em;\n    padding-left: 10px;\n    display: flex;\n    flex-direction: column;\n    max-height: 80vH;\n}\n\n.sidecar-parent-indicator {\n    position: absolute;\n}\n\n.sidecar-post {\n    display: flex;\n    flex-direction: column;\n    padding: 5px;\n    flex-shrink: 0;\n    font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";\n}\n\n.sidecar-post a {\n    text-decoration: none;\n}\n\n.sidecar-post a:hover {\n    text-decoration: underline;\n}\n\n.sidecar-post-user-info {\n    display: flex;\n    flex-direction: row;\n    font-size: 0.9em;\n}\n\n.sidecar-post-avatar {\n    width: 24px;\n    height: 24px;\n    padding: 2px;\n}\n\n.sidecar-post-username {\n    font-weight: 600;\n    color: rgb(11, 15, 20);\n}\n\n.sidecar-post-handle {\n    color: rgb(66, 87, 108);\n    font-variant: no-contextual;\n}\n\n.sidecar-post-content {\n    padding: 5px 0px;\n}\n\n.sidecar-post-content a {\n    color: rgb(16, 131, 254);\n}\n\n.sidecar-post-footer {\n    color: rgb(66, 87, 108);\n    display: flex;\n    flex-direction: row;\n    font-size: 11px;\n}\n\n.sidecar-post-footer svg, .sidecar-post-footer span {\n    display: inline-flex;\n    vertical-align: middle;\n    /* flex: 1; */\n    color: rgb(111, 134, 159);\n}\n\n.sidecar-post-timestamp {\n    display: inline-flex;\n    vertical-align: middle;\n    flex: 3;\n}\n\n.sidecar-parent .sidecar-post {\n    border: 3px dashed rgb(111, 134, 159);\n    padding: 5px;\n}\n\n.sidecar-post-counts {\n    display: flex;\n    flex: 2;\n}\n\n.sidecar-count {\n    display: flex;\n    flex: 1;\n    justify-content: right;\n    align-items: center;\n}\n\n.sidecar-count-icon > svg {\n  height: 1em;\n}\n';
   const configCss = "h1 {\n    font-size: 18pt;\n}\n\nh2 {\n    font-size: 14pt;\n}\n.config_var textarea {\n    width: 100%;\n    height: 1.5em;\n}\n\n#GM_config_rulesConfig_var textarea {\n    height: 10em;\n}\n\n#GM_config_stateSyncConfig_var textarea {\n    height: 10em;\n}\n\n\n\n#GM_config_header {\n    position: fixed;\n    background-color: inherit;\n    top: -10px;\n    width: 100%;\n}\n\n@media (prefers-color-scheme: light) {\n    #GM_config_header {\n        background-color: #ffffff;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    #GM_config_header {\n        background-color: #29333d;\n    }\n}\n\n#GM_config_section_0 {\n    padding-top: 100px;\n}\n\n#GM_config_buttons_holder {\n    position: fixed;\n    top: 0;\n    right: 0;\n}\n";
   const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-parent">\n  <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n  {{> postTemplate parent}}\n  </div>\n  {{/if}}\n  {{#each replies}}\n  {{> postTemplate this}}\n  {{/each}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>    \n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label">{{likeCount}}</div>\n  </div>\n\n  </div>\n  </div>\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="alt text" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="alt text" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title=""></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n';
   const millisecondsInWeek = 6048e5;
@@ -52282,7 +52287,8 @@ if (cid) {
       super(name, config2, state2, api);
       this.selector = selector;
       this._index = null;
-      this._childIndex = null;
+      this._replyIndex = null;
+      this._threadIndex = 0;
       this.postId = null;
       this.loadNewerCallback = null;
       this.debounceTimeout = null;
@@ -52310,11 +52316,25 @@ if (cid) {
       this.scrollTick = false;
       this.scrollTop = 0;
       this.scrollDirection = 0;
-      this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
-      this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
-      Handlebars.registerPartial("postTemplate", this.postTemplate);
-      this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
-      Handlebars.registerPartial("imageTemplate", this.imageTemplate);
+      waitForElement$1(
+        "#sidecar-replies-template",
+        () => {
+          this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
+        }
+      );
+      waitForElement$1(
+        "#sidecar-post-template",
+        () => {
+          this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
+          Handlebars.registerPartial("postTemplate", this.postTemplate);
+        }
+      );
+      waitForElement$1(
+        () => {
+          this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
+          Handlebars.registerPartial("imageTemplate", this.imageTemplate);
+        }
+      );
     }
     isActive() {
       return false;
@@ -52423,6 +52443,7 @@ if (cid) {
     }
     set index(value) {
       this._index = value;
+      this._threadIndex = 0;
       this.postId = this.postIdForItem(this.selectedItem);
       this.updateInfoIndicator();
     }
@@ -52438,13 +52459,13 @@ if (cid) {
       return $(this.items[this.index]);
     }
     get selectedReply() {
-      return this.selectedItem.closest(".thread").find(".sidecar-post").eq(this.childIndex);
+      return this.selectedItem.closest(".thread").find(".sidecar-post").eq(this.replyIndex);
     }
-    get childIndex() {
-      return this._childIndex;
+    get replyIndex() {
+      return this._replyIndex;
     }
-    set childIndex(value) {
-      let oldIndex = this._childIndex;
+    set replyIndex(value) {
+      let oldIndex = this._replyIndex;
       const replies = $(this.selectedItem).parent().find("div.sidecar-post");
       if (value == oldIndex || value < 0 || value >= replies.length) {
         return;
@@ -52452,18 +52473,57 @@ if (cid) {
       if (oldIndex != null) {
         replies.eq(oldIndex).removeClass("reply-selection-active");
       }
-      this._childIndex = value;
-      if (this.childIndex == null) {
+      this._replyIndex = value;
+      if (this.replyIndex == null) {
         $(this.selectedItem).addClass("item-selection-active");
         $(this.selectedItem).removeClass("item-selection-child-focused");
         replies.removeClass("reply-selection-active");
       } else {
-        const selectedReply = replies.eq(this.childIndex);
+        const selectedReply = replies.eq(this.replyIndex);
         if (selectedReply.length) {
           $(this.selectedItem).addClass("item-selection-child-focused");
           $(this.selectedItem).removeClass("item-selection-active");
           selectedReply.addClass("reply-selection-active");
           this.scrollToElement(selectedReply[0], "nearest");
+        }
+      }
+    }
+    get threadIndex() {
+      return this._threadIndex;
+    }
+    set threadIndex(value) {
+      let oldIndex = this._threadIndex;
+      const posts = $(this.selectedItem).find(".unrolled-reply");
+      if (value == oldIndex) {
+        return;
+      } else if (value < 0) {
+        this._threadIndex = 0;
+        this.setIndex(this.index - 1, false, true);
+        return;
+      } else if (value > posts.length) {
+        this._threadIndex = 0;
+        this.setIndex(this.index + 1, false, true);
+        return;
+      }
+      if (oldIndex != null) {
+        const oldPost = oldIndex > 0 ? posts.eq(oldIndex - 1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
+        oldPost.removeClass("reply-selection-active");
+      }
+      this._threadIndex = value;
+      if (this.threadIndex == null) {
+        $(this.selectedItem).addClass("item-selection-active");
+        $(this.selectedItem).removeClass("item-selection-child-focused");
+        posts.removeClass("reply-selection-active");
+      } else {
+        const selectedPost = this.threadIndex > 0 ? posts.eq(this.threadIndex - 1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
+        console.log(selectedPost);
+        if (selectedPost.length) {
+          $(this.selectedItem).addClass("item-selection-child-focused");
+          $(this.selectedItem).removeClass("item-selection-active");
+          selectedPost.addClass("reply-selection-active");
+          this.scrollToElement(selectedPost[0], "nearest");
+        } else {
+          debugger;
         }
       }
     }
@@ -52730,7 +52790,7 @@ if (cid) {
       }
       var target2 = $(event.target).closest(this.selector);
       var index = this.getIndexFromItem(target2);
-      this.childIndex = null;
+      this.replyIndex = null;
       if (index != this.index) {
         this.setIndex(index);
       }
@@ -52744,7 +52804,7 @@ if (cid) {
       var parent = target2.closest(".thread").find(".item");
       const parentIndex = this.getIndexFromItem(parent);
       this.setIndex(parentIndex);
-      this.childIndex = index;
+      this.replyIndex = index;
     }
     handleInput(event) {
       if (this.handleMovementKey(event)) {
@@ -53125,10 +53185,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.updateItems();
     }
     toggleFocus() {
-      if (this.childIndex == null) {
-        this.childIndex = 0;
+      if (this.replyIndex == null) {
+        this.replyIndex = 0;
       } else {
-        this.childIndex = null;
+        this.replyIndex = null;
       }
     }
     handleMovementKey(event) {
@@ -53143,15 +53203,19 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"].includes(event.key)) {
           if (["j", "ArrowDown"].indexOf(event.key) != -1) {
             event.preventDefault();
-            if (event.key == "ArrowDown" && this.config.get("showReplySidecar") && this.childIndex != null) {
-              this.childIndex += 1;
+            if (event.key == "ArrowDown" && this.config.get("showReplySidecar") && this.replyIndex != null) {
+              this.replyIndex += 1;
+            } else if (this.config.get("unrolledPostSelection")) {
+              this.threadIndex += 1;
             } else {
               moved = this.jumpToNext(event.key == "j");
             }
           } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
             event.preventDefault();
-            if (event.key == "ArrowUp" && this.config.get("showReplySidecar") && this.childIndex != null) {
-              this.childIndex -= 1;
+            if (event.key == "ArrowUp" && this.config.get("showReplySidecar") && this.replyIndex != null) {
+              this.replyIndex -= 1;
+            } else if (this.config.get("unrolledPostSelection")) {
+              this.threadIndex -= 1;
             } else {
               moved = this.jumpToPrev(event.key == "k");
             }
@@ -53164,13 +53228,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             }
           } else if (event.key == "ArrowLeft") {
             event.preventDefault();
-            if (!this.config.get("showReplySidecar") || this.childIndex == null) {
+            if (!this.config.get("showReplySidecar") || this.replyIndex == null) {
               return;
             }
             this.toggleFocus();
           } else if (event.key == "ArrowRight") {
             event.preventDefault();
-            if (!this.config.get("showReplySidecar") || this.childIndex != null) {
+            if (!this.config.get("showReplySidecar") || this.replyIndex != null) {
               return;
             }
             this.toggleFocus();
@@ -53338,7 +53402,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       } else if (!event.metaKey) {
         var item = this.selectedItem;
         if (["o", "Enter"].includes(event.key) && !this.isPopupVisible) {
-          if (this.childIndex == null) {
+          if (this.replyIndex == null) {
             $(item).click();
           } else {
             console.log(this.selectedReply);
@@ -53374,7 +53438,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           button.focus();
           button.click();
         } else if (event.key == "l") {
-          if (this.config.get("showReplySidecar") && this.childIndex != null) {
+          if (this.config.get("showReplySidecar") && this.replyIndex != null) {
             this.api.getAtprotoUri(this.urlForItem(this.selectedReply)).then(
               (uri) => this.api.getThread(uri).then(
                 (thread) => {
@@ -54209,6 +54273,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
 
         .sidecar-post {
+            margin: 1px;
             ${config.get("replySelectionInactive")}
         }
 

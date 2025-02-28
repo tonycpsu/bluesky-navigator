@@ -187,11 +187,13 @@ export class ItemHandler extends Handler {
     ]
   }
 
+
   constructor(name, config, state, api, selector) {
     super(name, config, state, api);
     this.selector = selector;
     this._index = null;
-    this._childIndex = null;
+    this._replyIndex = null;
+    this._threadIndex = 0;
     this.postId = null;
     this.loadNewerCallback = null;
     this.debounceTimeout = null;
@@ -221,11 +223,31 @@ export class ItemHandler extends Handler {
     this.scrollTop = 0;
     this.scrollDirection = 0;
 
-    this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
-    this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
-    Handlebars.registerPartial("postTemplate", this.postTemplate);
-    this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
-    Handlebars.registerPartial("imageTemplate", this.imageTemplate);
+    waitForElement(
+      '#sidecar-replies-template',
+      () => {
+        this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html())
+      }
+    );
+    waitForElement(
+      '#sidecar-post-template',
+      () => {
+        this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
+        Handlebars.registerPartial("postTemplate", this.postTemplate);
+      }
+    );
+    waitForElement(
+      () => {
+      '#sidecar-embed-image-template',
+        this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
+        Handlebars.registerPartial("imageTemplate", this.imageTemplate);
+      }
+    );
+    // this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
+    // this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
+    // Handlebars.registerPartial("postTemplate", this.postTemplate);
+    // this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
+    // Handlebars.registerPartial("imageTemplate", this.imageTemplate);
   }
 
   isActive() {
@@ -359,6 +381,7 @@ export class ItemHandler extends Handler {
 
   set index(value) {
     this._index = value;
+    this._threadIndex = 0;
     this.postId = this.postIdForItem(this.selectedItem);
     this.updateInfoIndicator();
   }
@@ -378,15 +401,15 @@ export class ItemHandler extends Handler {
   }
 
   get selectedReply() {
-    return this.selectedItem.closest(".thread").find(".sidecar-post").eq(this.childIndex);
+    return this.selectedItem.closest(".thread").find(".sidecar-post").eq(this.replyIndex);
   }
 
-  get childIndex() {
-    return this._childIndex;
+  get replyIndex() {
+    return this._replyIndex;
   }
 
-  set childIndex(value) {
-    let oldIndex = this._childIndex;
+  set replyIndex(value) {
+    let oldIndex = this._replyIndex;
     const replies = $(this.selectedItem).parent().find('div.sidecar-post');
     if(value == oldIndex || value < 0 || value >= replies.length) {
       return;
@@ -394,18 +417,60 @@ export class ItemHandler extends Handler {
     if(oldIndex != null) {
       replies.eq(oldIndex).removeClass("reply-selection-active");
     }
-    this._childIndex = value;
-    if(this.childIndex == null) {
+    this._replyIndex = value;
+    if(this.replyIndex == null) {
       $(this.selectedItem).addClass("item-selection-active");
       $(this.selectedItem).removeClass("item-selection-child-focused");
       replies.removeClass("reply-selection-active");
     } else {
-      const selectedReply = replies.eq(this.childIndex);
+      const selectedReply = replies.eq(this.replyIndex);
       if(selectedReply.length) {
         $(this.selectedItem).addClass("item-selection-child-focused");
         $(this.selectedItem).removeClass("item-selection-active");
         selectedReply.addClass("reply-selection-active");
         this.scrollToElement(selectedReply[0], "nearest");
+      }
+    }
+  }
+
+  get threadIndex() {
+    return this._threadIndex;
+  }
+
+  set threadIndex(value) {
+    // debugger;
+    let oldIndex = this._threadIndex;
+    const posts = $(this.selectedItem).find('.unrolled-reply');
+    if(value == oldIndex) {
+      return;
+    } else if (value < 0) {
+      this._threadIndex = 0;
+      this.setIndex(this.index - 1, false, true);
+      return;
+    } else if (value > posts.length) {
+      this._threadIndex = 0;
+      this.setIndex(this.index + 1, false, true);
+      return;
+    }
+    if(oldIndex != null) {
+      const oldPost = oldIndex > 0 ? posts.eq(oldIndex-1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
+      oldPost.removeClass("reply-selection-active");
+    }
+    this._threadIndex = value;
+    if(this.threadIndex == null) {
+      $(this.selectedItem).addClass("item-selection-active");
+      $(this.selectedItem).removeClass("item-selection-child-focused");
+      posts.removeClass("reply-selection-active");
+    } else {
+      const selectedPost = this.threadIndex > 0 ? posts.eq(this.threadIndex-1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
+      console.log(selectedPost);
+      if(selectedPost.length) {
+        $(this.selectedItem).addClass("item-selection-child-focused");
+        $(this.selectedItem).removeClass("item-selection-active");
+        selectedPost.addClass("reply-selection-active");
+        this.scrollToElement(selectedPost[0], "nearest");
+      } else {
+        debugger;
       }
     }
   }
@@ -753,7 +818,7 @@ export class ItemHandler extends Handler {
     }
     var target = $(event.target).closest(this.selector)
     var index = this.getIndexFromItem(target);
-    this.childIndex = null;
+    this.replyIndex = null;
     if (index != this.index) {
       // this.applyItemStyle(this.selectedItem, false);
       this.setIndex(index);
@@ -769,7 +834,7 @@ export class ItemHandler extends Handler {
     var parent = target.closest(".thread").find(".item");
     const parentIndex = this.getIndexFromItem(parent);
     this.setIndex(parentIndex);
-    this.childIndex = index;
+    this.replyIndex = index;
   }
 
 
@@ -1242,10 +1307,10 @@ this.itemStats.oldest
   }
 
   toggleFocus() {
-    if(this.childIndex == null) {
-      this.childIndex = 0;
+    if(this.replyIndex == null) {
+      this.replyIndex = 0;
     } else {
-      this.childIndex = null;
+      this.replyIndex = null;
     }
   }
 
@@ -1264,15 +1329,19 @@ this.itemStats.oldest
       {
         if (["j", "ArrowDown"].indexOf(event.key) != -1) {
           event.preventDefault();
-          if(event.key == "ArrowDown" && this.config.get("showReplySidecar") && this.childIndex != null) {
-            this.childIndex += 1;
+          if(event.key == "ArrowDown" && this.config.get("showReplySidecar") && this.replyIndex != null) {
+            this.replyIndex += 1;
+          } else if (this.config.get("unrolledPostSelection")) {
+            this.threadIndex += 1;
           } else {
             moved = this.jumpToNext(event.key == "j");
           }
         } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
           event.preventDefault();
-          if(event.key == "ArrowUp" && this.config.get("showReplySidecar") && this.childIndex != null) {
-            this.childIndex -= 1;
+          if(event.key == "ArrowUp" && this.config.get("showReplySidecar") && this.replyIndex != null) {
+            this.replyIndex -= 1;
+          } else if (this.config.get("unrolledPostSelection")) {
+            this.threadIndex -= 1;
           } else {
             moved = this.jumpToPrev(event.key == "k");
           }
@@ -1286,13 +1355,13 @@ this.itemStats.oldest
           }
         } else if (event.key == "ArrowLeft") {
           event.preventDefault();
-          if(!this.config.get("showReplySidecar") || this.childIndex == null) {
+          if(!this.config.get("showReplySidecar") || this.replyIndex == null) {
             return;
           }
           this.toggleFocus();
         } else if (event.key == "ArrowRight") {
           event.preventDefault()
-          if(!this.config.get("showReplySidecar") || this.childIndex != null) {
+          if(!this.config.get("showReplySidecar") || this.replyIndex != null) {
             return;
           }
           this.toggleFocus();
@@ -1517,7 +1586,7 @@ this.itemStats.oldest
       if (["o", "Enter"].includes(event.key) && !this.isPopupVisible)
       {
         // o = open
-        if(this.childIndex == null) {
+        if(this.replyIndex == null) {
           $(item).click();
         } else {
           console.log(this.selectedReply);
@@ -1566,7 +1635,7 @@ this.itemStats.oldest
         button.focus();
         button.click();
       } else if(event.key == "l") {
-        if(this.config.get("showReplySidecar") && this.childIndex != null) {
+        if(this.config.get("showReplySidecar") && this.replyIndex != null) {
           this.api.getAtprotoUri(this.urlForItem(this.selectedReply)).then(
             (uri) => this.api.getThread(uri).then(
               (thread) => {

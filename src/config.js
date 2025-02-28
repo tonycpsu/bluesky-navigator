@@ -49,6 +49,12 @@ export const CONFIG_FIELDS = {
         'type': 'checkbox',
         'default': false
     },
+    'unrolledPostSelection':  {
+        'label': 'Unrolled Post Selection',
+        'title': 'If checked, navigation between/selection of individual unrolled posts will be enabled.',
+        'type': 'checkbox',
+        'default': false
+    },
     'showReplySidecar':  {
         'label': 'Show Replies Sidecar',
         'title': 'If checked, replies to the selected post (and, where applicable, the post being replied to) will be displayed in a sidecar next to each post (requires atproto settings below).',
@@ -130,27 +136,27 @@ export const CONFIG_FIELDS = {
     'selectionActive': {
         'label': 'CSS Style: Selected Post',
         'type': 'textarea',
-        'default': 'border: 3px rgba(255, 0, 0, .6) solid !important;'
+        'default': 'outline: 3px rgba(255, 0, 0, .6) solid !important;'
     },
     'selectionChildFocused': {
         'label': 'CSS Style: Selected Child Post Focused',
         'type': 'textarea',
-        'default': 'border: 3px rgba(128, 0, 0, .2) solid !important;'
+        'default': 'outline: 3px rgba(128, 0, 0, .2) solid !important;'
     },
     'selectionInactive': {
         'label': 'CSS Style: Unselected Post',
         'type': 'textarea',
-        'default': 'border: 3px solid transparent;'
+        'default': 'outline: 3px solid transparent;'
     },
     'replySelectionActive': {
         'label': 'CSS Style: Selected Reply',
         'type': 'textarea',
-        'default': 'border: 1px rgba(255, 0, 0, .6) solid !important;'
+        'default': 'outline: 1px rgba(255, 0, 0, .8) solid !important;'
     },
     'replySelectionInactive': {
         'label': 'CSS Style: Unselected Replies',
         'type': 'textarea',
-        'default': 'border: 1px rgb(212, 219, 226) solid !important;'
+        'default': 'outline: 1px rgb(212, 219, 226) solid'
     },
     'threadIndicatorWidth': {
         'label': 'Thread Indicator Width in pixels',

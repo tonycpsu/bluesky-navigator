@@ -35,7 +35,6 @@ export class BlueskyAPI {
         const match = postUrl.match(/bsky\.app\/profile\/([^\/]+)\/post\/([^\/]+)/);
         if (!match) {
             console.error("Invalid Bluesky post URL format.");
-            debugger;
             return null;
         }
 

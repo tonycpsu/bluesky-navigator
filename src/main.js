@@ -251,6 +251,7 @@ function getScreenFromElement(element) {
         }
 
         .sidecar-post {
+            margin: 1px;
             ${config.get("replySelectionInactive")}
         }
 

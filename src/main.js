@@ -308,6 +308,12 @@ function getScreenFromElement(element) {
             margin: 1px;
         }
 
+        ${constants.HOME_SCREEN_SELECTOR} .item > div:first-of-type > div:last-of-type > div:last-of-type > div:first-of-type {
+            flex: unset !important;
+        }
+
+
+
 `
 
         // Inject the style into the page

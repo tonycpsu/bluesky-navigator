@@ -193,7 +193,7 @@ export class ItemHandler extends Handler {
     this.selector = selector;
     this._index = null;
     this._replyIndex = null;
-    this._threadIndex = 0;
+    this._threadIndex = null;
     this.postId = null;
     this.loadNewerCallback = null;
     this.debounceTimeout = null;
@@ -381,7 +381,7 @@ export class ItemHandler extends Handler {
 
   set index(value) {
     this._index = value;
-    this._threadIndex = 0;
+    this._threadIndex = null;
     this.postId = this.postIdForItem(this.selectedItem);
     this.updateInfoIndicator();
   }
@@ -1345,7 +1345,7 @@ this.itemStats.oldest
       {
         if (["j", "ArrowDown"].indexOf(event.key) != -1) {
           event.preventDefault();
-          if(event.key == "ArrowDown" && this.config.get("showReplySidecar") && this.replyIndex != null) {
+          if(this.config.get("showReplySidecar") && this.replyIndex != null) {
             this.replyIndex += 1;
           } else if (this.config.get("unrolledPostSelection")) {
             this.threadIndex += 1;
@@ -1354,7 +1354,7 @@ this.itemStats.oldest
           }
         } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
           event.preventDefault();
-          if(event.key == "ArrowUp" && this.config.get("showReplySidecar") && this.replyIndex != null) {
+          if(this.config.get("showReplySidecar") && this.replyIndex != null) {
             this.replyIndex -= 1;
           } else if (this.config.get("unrolledPostSelection")) {
             this.threadIndex -= 1;
@@ -1489,6 +1489,7 @@ this.itemStats.oldest
           );
         }
       );
+      this.threadIndex = 0;
       // $(`div.thread[data-bsky-navigator-thread-index=${threadIndex}] div.item[data-bsky-navigator-thread-offset!=0]`).addClass("filtered");
     }
   }

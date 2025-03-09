@@ -1454,7 +1454,6 @@ this.itemStats.oldest
   }
 
   async unrollThread(item, thread) {
-    // TODO: remove redundant replies after unrolling
     const bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
     Handlebars.registerPartial("bodyTemplate", bodyTemplate);
     console.log(thread.parent, thread.parent?.post, thread.parent?.post?.author?.did, thread.post?.author?.did);
@@ -1481,19 +1480,28 @@ this.itemStats.oldest
         div.append(reply);
         // $(`div.thread:has(a[href$="${p.uri.split("/").pop()}"])`).addClass("filtered");
       });
-      // hide all other thread items
+      // remove redundant replies after unrolling
       const threadIndex = $(item).closest('.thread').data('bsky-navigator-thread-index');
-      this.items = this.items.filter(
-        (i, item) => {
+
+      function isRedundant(item, threadIndex) {
+        console.log(item);
           return (
-            $(item).closest(".thread").data('data-bsky-navigator-thread-index') != threadIndex
-            ||
-            $(item).data('bsky-navigator-thread-offset') == 0
+            $(item).closest(".thread").data('bsky-navigator-thread-index') == threadIndex
+            &&
+            $(item).data('bsky-navigator-thread-offset') != 0
           );
+      }
+      this.items.each(
+        (i, item) => {
+          if (isRedundant(item, threadIndex)) {
+            console.log("filtered", item);
+            $(item).addClass("filtered");
+          }
         }
       );
+      this.items = this.items.filter(!isRedundant(item, threadIndex));
+      this.loadItems();
       this.threadIndex = 0;
-      // $(`div.thread[data-bsky-navigator-thread-index=${threadIndex}] div.item[data-bsky-navigator-thread-offset!=0]`).addClass("filtered");
     }
   }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+343.5933ed64
+// @version     1.0.31+344.6f603bdb
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -53311,6 +53311,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return;
       }
       if (thread.replies.map((r) => r.post && r.post.author.did).includes(thread.post.author.did)) {
+        let isRedundant = function(item2, threadIndex2) {
+          console.log(item2);
+          return $(item2).closest(".thread").data("bsky-navigator-thread-index") == threadIndex2 && $(item2).data("bsky-navigator-thread-offset") != 0;
+        };
         const unrolledPosts = await this.api.unrollThread(thread);
         const parent = $(item).find('div[data-testid="contentHider-post"]').parent();
         parent.css({ "overflow-y": "scroll", "max-height": "80vH" });
@@ -53329,11 +53333,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           div.append(reply);
         });
         const threadIndex = $(item).closest(".thread").data("bsky-navigator-thread-index");
-        this.items = this.items.filter(
+        this.items.each(
           (i, item2) => {
-            return $(item2).closest(".thread").data("data-bsky-navigator-thread-index") != threadIndex || $(item2).data("bsky-navigator-thread-offset") == 0;
+            if (isRedundant(item2, threadIndex)) {
+              console.log("filtered", item2);
+              $(item2).addClass("filtered");
+            }
           }
         );
+        this.items = this.items.filter(!isRedundant(item, threadIndex));
+        this.loadItems();
         this.threadIndex = 0;
       }
     }

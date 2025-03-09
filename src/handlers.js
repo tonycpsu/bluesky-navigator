@@ -10,6 +10,48 @@ const {
 } = utils;
 
 
+function convertToEmbed(url) {
+    try {
+        let embedHtml = "";
+
+        // YouTube Embed
+        if (url.includes("youtube.com") || url.includes("youtu.be")) {
+            let videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
+            if (videoId) {
+                embedHtml = `<iframe width="320" height="200" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
+            }
+        }
+
+        // Twitter/X Embed
+        else if (url.includes("twitter.com") || url.includes("x.com")) {
+            embedHtml = `<blockquote class="twitter-tweet"><a href="${url}"></a></blockquote>
+                         <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>`;
+        }
+
+        // TikTok Embed
+        else if (url.includes("tiktok.com")) {
+            embedHtml = `<blockquote class="tiktok-embed" cite="${url}" data-video-id="${url.split('/').pop()}" style="max-width: 605px; min-width: 325px;">
+                            <a href="${url}">Watch on TikTok</a>
+                         </blockquote>
+                         <script async src="https://www.tiktok.com/embed.js"></script>`;
+        }
+
+        // Instagram Embed
+        else if (url.includes("instagram.com/p/")) {
+            embedHtml = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="13">
+                            <a href="${url}">View on Instagram</a>
+                         </blockquote>
+                         <script async src="https://www.instagram.com/embed.js"></script>`;
+        }
+
+        // Default: Just return a linked URL if not recognized
+        return embedHtml || `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    } catch (error) {
+        console.error("Error generating embed:", error);
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    }
+}
+
 function formatPostText(post) {
     let text = post.text;
     if (!post.facets) return text; // No mentions/links, return as is
@@ -41,8 +83,9 @@ function formatPostText(post) {
                 text = text.slice(0, start) + mentionLink + text.slice(end+1);
             } else if (feature.$type === "app.bsky.richtext.facet#link") {
                 let url = feature.uri;
-                let linkElement = `<a href="${url}" target="_blank" rel="noopener noreferrer">${originalSubstring}</a>`;
-                text = text.slice(0, start) + linkElement + text.slice(end+1);
+                let embedHtml = convertToEmbed(url);
+                // let linkElement = `<a href="${url}" target="_blank" rel="noopener noreferrer">${originalSubstring}</a>`;
+                text = text.slice(0, start) + embedHtml + text.slice(end+1);
             } else if (feature.$type === "app.bsky.richtext.facet#tag") {
                 let hashtagLink = `<a href="https://bsky.app/search?q=${encodeURIComponent(originalSubstring)}" class="hashtag">${originalSubstring}</a>`;
                 text = text.slice(0, start) + hashtagLink + text.slice(end+1);
@@ -469,7 +512,7 @@ export class ItemHandler extends Handler {
         this.selectedPost.addClass("reply-selection-active");
         this.scrollToElement(this.selectedPost[0], "nearest");
       } else {
-        debugger;
+        return;
       }
     }
   }
@@ -1464,7 +1507,7 @@ this.itemStats.oldest
     if (thread.replies.map(r => r.post && r.post.author.did).includes(thread.post.author.did)) {
       const unrolledPosts = (await this.api.unrollThread(thread));
       const parent = $(item).find('div[data-testid="contentHider-post"]').parent();
-      parent.css({"overflow-y": "scroll", "max-height": "80vH"});
+      parent.css({"overflow-y": "scroll", "max-height": "80vH", "padding-top": "1em"});
       var div = $(parent).find('div.unrolled-replies');
       if($(div).length) {
         $(div).empty();
@@ -1484,13 +1527,14 @@ this.itemStats.oldest
       const threadIndex = $(item).closest('.thread').data('bsky-navigator-thread-index');
 
       function isRedundant(item, threadIndex) {
-        console.log(item);
+        // console.log(item);
           return (
-            $(item).closest(".thread").data('bsky-navigator-thread-index') == threadIndex
-            &&
             $(item).data('bsky-navigator-thread-offset') != 0
+            &&
+            $(item).closest(".thread").data('bsky-navigator-thread-index') == threadIndex
           );
       }
+      // debugger;
       this.items.each(
         (i, item) => {
           if (isRedundant(item, threadIndex)) {
@@ -1499,8 +1543,10 @@ this.itemStats.oldest
           }
         }
       );
-      this.items = this.items.filter(!isRedundant(item, threadIndex));
-      this.loadItems();
+      console.log(this.items.length);
+      this.items = this.items.filter( (i, item) => { return !isRedundant(item, threadIndex)});;
+      console.log(this.items.length);
+      // this.loadItems();
       this.threadIndex = 0;
     }
   }

@@ -305,7 +305,7 @@ function getScreenFromElement(element) {
         }
 
         ${constants.POST_CONTENT_SELECTOR} {
-            margin: 1px;
+            margin: 1em 1px 1px 1px;
         }
 
         ${constants.HOME_SCREEN_SELECTOR} .item > div:first-of-type > div:last-of-type > div:last-of-type > div:first-of-type {

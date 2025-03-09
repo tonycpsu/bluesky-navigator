@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+342.1c3bef4f
+// @version     1.0.31+343.5933ed64
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44608,11 +44608,11 @@ if (cid) {
     }
     async unrollThread(thread) {
       const originalAuthor = thread.post.author.did;
-      async function collectPosts(threadNode, posts2 = []) {
+      async function collectPosts(threadNode, parentAuthorDid, posts2 = []) {
         if (!threadNode.post) {
           return [];
         }
-        if (threadNode.post.author.did === originalAuthor) {
+        if (threadNode.post.author.did === originalAuthor && parentAuthorDid === originalAuthor) {
           posts2.push(threadNode.post);
         }
         if (threadNode.post.replyCount && !threadNode.replies) {
@@ -44620,13 +44620,13 @@ if (cid) {
         }
         if (threadNode.replies) {
           for (const reply of threadNode.replies) {
-            await collectPosts(reply, posts2);
+            await collectPosts(reply, threadNode.post.author.did, posts2);
           }
         }
         return posts2;
       }
       collectPosts = collectPosts.bind(this);
-      const allPosts = await collectPosts(thread);
+      const allPosts = await collectPosts(thread, originalAuthor);
       console.log(allPosts.length);
       return allPosts;
     }
@@ -52498,11 +52498,11 @@ if (cid) {
       if (value == oldIndex) {
         return;
       } else if (value < 0) {
-        this._threadIndex = 0;
+        this._threadIndex = null;
         this.setIndex(this.index - 1, false, true);
         return;
       } else if (value > this.unrolledreplies.length) {
-        this._threadIndex = 0;
+        this._threadIndex = null;
         this.setIndex(this.index + 1, false, true);
         return;
       }
@@ -53215,6 +53215,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             if (this.config.get("showReplySidecar") && this.replyIndex != null) {
               this.replyIndex += 1;
             } else if (this.config.get("unrolledPostSelection")) {
+              this.markItemRead(this.index, true);
               this.threadIndex += 1;
             } else {
               moved = this.jumpToNext(event.key == "j");
@@ -53224,6 +53225,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             if (this.config.get("showReplySidecar") && this.replyIndex != null) {
               this.replyIndex -= 1;
             } else if (this.config.get("unrolledPostSelection")) {
+              this.markItemRead(this.index, true);
               this.threadIndex -= 1;
             } else {
               moved = this.jumpToPrev(event.key == "k");

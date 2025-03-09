@@ -77,11 +77,11 @@ export class BlueskyAPI {
 
         const originalAuthor = thread.post.author.did;
 
-        async function collectPosts(threadNode, posts = []) {
+        async function collectPosts(threadNode, parentAuthorDid, posts = []) {
             if(!threadNode.post) {
                 return [];
             }
-            if (threadNode.post.author.did === originalAuthor) {
+            if (threadNode.post.author.did === originalAuthor && parentAuthorDid === originalAuthor) {
                 posts.push(threadNode.post);
             }
             if(threadNode.post.replyCount && !threadNode.replies) {
@@ -89,14 +89,15 @@ export class BlueskyAPI {
             }
             if (threadNode.replies) {
                 for (const reply of threadNode.replies) {
-                    await collectPosts(reply, posts);
+                    await collectPosts(reply, threadNode.post.author.did, posts);
+
                 }
             }
             return posts;
         }
         collectPosts = collectPosts.bind(this);
 
-        const allPosts = await collectPosts(thread);
+        const allPosts = await collectPosts(thread, originalAuthor);
         // allPosts.sort((a, b) => new Date(a.indexedAt) - new Date(b.indexedAt));
         console.log(allPosts.length);
         return allPosts;

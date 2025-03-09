@@ -443,11 +443,11 @@ export class ItemHandler extends Handler {
     if(value == oldIndex) {
       return;
     } else if (value < 0) {
-      this._threadIndex = 0;
+      this._threadIndex = null;
       this.setIndex(this.index - 1, false, true);
       return;
     } else if (value > this.unrolledreplies.length) {
-      this._threadIndex = 0;
+      this._threadIndex = null;
       this.setIndex(this.index + 1, false, true);
       return;
     }
@@ -1289,6 +1289,7 @@ this.itemStats.oldest
   }
 
   jumpToNext(mark) {
+
     if (this.index < this.items.length) {
       // this.index += 1
       this.setIndex(this.index + 1, mark, true);
@@ -1348,6 +1349,7 @@ this.itemStats.oldest
           if(this.config.get("showReplySidecar") && this.replyIndex != null) {
             this.replyIndex += 1;
           } else if (this.config.get("unrolledPostSelection")) {
+            this.markItemRead(this.index, true);
             this.threadIndex += 1;
           } else {
             moved = this.jumpToNext(event.key == "j");
@@ -1357,6 +1359,7 @@ this.itemStats.oldest
           if(this.config.get("showReplySidecar") && this.replyIndex != null) {
             this.replyIndex -= 1;
           } else if (this.config.get("unrolledPostSelection")) {
+            this.markItemRead(this.index, true);
             this.threadIndex -= 1;
           } else {
             moved = this.jumpToPrev(event.key == "k");

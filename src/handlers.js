@@ -443,8 +443,12 @@ export class ItemHandler extends Handler {
     return $(this.items[this.index]);
   }
 
+  getReplyForIndex(index) {
+    return this.selectedItem.closest(".thread").find(".sidecar-post").eq(index);
+  }
+
   get selectedReply() {
-    return this.selectedItem.closest(".thread").find(".sidecar-post").eq(this.replyIndex);
+    return this.getReplyForIndex(this.replyIndex);
   }
 
   get replyIndex() {
@@ -515,6 +519,7 @@ export class ItemHandler extends Handler {
         return;
       }
     }
+    this.updateInfoIndicator();
   }
 
   get unrolledreplies() {
@@ -764,14 +769,6 @@ export class ItemHandler extends Handler {
     const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
 
     $(element).parent().parent().addClass("thread");
-
-    if(this.config.get("showPostCounts") == "All" || selected && this.config.get("showPostCounts") == "Selection") {
-      const bannerDiv = $(element).find("div.item-banner").first().length
-            ? $(element).find("div.item-banner").first()
-            : $(element).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
-      $(bannerDiv).html(`<strong>${this.getIndexFromItem(element)+1}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
-
-    }
 
     $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
 
@@ -1097,7 +1094,7 @@ You're all caught up.
     const index = this.itemStats.shownCount ? this.index+1 : 0;
     $("div#infoIndicatorText").html(`
 <div id="itemCountStats">
-<strong>${index}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
+<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex+1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
 </div>
 <div id="itemTimestampStats">
 ${
@@ -1106,6 +1103,17 @@ this.itemStats.oldest
 `${dateFns.format(this.itemStats.oldest, 'yyyy-MM-dd hh:mmaaa')} - ${dateFns.format(this.itemStats.newest, 'yyyy-MM-dd hh:mmaaa')}</div>`
 : ``
 }`);
+
+    if(this.config.get("showPostCounts") == "All" || selected && this.config.get("showPostCounts") == "Selection") {
+      const bannerDiv = $(this.selectedItem).find("div.item-banner").first().length
+            ? $(this.selectedItem).find("div.item-banner").first()
+            : $(this.selectedItem).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
+      // $(bannerDiv).html(`<strong>${this.getIndexFromItem(element)+1}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
+      // debugger;
+      $(bannerDiv).html(`<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex+1}/${this.unrolledreplies.length+1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
+    }
+
+
   }
 
   loadNewerItems() {
@@ -1284,11 +1292,16 @@ this.itemStats.oldest
 
   markItemRead(index, isRead) {
     if (this.name == "post" && !this.config.get("savePostState")) {
-      return
+      return;
     }
-    let postId = this.postIdForItem(this.items[index])
+    let item = (
+      this.threadIndex == null
+        ? this.items[index]
+        : this.getReplyForIndex(index)
+    );
+    let postId = this.postIdForItem(item);
     if (!postId) {
-      return
+      return;
     }
     this.markPostRead(postId, isRead);
     this.applyItemStyle(this.items[index], index == this.index)
@@ -1392,7 +1405,9 @@ this.itemStats.oldest
           if(this.config.get("showReplySidecar") && this.replyIndex != null) {
             this.replyIndex += 1;
           } else if (this.config.get("unrolledPostSelection")) {
-            this.markItemRead(this.index, true);
+            if (event.key == "j") {
+              this.markItemRead(this.index, true);
+            }
             this.threadIndex += 1;
           } else {
             moved = this.jumpToNext(event.key == "j");
@@ -1402,7 +1417,9 @@ this.itemStats.oldest
           if(this.config.get("showReplySidecar") && this.replyIndex != null) {
             this.replyIndex -= 1;
           } else if (this.config.get("unrolledPostSelection")) {
-            this.markItemRead(this.index, true);
+            if (event.key == "k") {
+              this.markItemRead(this.index, true);
+            }
             this.threadIndex -= 1;
           } else {
             moved = this.jumpToPrev(event.key == "k");

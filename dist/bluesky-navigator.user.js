@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+346.11072104
+// @version     1.0.31+347.7f0b3f18
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -52488,8 +52488,11 @@ if (cid) {
     get selectedItem() {
       return $(this.items[this.index]);
     }
+    getReplyForIndex(index) {
+      return this.selectedItem.closest(".thread").find(".sidecar-post").eq(index);
+    }
     get selectedReply() {
-      return this.selectedItem.closest(".thread").find(".sidecar-post").eq(this.replyIndex);
+      return this.getReplyForIndex(this.replyIndex);
     }
     get replyIndex() {
       return this._replyIndex;
@@ -52552,6 +52555,7 @@ if (cid) {
           return;
         }
       }
+      this.updateInfoIndicator();
     }
     get unrolledreplies() {
       return $(this.selectedItem).find(".unrolled-reply");
@@ -52714,7 +52718,7 @@ if (cid) {
       console.log(itemMargin);
       return margin + itemMargin;
     }
-    applyItemStyle(element, selected) {
+    applyItemStyle(element, selected2) {
       $(element).addClass("item");
       if (this.config.get("postActionButtonPosition") == "Left") {
         const postContainer = $(element).find(constants$1.POST_CONTENT_SELECTOR).prev();
@@ -52744,21 +52748,17 @@ if (cid) {
       const threadIndicator = $(element).find("div.r-lchren, div.r-1mhb1uw > svg");
       const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
       $(element).parent().parent().addClass("thread");
-      if (this.config.get("showPostCounts") == "All" || selected && this.config.get("showPostCounts") == "Selection") {
-        const bannerDiv = $(element).find("div.item-banner").first().length ? $(element).find("div.item-banner").first() : $(element).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
-        $(bannerDiv).html(`<strong>${this.getIndexFromItem(element) + 1}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
-      }
       $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
       $(element).find("video").each(
         (i, video2) => {
-          if (this.config.get("videoPreviewPlayback") == "Pause all" || this.config.get("videoPreviewPlayback") == "Play selected" && !selected) {
+          if (this.config.get("videoPreviewPlayback") == "Pause all" || this.config.get("videoPreviewPlayback") == "Play selected" && !selected2) {
             this.pauseVideo(video2);
-          } else if (this.config.get("videoPreviewPlayback") == "Play selected" && selected) {
+          } else if (this.config.get("videoPreviewPlayback") == "Play selected" && selected2) {
             this.playVideo(video2);
           }
         }
       );
-      if (selected) {
+      if (selected2) {
         $(element).parent().parent().addClass("thread-selection-active");
         $(element).parent().parent().removeClass("thread-selection-inactive");
       } else {
@@ -52782,7 +52782,7 @@ if (cid) {
       } else {
         $(element).parent().parent().addClass(["thread-first", "thread-middle", "thread-last"]);
       }
-      if (selected) {
+      if (selected2) {
         $(element).addClass("item-selection-active");
         $(element).removeClass("item-selection-inactive");
       } else {
@@ -53007,10 +53007,14 @@ You're all caught up.
       const index = this.itemStats.shownCount ? this.index + 1 : 0;
       $("div#infoIndicatorText").html(`
 <div id="itemCountStats">
-<strong>${index}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
+<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
 </div>
 <div id="itemTimestampStats">
 ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa")} - ${format(this.itemStats.newest, "yyyy-MM-dd hh:mmaaa")}</div>` : ``}`);
+      if (this.config.get("showPostCounts") == "All" || selected && this.config.get("showPostCounts") == "Selection") {
+        const bannerDiv = $(this.selectedItem).find("div.item-banner").first().length ? $(this.selectedItem).find("div.item-banner").first() : $(this.selectedItem).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
+        $(bannerDiv).html(`<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}/${this.unrolledreplies.length + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
+      }
     }
     loadNewerItems() {
       if (!this.loadNewerButton) {
@@ -53160,7 +53164,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.name == "post" && !this.config.get("savePostState")) {
         return;
       }
-      let postId = this.postIdForItem(this.items[index]);
+      let item = this.threadIndex == null ? this.items[index] : this.getReplyForIndex(index);
+      let postId = this.postIdForItem(item);
       if (!postId) {
         return;
       }
@@ -53243,7 +53248,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             if (this.config.get("showReplySidecar") && this.replyIndex != null) {
               this.replyIndex += 1;
             } else if (this.config.get("unrolledPostSelection")) {
-              this.markItemRead(this.index, true);
+              if (event.key == "j") {
+                this.markItemRead(this.index, true);
+              }
               this.threadIndex += 1;
             } else {
               moved = this.jumpToNext(event.key == "j");
@@ -53253,7 +53260,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             if (this.config.get("showReplySidecar") && this.replyIndex != null) {
               this.replyIndex -= 1;
             } else if (this.config.get("unrolledPostSelection")) {
-              this.markItemRead(this.index, true);
+              if (event.key == "k") {
+                this.markItemRead(this.index, true);
+              }
               this.threadIndex -= 1;
             } else {
               moved = this.jumpToPrev(event.key == "k");
@@ -53585,8 +53594,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       );
     }
-    applyItemStyle(element, selected) {
-      super.applyItemStyle(element, selected);
+    applyItemStyle(element, selected2) {
+      super.applyItemStyle(element, selected2);
       const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
       if (this.config.get("postActionButtonPosition") == "Left") {
         const buttonsDiv = $(element).find('button[data-testid="postDropdownBtn"]').parent().parent().parent();

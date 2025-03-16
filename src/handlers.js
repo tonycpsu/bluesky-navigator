@@ -1301,6 +1301,7 @@ this.itemStats.oldest
     );
     let postId = this.postIdForItem(item);
     if (!postId) {
+      console.log("no post");
       return;
     }
     this.markPostRead(postId, isRead);

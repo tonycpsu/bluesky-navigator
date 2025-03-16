@@ -478,6 +478,10 @@ function getScreenFromElement(element) {
             if(config.get("hideRightSidebar")) {
                 $(rightSidebar).css("display", "none");
             }
+
+            // FIXME: the rest of this working recently so we return early
+            return;
+
             const sidebarDiff = (width - 600)/ (1 + !!config.get("hideRightSidebar"));
             // debugger;
             console.log("sidebarDiff", sidebarDiff);

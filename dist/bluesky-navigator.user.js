@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+347.7f0b3f18
+// @version     1.0.31+348.e57ff1d4
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -48,7 +48,7 @@
       return `${constants$1.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"]`;
     },
     FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
-    LEFT_SIDEBAR_SELECTOR: "nav.r-pgf20v",
+    LEFT_SIDEBAR_SELECTOR: 'nav[role="navigation"]',
     POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
     POST_CONTENT_SELECTOR: 'div[data-testid="contentHider-post"]',
     WIDTH_SELECTOR: 'div[style*="removed-body-scroll-bar-size"][style*="width: 100%"]',
@@ -53167,6 +53167,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       let item = this.threadIndex == null ? this.items[index] : this.getReplyForIndex(index);
       let postId = this.postIdForItem(item);
       if (!postId) {
+        console.log("no post");
         return;
       }
       this.markPostRead(postId, isRead);
@@ -54516,40 +54517,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           setContextFromUrl();
         }
       );
-      function adjustTransformX(el, offset) {
-        var transform = $(el).css("transform");
-        var translateX = 0;
-        if (!transform || transform == "none") {
-          $(el).css("transform", "translateX(0px);");
-          transform = $(el).css("transform");
-        }
-        console.log(`translateX = ${translateX}`);
-        $(el).css("transform", `translateX(${translateX + offset}px)`);
-      }
       function setWidth(leftSidebar, width) {
-        const LEFT_TRANSLATE_X_DEFAULT = -540;
-        const RIGHT_TRANSLATE_X_DEFAULT = 300;
         const rightSidebar = $(leftSidebar).next();
         if (config.get("hideRightSidebar")) {
           $(rightSidebar).css("display", "none");
         }
-        const sidebarDiff = (width - 600) / (1 + !!config.get("hideRightSidebar"));
-        console.log("sidebarDiff", sidebarDiff);
-        if (state.leftSidebarMinimized) {
-          $(leftSidebar).css("transform", "");
-        } else if (sidebarDiff) {
-          adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT - sidebarDiff);
-          adjustTransformX(rightSidebar, RIGHT_TRANSLATE_X_DEFAULT + sidebarDiff);
-        } else {
-          console.log("reset sidebars");
-          $(leftSidebar).css("transform", `translateX(${LEFT_TRANSLATE_X_DEFAULT}px)`);
-          $(rightSidebar).css("transform", `translateX(${RIGHT_TRANSLATE_X_DEFAULT}px)`);
-        }
-        $(constants$1.WIDTH_SELECTOR).css("max-width", `${width}px`, "!important");
-        $('div[role="tablist"]').css("width", `${width}px`);
-        $("#statusBar").css("max-width", `${width}px`);
-        $('div[style^="position: fixed; inset: 0px 0px 0px 50%;"]').css("width", `${width}px`);
-        adjustTransformX($("main"), constants$1.WIDTH_OFFSET);
+        return;
       }
       state.leftSidebarMinimized = false;
       waitForElement(
@@ -54589,7 +54562,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (remainingWidth >= config.get("postWidthDesktop")) {
             setWidth($(constants$1.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
           } else {
-            setWidth($(constants$1.LEFT_SIDEBAR_SELECTOR), remainingWidth);
+            setWidth($(constants$1.LEFT_SIDEBAR_SELECTOR));
           }
         }
       }

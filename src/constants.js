@@ -22,7 +22,7 @@ const constants = {
     return `${constants.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"]`;
   },
   FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
-  LEFT_SIDEBAR_SELECTOR: 'nav.r-pgf20v',
+  LEFT_SIDEBAR_SELECTOR: 'nav[role="navigation"]',
   POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
   POST_CONTENT_SELECTOR: 'div[data-testid="contentHider-post"]',
   WIDTH_SELECTOR: 'div[style*="removed-body-scroll-bar-size"][style*="width: 100%"]',

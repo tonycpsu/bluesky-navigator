@@ -87,13 +87,17 @@ function formatPostText(post) {
                 // let linkElement = `<a href="${url}" target="_blank" rel="noopener noreferrer">${originalSubstring}</a>`;
                 text = text.slice(0, start) + embedHtml + text.slice(end+1);
             } else if (feature.$type === "app.bsky.richtext.facet#tag") {
-                let hashtagLink = `<a href="https://bsky.app/search?q=${encodeURIComponent(originalSubstring)}" class="hashtag">${originalSubstring}</a>`;
-                text = text.slice(0, start) + hashtagLink + text.slice(end+1);
+              let hashtagLink = `<a href="https://bsky.app/search?q=%23${feature.tag}" class="hashtag">${originalSubstring}</a>`;
+              text = text.slice(0, start) + hashtagLink + text.slice(end+1);
             }
         });
     });
 
     return text;
+}
+
+function urlForPost(post) {
+  return `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split("/").slice(-1)[0]}`
 }
 
 function formatPost(post) {
@@ -104,7 +108,7 @@ function formatPost(post) {
   // }
   return {
     postId: post.cid,
-    postUrl: `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split("/").slice(-1)[0]}`,
+    postUrl: urlForPost(post),
     avatar: post.author.avatar,
     displayName: post.author.displayName || post.author.handle,
     handle: post.author.handle,
@@ -493,7 +497,7 @@ export class ItemHandler extends Handler {
       this._threadIndex = null;
       this.setIndex(this.index - 1, false, true);
       return;
-    } else if (value > this.unrolledreplies.length) {
+    } else if (value > this.unrolledReplies.length) {
       this._threadIndex = null;
       this.setIndex(this.index + 1, false, true);
       return;
@@ -522,12 +526,12 @@ export class ItemHandler extends Handler {
     this.updateInfoIndicator();
   }
 
-  get unrolledreplies() {
+  get unrolledReplies() {
     return $(this.selectedItem).find('.unrolled-reply');
   }
 
   getPostForThreadIndex(index) {
-    return index > 0 ? this.unrolledreplies.eq(index-1) : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
+    return index > 0 ? this.unrolledReplies.eq(index-1) : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
   }
 
   get selectedPost() {
@@ -1110,7 +1114,7 @@ this.itemStats.oldest
             : $(this.selectedItem).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
       // $(bannerDiv).html(`<strong>${this.getIndexFromItem(element)+1}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
       // debugger;
-      $(bannerDiv).html(`<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex+1}/${this.unrolledreplies.length+1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
+      $(bannerDiv).html(`<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex+1}/${this.unrolledReplies.length+1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
     }
 
 
@@ -1294,18 +1298,30 @@ this.itemStats.oldest
     if (this.name == "post" && !this.config.get("savePostState")) {
       return;
     }
+    let mainItem = $(this.items)[index];
     let item = (
-      this.threadIndex == null
-        ? this.items[index]
-        : this.getReplyForIndex(index)
+      this.threadIndex != null
+        ? this.getPostForThreadIndex(this.threadIndex)
+        : mainItem
     );
-    let postId = this.postIdForItem(item);
+    console.log(item);
+    let postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
     if (!postId) {
+      debugger;
       console.log("no post");
       return;
     }
     this.markPostRead(postId, isRead);
-    this.applyItemStyle(this.items[index], index == this.index)
+    if(this.unrolledReplies.length) {
+      $(item).addClass(isRead ? "item-read" : "item-unread");
+      $(item).removeClass(isRead ? "item-unread" : "item-read");
+      debugger;
+    }
+    if (!this.unrolledReplies.length || this.unrolledReplies.get().every(
+      (r) => $(r).hasClass("item-read")
+    )) {
+      this.applyItemStyle(this.items[index], index == this.index)
+    }
     this.updateInfoIndicator();
   }
 
@@ -1534,9 +1550,10 @@ this.itemStats.oldest
         parent.append(div);
       }
       unrolledPosts.slice(1).map( (p, i) => {
+        // debugger;
         var reply = $('<div class="unrolled-reply" style="position: relative"/>');
         reply.append($('<hr class="unrolled-divider"/>'));
-        reply.append($(`<div class="unrolled-banner">${i+2}/${unrolledPosts.length}</div>`));
+        reply.append($(`<div class="unrolled-banner"><a href="${urlForPost(p)}"/>${i+2}/${unrolledPosts.length}</a></div>`));
         reply.append($(bodyTemplate(formatPost(p))));
         div.append(reply);
         // $(`div.thread:has(a[href$="${p.uri.split("/").pop()}"])`).addClass("filtered");

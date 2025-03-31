@@ -479,30 +479,39 @@ function getScreenFromElement(element) {
                 $(rightSidebar).css("display", "none");
             }
 
-            // FIXME: the rest of this working recently so we return early
-            return;
+            // // FIXME: the rest of this working recently so we return early
+            // return;
 
-            const sidebarDiff = (width - 600)/ (1 + !!config.get("hideRightSidebar"));
+            const sidebarDiff = (width - 600);// (1 + !config.get("hideRightSidebar"));
             // debugger;
             console.log("sidebarDiff", sidebarDiff);
+
+            
             if(state.leftSidebarMinimized) {
-                // console.log("remove", leftSidebar);
-                $(leftSidebar).css("transform", "");
-            }
+                console.log("minimized");
+                // $(leftSidebar).css("transform", "");
+                adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT-sidebarDiff/2 + constants.WIDTH_OFFSET);
+                adjustTransformX('main', sidebarDiff/2 - constants.WIDTH_OFFSET);
+                        }
             else if(sidebarDiff) {
-                adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT-sidebarDiff);
-                adjustTransformX(rightSidebar, RIGHT_TRANSLATE_X_DEFAULT+sidebarDiff);
+                if (config.get("hideRightSidebar")) {
+                    adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT-sidebarDiff/2 + constants.WIDTH_OFFSET);
+                    adjustTransformX('main', sidebarDiff/2 - constants.WIDTH_OFFSET);
+                } else {
+                    adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT-sidebarDiff/2);
+                    adjustTransformX(rightSidebar, RIGHT_TRANSLATE_X_DEFAULT+sidebarDiff/2);
+                }
             } else {
                 console.log("reset sidebars");
                 $(leftSidebar).css("transform", `translateX(${LEFT_TRANSLATE_X_DEFAULT}px)`);
                 $(rightSidebar).css("transform", `translateX(${RIGHT_TRANSLATE_X_DEFAULT}px)`);
-
             }
+
             $(constants.WIDTH_SELECTOR).css("max-width", `${width}px`, "!important");
             $('div[role="tablist"]').css("width", `${width}px`);
             $('#statusBar').css("max-width", `${width}px`);
             $('div[style^="position: fixed; inset: 0px 0px 0px 50%;"]').css("width", `${width}px`);
-            adjustTransformX($('main'), constants.WIDTH_OFFSET);
+            // adjustTransformX($('main'), constants.WIDTH_OFFSET);
         }
 
         state.leftSidebarMinimized = false;
@@ -542,11 +551,12 @@ function getScreenFromElement(element) {
                 const rightSidebar = $(leftSidebar).next();
 
                 const leftSidebarWidth = $(leftSidebar).outerWidth();
+                // debugger;
                 const remainingWidth = (
                     $(window).width()
                         - leftSidebarWidth
                         // - (!state.leftSidebarMinimized ? $(rightSidebar).outerWidth() : 0)
-                        - ($(rightSidebar).outerWidth() || 0)
+                        - !config.get("hideRightSidebar")*($(rightSidebar).outerWidth() || 0)
                         - constants.WIDTH_OFFSET
                 );
                 // debugger;

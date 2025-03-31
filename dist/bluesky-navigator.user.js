@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+349.60596f0e
+// @version     1.0.31+350.db3cd44c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -53172,7 +53172,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       console.log(item);
       let postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
       if (!postId) {
-        debugger;
         console.log("no post");
         return;
       }
@@ -53180,11 +53179,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.unrolledReplies.length) {
         $(item).addClass(isRead ? "item-read" : "item-unread");
         $(item).removeClass(isRead ? "item-unread" : "item-read");
-        debugger;
       }
       if (!this.unrolledReplies.length || this.unrolledReplies.get().every(
         (r) => $(r).hasClass("item-read")
       )) {
+        this.markPostRead(this.postIdForItem(mainItem), isRead);
         this.applyItemStyle(this.items[index], index == this.index);
       }
       this.updateInfoIndicator();
@@ -54532,12 +54531,46 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           setContextFromUrl();
         }
       );
+      function adjustTransformX(el, offset) {
+        var transform = $(el).css("transform");
+        var translateX = 0;
+        if (!transform || transform == "none") {
+          $(el).css("transform", "translateX(0px);");
+          transform = $(el).css("transform");
+        }
+        console.log(`translateX = ${translateX}`);
+        $(el).css("transform", `translateX(${translateX + offset}px)`);
+      }
       function setWidth(leftSidebar, width) {
+        const LEFT_TRANSLATE_X_DEFAULT = -540;
+        const RIGHT_TRANSLATE_X_DEFAULT = 300;
         const rightSidebar = $(leftSidebar).next();
         if (config.get("hideRightSidebar")) {
           $(rightSidebar).css("display", "none");
         }
-        return;
+        const sidebarDiff = width - 600;
+        console.log("sidebarDiff", sidebarDiff);
+        if (state.leftSidebarMinimized) {
+          console.log("minimized");
+          adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2 + constants$1.WIDTH_OFFSET);
+          adjustTransformX("main", sidebarDiff / 2 - constants$1.WIDTH_OFFSET);
+        } else if (sidebarDiff) {
+          if (config.get("hideRightSidebar")) {
+            adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2 + constants$1.WIDTH_OFFSET);
+            adjustTransformX("main", sidebarDiff / 2 - constants$1.WIDTH_OFFSET);
+          } else {
+            adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2);
+            adjustTransformX(rightSidebar, RIGHT_TRANSLATE_X_DEFAULT + sidebarDiff / 2);
+          }
+        } else {
+          console.log("reset sidebars");
+          $(leftSidebar).css("transform", `translateX(${LEFT_TRANSLATE_X_DEFAULT}px)`);
+          $(rightSidebar).css("transform", `translateX(${RIGHT_TRANSLATE_X_DEFAULT}px)`);
+        }
+        $(constants$1.WIDTH_SELECTOR).css("max-width", `${width}px`, "!important");
+        $('div[role="tablist"]').css("width", `${width}px`);
+        $("#statusBar").css("max-width", `${width}px`);
+        $('div[style^="position: fixed; inset: 0px 0px 0px 50%;"]').css("width", `${width}px`);
       }
       state.leftSidebarMinimized = false;
       waitForElement(
@@ -54572,12 +54605,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const leftSidebar = $(constants$1.LEFT_SIDEBAR_SELECTOR);
           const rightSidebar = $(leftSidebar).next();
           const leftSidebarWidth = $(leftSidebar).outerWidth();
-          const remainingWidth = $(window).width() - leftSidebarWidth - ($(rightSidebar).outerWidth() || 0) - constants$1.WIDTH_OFFSET;
+          const remainingWidth = $(window).width() - leftSidebarWidth - !config.get("hideRightSidebar") * ($(rightSidebar).outerWidth() || 0) - constants$1.WIDTH_OFFSET;
           console.log("remainingWidth", remainingWidth, "leftSidebarWidth", leftSidebarWidth);
           if (remainingWidth >= config.get("postWidthDesktop")) {
             setWidth($(constants$1.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
           } else {
-            setWidth($(constants$1.LEFT_SIDEBAR_SELECTOR));
+            setWidth($(constants$1.LEFT_SIDEBAR_SELECTOR), remainingWidth);
           }
         }
       }

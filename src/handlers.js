@@ -1307,7 +1307,7 @@ this.itemStats.oldest
     console.log(item);
     let postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
     if (!postId) {
-      debugger;
+      // debugger;
       console.log("no post");
       return;
     }
@@ -1315,11 +1315,12 @@ this.itemStats.oldest
     if(this.unrolledReplies.length) {
       $(item).addClass(isRead ? "item-read" : "item-unread");
       $(item).removeClass(isRead ? "item-unread" : "item-read");
-      debugger;
+      // debugger;
     }
     if (!this.unrolledReplies.length || this.unrolledReplies.get().every(
       (r) => $(r).hasClass("item-read")
     )) {
+      this.markPostRead(this.postIdForItem(mainItem), isRead);
       this.applyItemStyle(this.items[index], index == this.index)
     }
     this.updateInfoIndicator();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+350.db3cd44c
+// @version     1.0.31+351.eb25e702
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44608,22 +44608,22 @@ if (cid) {
     }
     async unrollThread(thread) {
       const originalAuthor = thread.post.author.did;
-      async function collectPosts(threadNode, parentAuthorDid, posts2 = []) {
+      async function collectPosts(threadNode, parentAuthorDid, posts = []) {
         if (!threadNode.post) {
           return [];
         }
         if (threadNode.post.author.did === originalAuthor && parentAuthorDid === originalAuthor) {
-          posts2.push(threadNode.post);
+          posts.push(threadNode.post);
         }
         if (threadNode.post.replyCount && !threadNode.replies) {
           threadNode.replies = (await this.getThread(threadNode.post.uri)).replies;
         }
         if (threadNode.replies) {
           for (const reply of threadNode.replies) {
-            await collectPosts(reply, threadNode.post.author.did, posts2);
+            await collectPosts(reply, threadNode.post.author.did, posts);
           }
         }
-        return posts2;
+        return posts;
       }
       collectPosts = collectPosts.bind(this);
       const allPosts = await collectPosts(thread, originalAuthor);
@@ -52547,9 +52547,8 @@ if (cid) {
       if (this.threadIndex == null) {
         $(this.selectedItem).addClass("item-selection-active");
         $(this.selectedItem).removeClass("item-selection-child-focused");
-        posts.removeClass("reply-selection-active");
       } else {
-        if (this.selectedPost.length) {
+        if (this.unrolledReplies.length && this.selectedPost) {
           $(this.selectedItem).addClass("item-selection-child-focused");
           $(this.selectedItem).removeClass("item-selection-active");
           this.selectedPost.addClass("reply-selection-active");
@@ -53172,15 +53171,19 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       console.log(item);
       let postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
       if (!postId) {
+        debugger;
         console.log("no post");
         return;
       }
-      this.markPostRead(postId, isRead);
+      var markedRead = this.markPostRead(postId, isRead);
+      console.log(isRead, markedRead);
       if (this.unrolledReplies.length) {
-        $(item).addClass(isRead ? "item-read" : "item-unread");
-        $(item).removeClass(isRead ? "item-unread" : "item-read");
+        $(item).addClass(markedRead ? "item-read" : "item-unread");
+        $(item).removeClass(markedRead ? "item-unread" : "item-read");
+      } else {
+        this.applyItemStyle(mainItem, index == this.index);
       }
-      if (!this.unrolledReplies.length || this.unrolledReplies.get().every(
+      if (this.unrolledReplies.length && this.unrolledReplies.get().every(
         (r) => $(r).hasClass("item-read")
       )) {
         this.markPostRead(this.postIdForItem(mainItem), isRead);
@@ -53197,6 +53200,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         seen[postId] = null;
       }
       this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
+      return !!seen[postId];
     }
     markVisibleRead() {
       $(this.items).each(

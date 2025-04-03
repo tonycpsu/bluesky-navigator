@@ -510,11 +510,11 @@ export class ItemHandler extends Handler {
     if(this.threadIndex == null) {
       $(this.selectedItem).addClass("item-selection-active");
       $(this.selectedItem).removeClass("item-selection-child-focused");
-      posts.removeClass("reply-selection-active");
+      // posts.removeClass("reply-selection-active");
     } else {
       // const selectedPost = this.threadIndex > 0 ? posts.eq(this.threadIndex-1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
       // console.log(selectedPost);
-      if(this.selectedPost.length) {
+      if(this.unrolledReplies.length && this.selectedPost) {
         $(this.selectedItem).addClass("item-selection-child-focused");
         $(this.selectedItem).removeClass("item-selection-active");
         this.selectedPost.addClass("reply-selection-active");
@@ -1307,17 +1307,20 @@ this.itemStats.oldest
     console.log(item);
     let postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
     if (!postId) {
-      // debugger;
+      debugger;
       console.log("no post");
       return;
     }
-    this.markPostRead(postId, isRead);
+    var markedRead = this.markPostRead(postId, isRead);
+    console.log(isRead, markedRead);
     if(this.unrolledReplies.length) {
-      $(item).addClass(isRead ? "item-read" : "item-unread");
-      $(item).removeClass(isRead ? "item-unread" : "item-read");
       // debugger;
+      $(item).addClass(markedRead ? "item-read" : "item-unread");
+      $(item).removeClass(markedRead ? "item-unread" : "item-read");
+    } else {
+      this.applyItemStyle(mainItem, index == this.index);
     }
-    if (!this.unrolledReplies.length || this.unrolledReplies.get().every(
+    if (this.unrolledReplies.length && this.unrolledReplies.get().every(
       (r) => $(r).hasClass("item-read")
     )) {
       this.markPostRead(this.postIdForItem(mainItem), isRead);
@@ -1325,6 +1328,7 @@ this.itemStats.oldest
     }
     this.updateInfoIndicator();
   }
+
 
   markPostRead(postId, isRead) {
 
@@ -1338,6 +1342,7 @@ this.itemStats.oldest
       // delete seen[postId];
     }
     this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
+    return !!seen[postId];
     // this.updateItems()
   }
 

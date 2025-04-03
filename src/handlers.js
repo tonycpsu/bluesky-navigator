@@ -1243,7 +1243,7 @@ this.itemStats.oldest
     if (this.index == 0)
     {
       window.scrollTo(0, 0)
-    } else if (this.selectedItem) {
+    } else if ($(this.selectedItem).length) {
       this.scrollToElement($(this.selectedItem)[0]);
     } else {
       // console.log(this.index, this.items.length)

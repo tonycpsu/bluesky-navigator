@@ -284,6 +284,20 @@ export class ItemHandler extends Handler {
       }
     );
     waitForElement(
+      '#sidecar-footer-template',
+      () => {
+        this.footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
+        Handlebars.registerPartial("footerTemplate", this.footerTemplate);
+      }
+    );
+    waitForElement(
+      '#sidecar-post-counts-template',
+      () => {
+        this.postCountsTemplate = Handlebars.compile($("#sidecar-post-counts-template").html());
+        Handlebars.registerPartial("postCountsTemplate", this.postCountsTemplate);
+      }
+    );
+    waitForElement(
       '#sidecar-embed-image-template',
       () => {
         this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
@@ -820,6 +834,7 @@ export class ItemHandler extends Handler {
     if (selected)
     {
       $(element).addClass("item-selection-active")
+      $(element).removeClass("item-selection-child-focused")
       $(element).removeClass("item-selection-inactive")
     }
     else
@@ -1538,6 +1553,7 @@ this.itemStats.oldest
 
   async unrollThread(item, thread) {
     const bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
+    // const footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
     Handlebars.registerPartial("bodyTemplate", bodyTemplate);
     console.log(thread.parent, thread.parent?.post, thread.parent?.post?.author?.did, thread.post?.author?.did);
 
@@ -1561,6 +1577,7 @@ this.itemStats.oldest
         reply.append($('<hr class="unrolled-divider"/>'));
         reply.append($(`<div class="unrolled-banner"><a href="${urlForPost(p)}"/>${i+2}/${unrolledPosts.length}</a></div>`));
         reply.append($(bodyTemplate(formatPost(p))));
+        reply.append($(this.footerTemplate(formatPost(p))));
         div.append(reply);
         // $(`div.thread:has(a[href$="${p.uri.split("/").pop()}"])`).addClass("filtered");
       });

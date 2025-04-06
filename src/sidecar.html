@@ -32,12 +32,27 @@
   </div>
   </div>
   {{> bodyTemplate this}}
+  {{> footerTemplate this}}
+  </div>
+  {{else}}
+  <div class="sidecar-post-empty" class="sidecar-post">
+  </div>
+  {{/if}}
+</script>
+
+<script id="sidecar-footer-template" type="text/x-handlebars-template">
   <div class="sidecar-post-footer">
   <div class="sidecar-post-timestamp">
   <a href="{{postUrl}}">
   {{timestamp}}
   </a>
   </div>
+  {{> postCountsTemplate this}}
+  </div>
+</script>
+
+<script id="sidecar-post-counts-template" type="text/x-handlebars-template">
+
   <div class="sidecar-post-counts">
   <div class="sidecar-count">
   <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>
@@ -55,12 +70,6 @@
   </div>
 
   </div>
-  </div>
-  </div>
-  {{else}}
-  <div class="sidecar-post-empty" class="sidecar-post">
-  </div>
-  {{/if}}
 </script>
 
 

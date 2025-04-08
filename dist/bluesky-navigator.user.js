@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+354.506afde2
+// @version     1.0.31+355.9780bdbd
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -53475,16 +53475,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       container.find(".sidecar-replies").css("display", display);
     }
     likePost(post2) {
-      var likes = parseInt($(post2).find(".sidecar-count-label-likes").text());
+      parseInt($(post2).find(".sidecar-count-label-likes").text());
       this.api.getAtprotoUri(this.urlForItem(post2)).then(
         (uri) => this.api.getThread(uri).then(
           (thread) => {
+            var likes = thread.post.likeCount;
             if (thread.post.viewer.like) {
               this.api.agent.deleteLike(thread.post.viewer.like).then(
                 (response) => {
                   console.log(response);
                   $(post2).find(".sidecar-like-button").html(constants$1.SIDECAR_SVG_LIKE[0]);
-                  $(post2).find(".sidecar-count-label-likes").html(likes - 1);
+                  $(post2).find(".sidecar-count-label-likes").html(Math.max(0, likes - 1));
                 }
               );
             } else {
@@ -53492,7 +53493,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
                 (response) => {
                   console.log(response);
                   $(post2).find(".sidecar-like-button").html(constants$1.SIDECAR_SVG_LIKE[1]);
-                  $(post2).find(".sidecar-count-label-likes").html(likes + 1);
+                  $(post2).find(".sidecar-count-label-likes").html(Math.max(0, likes + 1));
                 }
               );
             }

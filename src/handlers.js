@@ -1694,12 +1694,13 @@ this.itemStats.oldest
     this.api.getAtprotoUri(this.urlForItem(post)).then(
       (uri) => this.api.getThread(uri).then(
         (thread) => {
+          var likes = thread.post.likeCount;
           if (thread.post.viewer.like) {
             this.api.agent.deleteLike(thread.post.viewer.like).then(
               (response) => {
                 console.log(response);
                 $(post).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[0]);
-                $(post).find(".sidecar-count-label-likes").html(likes-1);
+                $(post).find(".sidecar-count-label-likes").html(Math.max(0, likes-1));
               }
             )
           } else {
@@ -1707,7 +1708,7 @@ this.itemStats.oldest
               (response) => {
                 console.log(response);
                 $(post).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[1]);
-                $(post).find(".sidecar-count-label-likes").html(likes+1);
+                $(post).find(".sidecar-count-label-likes").html(Math.max(0, likes+1));
               }
             )
           }

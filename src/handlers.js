@@ -1689,6 +1689,34 @@ this.itemStats.oldest
     container.find('.sidecar-replies').css("display", display);
   }
 
+  likePost(post) {
+    var likes = parseInt($(post).find(".sidecar-count-label-likes").text());
+    this.api.getAtprotoUri(this.urlForItem(post)).then(
+      (uri) => this.api.getThread(uri).then(
+        (thread) => {
+          if (thread.post.viewer.like) {
+            this.api.agent.deleteLike(thread.post.viewer.like).then(
+              (response) => {
+                console.log(response);
+                $(post).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[0]);
+                $(post).find(".sidecar-count-label-likes").html(likes-1);
+              }
+            )
+          } else {
+            this.api.agent.like(uri, thread.post.cid).then(
+              (response) => {
+                console.log(response);
+                $(post).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[1]);
+                $(post).find(".sidecar-count-label-likes").html(likes+1);
+              }
+            )
+          }
+        }
+      )
+    );
+
+  }
+
   handleItemKey(event) {
 
     if(this.isPopupVisible) {
@@ -1768,27 +1796,11 @@ this.itemStats.oldest
         button.click();
       } else if(event.key == "l") {
         if(this.config.get("showReplySidecar") && this.replyIndex != null) {
-          this.api.getAtprotoUri(this.urlForItem(this.selectedReply)).then(
-            (uri) => this.api.getThread(uri).then(
-              (thread) => {
-                if (thread.post.viewer.like) {
-                  this.api.agent.deleteLike(thread.post.viewer.like).then(
-                    (response) => {
-                      console.log(response);
-                      $(this.selectedReply).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[0]);
-                    }
-                  )
-                } else {
-                  this.api.agent.like(uri, thread.post.cid).then(
-                    (response) => {
-                      console.log(response);
-                      $(this.selectedReply).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[1]);
-                    }
-                  )
-                }
-              }
-            )
-          );
+          this.likePost(this.selectedReply);
+        } else if (this.threadIndex) {
+          console.log(this.selectedPost);
+          this.likePost(this.selectedPost);
+          // debugger;
         } else {
           $(item).find("button[data-testid='likeBtn']").click();
         }

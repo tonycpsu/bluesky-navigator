@@ -4,6 +4,7 @@ import constants from './constants.js'
 import * as utils from "./utils.js";
 import * as dateFns from "date-fns";
 import Handlebars from "handlebars";
+import html2canvas from "html2canvas";
 
 const {
   waitForElement
@@ -100,6 +101,38 @@ function urlForPost(post) {
   return `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split("/").slice(-1)[0]}`
 }
 
+function extractQuotedPost(embed) {
+  if (!embed) return null;
+
+  // Direct quote post: embed.record contains the quoted post
+  // Type is "app.bsky.embed.record#view"
+  if (embed.record && embed.record.author) {
+    const record = embed.record;
+    return {
+      avatar: record.author?.avatar,
+      displayName: record.author?.displayName || record.author?.handle,
+      handle: record.author?.handle,
+      text: record.value?.text || '',
+      images: record.embeds?.[0]?.images || null
+    };
+  }
+
+  // Quote post with media: embed.record.record contains the quoted post
+  // Type is "app.bsky.embed.recordWithMedia#view"
+  if (embed.record?.record?.author) {
+    const record = embed.record.record;
+    return {
+      avatar: record.author?.avatar,
+      displayName: record.author?.displayName || record.author?.handle,
+      handle: record.author?.handle,
+      text: record.value?.text || '',
+      images: record.embeds?.[0]?.images || null
+    };
+  }
+
+  return null;
+}
+
 function formatPost(post) {
   const formatter = Intl.NumberFormat('en', { notation: 'compact' });
 
@@ -115,6 +148,7 @@ function formatPost(post) {
     content: formatPostText(post.record),
     // content: post.record.text,
     embed: post.embed,
+    quotedPost: extractQuotedPost(post.embed),
     timestamp: new Date(post.record.createdAt).toLocaleString(),
     replySvg: constants.SIDECAR_SVG_REPLY,
     replyCount: formatter.format(post.replyCount),
@@ -302,6 +336,13 @@ export class ItemHandler extends Handler {
       () => {
         this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
         Handlebars.registerPartial("imageTemplate", this.imageTemplate);
+      }
+    );
+    waitForElement(
+      '#sidecar-embed-quote-template',
+      () => {
+        this.quoteTemplate = Handlebars.compile($("#sidecar-embed-quote-template").html());
+        Handlebars.registerPartial("quoteTemplate", this.quoteTemplate);
       }
     );
     // this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
@@ -790,20 +831,6 @@ export class ItemHandler extends Handler {
 
     $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
 
-    $(element).find('video').each(
-      (i, video) => {
-        if (
-          (this.config.get("videoPreviewPlayback") == "Pause all")
-            ||
-            ( (this.config.get("videoPreviewPlayback") == "Play selected") && !selected)
-        ) {
-          this.pauseVideo(video);
-        } else if ((this.config.get("videoPreviewPlayback") == "Play selected") && selected) {
-          this.playVideo(video);
-        }
-      }
-    )
-
     if (selected) {
       $(element).parent().parent().addClass("thread-selection-active")
       $(element).parent().parent().removeClass("thread-selection-inactive")
@@ -1288,7 +1315,30 @@ this.itemStats.oldest
     this.applyItemStyle(this.items[oldIndex], false);
     this.index = index;
     this.applyItemStyle(this.selectedItem, true);
+
     this.expandItem(this.selectedItem);
+
+    $(this.selectedItem).find('video').each(
+      (i, video) => {
+        debugger;
+        if (
+          (this.config.get("videoPreviewPlayback") == "Pause all")
+            ||
+            ( (this.config.get("videoPreviewPlayback") == "Play selected") && !selected)
+        ) {
+          this.pauseVideo(video);
+        } else if ((this.config.get("videoPreviewPlayback") == "Play selected") && selected) {
+          this.playVideo(video);
+        }
+
+        if (this.config.get("videoDisableLoop")) {
+          debugger;
+          video.removeAttribute("autoplay");
+          video.addEventListener('ended', function() { video.load(); });
+        }
+      }
+    )
+
     if(update) {
       this.updateItems();
     }
@@ -1562,7 +1612,8 @@ this.itemStats.oldest
     }
     if (thread.replies.map(r => r.post && r.post.author.did).includes(thread.post.author.did)) {
       const unrolledPosts = (await this.api.unrollThread(thread));
-      const parent = $(item).find('div[data-testid="contentHider-post"]').parent();
+      // Use .first() to only select the main post's contentHider, not the one inside embedded quotes
+      const parent = $(item).find('div[data-testid="contentHider-post"]').first().parent();
       parent.css({"overflow-y": "scroll", "max-height": "80vH", "padding-top": "1em"});
       var div = $(parent).find('div.unrolled-replies');
       if($(div).length) {
@@ -1718,6 +1769,51 @@ this.itemStats.oldest
 
   }
 
+  async captureScreenshot(item) {
+    try {
+      // Capture the item element as a canvas
+      const canvas = await html2canvas(item, {
+        backgroundColor: null,
+        scale: 2, // Higher quality
+        logging: false,
+        useCORS: true
+      });
+
+      // Convert canvas to blob
+      canvas.toBlob(async (blob) => {
+        try {
+          // Copy to clipboard
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'image/png': blob
+            })
+          ]);
+          console.log('Screenshot copied to clipboard!');
+
+          // Optional: Show a brief notification
+          const notification = $('<div>').css({
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            padding: '10px 20px',
+            backgroundColor: '#4CAF50',
+            color: 'white',
+            borderRadius: '4px',
+            zIndex: 10000,
+            fontSize: '14px'
+          }).text('Screenshot copied to clipboard!');
+
+          $('body').append(notification);
+          setTimeout(() => notification.fadeOut(500, () => notification.remove()), 2000);
+        } catch (err) {
+          console.error('Failed to copy screenshot to clipboard:', err);
+        }
+      });
+    } catch (err) {
+      console.error('Failed to capture screenshot:', err);
+    }
+  }
+
   handleItemKey(event) {
 
     if(this.isPopupVisible) {
@@ -1827,6 +1923,9 @@ this.itemStats.oldest
           return;
         }
         this.expandItem(this.selectedItem);
+      } else if (event.key == "c") {
+        // c = capture screenshot
+        this.captureScreenshot(item[0]);
       } else {
         return false
       }

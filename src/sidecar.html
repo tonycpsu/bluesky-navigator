@@ -80,10 +80,40 @@
   {{#each embed.images}}
   {{> imageTemplate this}}
   {{/each}}
+  {{#if embed.media.images}}
+  {{#each embed.media.images}}
+  {{> imageTemplate this}}
+  {{/each}}
+  {{/if}}
+  {{/if}}
+  {{#if quotedPost}}
+  {{> quoteTemplate quotedPost}}
   {{/if}}
 </div>
 </script>
 
 <script id="sidecar-embed-image-template" type="text/x-handlebars-template">
         <button aria-label="alt text" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="alt text" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title=""></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>
+</script>
+
+<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">
+<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">
+  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+    {{#if avatar}}
+    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">
+    {{/if}}
+    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">
+      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>
+      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>
+    </a>
+  </div>
+  <div class="sidecar-quote-content">{{{text}}}</div>
+  {{#if images}}
+  <div class="sidecar-quote-images" style="margin-top: 8px;">
+    {{#each images}}
+    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">
+    {{/each}}
+  </div>
+  {{/if}}
+</div>
 </script>

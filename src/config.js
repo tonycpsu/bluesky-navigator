@@ -37,6 +37,12 @@ export const CONFIG_FIELDS = {
         'type': 'select',
         'options': ['Play all', 'Play selected', 'Pause all'],
     },
+    'videoDisableLoop': {
+        'label': 'Video Disable Looping',
+        'title': 'Disable looping of videos',
+        'type': 'checkbox',
+        'default': false
+    },
     'showReplyContext':  {
         'label': 'Show Reply Context',
         'title': 'If checked, the post being replied to will be shown even if it was previously marked as read.',

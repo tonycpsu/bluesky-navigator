@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+357.fed5f528
+// @version     1.0.31+358.ff8f36ab
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -25,27 +25,27 @@
 
 (function() {
   "use strict";
-  const constants$1 = {
+  const constants = {
     URL_MONITOR_INTERVAL: 500,
     STATE_KEY: "bluesky_state",
     DRAWER_MENU_SELECTOR: 'button[aria-label="Open drawer menu"]',
     SCREEN_SELECTOR: "main > div > div > div",
     HOME_SCREEN_SELECTOR: 'div[data-testid="HomeScreen"]',
     get FEED_TAB_SELECTOR() {
-      return `${constants$1.HOME_SCREEN_SELECTOR} > div > div`;
+      return `${constants.HOME_SCREEN_SELECTOR} > div > div`;
     },
     get TOOLBAR_CONTAINER_SELECTOR() {
-      return `${constants$1.FEED_TAB_SELECTOR} > div:first-child`;
+      return `${constants.FEED_TAB_SELECTOR} > div:first-child`;
     },
     LOAD_NEW_BUTTON_SELECTOR: "button[aria-label^='Load new']",
     get LOAD_NEW_INDICATOR_SELECTOR() {
-      return `${constants$1.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
+      return `${constants.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
     },
     get FEED_CONTAINER_SELECTOR() {
-      return `${constants$1.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div`;
+      return `${constants.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div`;
     },
     get STATUS_BAR_CONTAINER_SELECTOR() {
-      return `${constants$1.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"]`;
+      return `${constants.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"]`;
     },
     FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
     LEFT_SIDEBAR_SELECTOR: 'nav[role="navigation"]',
@@ -54,6 +54,7 @@
     WIDTH_SELECTOR: 'div[style*="removed-body-scroll-bar-size"][style*="width: 100%"]',
     PROFILE_SELECTOR: 'a[aria-label="View profile"]',
     LINK_SELECTOR: 'a[target="_blank"]',
+    CLEARSKY_LIST_REFRESH_INTERVAL: 60 * 60 * 24,
     CLEARSKY_BLOCKED_ALL_CSS: { "background-color": "#ff8080" },
     CLEARSKY_BLOCKED_RECENT_CSS: { "background-color": "#cc4040" },
     SIDECAR_SVG_REPLY: `<svg fill="none" width="18" viewBox="0 0 24 24" height="18" style="color: rgb(111, 134, 159); pointer-events: none; flex-shrink: 0; display: block;"><path fill="hsl(211, 20%, 53%)" fill-rule="evenodd" clip-rule="evenodd" d="M2.002 6a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H12.28l-4.762 2.858A1 1 0 0 1 6.002 21v-2h-1a3 3 0 0 1-3-3V6Zm3-1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2a1 1 0 0 1 1 1v1.234l3.486-2.092a1 1 0 0 1 .514-.142h7a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-14Z"></path></svg>`,
@@ -73,7 +74,7 @@
       this.key = key;
       this.config = config2;
       if (!this.config) {
-        debugger;
+        console.warn("StateManager: config is undefined");
       }
       this.listeners = [];
       this.debounceTimeout = null;
@@ -126,14 +127,20 @@
      * @returns {Promise<Object>} - Resolves with the parsed result of the query.
      */
     async executeRemoteQuery(query, successStatus = "success") {
-      const { url, namespace = "bluesky_navigator", database = "state", username, password } = JSON.parse(this.config.stateSyncConfig);
+      const {
+        url,
+        namespace = "bluesky_navigator",
+        database = "state",
+        username,
+        password
+      } = JSON.parse(this.config.stateSyncConfig);
       return new Promise((resolve, reject) => {
         GM_xmlhttpRequest({
           method: "POST",
           url: `${url.replace(/\/$/, "")}/sql`,
           headers: {
-            "Accept": "application/json",
-            "Authorization": "Basic " + btoa(`${username}:${password}`)
+            Accept: "application/json",
+            Authorization: "Basic " + btoa(`${username}:${password}`)
           },
           data: `USE NS ${namespace} DB ${database}; ${query}`,
           onload: (response) => {
@@ -254,7 +261,13 @@
      * Saves the remote state if needed.
      */
     async saveRemoteState(since) {
-      const { url, namespace = "bluesky_navigator", database = "state", username, password } = JSON.parse(this.config.stateSyncConfig);
+      const {
+        url,
+        namespace = "bluesky_navigator",
+        database = "state",
+        username,
+        password
+      } = JSON.parse(this.config.stateSyncConfig);
       try {
         const lastUpdated = await this.getRemoteStateUpdated();
         if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
@@ -324,7 +337,7 @@
       this.listeners.forEach((callback) => callback(this.state));
     }
     handleBlockListResponse(response, responseKey, stateKey) {
-      var jsonResponse = $.parseJSON(response.response);
+      const jsonResponse = $.parseJSON(response.response);
       try {
         this.state.blocks[stateKey].handles = jsonResponse.data[responseKey].map(
           (entry) => entry.Handle
@@ -363,7 +376,7 @@
     seen: {},
     lastUpdated: null,
     page: "home",
-    "blocks": { "all": [], "recent": [] },
+    blocks: { all: [], recent: [] },
     feedSortReverse: false,
     feedHideRead: false
   };
@@ -44573,7 +44586,7 @@ if (cid) {
       console.log(data);
     }
     async getAtprotoUri(postUrl) {
-      const match2 = postUrl.match(/bsky\.app\/profile\/([^\/]+)\/post\/([^\/]+)/);
+      const match2 = postUrl.match(/bsky\.app\/profile\/([^/]+)\/post\/([^/]+)/);
       if (!match2) {
         console.error("Invalid Bluesky post URL format.");
         return null;
@@ -44600,15 +44613,13 @@ if (cid) {
     }
     async getReplies(uri) {
       const thread = this.getThread(uri);
-      return thread.replies.map(
-        (i2, reply) => {
-          return reply.post.record.text;
-        }
-      );
+      return thread.replies.map((i2, reply) => {
+        return reply.post.record.text;
+      });
     }
     async unrollThread(thread) {
       const originalAuthor = thread.post.author.did;
-      async function collectPosts(threadNode, parentAuthorDid, posts = []) {
+      const collectPosts = async (threadNode, parentAuthorDid, posts = []) => {
         if (!threadNode.post) {
           return [];
         }
@@ -44624,10 +44635,8 @@ if (cid) {
           }
         }
         return posts;
-      }
-      collectPosts = collectPosts.bind(this);
+      };
       const allPosts = await collectPosts(thread, originalAuthor);
-      console.log(allPosts.length);
       return allPosts;
     }
   }
@@ -44713,7 +44722,7 @@ if (cid) {
     return input.split(/\s+/).filter((term) => term.length > 0);
   }
   function extractLastTerm(input) {
-    let terms = splitTerms(input);
+    const terms = splitTerms(input);
     return terms.length > 0 ? terms[terms.length - 1] : "";
   }
   const utils$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
@@ -44726,270 +44735,273 @@ if (cid) {
     waitForElement: waitForElement$2
   }, Symbol.toStringTag, { value: "Module" }));
   const CONFIG_FIELDS = {
-    "displaySection": {
-      "section": [GM_config.create("Display Preferences"), "Customize how items are displayed"],
-      "type": "hidden"
+    displaySection: {
+      section: [GM_config.create("Display Preferences"), "Customize how items are displayed"],
+      type: "hidden"
     },
-    "postWidthDesktop": {
-      "label": "Maximum width of posts in pixels when in desktop mode",
-      "type": "integer",
-      "default": "600"
+    postWidthDesktop: {
+      label: "Maximum width of posts in pixels when in desktop mode",
+      type: "integer",
+      default: "600"
     },
-    "postActionButtonPosition": {
-      "label": "Post action button position",
-      "title": "Where to position reply, repost, like, etc. buttons",
-      "type": "select",
-      "options": ["Bottom", "Left"],
-      "default": "Bottom"
+    postActionButtonPosition: {
+      label: "Post action button position",
+      title: "Where to position reply, repost, like, etc. buttons",
+      type: "select",
+      options: ["Bottom", "Left"],
+      default: "Bottom"
     },
-    "postTimestampFormat": {
-      "label": "Post timestamp format",
-      "title": "A format string specifying how post timestamps are displayed",
-      "type": "textarea",
-      "default": "'$age' '('yyyy-MM-dd hh:mmaaa')'"
+    postTimestampFormat: {
+      label: "Post timestamp format",
+      title: "A format string specifying how post timestamps are displayed",
+      type: "textarea",
+      default: "'$age' '('yyyy-MM-dd hh:mmaaa')'"
     },
-    "postTimestampFormatMobile": {
-      "label": "Post timestamp format (mobile)",
-      "title": "A format string specifying how post timestamps are displayed on small screens",
-      "type": "textarea",
-      "default": "'$age'"
+    postTimestampFormatMobile: {
+      label: "Post timestamp format (mobile)",
+      title: "A format string specifying how post timestamps are displayed on small screens",
+      type: "textarea",
+      default: "'$age'"
     },
-    "videoPreviewPlayback": {
-      "label": "Video Preview Playback",
-      "title": "Control playback of video previews",
-      "type": "select",
-      "options": ["Play all", "Play selected", "Pause all"]
+    videoPreviewPlayback: {
+      label: "Video Preview Playback",
+      title: "Control playback of video previews",
+      type: "select",
+      options: ["Play all", "Play selected", "Pause all"]
     },
-    "videoDisableLoop": {
-      "label": "Video Disable Looping",
-      "title": "Disable looping of videos",
-      "type": "checkbox",
-      "default": false
+    videoDisableLoop: {
+      label: "Video Disable Looping",
+      title: "Disable looping of videos",
+      type: "checkbox",
+      default: false
     },
-    "showReplyContext": {
-      "label": "Show Reply Context",
-      "title": "If checked, the post being replied to will be shown even if it was previously marked as read.",
-      "type": "checkbox",
-      "default": false
+    showReplyContext: {
+      label: "Show Reply Context",
+      title: "If checked, the post being replied to will be shown even if it was previously marked as read.",
+      type: "checkbox",
+      default: false
     },
-    "unrollThreads": {
-      "label": "Unroll Threads",
-      "title": 'If checked, threads with one or more replies from the original author will be "unrolled" into the first post.',
-      "type": "checkbox",
-      "default": false
+    unrollThreads: {
+      label: "Unroll Threads",
+      title: 'If checked, threads with one or more replies from the original author will be "unrolled" into the first post.',
+      type: "checkbox",
+      default: false
     },
-    "unrolledPostSelection": {
-      "label": "Unrolled Post Selection",
-      "title": "If checked, navigation between/selection of individual unrolled posts will be enabled.",
-      "type": "checkbox",
-      "default": false
+    unrolledPostSelection: {
+      label: "Unrolled Post Selection",
+      title: "If checked, navigation between/selection of individual unrolled posts will be enabled.",
+      type: "checkbox",
+      default: false
     },
-    "showReplySidecar": {
-      "label": "Show Replies Sidecar",
-      "title": "If checked, replies to the selected post (and, where applicable, the post being replied to) will be displayed in a sidecar next to each post (requires atproto settings below).",
-      "type": "checkbox",
-      "default": false
+    showReplySidecar: {
+      label: "Show Replies Sidecar",
+      title: "If checked, replies to the selected post (and, where applicable, the post being replied to) will be displayed in a sidecar next to each post (requires atproto settings below).",
+      type: "checkbox",
+      default: false
     },
-    "showReplySidecarMinimumWidth": {
-      "label": "Show Replies Sidecar Minimum Width",
-      "title": "Set a minimum post width in pixels for showing the reply sidecar",
-      "type": "int",
-      "default": 600
+    showReplySidecarMinimumWidth: {
+      label: "Show Replies Sidecar Minimum Width",
+      title: "Set a minimum post width in pixels for showing the reply sidecar",
+      type: "int",
+      default: 600
     },
-    "sidecarReplySortOrder": {
-      "label": "Reply Sidecar Sort Order",
-      "title": "Select an option to determine how replies are sorted in the sidecar",
-      "type": "select",
-      "options": ["Default", "Oldest First", "Newest First", "Most Liked First", "Most Reposted First"]
+    sidecarReplySortOrder: {
+      label: "Reply Sidecar Sort Order",
+      title: "Select an option to determine how replies are sorted in the sidecar",
+      type: "select",
+      options: ["Default", "Oldest First", "Newest First", "Most Liked First", "Most Reposted First"]
     },
-    "hideRightSidebar": {
-      "label": "Hide Right Sidebar",
-      "title": "If checked, the right sidebar with the search box, following/trending displays, etc. will be hidden (useful when overriding max width above).",
-      "type": "checkbox",
-      "default": false
+    hideRightSidebar: {
+      label: "Hide Right Sidebar",
+      title: "If checked, the right sidebar with the search box, following/trending displays, etc. will be hidden (useful when overriding max width above).",
+      type: "checkbox",
+      default: false
     },
-    "hideLoadNewButton": {
-      "label": "Hide Load New Button",
-      "title": "If checked, the floating button to load new items will be hidden.",
-      "type": "checkbox",
-      "default": false
+    hideLoadNewButton: {
+      label: "Hide Load New Button",
+      title: "If checked, the floating button to load new items will be hidden.",
+      type: "checkbox",
+      default: false
     },
-    "showPostCounts": {
-      "label": "Show Post Counts",
-      "title": "Specify whether post counts are displayed in all, selected, or no posts.",
-      "type": "select",
-      "options": ["All", "Selection", "None"],
-      "default": "All"
+    showPostCounts: {
+      label: "Show Post Counts",
+      title: "Specify whether post counts are displayed in all, selected, or no posts.",
+      type: "select",
+      options: ["All", "Selection", "None"],
+      default: "All"
     },
-    "enableSmoothScrolling": {
-      "label": "Enable Smooth Scrolling",
-      "title": "If checked, scrolling using keyboard navigation will be smooth \u{1F6E5}\uFE0F \u{1F3B7}",
-      "type": "checkbox",
-      "default": false
+    enableSmoothScrolling: {
+      label: "Enable Smooth Scrolling",
+      title: "If checked, scrolling using keyboard navigation will be smooth \u{1F6E5}\uFE0F \u{1F3B7}",
+      type: "checkbox",
+      default: false
     },
-    "posts": {
-      "label": "CSS Style: All Posts",
-      "type": "textarea",
-      "default": "padding 1px;"
+    posts: {
+      label: "CSS Style: All Posts",
+      type: "textarea",
+      default: "padding 1px;"
     },
-    "unreadPosts": {
-      "label": "CSS Style: Unread Posts",
-      "type": "textarea",
-      "default": "opacity: 100% !important;"
+    unreadPosts: {
+      label: "CSS Style: Unread Posts",
+      type: "textarea",
+      default: "opacity: 100% !important;"
     },
-    "unreadPostsLightMode": {
-      "label": "CSS Style: Unread Posts (Light Mode)",
-      "type": "textarea",
-      "default": "background-color: white;"
+    unreadPostsLightMode: {
+      label: "CSS Style: Unread Posts (Light Mode)",
+      type: "textarea",
+      default: "background-color: white;"
     },
-    "unreadPostsDarkMode": {
-      "label": "CSS Style: Unread Posts (Dark Mode)",
-      "type": "textarea",
-      "default": "background-color: #202020;"
+    unreadPostsDarkMode: {
+      label: "CSS Style: Unread Posts (Dark Mode)",
+      type: "textarea",
+      default: "background-color: #202020;"
     },
-    "readPosts": {
-      "label": "CSS Style: Read Posts",
-      "type": "textarea",
-      "default": "opacity: 75% !important;"
+    readPosts: {
+      label: "CSS Style: Read Posts",
+      type: "textarea",
+      default: "opacity: 75% !important;"
     },
-    "readPostsLightMode": {
-      "label": "CSS Style: Read Posts (Light Mode)",
-      "type": "textarea",
-      "default": "background-color: #f0f0f0;"
+    readPostsLightMode: {
+      label: "CSS Style: Read Posts (Light Mode)",
+      type: "textarea",
+      default: "background-color: #f0f0f0;"
     },
-    "readPostsDarkMode": {
-      "label": "CSS Style: Read Posts (Dark Mode)",
-      "type": "textarea",
-      "default": "background-color: black;"
+    readPostsDarkMode: {
+      label: "CSS Style: Read Posts (Dark Mode)",
+      type: "textarea",
+      default: "background-color: black;"
     },
-    "selectionActive": {
-      "label": "CSS Style: Selected Post",
-      "type": "textarea",
-      "default": "outline: 3px rgba(255, 0, 0, .6) solid !important;"
+    selectionActive: {
+      label: "CSS Style: Selected Post",
+      type: "textarea",
+      default: "outline: 3px rgba(255, 0, 0, .6) solid !important;"
     },
-    "selectionChildFocused": {
-      "label": "CSS Style: Selected Child Post Focused",
-      "type": "textarea",
-      "default": "outline: 3px rgba(128, 0, 0, .2) solid !important;"
+    selectionChildFocused: {
+      label: "CSS Style: Selected Child Post Focused",
+      type: "textarea",
+      default: "outline: 3px rgba(128, 0, 0, .2) solid !important;"
     },
-    "selectionInactive": {
-      "label": "CSS Style: Unselected Post",
-      "type": "textarea",
-      "default": "outline: 3px solid transparent;"
+    selectionInactive: {
+      label: "CSS Style: Unselected Post",
+      type: "textarea",
+      default: "outline: 3px solid transparent;"
     },
-    "replySelectionActive": {
-      "label": "CSS Style: Selected Reply",
-      "type": "textarea",
-      "default": "outline: 1px rgba(255, 0, 0, .8) solid !important;"
+    replySelectionActive: {
+      label: "CSS Style: Selected Reply",
+      type: "textarea",
+      default: "outline: 1px rgba(255, 0, 0, .8) solid !important;"
     },
-    "replySelectionInactive": {
-      "label": "CSS Style: Unselected Replies",
-      "type": "textarea",
-      "default": "outline: 1px rgb(212, 219, 226) solid"
+    replySelectionInactive: {
+      label: "CSS Style: Unselected Replies",
+      type: "textarea",
+      default: "outline: 1px rgb(212, 219, 226) solid"
     },
-    "threadIndicatorWidth": {
-      "label": "Thread Indicator Width in pixels",
-      "type": "integer",
-      "default": "4"
+    threadIndicatorWidth: {
+      label: "Thread Indicator Width in pixels",
+      type: "integer",
+      default: "4"
     },
-    "threadIndicatorColor": {
-      "label": "Thread Indicator Color",
-      "type": "textarea",
-      "default": "rgb(212, 219, 226)"
+    threadIndicatorColor: {
+      label: "Thread Indicator Color",
+      type: "textarea",
+      default: "rgb(212, 219, 226)"
     },
-    "threadMargin": {
-      "label": "Thread Margin",
-      "type": "textarea",
-      "default": "10px"
+    threadMargin: {
+      label: "Thread Margin",
+      type: "textarea",
+      default: "10px"
     },
-    "atprotoSection": {
-      "section": [GM_config.create("AT Protocol Agent"), "Enables additional functionality"],
-      "type": "hidden"
+    atprotoSection: {
+      section: [GM_config.create("AT Protocol Agent"), "Enables additional functionality"],
+      type: "hidden"
     },
-    "atprotoService": {
-      "label": "Service",
-      "title": "AT Protocol Service",
-      "type": "textarea",
-      "default": "https://bsky.social"
+    atprotoService: {
+      label: "Service",
+      title: "AT Protocol Service",
+      type: "textarea",
+      default: "https://bsky.social"
     },
-    "atprotoIdentifier": {
-      "label": "Identifier (Handle)",
-      "title": "AT Protocol Identifier (Handle)",
-      "type": "textarea"
+    atprotoIdentifier: {
+      label: "Identifier (Handle)",
+      title: "AT Protocol Identifier (Handle)",
+      type: "textarea"
     },
-    "atprotoPassword": {
-      "label": "Password",
-      "title": "AT Protocol Password",
-      "type": "textarea"
+    atprotoPassword: {
+      label: "Password",
+      title: "AT Protocol Password",
+      type: "textarea"
     },
-    "stateSyncSection": {
-      "section": [GM_config.create("State Sync"), 'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'],
-      "type": "hidden"
+    stateSyncSection: {
+      section: [
+        GM_config.create("State Sync"),
+        'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'
+      ],
+      type: "hidden"
     },
-    "stateSyncEnabled": {
-      "label": "Enable State Sync",
-      "title": "If checked, synchronize state to/from the cloud",
-      "type": "checkbox",
-      "default": false
+    stateSyncEnabled: {
+      label: "Enable State Sync",
+      title: "If checked, synchronize state to/from the cloud",
+      type: "checkbox",
+      default: false
     },
-    "stateSyncConfig": {
-      "label": "State Sync Configuration (JSON)",
-      "title": "JSON object containing state information",
-      "type": "textarea"
+    stateSyncConfig: {
+      label: "State Sync Configuration (JSON)",
+      title: "JSON object containing state information",
+      type: "textarea"
     },
-    "stateSyncTimeout": {
-      "label": "State Sync Timeout",
-      "title": "Number of milliseconds of idle time before syncing state",
-      "type": "int",
-      "default": 5e3
+    stateSyncTimeout: {
+      label: "State Sync Timeout",
+      title: "Number of milliseconds of idle time before syncing state",
+      type: "int",
+      default: 5e3
     },
-    "rulesSection": {
-      "section": [GM_config.create("Rules"), "Post Rules"],
-      "type": "hidden"
+    rulesSection: {
+      section: [GM_config.create("Rules"), "Post Rules"],
+      type: "hidden"
     },
-    "rulesConfig": {
-      "label": "Filters Configuration",
-      "type": "textarea"
+    rulesConfig: {
+      label: "Filters Configuration",
+      type: "textarea"
     },
-    "miscellaneousSection": {
-      "section": [GM_config.create("Miscellaneous"), "Other settings"],
-      "type": "hidden"
+    miscellaneousSection: {
+      section: [GM_config.create("Miscellaneous"), "Other settings"],
+      type: "hidden"
     },
-    "markReadOnScroll": {
-      "label": "Mark Read on Scroll",
-      "title": "If checked, items will be marked read while scrolling",
-      "type": "checkbox",
-      "default": false
+    markReadOnScroll: {
+      label: "Mark Read on Scroll",
+      title: "If checked, items will be marked read while scrolling",
+      type: "checkbox",
+      default: false
     },
-    "disableLoadMoreOnScroll": {
-      "label": "Disable Load More on Scroll",
-      "title": 'If checked, the default behavior of loading more items when scrolling will be disabled. You can still press "U" to load more manually.',
-      "type": "checkbox",
-      "default": false
+    disableLoadMoreOnScroll: {
+      label: "Disable Load More on Scroll",
+      title: 'If checked, the default behavior of loading more items when scrolling will be disabled. You can still press "U" to load more manually.',
+      type: "checkbox",
+      default: false
     },
-    "savePostState": {
-      "label": "Save Post State",
-      "title": "If checked, read/unread state is kept for post items in addition to feed items",
-      "type": "checkbox",
-      "default": false
+    savePostState: {
+      label: "Save Post State",
+      title: "If checked, read/unread state is kept for post items in addition to feed items",
+      type: "checkbox",
+      default: false
     },
-    "stateSaveTimeout": {
-      "label": "State Save Timeout",
-      "title": "Number of milliseconds of idle time before saving state locally",
-      "type": "int",
-      "default": 1e3
+    stateSaveTimeout: {
+      label: "State Save Timeout",
+      title: "Number of milliseconds of idle time before saving state locally",
+      type: "int",
+      default: 1e3
     },
-    "historyMax": {
-      "label": "History Max Size",
-      "title": "Maximum number of posts to remember for saving read state",
-      "type": "int",
-      "default": constants$1.DEFAULT_HISTORY_MAX
+    historyMax: {
+      label: "History Max Size",
+      title: "Maximum number of posts to remember for saving read state",
+      type: "int",
+      default: constants.DEFAULT_HISTORY_MAX
     },
-    "showDebuggingInfo": {
-      "label": "Enable Debugging",
-      "title": "If checked, some debugging info will be shown in posts",
-      "type": "checkbox",
-      "default": false
+    showDebuggingInfo: {
+      label: "Enable Debugging",
+      title: "If checked, some debugging info will be shown in posts",
+      type: "checkbox",
+      default: false
     }
   };
   const style = '/* style.css */\n\ndiv[style^="position: fixed; inset: 0px 0px 0px 50%;"] {\n    border: none;\n}\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    width: 100%;\n    height: 32px;\n    background-color: inherit;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n@media (prefers-color-scheme: dark) {\n    div#bsky-navigator-toolbar {\n        background-color: #29333d\n    }\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n@media (prefers-color-scheme: dark) {\n    .indicator-image {\n        filter: invert(1) brightness(2);\n    }\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\ndiv#infoIndicatorText {\n    font-size: 0.8em;\n}\n\ndiv#itemTimestampStats {\n    font-size: 0.7em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n        overflow: clip;\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n        overflow: clip;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    div#statusBar {\n        background-color: #29333d;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n#prevButton {\n    z-index: 1000;\n    position: absolute;\n    top: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#prevButton.mobile {\n    position: fixed;\n    left: 1%;\n    top: 25%;\n}\n\n#nextButton {\n    z-index: 1000;\n    position: absolute;\n    bottom: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#nextButton.mobile {\n    position: fixed;\n    left: 1%;\n    bottom: 20%;\n}\n\nnav.r-1wyvozj {\n    overflow: inherit;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    bottom: 2px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n\n.popup {\n    display: none;\n    position: fixed;\n    max-height: 80vH;\n    top: 50%;\n    left: 50%;\n    transform: translate(-50%, -50%);\n    /* transform: scale(0.25); /\\* Scale down to 75% *\\/ */\n    background: white;\n    padding: 15px;\n    border-radius: 12px;\n    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n    width: 400px;\n    z-index: 1000;\n}\n\nnav + div {\n    display: none;\n}\n\ndiv:has(>div.item) {\n    display: flex;\n    flex-direction: row;\n    align-items: stretch;\n}\n\n.item {\n    display: flex;\n    flex: 2;\n    max-height: 100%;\n}\n\n.item > div:first-of-type {\n    flex: 1;\n    align-items: stretch;\n\n}\n\n.item > div:first-of-type > div:last-of-type {\n    flex: 1;\n}\n\n.unrolled-banner {\n    position: absolute;\n    top: -0.5em;\n    left: 10px;\n    padding: 0px 5px;\n    backdrop-filter: blur(10px);\n    color: #888;\n}\n\n.unrolled-divider {\n    margin-top: 1em;\n    border: 1px solid #eee;\n    color: white;\n}\n\n.unrolled-reply {\n    /* border: 1px transparent; */\n    margin: 1px;\n    border: 1px solid transparent;\n    box-sizing: border-box;\n}\n\n.sidecar-replies {\n    flex: 1 1 0;\n    min-height: 0;\n    overflow-y: auto;\n    font-size: 0.8em;\n    padding-left: 10px;\n    display: flex;\n    flex-direction: column;\n    max-height: 50vH;\n}\n\n.sidecar-parent-indicator {\n    position: absolute;\n}\n\n.sidecar-post {\n    display: flex;\n    flex-direction: column;\n    padding: 5px;\n    flex-shrink: 0;\n    font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";\n}\n\n.sidecar-post a {\n    text-decoration: none;\n}\n\n.sidecar-post a:hover {\n    text-decoration: underline;\n}\n\n.sidecar-post-user-info {\n    display: flex;\n    flex-direction: row;\n    font-size: 0.9em;\n}\n\n.sidecar-post-avatar {\n    width: 24px;\n    height: 24px;\n    padding: 2px;\n}\n\n.sidecar-post-username {\n    font-weight: 600;\n    color: rgb(11, 15, 20);\n}\n\n.sidecar-post-handle {\n    color: rgb(66, 87, 108);\n    font-variant: no-contextual;\n}\n\n.sidecar-post-content {\n    padding: 5px 0px;\n}\n\n.sidecar-post-content a {\n    color: rgb(16, 131, 254);\n}\n\n.sidecar-post-footer {\n    color: rgb(66, 87, 108);\n    display: flex;\n    flex-direction: row;\n    font-size: 11px;\n}\n\n.sidecar-post-footer svg, .sidecar-post-footer span {\n    display: inline-flex;\n    vertical-align: middle;\n    /* flex: 1; */\n    color: rgb(111, 134, 159);\n}\n\n.sidecar-post-timestamp {\n    display: inline-flex;\n    vertical-align: middle;\n    flex: 3;\n}\n\n.sidecar-parent .sidecar-post {\n    border: 3px dashed rgb(111, 134, 159);\n    padding: 5px;\n}\n\n.sidecar-post-counts {\n    display: flex;\n    flex: 2;\n}\n\n.sidecar-count {\n    display: flex;\n    flex: 1;\n    justify-content: right;\n    align-items: center;\n}\n\n.sidecar-count-icon > svg {\n  height: 1em;\n}\n';
@@ -59926,14 +59938,12 @@ if (cid) {
     var defaultBackgroundColor = typeof backgroundColorOverride === "string" ? parseColor(context, backgroundColorOverride) : backgroundColorOverride === null ? COLORS.TRANSPARENT : 4294967295;
     return element === ownerDocument.documentElement ? isTransparent(documentBackgroundColor) ? isTransparent(bodyBackgroundColor) ? defaultBackgroundColor : bodyBackgroundColor : documentBackgroundColor : defaultBackgroundColor;
   };
-  const {
-    waitForElement: waitForElement$1
-  } = utils$1;
+  const { waitForElement: waitForElement$1 } = utils$1;
   function convertToEmbed(url) {
     try {
       let embedHtml = "";
       if (url.includes("youtube.com") || url.includes("youtu.be")) {
-        let videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
+        const videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
         if (videoId) {
           embedHtml = `<iframe width="320" height="200" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
         }
@@ -59960,30 +59970,30 @@ if (cid) {
   function formatPostText(post2) {
     let text = post2.text;
     if (!post2.facets) return text;
-    let charOffsets = [];
+    const charOffsets = [];
     let runningByteCount = 0;
     let utf16CharIndex = 0;
-    for (let char of text) {
-      let charSize = new TextEncoder().encode(char).length;
+    for (const char of text) {
+      const charSize = new TextEncoder().encode(char).length;
       charOffsets.push({ byteOffset: runningByteCount, charIndex: utf16CharIndex });
       runningByteCount += charSize;
       utf16CharIndex++;
     }
     post2.facets.slice().reverse().forEach((facet2) => {
       const { index, features } = facet2;
-      let start = charOffsets.findLast((c) => c.byteOffset <= index.byteStart)?.charIndex || 0;
-      let end = charOffsets.findLast((c) => c.byteOffset <= index.byteEnd)?.charIndex || text.length;
-      let originalSubstring = text.slice(start, end);
+      const start = charOffsets.findLast((c) => c.byteOffset <= index.byteStart)?.charIndex || 0;
+      const end = charOffsets.findLast((c) => c.byteOffset <= index.byteEnd)?.charIndex || text.length;
+      const originalSubstring = text.slice(start, end);
       features.forEach((feature) => {
         if (feature.$type === "app.bsky.richtext.facet#mention") {
-          let mentionLink = `<a href="https://bsky.app/profile/${feature.did}" class="mention">${originalSubstring}</a>`;
+          const mentionLink = `<a href="https://bsky.app/profile/${feature.did}" class="mention">${originalSubstring}</a>`;
           text = text.slice(0, start) + mentionLink + text.slice(end + 1);
         } else if (feature.$type === "app.bsky.richtext.facet#link") {
-          let url = feature.uri;
-          let embedHtml = convertToEmbed(url);
+          const url = feature.uri;
+          const embedHtml = convertToEmbed(url);
           text = text.slice(0, start) + embedHtml + text.slice(end + 1);
         } else if (feature.$type === "app.bsky.richtext.facet#tag") {
-          let hashtagLink = `<a href="https://bsky.app/search?q=%23${feature.tag}" class="hashtag">${originalSubstring}</a>`;
+          const hashtagLink = `<a href="https://bsky.app/search?q=%23${feature.tag}" class="hashtag">${originalSubstring}</a>`;
           text = text.slice(0, start) + hashtagLink + text.slice(end + 1);
         }
       });
@@ -60055,11 +60065,11 @@ if (cid) {
       quotedPost: extractQuotedPost(post2.embed),
       externalLink: extractExternalLink(post2.embed),
       timestamp: new Date(post2.record.createdAt).toLocaleString(),
-      replySvg: constants$1.SIDECAR_SVG_REPLY,
+      replySvg: constants.SIDECAR_SVG_REPLY,
       replyCount: formatter.format(post2.replyCount),
-      repostSvg: constants$1.SIDECAR_SVG_REPOST[post2.viewer.repost ? 1 : 0],
+      repostSvg: constants.SIDECAR_SVG_REPOST[post2.viewer.repost ? 1 : 0],
       repostCount: formatter.format(post2.repostCount),
-      likeSvg: constants$1.SIDECAR_SVG_LIKE[post2.viewer.like ? 1 : 0],
+      likeSvg: constants.SIDECAR_SVG_LIKE[post2.viewer.like ? 1 : 0],
       likeCount: formatter.format(post2.likeCount)
     };
   }
@@ -60177,61 +60187,44 @@ if (cid) {
       this.scrollTick = false;
       this.scrollTop = 0;
       this.scrollDirection = 0;
-      waitForElement$1(
-        "#sidecar-replies-template",
-        () => {
-          this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
-        }
-      );
-      waitForElement$1(
-        "#sidecar-post-template",
-        () => {
-          this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
-          Handlebars.registerPartial("postTemplate", this.postTemplate);
-        }
-      );
-      waitForElement$1(
-        "#sidecar-footer-template",
-        () => {
-          this.footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
-          Handlebars.registerPartial("footerTemplate", this.footerTemplate);
-        }
-      );
-      waitForElement$1(
-        "#sidecar-post-counts-template",
-        () => {
-          this.postCountsTemplate = Handlebars.compile($("#sidecar-post-counts-template").html());
-          Handlebars.registerPartial("postCountsTemplate", this.postCountsTemplate);
-        }
-      );
-      waitForElement$1(
-        "#sidecar-embed-image-template",
-        () => {
-          this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
-          Handlebars.registerPartial("imageTemplate", this.imageTemplate);
-        }
-      );
-      waitForElement$1(
-        "#sidecar-embed-quote-template",
-        () => {
-          this.quoteTemplate = Handlebars.compile($("#sidecar-embed-quote-template").html());
-          Handlebars.registerPartial("quoteTemplate", this.quoteTemplate);
-        }
-      );
-      waitForElement$1(
-        "#sidecar-embed-external-template",
-        () => {
-          this.externalTemplate = Handlebars.compile($("#sidecar-embed-external-template").html());
-          Handlebars.registerPartial("externalTemplate", this.externalTemplate);
-        }
-      );
+      waitForElement$1("#sidecar-replies-template", () => {
+        this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
+      });
+      waitForElement$1("#sidecar-post-template", () => {
+        this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
+        Handlebars.registerPartial("postTemplate", this.postTemplate);
+      });
+      waitForElement$1("#sidecar-footer-template", () => {
+        this.footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
+        Handlebars.registerPartial("footerTemplate", this.footerTemplate);
+      });
+      waitForElement$1("#sidecar-post-counts-template", () => {
+        this.postCountsTemplate = Handlebars.compile($("#sidecar-post-counts-template").html());
+        Handlebars.registerPartial("postCountsTemplate", this.postCountsTemplate);
+      });
+      waitForElement$1("#sidecar-embed-image-template", () => {
+        this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
+        Handlebars.registerPartial("imageTemplate", this.imageTemplate);
+      });
+      waitForElement$1("#sidecar-embed-quote-template", () => {
+        this.quoteTemplate = Handlebars.compile($("#sidecar-embed-quote-template").html());
+        Handlebars.registerPartial("quoteTemplate", this.quoteTemplate);
+      });
+      waitForElement$1("#sidecar-embed-external-template", () => {
+        this.externalTemplate = Handlebars.compile($("#sidecar-embed-external-template").html());
+        Handlebars.registerPartial("externalTemplate", this.externalTemplate);
+      });
     }
     isActive() {
       return false;
     }
     activate() {
       this.keyState = [];
-      this.popupObserver = waitForElement$1(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
+      this.popupObserver = waitForElement$1(
+        this.POPUP_MENU_SELECTOR,
+        this.onPopupAdd,
+        this.onPopupRemove
+      );
       this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
         root: null,
         // Observing within the viewport
@@ -60249,7 +60242,7 @@ if (cid) {
       this.observer = waitForElement$1(safeSelector, (element) => {
         this.onItemAdded(element), this.onItemRemoved(element);
       });
-      this.loadNewerObserver = waitForElement$1(constants$1.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
+      this.loadNewerObserver = waitForElement$1(constants.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
         this.loadNewerButton = $(button)[0];
         $("a#loadNewerIndicatorLink").on("click", () => this.loadNewerItems());
         $("img#loadNewerIndicatorImage").addClass("image-highlight");
@@ -60277,18 +60270,17 @@ if (cid) {
       this.enableIntersectionObserver = true;
       $(document).on("scroll", this.onScroll);
       $(document).on("scrollend", () => {
-        setTimeout(
-          () => this.ignoreMouseMovement = false,
-          500
-        );
+        setTimeout(() => this.ignoreMouseMovement = false, 500);
       });
       console.log(this.state.mobileView);
       this.floatingButtonsObserver = waitForElement$1(
-        this.state.mobileView ? constants$1.HOME_SCREEN_SELECTOR : constants$1.LEFT_SIDEBAR_SELECTOR,
+        this.state.mobileView ? constants.HOME_SCREEN_SELECTOR : constants.LEFT_SIDEBAR_SELECTOR,
         (container) => {
           console.log(container);
           if (!this.prevButton) {
-            this.prevButton = $(`<div id="prevButton" title="previous post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`);
+            this.prevButton = $(
+              `<div id="prevButton" title="previous post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`
+            );
             $(container).append(this.prevButton);
             if (this.state.mobileView) {
               $("#prevButton").addClass("mobile");
@@ -60299,7 +60291,9 @@ if (cid) {
             });
           }
           if (!this.nextButton) {
-            this.nextButton = $(`<div id="nextButton" title="next post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.next[0]}"/></div>`);
+            this.nextButton = $(
+              `<div id="nextButton" title="next post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.next[0]}"/></div>`
+            );
             $(this.prevButton).after(this.nextButton);
             if (this.state.mobileView) {
               $("#nextButton").addClass("mobile");
@@ -60340,11 +60334,6 @@ if (cid) {
     get index() {
       return this._index;
     }
-    set index(value) {
-      this._index = value;
-      this.postId = this.postIdForItem(this.selectedItem);
-      this.updateInfoIndicator();
-    }
     get selectedItem() {
       return $(this.items[this.index]);
     }
@@ -60358,7 +60347,7 @@ if (cid) {
       return this._replyIndex;
     }
     set replyIndex(value) {
-      let oldIndex = this._replyIndex;
+      const oldIndex = this._replyIndex;
       const replies = $(this.selectedItem).parent().find("div.sidecar-post");
       if (value == oldIndex || value < 0 || value >= replies.length) {
         return;
@@ -60385,7 +60374,7 @@ if (cid) {
       return this._threadIndex;
     }
     set threadIndex(value) {
-      let oldIndex = this._threadIndex;
+      const oldIndex = this._threadIndex;
       if (value == oldIndex) {
         return;
       } else if (value < 0) {
@@ -60420,7 +60409,7 @@ if (cid) {
       return $(this.selectedItem).find(".unrolled-reply");
     }
     getPostForThreadIndex(index) {
-      return index > 0 ? this.unrolledReplies.eq(index - 1) : $(this.selectedItem).find(constants$1.POST_CONTENT_SELECTOR).first();
+      return index > 0 ? this.unrolledReplies.eq(index - 1) : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
     }
     get selectedPost() {
       return this.getPostForThreadIndex(this.threadIndex);
@@ -60445,7 +60434,7 @@ if (cid) {
       this.ignoreMouseMovement = true;
       if (!this.scrollTick) {
         requestAnimationFrame(() => {
-          let currentScroll = $(window).scrollTop();
+          const currentScroll = $(window).scrollTop();
           if (currentScroll > this.scrollTop) {
             this.scrollDirection = -1;
           } else if (currentScroll < this.scrollTop) {
@@ -60459,12 +60448,10 @@ if (cid) {
     }
     scrollToElement(target2, block2 = null) {
       this.enableIntersectionObserver = false;
-      target2.scrollIntoView(
-        {
-          behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
-          block: block2 == null ? "start" : block2
-        }
-      );
+      target2.scrollIntoView({
+        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
+        block: block2 == null ? "start" : block2
+      });
     }
     // Function to programmatically play a video from the userscript
     playVideo(video2) {
@@ -60477,11 +60464,9 @@ if (cid) {
     }
     setupIntersectionObserver(entries) {
       if (this.intersectionObserver) {
-        $(this.items).each(
-          (i2, item) => {
-            this.intersectionObserver.observe($(item)[0]);
-          }
-        );
+        $(this.items).each((i2, item) => {
+          this.intersectionObserver.observe($(item)[0]);
+        });
       }
     }
     onIntersection(entries) {
@@ -60491,19 +60476,15 @@ if (cid) {
       let target2 = null;
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
-          this.visibleItems = this.visibleItems.filter(
-            (item) => item.target != entry.target
-          );
+          this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
           this.visibleItems.push(entry);
         } else {
           const oldLength = this.visibleItems.length;
-          this.visibleItems = this.visibleItems.filter(
-            (item) => item.target != entry.target
-          );
+          this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
           if (this.visibleItems.length < oldLength) {
             console.log("removed", entry.target);
             if (this.config.get("markReadOnScroll")) {
-              var index2 = this.getIndexFromItem(entry.target);
+              const index2 = this.getIndexFromItem(entry.target);
               this.markItemRead(index2, true);
             }
           }
@@ -60515,8 +60496,7 @@ if (cid) {
       if (!visibleItems.length) {
         return;
       }
-      for (const [i2, item] of visibleItems.entries()) {
-        var index = this.getIndexFromItem(item.target);
+      for (const [_i, item] of visibleItems.entries()) {
         if (item.intersectionRatio == 1) {
           target2 = item.target;
           break;
@@ -60524,9 +60504,8 @@ if (cid) {
       }
       if (target2 == null) {
         target2 = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
-        var index = this.getIndexFromItem(target2);
       }
-      var index = this.getIndexFromItem(target2);
+      const index = this.getIndexFromItem(target2);
       this.setIndex(index);
     }
     onFooterIntersection(entries) {
@@ -60558,29 +60537,29 @@ if (cid) {
       this.isPopupVisible = false;
     }
     get scrollMargin() {
-      var margin;
+      let margin;
+      let el;
       if (this.state.mobileView) {
-        var el = $(`${constants$1.HOME_SCREEN_SELECTOR} > div > div > div`);
+        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
         el = el.first().children().filter(":visible").first();
         if (this.index) {
-          var transform2 = el[0].style.transform;
-          var translateY = transform2.indexOf("(") == -1 ? 0 : parseInt(transform2.split("(")[1].split("px")[0]);
+          const transform2 = el[0].style.transform;
+          const translateY = transform2.indexOf("(") == -1 ? 0 : parseInt(transform2.split("(")[1].split("px")[0]);
           margin = el.outerHeight() + translateY;
         } else {
           margin = el.outerHeight();
         }
       } else {
-        var el = $(`${constants$1.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
+        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
         margin = el.outerHeight();
       }
-      var itemMargin = parseInt($(this.selector).css("margin-top").replace("px", ""));
-      console.log(itemMargin);
+      const itemMargin = parseInt($(this.selector).css("margin-top").replace("px", ""));
       return margin + itemMargin;
     }
-    applyItemStyle(element, selected2) {
+    applyItemStyle(element, selected) {
       $(element).addClass("item");
       if (this.config.get("postActionButtonPosition") == "Left") {
-        const postContainer = $(element).find(constants$1.POST_CONTENT_SELECTOR).prev();
+        const postContainer = $(element).find(constants.POST_CONTENT_SELECTOR).prev();
         if (postContainer.length) {
           postContainer.css("flex", "");
         }
@@ -60598,7 +60577,9 @@ if (cid) {
         if (userFormat) {
           const formattedDate = format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
           if (this.config.get("showDebuggingInfo")) {
-            postTimestampElement.text(`${formattedDate} (${$(element).parent().parent().attr("data-bsky-navigator-thread-index")}, ${$(element).attr("data-bsky-navigator-item-index")})`);
+            postTimestampElement.text(
+              `${formattedDate} (${$(element).parent().parent().attr("data-bsky-navigator-thread-index")}, ${$(element).attr("data-bsky-navigator-item-index")})`
+            );
           } else {
             postTimestampElement.text(formattedDate);
           }
@@ -60608,7 +60589,7 @@ if (cid) {
       const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
       $(element).parent().parent().addClass("thread");
       $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
-      if (selected2) {
+      if (selected) {
         $(element).parent().parent().addClass("thread-selection-active");
         $(element).parent().parent().removeClass("thread-selection-inactive");
       } else {
@@ -60616,11 +60597,9 @@ if (cid) {
         $(element).parent().parent().addClass("thread-selection-inactive");
       }
       if (threadIndicator.length) {
-        var parent = threadIndicator.parents().has(avatarDiv).first();
-        var children = parent.find("*");
+        const parent = threadIndicator.parents().has(avatarDiv).first();
+        const children = parent.find("*");
         if (threadIndicator.length == 1) {
-          var parent = threadIndicator.parents().has(avatarDiv).first();
-          var children = parent.find("*");
           if (children.index(threadIndicator) < children.index(avatarDiv)) {
             $(element).parent().parent().addClass("thread-last");
           } else {
@@ -60632,7 +60611,7 @@ if (cid) {
       } else {
         $(element).parent().parent().addClass(["thread-first", "thread-middle", "thread-last"]);
       }
-      if (selected2) {
+      if (selected) {
         $(element).addClass("item-selection-active");
         $(element).removeClass("item-selection-child-focused");
         $(element).removeClass("item-selection-inactive");
@@ -60641,7 +60620,7 @@ if (cid) {
         $(element).removeClass("item-selection-child-focused");
         $(element).addClass("item-selection-inactive");
       }
-      var postId = this.postIdForItem($(element));
+      const postId = this.postIdForItem($(element));
       if (postId != null && this.state.seen[postId]) {
         $(element).addClass("item-read");
         $(element).removeClass("item-unread");
@@ -60651,10 +60630,10 @@ if (cid) {
       }
       const handle2 = this.handleFromItem(element);
       if (this.state.blocks.all.includes(handle2)) {
-        $(element).find(constants$1.PROFILE_SELECTOR).css(constants$1.CLEARSKY_BLOCKED_ALL_CSS);
+        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_ALL_CSS);
       }
       if (this.state.blocks.recent.includes(handle2)) {
-        $(element).find(constants$1.PROFILE_SELECTOR).css(constants$1.CLEARSKY_BLOCKED_RECENT_CSS);
+        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_RECENT_CSS);
       }
     }
     didMouseMove(event) {
@@ -60676,8 +60655,8 @@ if (cid) {
       if (this.ignoreMouseMovement) {
         return;
       }
-      var target2 = $(event.target).closest(this.selector);
-      var index = this.getIndexFromItem(target2);
+      const target2 = $(event.target).closest(this.selector);
+      const index = this.getIndexFromItem(target2);
       this.replyIndex = null;
       if (index != this.index) {
         this.setIndex(index);
@@ -60687,9 +60666,9 @@ if (cid) {
       if (this.ignoreMouseMovement) {
         return;
       }
-      var target2 = $(event.target).closest(".sidecar-post");
-      var index = this.getSidecarIndexFromItem(target2);
-      var parent = target2.closest(".thread").find(".item");
+      const target2 = $(event.target).closest(".sidecar-post");
+      const index = this.getSidecarIndexFromItem(target2);
+      const parent = target2.closest(".thread").find(".item");
       const parentIndex = this.getIndexFromItem(parent);
       this.setIndex(parentIndex);
       this.replyIndex = index;
@@ -60722,7 +60701,7 @@ if (cid) {
       const messageBody = $('<div class="messageBody">');
       this.messageContainer.append(messageBody);
       $(messageBody).html(message2);
-      $(constants$1.FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
+      $(constants.FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
       window.scrollTo(0, 0);
     }
     hideMessage() {
@@ -60741,7 +60720,7 @@ if (cid) {
       this.items.length;
       this.index;
       const classes = ["thread-first", "thread-middle", "thread-last"];
-      let set = [];
+      const set = [];
       $(this.items).css("opacity", "0%");
       let itemIndex = 0;
       let threadIndex = 0;
@@ -60773,13 +60752,11 @@ if (cid) {
           this.itemStats.newest = timestamp;
         }
         if (this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
-          this.getSidecarContent().then(
-            (content2) => {
-              if (!$(item).parent().find(".sidecar-replies").length) {
-                $(item).parent().append(content2);
-              }
+          this.getSidecarContent().then((content2) => {
+            if (!$(item).parent().find(".sidecar-replies").length) {
+              $(item).parent().append(content2);
             }
-          );
+          });
         }
       });
       this.setupIntersectionObserver();
@@ -60787,25 +60764,21 @@ if (cid) {
       if (this.index != null) {
         this.applyItemStyle(this.selectedItem, true);
       }
-      $("div.r-1mhb1uw").each(
-        (i2, el) => {
-          const ancestor = $(el).parent().parent().parent().parent();
-          $(el).parent().parent().parent().addClass("item-selection-inactive");
-          if ($(ancestor).prev().find("div.item-unread").length) {
-            $(el).parent().parent().parent().addClass("item-unread");
-            $(el).parent().parent().parent().removeClass("item-read");
-          } else {
-            $(el).parent().parent().parent().addClass("item-read");
-            $(el).parent().parent().parent().removeClass("item-unread");
-          }
+      $("div.r-1mhb1uw").each((i2, el) => {
+        const ancestor = $(el).parent().parent().parent().parent();
+        $(el).parent().parent().parent().addClass("item-selection-inactive");
+        if ($(ancestor).prev().find("div.item-unread").length) {
+          $(el).parent().parent().parent().addClass("item-unread");
+          $(el).parent().parent().parent().removeClass("item-read");
+        } else {
+          $(el).parent().parent().parent().addClass("item-read");
+          $(el).parent().parent().parent().removeClass("item-unread");
         }
-      );
-      $("div.r-1mhb1uw svg").each(
-        (i2, el) => {
-          $(el).find("line").attr("stroke", this.config.get("threadIndicatorColor"));
-          $(el).find("circle").attr("fill", this.config.get("threadIndicatorColor"));
-        }
-      );
+      });
+      $("div.r-1mhb1uw svg").each((i2, el) => {
+        $(el).find("line").attr("stroke", this.config.get("threadIndicatorColor"));
+        $(el).find("circle").attr("fill", this.config.get("threadIndicatorColor"));
+      });
       $(this.selector).on("mouseover", this.onItemMouseOver);
       $(this.selector).closest("div.thread").addClass("bsky-navigator-seen");
       $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
@@ -60821,13 +60794,16 @@ if (cid) {
       this.updateInfoIndicator();
       this.enableFooterObserver();
       if ($(this.items).filter(":visible").length == 0) {
-        this.showMessage("No more unread posts.", `
+        this.showMessage(
+          "No more unread posts.",
+          `
 <p>
 You're all caught up.
 </p>
 
 <div id="messageActions"/>
-`);
+`
+        );
         if ($("#loadOlderAction").length == 0) {
           $("#messageActions").append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
           $("#loadOlderAction > a").on("click", () => this.loadOlderItems());
@@ -60842,11 +60818,9 @@ You're all caught up.
       this.ignoreMouseMovement = false;
     }
     refreshItems() {
-      $(this.items).each(
-        (index, item) => {
-          this.applyItemStyle(this.items[index], index == this.index);
-        }
-      );
+      $(this.items).each((index, item) => {
+        this.applyItemStyle(this.items[index], index == this.index);
+      });
       $(this.items).css("opacity", "100%");
     }
     updateInfoIndicator() {
@@ -60862,9 +60836,11 @@ You're all caught up.
 </div>
 <div id="itemTimestampStats">
 ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa")} - ${format(this.itemStats.newest, "yyyy-MM-dd hh:mmaaa")}</div>` : ``}`);
-      if (this.config.get("showPostCounts") == "All" || selected && this.config.get("showPostCounts") == "Selection") {
+      if (this.config.get("showPostCounts") == "All" || this.selectedItem && this.config.get("showPostCounts") == "Selection") {
         const bannerDiv = $(this.selectedItem).find("div.item-banner").first().length ? $(this.selectedItem).find("div.item-banner").first() : $(this.selectedItem).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
-        $(bannerDiv).html(`<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}/${this.unrolledReplies.length + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
+        $(bannerDiv).html(
+          `<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}/${this.unrolledReplies.length + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong>`
+        );
       }
     }
     loadNewerItems() {
@@ -60874,7 +60850,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.loadingNew = true;
       this.applyItemStyle(this.selectedItem, false);
-      let oldPostId = this.postIdForItem(this.selectedItem);
+      const oldPostId = this.postIdForItem(this.selectedItem);
       $(this.loadNewerButton).click();
       setTimeout(() => {
         this.loadItems(oldPostId);
@@ -60896,22 +60872,22 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const index = reversed ? 0 : this.items.length - 1;
       this.setIndex(index);
       this.updateItems();
-      var indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
-      var loadElement = this.items.length ? this.items[this.items.length - 1] : $(this.selector).first()[0];
-      $(indicatorElement).closest("div.thread").addClass(this.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse");
-      this.loadOlderItemsCallback(
-        [
-          {
-            time: performance.now(),
-            target: loadElement,
-            isIntersecting: true,
-            intersectionRatio: 1,
-            boundingClientRect: loadElement.getBoundingClientRect(),
-            intersectionRect: loadElement.getBoundingClientRect(),
-            rootBounds: document.documentElement.getBoundingClientRect()
-          }
-        ]
+      const indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
+      const loadElement = this.items.length ? this.items[this.items.length - 1] : $(this.selector).first()[0];
+      $(indicatorElement).closest("div.thread").addClass(
+        this.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse"
       );
+      this.loadOlderItemsCallback([
+        {
+          time: performance.now(),
+          target: loadElement,
+          isIntersecting: true,
+          intersectionRatio: 1,
+          boundingClientRect: loadElement.getBoundingClientRect(),
+          intersectionRect: loadElement.getBoundingClientRect(),
+          rootBounds: document.documentElement.getBoundingClientRect()
+        }
+      ]);
     }
     postIdFromUrl() {
       return window.location.href.split("/")[6];
@@ -60927,7 +60903,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
     handleFromItem(item) {
-      return $.trim($(item).find(constants$1.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1);
+      return $.trim(
+        $(item).find(constants.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")
+      ).slice(1);
     }
     async getThreadForItem(item) {
       const url = this.urlForItem(item);
@@ -60942,7 +60920,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return thread;
     }
     displayNameFromItem(item) {
-      return $.trim($(item).find(constants$1.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""));
+      return $.trim(
+        $(item).find(constants.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")
+      );
     }
     getHandles() {
       return Array.from(new Set(this.items.map((i2, item) => this.handleFromItem(item))));
@@ -60954,9 +60934,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const authors = $(this.items).get().map((item) => ({
         handle: this.handleFromItem(item),
         displayName: this.displayNameFromItem(item)
-      })).filter(
-        (author) => author.handle.length > 0
-      );
+      })).filter((author) => author.handle.length > 0);
       const uniqueMap = /* @__PURE__ */ new Map();
       authors.forEach((author) => {
         uniqueMap.set(author.handle, author);
@@ -60978,7 +60956,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }, 2e3);
     }
     setIndex(index, mark, update) {
-      let oldIndex = this.index;
+      const oldIndex = this.index;
       if (index == oldIndex) {
         console.log("unnecessary setIndex");
         return;
@@ -60995,23 +60973,20 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.index = index;
       this.applyItemStyle(this.selectedItem, true);
       this.expandItem(this.selectedItem);
-      $(this.selectedItem).find("video").each(
-        (i2, video2) => {
-          debugger;
-          if (this.config.get("videoPreviewPlayback") == "Pause all" || this.config.get("videoPreviewPlayback") == "Play selected" && !selected) {
-            this.pauseVideo(video2);
-          } else if (this.config.get("videoPreviewPlayback") == "Play selected" && selected) {
-            this.playVideo(video2);
-          }
-          if (this.config.get("videoDisableLoop")) {
-            debugger;
-            video2.removeAttribute("autoplay");
-            video2.addEventListener("ended", function() {
-              video2.load();
-            });
-          }
+      $(this.selectedItem).find("video").each((_i, video2) => {
+        const playbackMode = this.config.get("videoPreviewPlayback");
+        if (playbackMode === "Pause all") {
+          this.pauseVideo(video2);
+        } else if (playbackMode === "Play selected") {
+          this.playVideo(video2);
         }
-      );
+        if (this.config.get("videoDisableLoop")) {
+          video2.removeAttribute("autoplay");
+          video2.addEventListener("ended", function() {
+            video2.load();
+          });
+        }
+      });
       if (update) {
         this.updateItems();
       }
@@ -61032,16 +61007,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.name == "post" && !this.config.get("savePostState")) {
         return;
       }
-      let mainItem = $(this.items)[index];
-      let item = this.threadIndex != null ? this.getPostForThreadIndex(this.threadIndex) : mainItem;
-      console.log(item);
-      let postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
+      const mainItem = $(this.items)[index];
+      const item = this.threadIndex != null ? this.getPostForThreadIndex(this.threadIndex) : mainItem;
+      const postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
       if (!postId) {
-        debugger;
-        console.log("no post");
+        console.warn("markItemRead: no postId found");
         return;
       }
-      var markedRead = this.markPostRead(postId, isRead);
+      const markedRead = this.markPostRead(postId, isRead);
       console.log(isRead, markedRead);
       if (this.unrolledReplies.length) {
         $(item).addClass(markedRead ? "item-read" : "item-unread");
@@ -61049,9 +61022,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       } else {
         this.applyItemStyle(mainItem, index == this.index);
       }
-      if (this.unrolledReplies.length && this.unrolledReplies.get().every(
-        (r) => $(r).hasClass("item-read")
-      )) {
+      if (this.unrolledReplies.length && this.unrolledReplies.get().every((r) => $(r).hasClass("item-read"))) {
         this.markPostRead(this.postIdForItem(mainItem), isRead);
         this.applyItemStyle(this.items[index], index == this.index);
       }
@@ -61069,11 +61040,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return !!seen[postId];
     }
     markVisibleRead() {
-      $(this.items).each(
-        (i2, item) => {
-          this.markItemRead(i2, true);
-        }
-      );
+      $(this.items).each((i2, item) => {
+        this.markItemRead(i2, true);
+      });
     }
     // FIXME: move to PostItemHanler
     handleNewThreadPage(element) {
@@ -61088,12 +61057,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.index < this.items.length) {
         this.setIndex(this.index + 1, mark, true);
       } else {
-        var next = $(this.selectedItem).parent().parent().parent().next();
+        const next = $(this.selectedItem).parent().parent().parent().next();
         if (next && $.trim(next.text()) == "Continue thread...") {
-          this.loadPageObserver = waitForElement$1(
-            this.THREAD_PAGE_SELECTOR,
-            this.handleNewThreadPage
-          );
+          this.loadPageObserver = waitForElement$1(this.THREAD_PAGE_SELECTOR, this.handleNewThreadPage);
           console.log(this.loadPageObserver);
           $(next).find("div").click();
         }
@@ -61101,9 +61067,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return true;
     }
     jumpToNextUnseenItem(mark) {
-      var i2;
+      let i2;
       for (i2 = this.index + 1; i2 < this.items.length - 1; i2++) {
-        var postId = this.postIdForItem(this.items[i2]);
+        const postId = this.postIdForItem(this.items[i2]);
         if (!this.state.seen[postId]) {
           break;
         }
@@ -61119,15 +61085,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
     handleMovementKey(event) {
-      var moved = false;
-      var mark = false;
+      let moved = false;
+      let mark = false;
       this.index;
       if (this.isPopupVisible) {
         return;
       }
       this.ignoreMouseMovement = true;
       if (this.keyState.length == 0) {
-        if (["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"].includes(event.key)) {
+        if (["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"].includes(
+          event.key
+        )) {
           if (["j", "ArrowDown"].indexOf(event.key) != -1) {
             event.preventDefault();
             if (this.config.get("showReplySidecar") && this.replyIndex != null) {
@@ -61153,7 +61121,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               moved = this.jumpToPrev(event.key == "k");
             }
           } else if (event.key == "h") {
-            var back_button = $("button[aria-label^='Back' i]").filter(":visible");
+            const back_button = $("button[aria-label^='Back' i]").filter(":visible");
             if (back_button.length) {
               back_button.click();
             } else {
@@ -61228,7 +61196,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     async unrollThread(item, thread) {
       const bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
       Handlebars.registerPartial("bodyTemplate", bodyTemplate);
-      console.log(thread.parent, thread.parent?.post, thread.parent?.post?.author?.did, thread.post?.author?.did);
+      console.log(
+        thread.parent,
+        thread.parent?.post,
+        thread.parent?.post?.author?.did,
+        thread.post?.author?.did
+      );
       if (thread.parent && thread.parent.post && thread.parent.post.author.did == thread.post.author.did) {
         return;
       }
@@ -61239,7 +61212,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const unrolledPosts = await this.api.unrollThread(thread);
         const parent = $(item).find('div[data-testid="contentHider-post"]').first().parent();
         parent.css({ "overflow-y": "scroll", "max-height": "80vH", "padding-top": "1em" });
-        var div = $(parent).find("div.unrolled-replies");
+        let div = $(parent).find("div.unrolled-replies");
         if ($(div).length) {
           $(div).empty();
         } else {
@@ -61247,22 +61220,24 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           parent.append(div);
         }
         unrolledPosts.slice(1).map((p, i2) => {
-          var reply = $('<div class="unrolled-reply" style="position: relative"/>');
+          const reply = $('<div class="unrolled-reply" style="position: relative"/>');
           reply.append($('<hr class="unrolled-divider"/>'));
-          reply.append($(`<div class="unrolled-banner"><a href="${urlForPost(p)}"/>${i2 + 2}/${unrolledPosts.length}</a></div>`));
+          reply.append(
+            $(
+              `<div class="unrolled-banner"><a href="${urlForPost(p)}"/>${i2 + 2}/${unrolledPosts.length}</a></div>`
+            )
+          );
           reply.append($(bodyTemplate(formatPost(p))));
           reply.append($(this.footerTemplate(formatPost(p))));
           div.append(reply);
         });
         const threadIndex = $(item).closest(".thread").data("bsky-navigator-thread-index");
-        this.items.each(
-          (i2, item2) => {
-            if (isRedundant(item2, threadIndex)) {
-              console.log("filtered", item2);
-              $(item2).addClass("filtered");
-            }
+        this.items.each((i2, item2) => {
+          if (isRedundant(item2, threadIndex)) {
+            console.log("filtered", item2);
+            $(item2).addClass("filtered");
           }
-        );
+        });
         console.log(this.items.length);
         this.items = this.items.filter((i2, item2) => {
           return !isRedundant(item2, threadIndex);
@@ -61276,51 +61251,41 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return this.repliesTemplate({});
       }
       const post2 = thread.post;
-      const replies = thread.replies.filter(
-        (reply) => reply.post
-      ).map(
-        (reply) => reply?.post
-      ).sort(
-        (a2, b) => {
-          switch (this.config.get("sidecarReplySortOrder")) {
-            case "Default":
-              return 0;
-            case "Oldest First":
-              return new Date(a2.record.createdAt) - new Date(b.record.createdAt);
-            case "Newest First":
-              return new Date(b.record.createdAt) - new Date(a2.record.createdAt);
-            case "Most Liked First":
-              return b.likeCount - a2.likeCount;
-            case "Most Reposted First":
-              return b.repostCount - a2.repostCount;
-            default:
-              console.error(`unknown sort order: ${this.config.get("sidecarReplySortOrder")}`);
-          }
+      const replies = thread.replies.filter((reply) => reply.post).map((reply) => reply?.post).sort((a2, b) => {
+        switch (this.config.get("sidecarReplySortOrder")) {
+          case "Default":
+            return 0;
+          case "Oldest First":
+            return new Date(a2.record.createdAt) - new Date(b.record.createdAt);
+          case "Newest First":
+            return new Date(b.record.createdAt) - new Date(a2.record.createdAt);
+          case "Most Liked First":
+            return b.likeCount - a2.likeCount;
+          case "Most Reposted First":
+            return b.repostCount - a2.repostCount;
+          default:
+            console.error(`unknown sort order: ${this.config.get("sidecarReplySortOrder")}`);
         }
-      ).map(formatPost);
-      return this.repliesTemplate(
-        {
-          postId: post2.cid,
-          parent: thread.parent ? formatPost(thread.parent.post) : null,
-          replies
-        }
-      );
+      }).map(formatPost);
+      return this.repliesTemplate({
+        postId: post2.cid,
+        parent: thread.parent ? formatPost(thread.parent.post) : null,
+        replies
+      });
     }
     async showSidecar(item, thread, action = null) {
       const container = $(item).parent();
       const emptyContent = await this.getSidecarContent();
-      let sidecar = $(container).find(".sidecar-replies")[0];
+      const sidecar = $(container).find(".sidecar-replies")[0];
       if (!sidecar) {
         $(container).append(emptyContent);
       }
       const sidecarContent = await this.getSidecarContent(item, thread);
       console.log(sidecarContent);
       container.find(".sidecar-replies").replaceWith($(sidecarContent));
-      container.find(".sidecar-post").each(
-        (i2, post2) => {
-          $(post2).on("mouseover", this.onSidecarItemMouseOver);
-        }
-      );
+      container.find(".sidecar-post").each((i2, post2) => {
+        $(post2).on("mouseover", this.onSidecarItemMouseOver);
+      });
       const display2 = action == null ? sidecar && $(sidecar).is(":visible") ? "none" : "flex" : action ? "flex" : "none";
       console.log(display2);
       container.find(".sidecar-replies").css("display", display2);
@@ -61328,28 +61293,22 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     likePost(post2) {
       parseInt($(post2).find(".sidecar-count-label-likes").text());
       this.api.getAtprotoUri(this.urlForItem(post2)).then(
-        (uri) => this.api.getThread(uri).then(
-          (thread) => {
-            var likes = thread.post.likeCount;
-            if (thread.post.viewer.like) {
-              this.api.agent.deleteLike(thread.post.viewer.like).then(
-                (response) => {
-                  console.log(response);
-                  $(post2).find(".sidecar-like-button").html(constants$1.SIDECAR_SVG_LIKE[0]);
-                  $(post2).find(".sidecar-count-label-likes").html(Math.max(0, likes - 1));
-                }
-              );
-            } else {
-              this.api.agent.like(uri, thread.post.cid).then(
-                (response) => {
-                  console.log(response);
-                  $(post2).find(".sidecar-like-button").html(constants$1.SIDECAR_SVG_LIKE[1]);
-                  $(post2).find(".sidecar-count-label-likes").html(Math.max(0, likes + 1));
-                }
-              );
-            }
+        (uri) => this.api.getThread(uri).then((thread) => {
+          const likes = thread.post.likeCount;
+          if (thread.post.viewer.like) {
+            this.api.agent.deleteLike(thread.post.viewer.like).then((response) => {
+              console.log(response);
+              $(post2).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[0]);
+              $(post2).find(".sidecar-count-label-likes").html(Math.max(0, likes - 1));
+            });
+          } else {
+            this.api.agent.like(uri, thread.post.cid).then((response) => {
+              console.log(response);
+              $(post2).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[1]);
+              $(post2).find(".sidecar-count-label-likes").html(Math.max(0, likes + 1));
+            });
           }
-        )
+        })
       );
     }
     async captureScreenshot(item) {
@@ -61411,7 +61370,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           return false;
         }
       } else if (!event.metaKey) {
-        var item = this.selectedItem;
+        const item = this.selectedItem;
         if (["o", "Enter"].includes(event.key) && !this.isPopupVisible) {
           if (this.replyIndex == null) {
             $(item).click();
@@ -61420,14 +61379,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             this.selectedReply.find(".sidecar-post-timestamp a")[0].click();
           }
         } else if (event.key == "O") {
-          var inner = $(item).find("div[aria-label^='Post by']");
+          const inner = $(item).find("div[aria-label^='Post by']");
           inner.click();
         } else if (event.key == "i") {
-          if ($(item).find(constants$1.LINK_SELECTOR).length) {
-            $(item).find(constants$1.LINK_SELECTOR)[0].click();
+          if ($(item).find(constants.LINK_SELECTOR).length) {
+            $(item).find(constants.LINK_SELECTOR)[0].click();
           }
         } else if (event.key == "m") {
-          var media = $(item).find("img[src*='feed_thumbnail']");
+          const media = $(item).find("img[src*='feed_thumbnail']");
           if (media.length > 0) {
             media[0].click();
           } else {
@@ -61445,7 +61404,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             }
           }
         } else if (event.key == "r") {
-          var button = $(item).find("button[aria-label^='Reply']");
+          const button = $(item).find("button[aria-label^='Reply']");
           button.focus();
           button.click();
         } else if (event.key == "l") {
@@ -61469,7 +61428,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         } else if (event.key == "A") {
           this.markVisibleRead();
         } else if (!isNaN(parseInt(event.key))) {
-          $("div[role='tablist'] > div > div > div").filter(":visible")[parseInt(event.key) - 1].click();
+          const tabs = $("div[role='tablist'] > div > div > div").filter(":visible");
+          const tabIndex = parseInt(event.key) - 1;
+          if (tabs[tabIndex]) {
+            tabs[tabIndex].click();
+          }
         } else if (event.key == ";") {
           if (!this.api) {
             return;
@@ -61486,15 +61449,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
   }
   class FeedItemHandler extends ItemHandler {
     INDICATOR_IMAGES = {
-      loadTop: [
-        "https://www.svgrepo.com/show/502348/circleupmajor.svg"
-      ],
-      loadBottom: [
-        "https://www.svgrepo.com/show/502338/circledownmajor.svg"
-      ],
-      loadTime: [
-        "https://www.svgrepo.com/show/446075/time-history.svg"
-      ],
+      loadTop: ["https://www.svgrepo.com/show/502348/circleupmajor.svg"],
+      loadBottom: ["https://www.svgrepo.com/show/502338/circledownmajor.svg"],
+      loadTime: ["https://www.svgrepo.com/show/446075/time-history.svg"],
       filter: [
         "https://www.svgrepo.com/show/347140/mail.svg",
         "https://www.svgrepo.com/show/347147/mail-unread.svg"
@@ -61514,105 +61471,76 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
       this.onSearchKeydown = this.onSearchKeydown.bind(this);
       this.setFilter = this.setFilter.bind(this);
-      this.feedTabObserver = waitForElement$1(
-        constants$1.FEED_TAB_SELECTOR,
-        (tab) => {
-          observeChanges$1(
-            tab,
-            (attributeName, oldValue, newValue, target2) => {
-              if (attributeName == "class" && newValue.includes("r-13awgt0")) {
-                console.log("refresh");
-                this.refreshItems();
-              }
-            },
-            false
-          );
-        }
-      );
+      this.feedTabObserver = waitForElement$1(constants.FEED_TAB_SELECTOR, (tab) => {
+        observeChanges$1(
+          tab,
+          (attributeName, oldValue, newValue, target2) => {
+            if (attributeName == "class" && newValue.includes("r-13awgt0")) {
+              console.log("refresh");
+              this.refreshItems();
+            }
+          },
+          false
+        );
+      });
     }
-    applyItemStyle(element, selected2) {
-      super.applyItemStyle(element, selected2);
+    applyItemStyle(element, selected) {
+      super.applyItemStyle(element, selected);
       const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
       if (this.config.get("postActionButtonPosition") == "Left") {
         const buttonsDiv = $(element).find('button[data-testid="postDropdownBtn"]').parent().parent().parent();
-        $(buttonsDiv).parent().css(
-          {
-            "min-height": "160px",
-            "min-width": "80px"
-            // "margin-left": "10px"
-          }
-        );
-        $(buttonsDiv).parent().children().first().css(
-          "flex",
-          ""
-        );
-        buttonsDiv.css(
-          {
-            "display": "flex",
-            "flex-direction": "column",
-            "align-items": "flex-start",
-            "position": "absolute",
-            "bottom": "0px",
-            "z-index": "10"
-          }
-        );
-        $(buttonsDiv).find("> div").css(
-          {
-            "margin-left": "0px",
-            "width": "100%"
-          }
-        );
-        $(buttonsDiv).find("> div > div").css(
-          {
-            "width": "100%"
-          }
-        );
+        $(buttonsDiv).parent().css({
+          "min-height": "160px",
+          "min-width": "80px"
+          // "margin-left": "10px"
+        });
+        $(buttonsDiv).parent().children().first().css("flex", "");
+        buttonsDiv.css({
+          display: "flex",
+          "flex-direction": "column",
+          "align-items": "flex-start",
+          position: "absolute",
+          bottom: "0px",
+          "z-index": "10"
+        });
+        $(buttonsDiv).find("> div").css({
+          "margin-left": "0px",
+          width: "100%"
+        });
+        $(buttonsDiv).find("> div > div").css({
+          width: "100%"
+        });
         const buttons = $(buttonsDiv).find('button[data-testid!="postDropdownBtn"]');
-        buttons.each(
-          (i2, button) => {
-            $(button).css(
-              {
-                "display": "flex",
-                "align-items": "center",
-                /* Ensures vertical alignment */
-                "justify-content": "space-between",
-                /* Pushes text to the right */
-                "gap": "12px",
-                /* Space between the icon and text */
-                "width": "100%",
-                "padding": "5px 2px"
-              }
-            );
-            const div = $(button).find("> div").first();
-            if (div.length) {
-              $(div).css({
-                "display": "flex",
-                "align-items": "center",
-                /* Ensures vertical alignment */
-                "justify-content": "space-between",
-                /* Pushes text to the right */
-                "gap": "12px",
-                /* Space between the icon and text */
-                // "width": "100%",
-                "padding": "0px"
-              });
-            }
-            if ($(button).attr("aria-label").startsWith("Repost")) {
-              $(div).css(
-                "width",
-                "100%"
-              );
-            }
-            const svg = $(button).find("svg").first();
-            $(svg).css({
-              "flex-shrink": "0",
-              /* Prevents icon from resizing */
-              // "vertical-align": "middle", /* Ensures SVG is aligned with the text */
-              "display": "block"
-              /* Removes inline spacing issues */
+        buttons.each((i2, button) => {
+          $(button).css({
+            display: "flex",
+            "align-items": "center",
+            "justify-content": "space-between",
+            gap: "12px",
+            width: "100%",
+            padding: "5px 2px"
+          });
+          const div = $(button).find("> div").first();
+          if (div.length) {
+            $(div).css({
+              display: "flex",
+              "align-items": "center",
+              "justify-content": "space-between",
+              gap: "12px",
+              // "width": "100%",
+              padding: "0px"
             });
           }
-        );
+          if ($(button).attr("aria-label").startsWith("Repost")) {
+            $(div).css("width", "100%");
+          }
+          const svg = $(button).find("svg").first();
+          $(svg).css({
+            "flex-shrink": "0",
+            // "vertical-align": "middle", /* Ensures SVG is aligned with the text */
+            display: "block"
+          });
+        });
         avatarDiv.closest("div.r-c97pre").children().eq(0).after(buttonsDiv);
       }
     }
@@ -61623,14 +61551,18 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
 <div id="topLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
 </div>`);
       $(this.toolbarDiv).append(this.topLoadIndicator);
-      this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[+this.state.feedSortReverse]}"/></div>`);
+      this.sortIndicator = $(
+        `<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[+this.state.feedSortReverse]}"/></div>`
+      );
       $(this.toolbarDiv).append(this.sortIndicator);
       $(".indicator-image path").attr("fill", "currentColor");
       $("#sortIndicator").on("click", (event) => {
         event.preventDefault();
         this.toggleSortOrder();
       });
-      this.filterIndicator = $(`<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[+this.state.feedHideRead]}"/></div>`);
+      this.filterIndicator = $(
+        `<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[+this.state.feedHideRead]}"/></div>`
+      );
       $(this.toolbarDiv).append(this.filterIndicator);
       $("#filterIndicator").on("click", (event) => {
         event.preventDefault();
@@ -61642,16 +61574,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         minLength: 0,
         appendTo: 'div[data-testid="homeScreenFeedTabs"]',
         source: this.onSearchAutocomplete,
-        focus: function(event, ui2) {
-          event.preventDefault();
-        },
-        focus: function(event, ui2) {
+        focus: function(event, _ui) {
           event.preventDefault();
         },
         select: function(event, ui2) {
           event.preventDefault();
-          let input = this;
-          let terms = splitTerms(input.value);
+          const input = this;
+          const terms = splitTerms(input.value);
           terms.pop();
           terms.push(ui2.item.value);
           input.value = terms.join(" ") + " ";
@@ -61660,12 +61589,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       $("#bsky-navigator-search").on("keydown", function(event) {
         if (event.key === "Tab") {
-          let autocompleteMenu = $(".ui-autocomplete:visible");
-          let firstItem = autocompleteMenu.children(".ui-menu-item").first();
+          const autocompleteMenu = $(".ui-autocomplete:visible");
+          const firstItem = autocompleteMenu.children(".ui-menu-item").first();
           if (firstItem.length) {
-            let uiItem = firstItem.data("ui-autocomplete-item");
+            const uiItem = firstItem.data("ui-autocomplete-item");
             $(this).autocomplete("close");
-            let terms = splitTerms(this.value);
+            const terms = splitTerms(this.value);
             terms.pop();
             terms.push(uiItem.value);
             this.value = terms.join(" ") + " ";
@@ -61697,13 +61626,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
       $(this.searchField).on("autocompleteselect", this.onSearchUpdate);
-      waitForElement$1(
-        "#bsky-navigator-toolbar",
-        null,
-        (div) => {
-          this.addToolbar(beforeDiv);
-        }
-      );
+      waitForElement$1("#bsky-navigator-toolbar", null, (div) => {
+        this.addToolbar(beforeDiv);
+      });
     }
     onSearchKeydown(event) {
       if (event.altKey) {
@@ -61713,52 +61638,39 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
     refreshToolbars() {
-      waitForElement$1(
-        constants$1.TOOLBAR_CONTAINER_SELECTOR,
-        (indicatorContainer) => {
-          waitForElement$1(
-            'div[data-testid="homeScreenFeedTabs"]',
-            (homeScreenFeedTabsDiv) => {
-              if (!$("#bsky-navigator-toolbar").length) {
-                this.addToolbar(homeScreenFeedTabsDiv);
-              }
-            }
-          );
-        }
-      );
-      waitForElement$1(
-        constants$1.STATUS_BAR_CONTAINER_SELECTOR,
-        (statusBarContainer, observer) => {
-          if (!$("#statusBar").length) {
-            this.addStatusBar($(statusBarContainer).parent().parent().parent().parent().parent());
-            observer.disconnect();
+      waitForElement$1(constants.TOOLBAR_CONTAINER_SELECTOR, (indicatorContainer) => {
+        waitForElement$1('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
+          if (!$("#bsky-navigator-toolbar").length) {
+            this.addToolbar(homeScreenFeedTabsDiv);
           }
+        });
+      });
+      waitForElement$1(constants.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer, observer) => {
+        if (!$("#statusBar").length) {
+          this.addStatusBar($(statusBarContainer).parent().parent().parent().parent().parent());
+          observer.disconnect();
         }
-      );
-      waitForElement$1(
-        "#bsky-navigator-toolbar",
-        (div) => {
-          waitForElement$1(
-            "#statusBar",
-            (div2) => {
-              this.setSortIcons();
-            }
-          );
-        }
-      );
+      });
+      waitForElement$1("#bsky-navigator-toolbar", (div) => {
+        waitForElement$1("#statusBar", (div2) => {
+          this.setSortIcons();
+        });
+      });
     }
     onSearchAutocomplete(request, response) {
-      const authors = this.getAuthors().sort((a2, b) => a2.handle.localeCompare(b.handle, void 0, { sensitivity: "base" }));
+      const authors = this.getAuthors().sort(
+        (a2, b) => a2.handle.localeCompare(b.handle, void 0, { sensitivity: "base" })
+      );
       const rules = Object.keys(this.state.rules);
       let term = extractLastTerm(request.term).toLowerCase();
-      let isNegation = term.startsWith("!");
+      const isNegation = term.startsWith("!");
       if (isNegation) term = term.substring(1);
       let results = [];
       if (term === "") {
         results = rules.map((r) => ({ label: `$${r}`, value: `$${r}` }));
       } else if (term.startsWith("@") || term.startsWith("$")) {
-        let type = term.charAt(0);
-        let search = term.substring(1).toLowerCase();
+        const type = term.charAt(0);
+        const search = term.substring(1).toLowerCase();
         if (type === "@") {
           results = authors.filter(
             (a2) => a2.handle.toLowerCase().includes(search) || a2.displayName.toLowerCase().includes(search)
@@ -61788,11 +61700,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
 `);
       $(this.statusBarLeft).append(this.bottomLoadIndicator);
       if (!this.infoIndicator) {
-        this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="infoIndicatorText"/></div>`);
+        this.infoIndicator = $(
+          `<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="infoIndicatorText"/></div>`
+        );
         $(this.statusBarCenter).append(this.infoIndicator);
       }
       if (!this.preferencesIcon) {
-        this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
+        this.preferencesIcon = $(
+          `<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`
+        );
         $(this.preferencesIcon).on("click", () => {
           $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1]);
           this.config.open();
@@ -61803,12 +61719,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     activate() {
       super.activate();
       this.refreshToolbars();
-      waitForElement$1(
-        "#bsky-navigator-search",
-        (el) => {
-          $(el).val(this.state.filter);
-        }
-      );
+      waitForElement$1("#bsky-navigator-search", (el) => {
+        $(el).val(this.state.filter);
+      });
     }
     deactivate() {
       super.deactivate();
@@ -61823,12 +61736,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.loadItems();
     }
     setSortIcons() {
-      ["top", "bottom"].forEach(
-        (bar) => {
-          const which = !this.state.feedSortReverse && bar == "bottom" || this.state.feedSortReverse && bar == "top" ? "Older" : "Newer";
-          const img = this.INDICATOR_IMAGES[`load${bar.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())}`][0];
-          $(`#${bar}LoadIndicator`).empty();
-          $(`#${bar}LoadIndicator`).append(`
+      ["top", "bottom"].forEach((bar) => {
+        const which = !this.state.feedSortReverse && bar == "bottom" || this.state.feedSortReverse && bar == "top" ? "Older" : "Newer";
+        const img = this.INDICATOR_IMAGES[`load${bar.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())}`][0];
+        $(`#${bar}LoadIndicator`).empty();
+        $(`#${bar}LoadIndicator`).append(`
 <div id="load${which}Indicator" title="Load ${which.toLowerCase()} items" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
       <a id="load${which}IndicatorLink">
 <img id="load${which}IndicatorImage" class="indicator-image" src="${img}"/>
@@ -61836,8 +61748,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
 </a>
 </div>
 `);
-        }
-      );
+      });
       $("img#loadOlderIndicatorImage").addClass("image-highlight");
       $("a#loadOlderIndicatorLink").on("click", () => this.loadOlderItems());
     }
@@ -61857,49 +61768,46 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
       if (this.state.filter && this.state.rules) {
-        const activeRules = this.state.filter.split(/[ ]+/).map(
-          (ruleStatement) => {
-            const [_, invert, matchType, query] = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
-            return {
-              invert,
-              matchType,
-              query
-            };
-          }
-        );
-        return activeRules.map(
-          (activeRule) => {
-            var allowed = null;
-            switch (activeRule.matchType) {
-              case "$":
-                const rules = this.state.rules[activeRule.query];
-                if (!rules) {
-                  console.log(`no rule ${activeRule.query}`);
-                  return null;
+        const activeRules = this.state.filter.split(/[ ]+/).map((ruleStatement) => {
+          const [_, invert, matchType, query] = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
+          return {
+            invert,
+            matchType,
+            query
+          };
+        });
+        return activeRules.map((activeRule) => {
+          let allowed = null;
+          switch (activeRule.matchType) {
+            case "$": {
+              const rules = this.state.rules[activeRule.query];
+              if (!rules) {
+                console.log(`no rule ${activeRule.query}`);
+                return null;
+              }
+              rules.forEach((rule) => {
+                if (rule.type === "all") {
+                  allowed = rule.action === "allow";
+                } else if (rule.type === "from" && !!this.filterAuthor(item, rule.value.substring(1))) {
+                  allowed = allowed || rule.action === "allow";
+                } else if (rule.type === "content" && !!this.filterContent(item, rule.value)) {
+                  allowed = allowed || rule.action === "allow";
                 }
-                rules.forEach((rule) => {
-                  if (rule.type === "all") {
-                    allowed = rule.action === "allow";
-                  } else if (rule.type === "from" && !!this.filterAuthor(item, rule.value.substring(1))) {
-                    allowed = allowed || rule.action === "allow";
-                  } else if (rule.type === "content" && !!this.filterContent(item, rule.value)) {
-                    allowed = allowed || rule.action === "allow";
-                  }
-                });
-                break;
-              case "@":
-                allowed = !!this.filterAuthor(item, activeRule.query);
-                break;
-              case "%":
-                allowed = !!this.filterContent(item, activeRule.query);
-                break;
-              default:
-                allowed = !!this.filterAuthor(item, activeRule.query) || !!this.filterContent(item, activeRule.query);
-                break;
+              });
+              break;
             }
-            return activeRule.invert ? !allowed : allowed;
+            case "@":
+              allowed = !!this.filterAuthor(item, activeRule.query);
+              break;
+            case "%":
+              allowed = !!this.filterContent(item, activeRule.query);
+              break;
+            default:
+              allowed = !!this.filterAuthor(item, activeRule.query) || !!this.filterContent(item, activeRule.query);
+              break;
           }
-        ).every((allowed) => allowed == true);
+          return activeRule.invert ? !allowed : allowed;
+        }).every((allowed) => allowed == true);
       }
       return true;
     }
@@ -61923,42 +61831,39 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     filterItems() {
       const hideRead = this.state.feedHideRead;
       $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+hideRead]);
-      $("#filterIndicator").attr("title", `show all or unread (currently ${hideRead ? "unread" : "all"})`);
+      $("#filterIndicator").attr(
+        "title",
+        `show all or unread (currently ${hideRead ? "unread" : "all"})`
+      );
       const parent = $(this.selector).first().closest(".thread").parent();
       const unseenThreads = parent.find(".thread");
-      $(unseenThreads).map(
-        (i2, thread) => {
-          $(thread).find(".item").each(
-            (i3, item) => {
-              if (this.filterItem(item, thread)) {
-                $(item).removeClass("filtered");
-              } else {
-                $(item).addClass("filtered");
-              }
-            }
-          );
-          if (this.filterThread(thread)) {
-            $(thread).removeClass("filtered");
+      $(unseenThreads).map((i2, thread) => {
+        $(thread).find(".item").each((i3, item) => {
+          if (this.filterItem(item, thread)) {
+            $(item).removeClass("filtered");
           } else {
-            $(thread).addClass("filtered");
+            $(item).addClass("filtered");
           }
+        });
+        if (this.filterThread(thread)) {
+          $(thread).removeClass("filtered");
+        } else {
+          $(thread).addClass("filtered");
         }
-      );
-      $(unseenThreads).map(
-        (i2, thread) => {
-          $(thread).find(".item").each(
-            (i3, item) => {
-              const offset = parseInt($(item).data("bsky-navigator-thread-offset"));
-              if (offset > 0 && $(item).hasClass("item-unread") && this.config.get("showReplyContext")) {
-                const index = parseInt($(thread).data("bsky-navigator-thread-index"));
-                const prev = $(`div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset - 1}"]`);
-                $(prev).removeClass("filtered");
-                $(prev).closest(".thread").removeClass("filtered");
-              }
-            }
-          );
-        }
-      );
+      });
+      $(unseenThreads).map((i2, thread) => {
+        $(thread).find(".item").each((i3, item) => {
+          const offset = parseInt($(item).data("bsky-navigator-thread-offset"));
+          if (offset > 0 && $(item).hasClass("item-unread") && this.config.get("showReplyContext")) {
+            const index = parseInt($(thread).data("bsky-navigator-thread-index"));
+            const prev = $(
+              `div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset - 1}"]`
+            );
+            $(prev).removeClass("filtered");
+            $(prev).closest(".thread").removeClass("filtered");
+          }
+        });
+      });
       this.refreshItems();
       if (hideRead && $(this.selectedItem).hasClass("item-read")) {
         console.log("jumping");
@@ -61968,28 +61873,27 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     sortItems() {
       const reversed = this.state.feedSortReverse;
       $("#sortIndicatorImage").attr("src", this.INDICATOR_IMAGES.sort[+reversed]);
-      $("#sortIndicator").attr("title", `change sort order (currently ${reversed ? "forward" : "reverse"} chronological)`);
-      const parent = $(this.selector).closest(".thread").first().parent();
-      const newItems = parent.children().filter(
-        (i2, item) => $(item).hasClass("thread")
-      ).get().sort(
-        (a2, b) => {
-          const threadIndexA = parseInt($(a2).data("bsky-navigator-thread-index"));
-          const threadIndexB = parseInt($(b).data("bsky-navigator-thread-index"));
-          const itemIndexA = parseInt($(a2).find(".item").data("bsky-navigator-item-index"));
-          const itemIndexB = parseInt($(b).find(".item").data("bsky-navigator-item-index"));
-          if (threadIndexA !== threadIndexB) {
-            return reversed ? threadIndexB - threadIndexA : threadIndexA - threadIndexB;
-          }
-          return itemIndexA - itemIndexB;
-        }
+      $("#sortIndicator").attr(
+        "title",
+        `change sort order (currently ${reversed ? "forward" : "reverse"} chronological)`
       );
+      const parent = $(this.selector).closest(".thread").first().parent();
+      const newItems = parent.children().filter((i2, item) => $(item).hasClass("thread")).get().sort((a2, b) => {
+        const threadIndexA = parseInt($(a2).data("bsky-navigator-thread-index"));
+        const threadIndexB = parseInt($(b).data("bsky-navigator-thread-index"));
+        const itemIndexA = parseInt($(a2).find(".item").data("bsky-navigator-item-index"));
+        const itemIndexB = parseInt($(b).find(".item").data("bsky-navigator-item-index"));
+        if (threadIndexA !== threadIndexB) {
+          return reversed ? threadIndexB - threadIndexA : threadIndexA - threadIndexB;
+        }
+        return itemIndexA - itemIndexB;
+      });
       reversed ^ this.loadingNew ? parent.prepend(newItems) : parent.children(".thread").last().next().after(newItems);
     }
     handleInput(event) {
-      var item = this.selectedItem;
+      const item = this.selectedItem;
       if (event.key == "a") {
-        $(item).find(constants$1.PROFILE_SELECTOR)[0].click();
+        $(item).find(constants.PROFILE_SELECTOR)[0].click();
       } else if (event.key == "u") {
         this.loadNewerItems();
       } else if (event.key == ":") {
@@ -62036,7 +61940,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     // }
     handleInput(event) {
       if (["o", "Enter"].includes(event.key) && !(event.altKey || event.metaKey)) {
-        var inner = $(item).find("div[aria-label^='Post by']");
+        const inner = $(item).find("div[aria-label^='Post by']");
         inner.click();
       }
       if (super.handleInput(event)) {
@@ -62047,7 +61951,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       var item = this.selectedItem;
       if (event.key == "a") {
-        var handle2 = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1]);
+        const handle2 = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1]);
         $(item).find("div").filter(
           (i2, el) => $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == `@${handle2}`
         )[0].click();
@@ -62102,11 +62006,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
   }
-  const {
-    waitForElement,
-    observeChanges,
-    observeVisibilityChange
-  } = utils$1;
+  const { waitForElement, observeChanges, observeVisibilityChange } = utils$1;
   GM_addStyle(style);
   let config;
   let handlers;
@@ -62129,8 +62029,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     return "unknown";
   }
   (function() {
-    var current_url = null;
-    var context = null;
+    let current_url = null;
+    let context = null;
     function parseRulesConfig(configText) {
       const lines = configText.split("\n");
       const rules = {};
@@ -62166,7 +62066,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         stateSaveTimeout: config.get("stateSaveTimeout"),
         maxEntries: config.get("historyMax")
       };
-      state.init(constants$1.STATE_KEY, stateManagerConfig, onStateInit);
+      state.init(constants.STATE_KEY, stateManagerConfig, onStateInit);
     }
     function onConfigSave() {
       state.rulesConfig = config.get("rulesConfig");
@@ -62197,9 +62097,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         loadSidecarTemplate("body", sidecarTemplatesHtml);
       }
       handlers = {
-        feed: new FeedItemHandler("feed", config, state, api, constants$1.FEED_ITEM_SELECTOR),
-        post: new PostItemHandler("post", config, state, api, constants$1.POST_ITEM_SELECTOR),
-        profile: new ProfileItemHandler("profile", config, state, api, constants$1.FEED_ITEM_SELECTOR),
+        feed: new FeedItemHandler("feed", config, state, api, constants.FEED_ITEM_SELECTOR),
+        post: new PostItemHandler("post", config, state, api, constants.POST_ITEM_SELECTOR),
+        profile: new ProfileItemHandler("profile", config, state, api, constants.FEED_ITEM_SELECTOR),
         input: new Handler("input", config, state, api)
       };
       if (state.rulesConfig) {
@@ -62234,12 +62134,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const stylesheet = `
 
         /* Feed itmes may be sorted, so we hide them visually and show them later */
-        div[data-testid$="FeedPage"] ${constants$1.FEED_ITEM_SELECTOR} {
+        div[data-testid$="FeedPage"] ${constants.FEED_ITEM_SELECTOR} {
             opacity: 0%;
         }
 
         ${config.get("hideLoadNewButton") ? `
-            ${constants$1.LOAD_NEW_BUTTON_SELECTOR} {
+            ${constants.LOAD_NEW_BUTTON_SELECTOR} {
                 display: none;
             }
             ` : ``}
@@ -62322,11 +62222,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             overflow-x: clip;
         }
 
-        ${constants$1.POST_CONTENT_SELECTOR} {
+        ${constants.POST_CONTENT_SELECTOR} {
             margin: 1em 1px 1px 1px;
         }
 
-        ${constants$1.HOME_SCREEN_SELECTOR} .item > div:first-of-type > div:last-of-type > div:last-of-type > div:first-of-type {
+        ${constants.HOME_SCREEN_SELECTOR} .item > div:first-of-type > div:last-of-type > div:last-of-type > div:first-of-type {
             flex: unset !important;
         }
 
@@ -62348,13 +62248,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         }
         if (!widthWatcher) {
-          widthWatcher = waitForElement(
-            constants$1.WIDTH_SELECTOR,
-            onWindowResize
-          );
+          widthWatcher = waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
         }
       }
-      waitForElement(constants$1.SCREEN_SELECTOR, (element) => {
+      waitForElement(constants.SCREEN_SELECTOR, (element) => {
         updateScreen(getScreenFromElement(element));
         observeVisibilityChange($(element), (isVisible) => {
           if (isVisible) {
@@ -62385,36 +62282,41 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
       function onFocus(e2) {
-        var target2 = e2.target;
+        const target2 = e2.target;
         if (typeof target2.tagName === "undefined") {
           return false;
         }
-        var targetTagName = target2.tagName.toLowerCase();
+        const targetTagName = target2.tagName.toLowerCase();
         console.log(`onFocus: ${targetTagName}`);
         switch (targetTagName) {
           case "input":
           case "textarea":
             setContext("input");
             break;
-          case "div":
-            let maybeTiptap = $(target2).closest(".tiptap");
+          case "div": {
+            const maybeTiptap = $(target2).closest(".tiptap");
             if (maybeTiptap.length) {
-              waitForElement(".tiptap", () => null, () => onBlur({ "target": maybeTiptap[0] }));
+              waitForElement(
+                ".tiptap",
+                () => null,
+                () => onBlur({ target: maybeTiptap[0] })
+              );
               setContext("input");
             } else {
               setContextFromUrl();
             }
             break;
+          }
           default:
             setContextFromUrl();
         }
       }
       function onBlur(e2) {
-        var target2 = e2.target;
+        const target2 = e2.target;
         if (typeof target2.tagName === "undefined") {
           return false;
         }
-        var targetTagName = target2.tagName.toLowerCase();
+        const targetTagName = target2.tagName.toLowerCase();
         console.log(`onBlur: ${targetTagName}`);
         console.log(e2.target);
         switch (targetTagName) {
@@ -62439,22 +62341,22 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (window.location.href !== current_url) {
             setContextFromUrl();
           }
-        }, constants$1.URL_MONITOR_INTERVAL);
+        }, constants.URL_MONITOR_INTERVAL);
       }
       state.mobileView = false;
       waitForElement(
-        `${constants$1.DRAWER_MENU_SELECTOR}, ${constants$1.LEFT_SIDEBAR_SELECTOR}`,
+        `${constants.DRAWER_MENU_SELECTOR}, ${constants.LEFT_SIDEBAR_SELECTOR}`,
         (element) => {
           console.log("viewport");
-          state.mobileView = $(element).is(constants$1.DRAWER_MENU_SELECTOR);
+          state.mobileView = $(element).is(constants.DRAWER_MENU_SELECTOR);
           console.log(state.mobileView);
           startMonitor();
           setContextFromUrl();
         }
       );
       function adjustTransformX(el, offset) {
-        var transform2 = $(el).css("transform");
-        var translateX = 0;
+        let transform2 = $(el).css("transform");
+        const translateX = 0;
         if (!transform2 || transform2 == "none") {
           $(el).css("transform", "translateX(0px);");
           transform2 = $(el).css("transform");
@@ -62473,12 +62375,18 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         console.log("sidebarDiff", sidebarDiff);
         if (state.leftSidebarMinimized) {
           console.log("minimized");
-          adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2 + constants$1.WIDTH_OFFSET);
-          adjustTransformX("main", sidebarDiff / 2 - constants$1.WIDTH_OFFSET);
+          adjustTransformX(
+            leftSidebar,
+            LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2 + constants.WIDTH_OFFSET
+          );
+          adjustTransformX("main", sidebarDiff / 2 - constants.WIDTH_OFFSET);
         } else if (sidebarDiff) {
           if (config.get("hideRightSidebar")) {
-            adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2 + constants$1.WIDTH_OFFSET);
-            adjustTransformX("main", sidebarDiff / 2 - constants$1.WIDTH_OFFSET);
+            adjustTransformX(
+              leftSidebar,
+              LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2 + constants.WIDTH_OFFSET
+            );
+            adjustTransformX("main", sidebarDiff / 2 - constants.WIDTH_OFFSET);
           } else {
             adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2);
             adjustTransformX(rightSidebar, RIGHT_TRANSLATE_X_DEFAULT + sidebarDiff / 2);
@@ -62488,27 +62396,24 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           $(leftSidebar).css("transform", `translateX(${LEFT_TRANSLATE_X_DEFAULT}px)`);
           $(rightSidebar).css("transform", `translateX(${RIGHT_TRANSLATE_X_DEFAULT}px)`);
         }
-        $(constants$1.WIDTH_SELECTOR).css("max-width", `${width}px`, "!important");
+        $(constants.WIDTH_SELECTOR).css("max-width", `${width}px`, "!important");
         $('div[role="tablist"]').css("width", `${width}px`);
         $("#statusBar").css("max-width", `${width}px`);
         $('div[style^="position: fixed; inset: 0px 0px 0px 50%;"]').css("width", `${width}px`);
       }
       state.leftSidebarMinimized = false;
       waitForElement(
-        constants$1.LEFT_SIDEBAR_SELECTOR,
+        constants.LEFT_SIDEBAR_SELECTOR,
         (leftSidebar) => {
           state.leftSidebarMinimized = !$(leftSidebar).hasClass("r-y46g1k");
-          observeChanges(
-            leftSidebar,
-            (attributeName, oldValue, newValue, target2) => {
-              if ($(leftSidebar).hasClass("r-y46g1k")) {
-                state.leftSidebarMinimized = false;
-              } else {
-                state.leftSidebarMinimized = true;
-              }
-              console.log(state.leftSidebarMinimized);
+          observeChanges(leftSidebar, (attributeName, oldValue, newValue, target2) => {
+            if ($(leftSidebar).hasClass("r-y46g1k")) {
+              state.leftSidebarMinimized = false;
+            } else {
+              state.leftSidebarMinimized = true;
             }
-          );
+            console.log(state.leftSidebarMinimized);
+          });
         }
         // (leftSidebar) => {
         //     console.log("removed");
@@ -62523,15 +62428,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (state.mobileView) {
           return;
         } else {
-          const leftSidebar = $(constants$1.LEFT_SIDEBAR_SELECTOR);
+          const leftSidebar = $(constants.LEFT_SIDEBAR_SELECTOR);
           const rightSidebar = $(leftSidebar).next();
           const leftSidebarWidth = $(leftSidebar).outerWidth();
-          const remainingWidth = $(window).width() - leftSidebarWidth - !config.get("hideRightSidebar") * ($(rightSidebar).outerWidth() || 0) - constants$1.WIDTH_OFFSET;
+          const remainingWidth = $(window).width() - leftSidebarWidth - // - (!state.leftSidebarMinimized ? $(rightSidebar).outerWidth() : 0)
+          !config.get("hideRightSidebar") * ($(rightSidebar).outerWidth() || 0) - constants.WIDTH_OFFSET;
           console.log("remainingWidth", remainingWidth, "leftSidebarWidth", leftSidebarWidth);
           if (remainingWidth >= config.get("postWidthDesktop")) {
-            setWidth($(constants$1.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
+            setWidth($(constants.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
           } else {
-            setWidth($(constants$1.LEFT_SIDEBAR_SELECTOR), remainingWidth);
+            setWidth($(constants.LEFT_SIDEBAR_SELECTOR), remainingWidth);
           }
         }
       }
@@ -62539,7 +62445,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(onWindowResize, 500);
       });
-      waitForElement(constants$1.WIDTH_SELECTOR, onWindowResize);
+      waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
       function proxyIntersectionObserver() {
         const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
         class ProxyIntersectionObserver {
@@ -62552,10 +62458,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               const filteredEntries = entries.filter(
                 (entry) => !($(entry.target).hasClass("thread") || $(entry.target).hasClass("item") || $(entry.target).find('div[data-testid^="feedItem"]').length || $(entry.target).next()?.attr("style") == "height: 32px;")
               );
-              callback(
-                filteredEntries,
-                observer
-              );
+              callback(filteredEntries, observer);
             }, options);
           }
           enable() {
@@ -62608,12 +62511,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         id: "GM_config",
         title: configTitleDiv,
         fields: CONFIG_FIELDS,
-        "events": {
-          "init": onConfigInit,
-          "save": onConfigSave,
-          "close": () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
+        events: {
+          init: onConfigInit,
+          save: onConfigSave,
+          close: () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
         },
-        "css": configCss
+        css: configCss
       });
     });
     $(document).ready(function(e2) {

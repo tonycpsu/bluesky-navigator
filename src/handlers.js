@@ -1,104 +1,105 @@
-;// handlers.js
+// handlers.js
 
-import constants from './constants.js'
-import * as utils from "./utils.js";
-import * as dateFns from "date-fns";
-import Handlebars from "handlebars";
-import html2canvas from "html2canvas";
+import constants from './constants.js';
+import * as utils from './utils.js';
+import * as dateFns from 'date-fns';
+import Handlebars from 'handlebars';
+import html2canvas from 'html2canvas';
 
-const {
-  waitForElement
-} = utils;
-
+const { waitForElement } = utils;
 
 function convertToEmbed(url) {
-    try {
-        let embedHtml = "";
+  try {
+    let embedHtml = '';
 
-        // YouTube Embed
-        if (url.includes("youtube.com") || url.includes("youtu.be")) {
-            let videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
-            if (videoId) {
-                embedHtml = `<iframe width="320" height="200" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
-            }
-        }
+    // YouTube Embed
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      const videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
+      if (videoId) {
+        embedHtml = `<iframe width="320" height="200" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
+      }
+    }
 
-        // Twitter/X Embed
-        else if (url.includes("twitter.com") || url.includes("x.com")) {
-            embedHtml = `<blockquote class="twitter-tweet"><a href="${url}"></a></blockquote>
+    // Twitter/X Embed
+    else if (url.includes('twitter.com') || url.includes('x.com')) {
+      embedHtml = `<blockquote class="twitter-tweet"><a href="${url}"></a></blockquote>
                          <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>`;
-        }
+    }
 
-        // TikTok Embed
-        else if (url.includes("tiktok.com")) {
-            embedHtml = `<blockquote class="tiktok-embed" cite="${url}" data-video-id="${url.split('/').pop()}" style="max-width: 605px; min-width: 325px;">
+    // TikTok Embed
+    else if (url.includes('tiktok.com')) {
+      embedHtml = `<blockquote class="tiktok-embed" cite="${url}" data-video-id="${url.split('/').pop()}" style="max-width: 605px; min-width: 325px;">
                             <a href="${url}">Watch on TikTok</a>
                          </blockquote>
                          <script async src="https://www.tiktok.com/embed.js"></script>`;
-        }
+    }
 
-        // Instagram Embed
-        else if (url.includes("instagram.com/p/")) {
-            embedHtml = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="13">
+    // Instagram Embed
+    else if (url.includes('instagram.com/p/')) {
+      embedHtml = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="13">
                             <a href="${url}">View on Instagram</a>
                          </blockquote>
                          <script async src="https://www.instagram.com/embed.js"></script>`;
-        }
-
-        // Default: Just return a linked URL if not recognized
-        return embedHtml || `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
-    } catch (error) {
-        console.error("Error generating embed:", error);
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
     }
+
+    // Default: Just return a linked URL if not recognized
+    return embedHtml || `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+  } catch (error) {
+    console.error('Error generating embed:', error);
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+  }
 }
 
 function formatPostText(post) {
-    let text = post.text;
-    if (!post.facets) return text; // No mentions/links, return as is
+  let text = post.text;
+  if (!post.facets) return text; // No mentions/links, return as is
 
-    let charOffsets = [];
+  const charOffsets = [];
 
-    // Convert byte-based offsets to character indices
-    let runningByteCount = 0;
-    let utf16CharIndex = 0;
+  // Convert byte-based offsets to character indices
+  let runningByteCount = 0;
+  let utf16CharIndex = 0;
 
-    for (let char of text) {
-        let charSize = new TextEncoder().encode(char).length;
-        charOffsets.push({ byteOffset: runningByteCount, charIndex: utf16CharIndex });
-        runningByteCount += charSize;
-        utf16CharIndex++;
-    }
+  for (const char of text) {
+    const charSize = new TextEncoder().encode(char).length;
+    charOffsets.push({ byteOffset: runningByteCount, charIndex: utf16CharIndex });
+    runningByteCount += charSize;
+    utf16CharIndex++;
+  }
 
-    // Process facets in **reverse order** to avoid breaking offsets
-    post.facets.slice().reverse().forEach(facet => {
-        const { index, features } = facet;
-        let start = charOffsets.findLast(c => c.byteOffset <= index.byteStart)?.charIndex || 0;
-        let end = charOffsets.findLast(c => c.byteOffset <= index.byteEnd)?.charIndex || text.length;
+  // Process facets in **reverse order** to avoid breaking offsets
+  post.facets
+    .slice()
+    .reverse()
+    .forEach((facet) => {
+      const { index, features } = facet;
+      const start = charOffsets.findLast((c) => c.byteOffset <= index.byteStart)?.charIndex || 0;
+      const end =
+        charOffsets.findLast((c) => c.byteOffset <= index.byteEnd)?.charIndex || text.length;
 
-        let originalSubstring = text.slice(start, end); // Extract original text
+      const originalSubstring = text.slice(start, end); // Extract original text
 
-        features.forEach(feature => {
-            if (feature.$type === "app.bsky.richtext.facet#mention") {
-                let mentionLink = `<a href="https://bsky.app/profile/${feature.did}" class="mention">${originalSubstring}</a>`;
-                text = text.slice(0, start) + mentionLink + text.slice(end+1);
-            } else if (feature.$type === "app.bsky.richtext.facet#link") {
-                let url = feature.uri;
-                let embedHtml = convertToEmbed(url);
-                // let linkElement = `<a href="${url}" target="_blank" rel="noopener noreferrer">${originalSubstring}</a>`;
-                text = text.slice(0, start) + embedHtml + text.slice(end+1);
-            } else if (feature.$type === "app.bsky.richtext.facet#tag") {
-              let hashtagLink = `<a href="https://bsky.app/search?q=%23${feature.tag}" class="hashtag">${originalSubstring}</a>`;
-              text = text.slice(0, start) + hashtagLink + text.slice(end+1);
-            }
-        });
+      features.forEach((feature) => {
+        if (feature.$type === 'app.bsky.richtext.facet#mention') {
+          const mentionLink = `<a href="https://bsky.app/profile/${feature.did}" class="mention">${originalSubstring}</a>`;
+          text = text.slice(0, start) + mentionLink + text.slice(end + 1);
+        } else if (feature.$type === 'app.bsky.richtext.facet#link') {
+          const url = feature.uri;
+          const embedHtml = convertToEmbed(url);
+          // let linkElement = `<a href="${url}" target="_blank" rel="noopener noreferrer">${originalSubstring}</a>`;
+          text = text.slice(0, start) + embedHtml + text.slice(end + 1);
+        } else if (feature.$type === 'app.bsky.richtext.facet#tag') {
+          const hashtagLink = `<a href="https://bsky.app/search?q=%23${feature.tag}" class="hashtag">${originalSubstring}</a>`;
+          text = text.slice(0, start) + hashtagLink + text.slice(end + 1);
+        }
+      });
     });
 
-    return text;
+  return text;
 }
 
 function urlForPost(post) {
-  return `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split("/").slice(-1)[0]}`
+  return `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split('/').slice(-1)[0]}`;
 }
 
 function extractQuotedPost(embed) {
@@ -113,7 +114,7 @@ function extractQuotedPost(embed) {
       displayName: record.author?.displayName || record.author?.handle,
       handle: record.author?.handle,
       text: record.value?.text || '',
-      images: record.embeds?.[0]?.images || null
+      images: record.embeds?.[0]?.images || null,
     };
   }
 
@@ -126,7 +127,7 @@ function extractQuotedPost(embed) {
       displayName: record.author?.displayName || record.author?.handle,
       handle: record.author?.handle,
       text: record.value?.text || '',
-      images: record.embeds?.[0]?.images || null
+      images: record.embeds?.[0]?.images || null,
     };
   }
 
@@ -145,7 +146,7 @@ function extractExternalLink(embed) {
       title: ext.title || '',
       description: ext.description || '',
       thumb: ext.thumb || null,
-      domain: ext.uri ? new URL(ext.uri).hostname : ''
+      domain: ext.uri ? new URL(ext.uri).hostname : '',
     };
   }
 
@@ -158,7 +159,7 @@ function extractExternalLink(embed) {
       title: ext.title || '',
       description: ext.description || '',
       thumb: ext.thumb || null,
-      domain: ext.uri ? new URL(ext.uri).hostname : ''
+      domain: ext.uri ? new URL(ext.uri).hostname : '',
     };
   }
 
@@ -188,12 +189,11 @@ function formatPost(post) {
     repostSvg: constants.SIDECAR_SVG_REPOST[post.viewer.repost ? 1 : 0],
     repostCount: formatter.format(post.repostCount),
     likeSvg: constants.SIDECAR_SVG_LIKE[post.viewer.like ? 1 : 0],
-    likeCount: formatter.format(post.likeCount)
-  }
+    likeCount: formatter.format(post.likeCount),
+  };
 }
 
 export class Handler {
-
   constructor(name, config, state, api) {
     //console.log(name)
     this.name = name;
@@ -218,89 +218,77 @@ export class Handler {
 
   bindKeys() {
     //console.log(`${this.name}: bind`)
-    document.addEventListener('keydown', this.handleInput, true)
+    document.addEventListener('keydown', this.handleInput, true);
   }
 
   unbindKeys() {
     //console.log(`${this.name}: unbind`)
-    document.removeEventListener('keydown', this.handleInput, true)
+    document.removeEventListener('keydown', this.handleInput, true);
   }
 
   handleInput(event) {
     //console.log(`handleInput: ${this}, ${this.name}: ${event}`)
     //console.dir(event)
     if (event.altKey && !event.metaKey) {
-      if (event.code === "KeyH") {
+      if (event.code === 'KeyH') {
         event.preventDefault();
         $("nav a[aria-label='Home']")[0].click();
-      }
-      else if (event.code === "KeyS") {
+      } else if (event.code === 'KeyS') {
         event.preventDefault();
         $("nav a[aria-label='Search']")[0].click();
-      }
-      else if (event.code === "KeyN") {
+      } else if (event.code === 'KeyN') {
         event.preventDefault();
         $("nav a[aria-label='Notifications']")[0].click();
-      }
-      else if (event.code === "KeyM") {
+      } else if (event.code === 'KeyM') {
         event.preventDefault();
         $("nav a[aria-label='Chat']")[0].click();
-      }
-      else if (event.code === "KeyF") {
+      } else if (event.code === 'KeyF') {
         event.preventDefault();
         $("nav a[aria-label='Feeds']")[0].click();
-      }
-      else if (event.code === "KeyL") {
+      } else if (event.code === 'KeyL') {
         event.preventDefault();
         $("nav a[aria-label='Lists']")[0].click();
-      }
-      else if (event.code === "KeyP") {
+      } else if (event.code === 'KeyP') {
         event.preventDefault();
         $("nav a[aria-label='Profile']")[0].click();
-      }
-      else if (event.code === "Comma") {
+      } else if (event.code === 'Comma') {
         event.preventDefault();
         $("nav a[aria-label='Settings']")[0].click();
-      }
-      else if (event.code === "Period") {
+      } else if (event.code === 'Period') {
         event.preventDefault();
-        this.config.open()
-      } else if (event.code === "Enter" && $("#GM_config").is(":visible")) {
+        this.config.open();
+      } else if (event.code === 'Enter' && $('#GM_config').is(':visible')) {
         event.preventDefault();
-        this.config.save()
+        this.config.save();
       }
-
     } else if (!event.altKey && !event.metaKey) {
-      if (event.code == "Escape" && $("#GM_config").is(":visible")) {
+      if (event.code == 'Escape' && $('#GM_config').is(':visible')) {
         event.preventDefault();
         this.config.close();
       }
     }
   }
-
 }
 
 export class ItemHandler extends Handler {
-
   // POPUP_MENU_SELECTOR = "div[data-radix-popper-content-wrapper]"
-  POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']"
+  POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
 
   // FIXME: this belongs in PostItemHandler
-  THREAD_PAGE_SELECTOR = "main > div > div > div"
+  THREAD_PAGE_SELECTOR = 'main > div > div > div';
 
-  MOUSE_MOVEMENT_THRESHOLD = 10
+  MOUSE_MOVEMENT_THRESHOLD = 10;
 
   FLOATING_BUTTON_IMAGES = {
     prev: [
       // 'https://www.svgrepo.com/show/491060/prev.svg'
-      'https://www.svgrepo.com/show/238452/up-arrow.svg'
+      'https://www.svgrepo.com/show/238452/up-arrow.svg',
     ],
     next: [
       // 'https://www.svgrepo.com/show/491054/next.svg'
-      'https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg'
-    ]
-  }
-
+      'https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg',
+    ],
+  };
 
   constructor(name, config, state, api, selector) {
     super(name, config, state, api);
@@ -330,61 +318,40 @@ export class ItemHandler extends Handler {
     this.enableScrollMonitor = false;
     this.enableIntersectionObserver = false;
     this.handlingClick = false;
-    this.itemStats = {}
+    this.itemStats = {};
     // this.visibleItems = new Set();
     this.visibleItems = [];
     this.scrollTick = false;
     this.scrollTop = 0;
     this.scrollDirection = 0;
 
-    waitForElement(
-      '#sidecar-replies-template',
-      () => {
-        this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html())
-      }
-    );
-    waitForElement(
-      '#sidecar-post-template',
-      () => {
-        this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
-        Handlebars.registerPartial("postTemplate", this.postTemplate);
-      }
-    );
-    waitForElement(
-      '#sidecar-footer-template',
-      () => {
-        this.footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
-        Handlebars.registerPartial("footerTemplate", this.footerTemplate);
-      }
-    );
-    waitForElement(
-      '#sidecar-post-counts-template',
-      () => {
-        this.postCountsTemplate = Handlebars.compile($("#sidecar-post-counts-template").html());
-        Handlebars.registerPartial("postCountsTemplate", this.postCountsTemplate);
-      }
-    );
-    waitForElement(
-      '#sidecar-embed-image-template',
-      () => {
-        this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
-        Handlebars.registerPartial("imageTemplate", this.imageTemplate);
-      }
-    );
-    waitForElement(
-      '#sidecar-embed-quote-template',
-      () => {
-        this.quoteTemplate = Handlebars.compile($("#sidecar-embed-quote-template").html());
-        Handlebars.registerPartial("quoteTemplate", this.quoteTemplate);
-      }
-    );
-    waitForElement(
-      '#sidecar-embed-external-template',
-      () => {
-        this.externalTemplate = Handlebars.compile($("#sidecar-embed-external-template").html());
-        Handlebars.registerPartial("externalTemplate", this.externalTemplate);
-      }
-    );
+    waitForElement('#sidecar-replies-template', () => {
+      this.repliesTemplate = Handlebars.compile($('#sidecar-replies-template').html());
+    });
+    waitForElement('#sidecar-post-template', () => {
+      this.postTemplate = Handlebars.compile($('#sidecar-post-template').html());
+      Handlebars.registerPartial('postTemplate', this.postTemplate);
+    });
+    waitForElement('#sidecar-footer-template', () => {
+      this.footerTemplate = Handlebars.compile($('#sidecar-footer-template').html());
+      Handlebars.registerPartial('footerTemplate', this.footerTemplate);
+    });
+    waitForElement('#sidecar-post-counts-template', () => {
+      this.postCountsTemplate = Handlebars.compile($('#sidecar-post-counts-template').html());
+      Handlebars.registerPartial('postCountsTemplate', this.postCountsTemplate);
+    });
+    waitForElement('#sidecar-embed-image-template', () => {
+      this.imageTemplate = Handlebars.compile($('#sidecar-embed-image-template').html());
+      Handlebars.registerPartial('imageTemplate', this.imageTemplate);
+    });
+    waitForElement('#sidecar-embed-quote-template', () => {
+      this.quoteTemplate = Handlebars.compile($('#sidecar-embed-quote-template').html());
+      Handlebars.registerPartial('quoteTemplate', this.quoteTemplate);
+    });
+    waitForElement('#sidecar-embed-external-template', () => {
+      this.externalTemplate = Handlebars.compile($('#sidecar-embed-external-template').html());
+      Handlebars.registerPartial('externalTemplate', this.externalTemplate);
+    });
     // this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
     // this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
     // Handlebars.registerPartial("postTemplate", this.postTemplate);
@@ -393,44 +360,47 @@ export class ItemHandler extends Handler {
   }
 
   isActive() {
-    return false
+    return false;
   }
 
   activate() {
-    this.keyState = []
-    this.popupObserver = waitForElement(this.POPUP_MENU_SELECTOR, this.onPopupAdd, this.onPopupRemove);
+    this.keyState = [];
+    this.popupObserver = waitForElement(
+      this.POPUP_MENU_SELECTOR,
+      this.onPopupAdd,
+      this.onPopupRemove
+    );
     this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
       root: null, // Observing within the viewport
       // rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
-      threshold: Array.from({ length: 101 }, (_, i) => i / 100)
+      threshold: Array.from({ length: 101 }, (_, i) => i / 100),
     });
     this.setupIntersectionObserver();
 
     this.footerIntersectionObserver = new IntersectionObserver(this.onFooterIntersection, {
       root: null, // Observing within the viewport
       // threshold: [1]
-      threshold: Array.from({ length: 101 }, (_, i) => i / 100)
+      threshold: Array.from({ length: 101 }, (_, i) => i / 100),
     });
 
-    const safeSelector = `${this.selector}:not(.thread ${this.selector})`
+    const safeSelector = `${this.selector}:not(.thread ${this.selector})`;
     this.observer = waitForElement(safeSelector, (element) => {
-      this.onItemAdded(element),
-      this.onItemRemoved(element)
+      (this.onItemAdded(element), this.onItemRemoved(element));
     });
 
     this.loadNewerObserver = waitForElement(constants.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
       this.loadNewerButton = $(button)[0];
-      $('a#loadNewerIndicatorLink').on("click", () => this.loadNewerItems())
+      $('a#loadNewerIndicatorLink').on('click', () => this.loadNewerItems());
 
       // $('img#loadNewerIndicatorImage').css("opacity", "1");
-      $('img#loadNewerIndicatorImage').addClass("image-highlight");
-      $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
+      $('img#loadNewerIndicatorImage').addClass('image-highlight');
+      $('img#loadNewerIndicatorImage').removeClass('toolbar-icon-pending');
       if ($('#loadNewerAction').length == 0) {
         $('#messageActions').append($('<div id="loadNewerAction"><a> Load newer posts</a></div>'));
-        $('#loadNewerAction > a').on("click", () => this.loadNewerItems());
+        $('#loadNewerAction > a').on('click', () => this.loadNewerItems());
       }
       this.loadNewerButton.addEventListener(
-        "click",
+        'click',
         (event) => {
           if (this.loadingNew) {
             return; // Avoid re-entry
@@ -447,19 +417,15 @@ export class ItemHandler extends Handler {
           setTimeout(() => {
             this.loadNewerItems();
           }, 0);
-
         },
         true // Capture phase
       );
     });
 
     this.enableIntersectionObserver = true;
-    $(document).on("scroll", this.onScroll);
-    $(document).on("scrollend", () => {
-      setTimeout(
-        () => this.ignoreMouseMovement = false,
-        500
-      );
+    $(document).on('scroll', this.onScroll);
+    $(document).on('scrollend', () => {
+      setTimeout(() => (this.ignoreMouseMovement = false), 500);
     });
 
     console.log(this.state.mobileView);
@@ -469,24 +435,28 @@ export class ItemHandler extends Handler {
         // debugger;
         console.log(container);
         if (!this.prevButton) {
-          this.prevButton = $(`<div id="prevButton" title="previous post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`);
+          this.prevButton = $(
+            `<div id="prevButton" title="previous post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`
+          );
           $(container).append(this.prevButton);
-          if(this.state.mobileView) {
-            $("#prevButton").addClass("mobile");
+          if (this.state.mobileView) {
+            $('#prevButton').addClass('mobile');
           }
-          $('#prevButton').on("click", (event) => {
+          $('#prevButton').on('click', (event) => {
             event.preventDefault();
             this.jumpToPrev(true);
           });
         }
 
         if (!this.nextButton) {
-          this.nextButton = $(`<div id="nextButton" title="next post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.next[0]}"/></div>`);
+          this.nextButton = $(
+            `<div id="nextButton" title="next post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.next[0]}"/></div>`
+          );
           $(this.prevButton).after(this.nextButton);
-          if(this.state.mobileView) {
-            $("#nextButton").addClass("mobile");
+          if (this.state.mobileView) {
+            $('#nextButton').addClass('mobile');
           }
-          $('#nextButton').on("click", (event) => {
+          $('#nextButton').on('click', (event) => {
             event.preventDefault();
             this.jumpToNext(true);
           });
@@ -494,31 +464,27 @@ export class ItemHandler extends Handler {
       }
     );
 
-    super.activate()
+    super.activate();
   }
 
   deactivate() {
-
-    if(this.floatingButtonsObserver) {
-      this.floatingButtonsObserver.disconnect()
+    if (this.floatingButtonsObserver) {
+      this.floatingButtonsObserver.disconnect();
     }
-    if(this.observer)
-    {
-      this.observer.disconnect()
+    if (this.observer) {
+      this.observer.disconnect();
     }
-    if(this.popupObserver)
-    {
-      this.popupObserver.disconnect()
+    if (this.popupObserver) {
+      this.popupObserver.disconnect();
     }
-    if(this.intersectionObserver)
-    {
-      this.intersectionObserver.disconnect()
+    if (this.intersectionObserver) {
+      this.intersectionObserver.disconnect();
     }
     this.disableFooterObserver();
 
-    $(this.selector).off("mouseover mouseleave");
-    $(document).off("scroll", this.onScroll);
-    super.deactivate()
+    $(this.selector).off('mouseover mouseleave');
+    $(document).off('scroll', this.onScroll);
+    super.deactivate();
   }
 
   set index(value) {
@@ -532,18 +498,12 @@ export class ItemHandler extends Handler {
     return this._index;
   }
 
-  set index(value) {
-    this._index = value;
-    this.postId = this.postIdForItem(this.selectedItem);
-    this.updateInfoIndicator();
-  }
-
   get selectedItem() {
     return $(this.items[this.index]);
   }
 
   getReplyForIndex(index) {
-    return this.selectedItem.closest(".thread").find(".sidecar-post").eq(index);
+    return this.selectedItem.closest('.thread').find('.sidecar-post').eq(index);
   }
 
   get selectedReply() {
@@ -555,26 +515,26 @@ export class ItemHandler extends Handler {
   }
 
   set replyIndex(value) {
-    let oldIndex = this._replyIndex;
+    const oldIndex = this._replyIndex;
     const replies = $(this.selectedItem).parent().find('div.sidecar-post');
-    if(value == oldIndex || value < 0 || value >= replies.length) {
+    if (value == oldIndex || value < 0 || value >= replies.length) {
       return;
     }
-    if(oldIndex != null) {
-      replies.eq(oldIndex).removeClass("reply-selection-active");
+    if (oldIndex != null) {
+      replies.eq(oldIndex).removeClass('reply-selection-active');
     }
     this._replyIndex = value;
-    if(this.replyIndex == null) {
-      $(this.selectedItem).addClass("item-selection-active");
-      $(this.selectedItem).removeClass("item-selection-child-focused");
-      replies.removeClass("reply-selection-active");
+    if (this.replyIndex == null) {
+      $(this.selectedItem).addClass('item-selection-active');
+      $(this.selectedItem).removeClass('item-selection-child-focused');
+      replies.removeClass('reply-selection-active');
     } else {
       const selectedReply = replies.eq(this.replyIndex);
-      if(selectedReply.length) {
-        $(this.selectedItem).addClass("item-selection-child-focused");
-        $(this.selectedItem).removeClass("item-selection-active");
-        selectedReply.addClass("reply-selection-active");
-        this.scrollToElement(selectedReply[0], "nearest");
+      if (selectedReply.length) {
+        $(this.selectedItem).addClass('item-selection-child-focused');
+        $(this.selectedItem).removeClass('item-selection-active');
+        selectedReply.addClass('reply-selection-active');
+        this.scrollToElement(selectedReply[0], 'nearest');
       }
     }
   }
@@ -585,8 +545,8 @@ export class ItemHandler extends Handler {
 
   set threadIndex(value) {
     // debugger;
-    let oldIndex = this._threadIndex;
-    if(value == oldIndex) {
+    const oldIndex = this._threadIndex;
+    if (value == oldIndex) {
       return;
     } else if (value < 0) {
       this._threadIndex = null;
@@ -597,23 +557,23 @@ export class ItemHandler extends Handler {
       this.setIndex(this.index + 1, false, true);
       return;
     }
-    if(oldIndex != null) {
+    if (oldIndex != null) {
       // const oldPost = oldIndex > 0 ? posts.eq(oldIndex-1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
-      this.getPostForThreadIndex(oldIndex).removeClass("reply-selection-active");
+      this.getPostForThreadIndex(oldIndex).removeClass('reply-selection-active');
     }
     this._threadIndex = value;
-    if(this.threadIndex == null) {
-      $(this.selectedItem).addClass("item-selection-active");
-      $(this.selectedItem).removeClass("item-selection-child-focused");
+    if (this.threadIndex == null) {
+      $(this.selectedItem).addClass('item-selection-active');
+      $(this.selectedItem).removeClass('item-selection-child-focused');
       // posts.removeClass("reply-selection-active");
     } else {
       // const selectedPost = this.threadIndex > 0 ? posts.eq(this.threadIndex-1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
       // console.log(selectedPost);
-      if(this.unrolledReplies.length && this.selectedPost) {
-        $(this.selectedItem).addClass("item-selection-child-focused");
-        $(this.selectedItem).removeClass("item-selection-active");
-        this.selectedPost.addClass("reply-selection-active");
-        this.scrollToElement(this.selectedPost[0], "nearest");
+      if (this.unrolledReplies.length && this.selectedPost) {
+        $(this.selectedItem).addClass('item-selection-child-focused');
+        $(this.selectedItem).removeClass('item-selection-active');
+        this.selectedPost.addClass('reply-selection-active');
+        this.scrollToElement(this.selectedPost[0], 'nearest');
       } else {
         return;
       }
@@ -626,7 +586,9 @@ export class ItemHandler extends Handler {
   }
 
   getPostForThreadIndex(index) {
-    return index > 0 ? this.unrolledReplies.eq(index-1) : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
+    return index > 0
+      ? this.unrolledReplies.eq(index - 1)
+      : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
   }
 
   get selectedPost() {
@@ -634,25 +596,23 @@ export class ItemHandler extends Handler {
     // return this.threadIndex > 0 ? posts.eq(this.threadIndex-1) : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
   }
 
-
   onItemAdded(element) {
-
     // console.log(element)
 
-    this.applyItemStyle(element)
+    this.applyItemStyle(element);
 
     // $(element).on("mouseleave", this.onItemMouseLeave)
 
-    clearTimeout(this.debounceTimeout)
+    clearTimeout(this.debounceTimeout);
 
     this.debounceTimeout = setTimeout(() => {
-      this.loadItems()
-    }, 500)
+      this.loadItems();
+    }, 500);
   }
 
   onItemRemoved(element) {
     if (this.intersectionObserver) {
-      this.intersectionObserver.disconnect(element)
+      this.intersectionObserver.disconnect(element);
     }
   }
 
@@ -664,7 +624,7 @@ export class ItemHandler extends Handler {
     this.ignoreMouseMovement = true;
     if (!this.scrollTick) {
       requestAnimationFrame(() => {
-        let currentScroll = $(window).scrollTop();
+        const currentScroll = $(window).scrollTop();
         if (currentScroll > this.scrollTop) {
           this.scrollDirection = -1;
         } else if (currentScroll < this.scrollTop) {
@@ -677,14 +637,12 @@ export class ItemHandler extends Handler {
     }
   }
 
-  scrollToElement(target, block=null) {
+  scrollToElement(target, block = null) {
     this.enableIntersectionObserver = false;
-    target.scrollIntoView(
-      {
-        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
-        block: (block == null) ? "start" : block
-      }
-    );
+    target.scrollIntoView({
+      behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+      block: block == null ? 'start' : block,
+    });
   }
 
   // Function to programmatically play a video from the userscript
@@ -701,40 +659,31 @@ export class ItemHandler extends Handler {
   }
 
   setupIntersectionObserver(entries) {
-
-    if(this.intersectionObserver) {
-      $(this.items).each(
-        (i, item) => {
-          this.intersectionObserver.observe($(item)[0]);
-        }
-      )
+    if (this.intersectionObserver) {
+      $(this.items).each((i, item) => {
+        this.intersectionObserver.observe($(item)[0]);
+      });
     }
   }
 
   onIntersection(entries) {
-
-    if(!this.enableIntersectionObserver || this.loading || this.loadingNew) {
+    if (!this.enableIntersectionObserver || this.loading || this.loadingNew) {
       return;
     }
     let target = null;
 
-    entries.forEach(entry => {
-
+    entries.forEach((entry) => {
       if (entry.isIntersecting) {
         // remove existing so intersectionRatio can be updated
-        this.visibleItems = this.visibleItems.filter(
-          (item) => item.target != entry.target
-        )
-        this.visibleItems.push(entry)
+        this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
+        this.visibleItems.push(entry);
       } else {
         const oldLength = this.visibleItems.length;
-        this.visibleItems = this.visibleItems.filter(
-          (item) => item.target != entry.target
-        )
-        if(this.visibleItems.length < oldLength) {
-          console.log("removed", entry.target);
-          if (this.config.get("markReadOnScroll")) {
-            var index = this.getIndexFromItem(entry.target);
+        this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
+        if (this.visibleItems.length < oldLength) {
+          console.log('removed', entry.target);
+          if (this.config.get('markReadOnScroll')) {
+            const index = this.getIndexFromItem(entry.target);
             this.markItemRead(index, true);
           }
         }
@@ -742,34 +691,31 @@ export class ItemHandler extends Handler {
     });
 
     const visibleItems = this.visibleItems
-    //                          .filter(
-    //   (item) => {
-    //     return item.target.getBoundingClientRect().top > 0
-    //   }
-    // )
-                             .sort(
-      (a, b) => (
+      //                          .filter(
+      //   (item) => {
+      //     return item.target.getBoundingClientRect().top > 0
+      //   }
+      // )
+      .sort((a, b) =>
         this.scrollDirection == 1
           ? b.target.getBoundingClientRect().top - a.target.getBoundingClientRect().top
-          :  a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
-      )
-    )
-    if (! visibleItems.length) {
+          : a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
+      );
+    if (!visibleItems.length) {
       return;
     }
 
-    for (const [i, item] of visibleItems.entries()) {
-      var index = this.getIndexFromItem(item.target);
+    for (const [_i, item] of visibleItems.entries()) {
       if (item.intersectionRatio == 1) {
         target = item.target;
         break;
       }
     }
     if (target == null) {
-      target = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
-      var index = this.getIndexFromItem(target);
+      target =
+        this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
     }
-    var index = this.getIndexFromItem(target);
+    const index = this.getIndexFromItem(target);
     this.setIndex(index);
   }
 
@@ -785,18 +731,17 @@ export class ItemHandler extends Handler {
   }
 
   enableFooterObserver() {
-    if (this.config.get("disableLoadMoreOnScroll")) {
+    if (this.config.get('disableLoadMoreOnScroll')) {
       return;
     }
-    if(!this.state.feedSortReverse && this.items.length > 0) {
+    if (!this.state.feedSortReverse && this.items.length > 0) {
       this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
     }
   }
 
   disableFooterObserver() {
-    if(this.footerIntersectionObserver)
-    {
-      this.footerIntersectionObserver.disconnect()
+    if (this.footerIntersectionObserver) {
+      this.footerIntersectionObserver.disconnect();
     }
   }
 
@@ -809,54 +754,59 @@ export class ItemHandler extends Handler {
   }
 
   get scrollMargin() {
-    var margin;
-    if(this.state.mobileView) {
-      // debugger;
-      var el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
-      el = el.first().children().filter(":visible").first();
-      if(this.index) {
-        var transform = el[0].style.transform
-        var translateY = transform.indexOf("(") == -1 ? 0 : parseInt(transform.split("(")[1].split("px")[0])
+    let margin;
+    let el;
+    if (this.state.mobileView) {
+      el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
+      el = el.first().children().filter(':visible').first();
+      if (this.index) {
+        const transform = el[0].style.transform;
+        const translateY =
+          transform.indexOf('(') == -1 ? 0 : parseInt(transform.split('(')[1].split('px')[0]);
         margin = el.outerHeight() + translateY;
       } else {
         margin = el.outerHeight();
       }
-
     } else {
-      var el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
+      el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
       margin = el.outerHeight();
     }
-    var itemMargin = parseInt($(this.selector).css("margin-top").replace("px", ""));
-    console.log(itemMargin);
+    const itemMargin = parseInt($(this.selector).css('margin-top').replace('px', ''));
     return margin + itemMargin;
   }
 
   applyItemStyle(element, selected) {
-    $(element).addClass("item");
+    $(element).addClass('item');
     // $(element).find("div").first().children().last().css("flex", "");
 
     // the flex property here creates problems if post actions are on the left
-    if (this.config.get("postActionButtonPosition") == "Left") {
+    if (this.config.get('postActionButtonPosition') == 'Left') {
       const postContainer = $(element).find(constants.POST_CONTENT_SELECTOR).prev();
-      if(postContainer.length) {
-        postContainer.css("flex", "");
+      if (postContainer.length) {
+        postContainer.css('flex', '');
       }
     }
-    const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first()
-    if (!postTimestampElement.attr("data-bsky-navigator-age")) {
-      postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text())
+    const postTimestampElement = $(element)
+      .find('a[href^="/profile/"][data-tooltip*=" at "]')
+      .first();
+    if (!postTimestampElement.attr('data-bsky-navigator-age')) {
+      postTimestampElement.attr('data-bsky-navigator-age', postTimestampElement.text());
     }
     const userFormat = this.config.get(
-      this.state.mobileView ? "postTimestampFormatMobile" : "postTimestampFormat"
+      this.state.mobileView ? 'postTimestampFormatMobile' : 'postTimestampFormat'
     );
-    const postTimeString = postTimestampElement.attr("aria-label")
+    const postTimeString = postTimestampElement.attr('aria-label');
     if (postTimeString && userFormat) {
       // console.log(postTimeString)
       const postTimestamp = new Date(postTimeString.replace(' at', ''));
       if (userFormat) {
-        const formattedDate = dateFns.format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
-        if (this.config.get("showDebuggingInfo")) {
-          postTimestampElement.text(`${formattedDate} (${$(element).parent().parent().attr("data-bsky-navigator-thread-index")}, ${$(element).attr("data-bsky-navigator-item-index")})`);
+        const formattedDate = dateFns
+          .format(postTimestamp, userFormat)
+          .replace('$age', postTimestampElement.attr('data-bsky-navigator-age'));
+        if (this.config.get('showDebuggingInfo')) {
+          postTimestampElement.text(
+            `${formattedDate} (${$(element).parent().parent().attr('data-bsky-navigator-thread-index')}, ${$(element).attr('data-bsky-navigator-item-index')})`
+          );
         } else {
           postTimestampElement.text(formattedDate);
         }
@@ -864,72 +814,63 @@ export class ItemHandler extends Handler {
     }
 
     // FIXME: This method of finding threads is likely to be unstable.
-    const threadIndicator = $(element).find("div.r-lchren, div.r-1mhb1uw > svg")
-    const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
+    const threadIndicator = $(element).find('div.r-lchren, div.r-1mhb1uw > svg');
+    const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
 
-    $(element).parent().parent().addClass("thread");
+    $(element).parent().parent().addClass('thread');
 
-    $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
+    $(element).css('scroll-margin-top', `${this.scrollMargin}px`, `!important`);
 
     if (selected) {
-      $(element).parent().parent().addClass("thread-selection-active")
-      $(element).parent().parent().removeClass("thread-selection-inactive")
+      $(element).parent().parent().addClass('thread-selection-active');
+      $(element).parent().parent().removeClass('thread-selection-inactive');
     } else {
-      $(element).parent().parent().removeClass("thread-selection-active")
-      $(element).parent().parent().addClass("thread-selection-inactive")
+      $(element).parent().parent().removeClass('thread-selection-active');
+      $(element).parent().parent().addClass('thread-selection-inactive');
     }
 
     if (threadIndicator.length) {
-      var parent = threadIndicator.parents().has(avatarDiv).first();
-      var children = parent.find("*");
+      const parent = threadIndicator.parents().has(avatarDiv).first();
+      const children = parent.find('*');
       if (threadIndicator.length == 1) {
-        var parent = threadIndicator.parents().has(avatarDiv).first();
-        var children = parent.find("*");
         if (children.index(threadIndicator) < children.index(avatarDiv)) {
-          $(element).parent().parent().addClass("thread-last")
+          $(element).parent().parent().addClass('thread-last');
         } else {
-          $(element).parent().parent().addClass("thread-first")
+          $(element).parent().parent().addClass('thread-first');
         }
       } else {
-        $(element).parent().parent().addClass("thread-middle")
+        $(element).parent().parent().addClass('thread-middle');
       }
-
     } else {
-      $(element).parent().parent().addClass(["thread-first", "thread-middle", "thread-last"])
+      $(element).parent().parent().addClass(['thread-first', 'thread-middle', 'thread-last']);
     }
 
-    if (selected)
-    {
-      $(element).addClass("item-selection-active")
-      $(element).removeClass("item-selection-child-focused")
-      $(element).removeClass("item-selection-inactive")
-    }
-    else
-    {
-      $(element).removeClass("item-selection-active")
-      $(element).removeClass("item-selection-child-focused")
-      $(element).addClass("item-selection-inactive")
+    if (selected) {
+      $(element).addClass('item-selection-active');
+      $(element).removeClass('item-selection-child-focused');
+      $(element).removeClass('item-selection-inactive');
+    } else {
+      $(element).removeClass('item-selection-active');
+      $(element).removeClass('item-selection-child-focused');
+      $(element).addClass('item-selection-inactive');
     }
 
-    var postId = this.postIdForItem($(element))
+    const postId = this.postIdForItem($(element));
 
-    if (postId != null && this.state.seen[postId])
-    {
-      $(element).addClass("item-read")
-      $(element).removeClass("item-unread")
-    }
-    else
-    {
-      $(element).addClass("item-unread")
-      $(element).removeClass("item-read")
+    if (postId != null && this.state.seen[postId]) {
+      $(element).addClass('item-read');
+      $(element).removeClass('item-unread');
+    } else {
+      $(element).addClass('item-unread');
+      $(element).removeClass('item-read');
     }
     const handle = this.handleFromItem(element);
     // console.log(handle)
     if (this.state.blocks.all.includes(handle)) {
-      $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_ALL_CSS)
+      $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_ALL_CSS);
     }
     if (this.state.blocks.recent.includes(handle)) {
-      $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_RECENT_CSS)
+      $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_RECENT_CSS);
     }
   }
 
@@ -945,21 +886,21 @@ export class ItemHandler extends Handler {
       this.lastMousePosition = currentPosition;
 
       if (distanceMoved >= this.MOUSE_MOVEMENT_THRESHOLD) {
-        return true
+        return true;
       }
     } else {
       // Set the initial mouse position
       this.lastMousePosition = currentPosition;
     }
-    return false
+    return false;
   }
 
   onItemMouseOver(event) {
     if (this.ignoreMouseMovement) {
       return;
     }
-    var target = $(event.target).closest(this.selector)
-    var index = this.getIndexFromItem(target);
+    const target = $(event.target).closest(this.selector);
+    const index = this.getIndexFromItem(target);
     this.replyIndex = null;
     if (index != this.index) {
       // this.applyItemStyle(this.selectedItem, false);
@@ -971,24 +912,23 @@ export class ItemHandler extends Handler {
     if (this.ignoreMouseMovement) {
       return;
     }
-    var target = $(event.target).closest(".sidecar-post")
-    var index = this.getSidecarIndexFromItem(target);
-    var parent = target.closest(".thread").find(".item");
+    const target = $(event.target).closest('.sidecar-post');
+    const index = this.getSidecarIndexFromItem(target);
+    const parent = target.closest('.thread').find('.item');
     const parentIndex = this.getIndexFromItem(parent);
     this.setIndex(parentIndex);
     this.replyIndex = index;
   }
 
-
   handleInput(event) {
     if (this.handleMovementKey(event)) {
-      return event.key
+      return event.key;
     } else if (this.handleItemKey(event)) {
-      return event.key
-    } else if (event.key == "U") {
+      return event.key;
+    } else if (event.key == 'U') {
       this.loadOlderItems();
     } else {
-      return super.handleInput(event)
+      return super.handleInput(event);
     }
   }
 
@@ -1005,15 +945,14 @@ export class ItemHandler extends Handler {
     this.messageContainer = $('<div id="messageContainer">');
     if (title) {
       const messageTitle = $('<div class="messageTitle">');
-      $(messageTitle).html(title)
+      $(messageTitle).html(title);
       this.messageContainer.append(messageTitle);
     }
     const messageBody = $('<div class="messageBody">');
     this.messageContainer.append(messageBody);
     $(messageBody).html(message);
-    $(constants.FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
+    $(constants.FEED_CONTAINER_SELECTOR).filter(':visible').append(this.messageContainer);
     window.scrollTo(0, 0);
-
   }
 
   hideMessage() {
@@ -1023,69 +962,73 @@ export class ItemHandler extends Handler {
 
   getTimestampForItem(item) {
     const postTimestampElement = $(item).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
-    const postTimeString = postTimestampElement.attr("aria-label");
-    if(!postTimeString) {
+    const postTimeString = postTimestampElement.attr('aria-label');
+    if (!postTimeString) {
       return null;
     }
     return new Date(postTimeString.replace(' at', ''));
   }
 
   loadItems(focusedPostId) {
+    const old_length = this.items.length;
+    const old_index = this.index;
 
-    var old_length = this.items.length
-    var old_index = this.index
+    const classes = ['thread-first', 'thread-middle', 'thread-last'];
+    const set = [];
 
-    const classes = ["thread-first", "thread-middle", "thread-last"];
-    let set = [];
-
-    $(this.items).css("opacity", "0%")
+    $(this.items).css('opacity', '0%');
     let itemIndex = 0;
     let threadIndex = 0;
     let threadOffset = 0;
 
-    $(this.selector).filter(":visible").each( (i, item) => {
-      $(item).attr("data-bsky-navigator-item-index", itemIndex++);
-      $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
+    $(this.selector)
+      .filter(':visible')
+      .each((i, item) => {
+        $(item).attr('data-bsky-navigator-item-index', itemIndex++);
+        $(item).parent().parent().attr('data-bsky-navigator-thread-index', threadIndex);
 
-      const threadDiv = $(item).parent().parent();
-      // Check if the div contains any of the target classes
-      if (classes.some(cls => $(threadDiv).hasClass(cls))) {
-        set.push(threadDiv[0]); // Collect the div
-        $(item).attr("data-bsky-navigator-thread-offset", threadOffset);
-        threadOffset++;
-        if ($(threadDiv).hasClass("thread-last")) {
-          threadIndex++;
-          threadOffset = 0;
+        const threadDiv = $(item).parent().parent();
+        // Check if the div contains any of the target classes
+        if (classes.some((cls) => $(threadDiv).hasClass(cls))) {
+          set.push(threadDiv[0]); // Collect the div
+          $(item).attr('data-bsky-navigator-thread-offset', threadOffset);
+          threadOffset++;
+          if ($(threadDiv).hasClass('thread-last')) {
+            threadIndex++;
+            threadOffset = 0;
+          }
         }
-      }
-    });
+      });
 
     this.sortItems();
     this.filterItems();
 
-    this.items = $(this.selector).filter(":visible")
+    this.items = $(this.selector).filter(':visible');
 
     this.itemStats.oldest = this.itemStats.newest = null;
-    $(this.selector).filter(":visible").each( (i, item) => {
+    $(this.selector)
+      .filter(':visible')
+      .each((i, item) => {
+        const timestamp = this.getTimestampForItem(item);
+        if (!this.itemStats.oldest || timestamp < this.itemStats.oldest) {
+          this.itemStats.oldest = timestamp;
+        }
+        if (!this.itemStats.newest || timestamp > this.itemStats.newest) {
+          this.itemStats.newest = timestamp;
+        }
 
-      const timestamp = this.getTimestampForItem(item);
-      if(!this.itemStats.oldest || timestamp < this.itemStats.oldest) {
-        this.itemStats.oldest = timestamp;
-      }
-      if(!this.itemStats.newest || timestamp > this.itemStats.newest) {
-        this.itemStats.newest = timestamp;
-      }
-
-      if (this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
-        this.getSidecarContent().then(
-          (content) => {
-            if(!$(item).parent().find(".sidecar-replies").length) {
+        if (
+          this.config.get('showReplySidecar') &&
+          $(this.selectedItem).closest('.thread').outerWidth() >=
+            this.config.get('showReplySidecarMinimumWidth')
+        ) {
+          this.getSidecarContent().then((content) => {
+            if (!$(item).parent().find('.sidecar-replies').length) {
               $(item).parent().append(content);
             }
-          }
-        );
-      }
-    });
+          });
+        }
+      });
 
     this.setupIntersectionObserver();
 
@@ -1093,43 +1036,41 @@ export class ItemHandler extends Handler {
     this.enableFooterObserver();
 
     // console.log(this.items)
-    if(this.index != null) {
-      this.applyItemStyle(this.selectedItem, true)
+    if (this.index != null) {
+      this.applyItemStyle(this.selectedItem, true);
     }
-    $("div.r-1mhb1uw").each(
-      (i, el) => {
-        const ancestor = $(el).parent().parent().parent().parent()
-        // $(ancestor).addClass(["thread"])
-        $(el).parent().parent().parent().addClass("item-selection-inactive")
-        if($(ancestor).prev().find("div.item-unread").length) {
-          $(el).parent().parent().parent().addClass("item-unread")
-          $(el).parent().parent().parent().removeClass("item-read")
-        } else {
-          $(el).parent().parent().parent().addClass("item-read")
-          $(el).parent().parent().parent().removeClass("item-unread")
-        }
+    $('div.r-1mhb1uw').each((i, el) => {
+      const ancestor = $(el).parent().parent().parent().parent();
+      // $(ancestor).addClass(["thread"])
+      $(el).parent().parent().parent().addClass('item-selection-inactive');
+      if ($(ancestor).prev().find('div.item-unread').length) {
+        $(el).parent().parent().parent().addClass('item-unread');
+        $(el).parent().parent().parent().removeClass('item-read');
+      } else {
+        $(el).parent().parent().parent().addClass('item-read');
+        $(el).parent().parent().parent().removeClass('item-unread');
       }
-    )
-    $("div.r-1mhb1uw svg").each(
-      (i, el) => {
-        $(el).find("line").attr("stroke", this.config.get("threadIndicatorColor"))
-        $(el).find("circle").attr("fill", this.config.get("threadIndicatorColor"))
-      }
-    )
-    $(this.selector).on("mouseover", this.onItemMouseOver)
+    });
+    $('div.r-1mhb1uw svg').each((i, el) => {
+      $(el).find('line').attr('stroke', this.config.get('threadIndicatorColor'));
+      $(el).find('circle').attr('fill', this.config.get('threadIndicatorColor'));
+    });
+    $(this.selector).on('mouseover', this.onItemMouseOver);
     // $(this.selector).on("mouseleave", this.onItemMouseLeave)
 
-    $(this.selector).closest("div.thread").addClass("bsky-navigator-seen")
+    $(this.selector).closest('div.thread').addClass('bsky-navigator-seen');
     // console.log("set loading false")
-    $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
+    $(this.selector)
+      .closest('div.thread')
+      .removeClass(['loading-indicator-reverse', 'loading-indicator-forward']);
 
     this.refreshItems();
 
     this.loading = false;
     // $('img#loadOlderIndicatorImage').css("opacity", "1");
-    $('img#loadOlderIndicatorImage').addClass("image-highlight");
-    $('img#loadOlderIndicatorImage').removeClass("toolbar-icon-pending");
-    if(focusedPostId) {
+    $('img#loadOlderIndicatorImage').addClass('image-highlight');
+    $('img#loadOlderIndicatorImage').removeClass('toolbar-icon-pending');
+    if (focusedPostId) {
       this.jumpToPost(focusedPostId);
     } else if (!this.jumpToPost(this.postId)) {
       this.setIndex(0);
@@ -1137,154 +1078,168 @@ export class ItemHandler extends Handler {
     this.updateInfoIndicator();
     this.enableFooterObserver();
 
-    if ($(this.items).filter(":visible").length == 0) {
-      this.showMessage("No more unread posts.", `
+    if ($(this.items).filter(':visible').length == 0) {
+      this.showMessage(
+        'No more unread posts.',
+        `
 <p>
 You're all caught up.
 </p>
 
 <div id="messageActions"/>
-`)
+`
+      );
       if ($('#loadOlderAction').length == 0) {
         $('#messageActions').append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
-        $('#loadOlderAction > a').on("click", () => this.loadOlderItems());
+        $('#loadOlderAction > a').on('click', () => this.loadOlderItems());
       }
       // if ($('img#loadNewerIndicatorImage').css("opacity") == "1") {
-      if ($('img#loadNewerIndicatorImage').hasClass("image-highlight")) {
+      if ($('img#loadNewerIndicatorImage').hasClass('image-highlight')) {
         $('#messageActions').append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
-        $('#loadNewerAction > a').on("click", () => this.loadNewerItems());
+        $('#loadNewerAction > a').on('click', () => this.loadNewerItems());
       }
-
     } else {
-      this.hideMessage()
+      this.hideMessage();
     }
 
     this.ignoreMouseMovement = false;
   }
 
   refreshItems() {
-    $(this.items).each(
-      (index, item) => {
-        this.applyItemStyle(this.items[index], index == this.index);
-      }
-    )
-    $(this.items).css("opacity", "100%")
+    $(this.items).each((index, item) => {
+      this.applyItemStyle(this.items[index], index == this.index);
+    });
+    $(this.items).css('opacity', '100%');
   }
 
   updateInfoIndicator() {
-    this.itemStats.unreadCount = this.items.filter(
-      (i, item) => $(item).hasClass("item-unread")
+    this.itemStats.unreadCount = this.items.filter((i, item) =>
+      $(item).hasClass('item-unread')
     ).length;
-    this.itemStats.filteredCount = this.items.filter(".filtered").length;
-    this.itemStats.shownCount = this.items.length - this.itemStats.filteredCount
-    const index = this.itemStats.shownCount ? this.index+1 : 0;
-    $("div#infoIndicatorText").html(`
+    this.itemStats.filteredCount = this.items.filter('.filtered').length;
+    this.itemStats.shownCount = this.items.length - this.itemStats.filteredCount;
+    const index = this.itemStats.shownCount ? this.index + 1 : 0;
+    $('div#infoIndicatorText').html(`
 <div id="itemCountStats">
-<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex+1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
+<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
 </div>
 <div id="itemTimestampStats">
 ${
-this.itemStats.oldest
-?
-`${dateFns.format(this.itemStats.oldest, 'yyyy-MM-dd hh:mmaaa')} - ${dateFns.format(this.itemStats.newest, 'yyyy-MM-dd hh:mmaaa')}</div>`
-: ``
+  this.itemStats.oldest
+    ? `${dateFns.format(this.itemStats.oldest, 'yyyy-MM-dd hh:mmaaa')} - ${dateFns.format(this.itemStats.newest, 'yyyy-MM-dd hh:mmaaa')}</div>`
+    : ``
 }`);
 
-    if(this.config.get("showPostCounts") == "All" || selected && this.config.get("showPostCounts") == "Selection") {
-      const bannerDiv = $(this.selectedItem).find("div.item-banner").first().length
-            ? $(this.selectedItem).find("div.item-banner").first()
-            : $(this.selectedItem).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
+    if (
+      this.config.get('showPostCounts') == 'All' ||
+      (this.selectedItem && this.config.get('showPostCounts') == 'Selection')
+    ) {
+      const bannerDiv = $(this.selectedItem).find('div.item-banner').first().length
+        ? $(this.selectedItem).find('div.item-banner').first()
+        : $(this.selectedItem)
+            .find('div')
+            .first()
+            .prepend($('<div class="item-banner"/>'))
+            .children('.item-banner')
+            .last();
       // $(bannerDiv).html(`<strong>${this.getIndexFromItem(element)+1}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
       // debugger;
-      $(bannerDiv).html(`<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex+1}/${this.unrolledReplies.length+1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
+      $(bannerDiv).html(
+        `<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}/${this.unrolledReplies.length + 1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong>`
+      );
     }
-
-
   }
 
   loadNewerItems() {
-    if(!this.loadNewerButton) {
-      console.log("no button")
+    if (!this.loadNewerButton) {
+      console.log('no button');
       return;
     }
     this.loadingNew = true;
-    this.applyItemStyle(this.selectedItem, false)
-    let oldPostId = this.postIdForItem(this.selectedItem)
-    $(this.loadNewerButton).click()
-    setTimeout( () => {
+    this.applyItemStyle(this.selectedItem, false);
+    const oldPostId = this.postIdForItem(this.selectedItem);
+    $(this.loadNewerButton).click();
+    setTimeout(() => {
       this.loadItems(oldPostId);
       // $('img#loadNewerIndicatorImage').css("opacity", "0.2");
-      $('img#loadNewerIndicatorImage').removeClass("image-highlight");
-      $('img#loadNewerIndicatorImage').removeClass("toolbar-icon-pending");
+      $('img#loadNewerIndicatorImage').removeClass('image-highlight');
+      $('img#loadNewerIndicatorImage').removeClass('toolbar-icon-pending');
       $('#loadNewerAction').remove();
       this.loadingNew = false;
-    }, 1000)
+    }, 1000);
   }
 
   loadOlderItems() {
-    if(this.loading) {
+    if (this.loading) {
       // console.log("already loading, returning")
       return;
     }
-    console.log("loading more");
+    console.log('loading more');
     // $('img#loadOlderIndicatorImage').css("opacity", "0.2");
-    $('img#loadOlderIndicatorImage').removeClass("image-highlight");
-    $('img#loadOlderIndicatorImage').addClass("toolbar-icon-pending");
+    $('img#loadOlderIndicatorImage').removeClass('image-highlight');
+    $('img#loadOlderIndicatorImage').addClass('toolbar-icon-pending');
     this.loading = true;
     const reversed = this.state.feedSortReverse;
-    const index = reversed ? 0 : this.items.length-1;
+    const index = reversed ? 0 : this.items.length - 1;
     this.setIndex(index);
     this.updateItems();
-    var indicatorElement = (
-      this.items.length
-        ? this.items[index]
-        : $(this.selector).eq(index)[0]
-    );
-    var loadElement = this.items.length ? this.items[this.items.length-1] : $(this.selector).first()[0];
-    $(indicatorElement).closest("div.thread").addClass(this.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse");
-    this.loadOlderItemsCallback(
-      [
-        {
-          time: performance.now(),
-          target: loadElement,
-          isIntersecting: true,
-          intersectionRatio: 1,
-          boundingClientRect: loadElement.getBoundingClientRect(),
-          intersectionRect: loadElement.getBoundingClientRect(),
-          rootBounds: document.documentElement.getBoundingClientRect(),
-        }
-      ]
-    )
+    const indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
+    const loadElement = this.items.length
+      ? this.items[this.items.length - 1]
+      : $(this.selector).first()[0];
+    $(indicatorElement)
+      .closest('div.thread')
+      .addClass(
+        this.state.feedSortReverse ? 'loading-indicator-forward' : 'loading-indicator-reverse'
+      );
+    this.loadOlderItemsCallback([
+      {
+        time: performance.now(),
+        target: loadElement,
+        isIntersecting: true,
+        intersectionRatio: 1,
+        boundingClientRect: loadElement.getBoundingClientRect(),
+        intersectionRect: loadElement.getBoundingClientRect(),
+        rootBounds: document.documentElement.getBoundingClientRect(),
+      },
+    ]);
   }
 
   postIdFromUrl() {
     //return $(document).find("meta[property='og:url']").attr("content").split("/")[6]
-    return window.location.href.split("/")[6]
+    return window.location.href.split('/')[6];
   }
 
   urlForItem(item) {
-    return `https://bsky.app${$(item).find("a[href*='/post/']").attr("href")}`;
+    return `https://bsky.app${$(item).find("a[href*='/post/']").attr('href')}`;
   }
 
   postIdForItem(item) {
     try {
-      return this.urlForItem(item).match(/post\/([^/]+)/)[1]
+      return this.urlForItem(item).match(/post\/([^/]+)/)[1];
     } catch (e) {
       return this.postIdFromUrl();
     }
   }
 
   handleFromItem(item) {
-    return $.trim($(item).find(constants.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")).slice(1)
+    return $.trim(
+      $(item)
+        .find(constants.PROFILE_SELECTOR)
+        .find('span')
+        .eq(1)
+        .text()
+        .replace(/[\u200E\u200F\u202A-\u202E]/g, '')
+    ).slice(1);
   }
 
   async getThreadForItem(item) {
     const url = this.urlForItem(item);
-    if(!url) {
+    if (!url) {
       return;
     }
     const uri = await this.api.getAtprotoUri(url);
-    if(!uri) {
+    if (!uri) {
       return;
     }
     const thread = await this.api.getThread(uri);
@@ -1293,60 +1248,65 @@ this.itemStats.oldest
   }
 
   displayNameFromItem(item) {
-    return $.trim($(item).find(constants.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""))
+    return $.trim(
+      $(item)
+        .find(constants.PROFILE_SELECTOR)
+        .find('span')
+        .eq(0)
+        .text()
+        .replace(/[\u200E\u200F\u202A-\u202E]/g, '')
+    );
   }
 
   getHandles() {
-    return Array.from(new Set(this.items.map( (i, item) => this.handleFromItem(item) )));
+    return Array.from(new Set(this.items.map((i, item) => this.handleFromItem(item))));
   }
 
   getDisplayNames() {
-    return Array.from(new Set(this.items.map( (i, item) => this.displayNameFromItem(item) )));
+    return Array.from(new Set(this.items.map((i, item) => this.displayNameFromItem(item))));
   }
 
   getAuthors() {
-    const authors = $(this.items).get().map( (item) => ({
-      handle: this.handleFromItem(item),
-      displayName: this.displayNameFromItem(item)
-    })).filter(
-      (author) => author.handle.length > 0
-    );
+    const authors = $(this.items)
+      .get()
+      .map((item) => ({
+        handle: this.handleFromItem(item),
+        displayName: this.displayNameFromItem(item),
+      }))
+      .filter((author) => author.handle.length > 0);
     const uniqueMap = new Map();
-    authors.forEach(author => {
+    authors.forEach((author) => {
       uniqueMap.set(author.handle, author); // Only keeps the last occurrence
     });
     return Array.from(uniqueMap.values()); // Convert back to an array
   }
 
   updateItems() {
-
     this.enableScrollMonitor = false;
     this.ignoreMouseMovement = true;
-    if (this.index == 0)
-    {
-      window.scrollTo(0, 0)
+    if (this.index == 0) {
+      window.scrollTo(0, 0);
     } else if ($(this.selectedItem).length) {
       this.scrollToElement($(this.selectedItem)[0]);
     } else {
       // console.log(this.index, this.items.length)
     }
     setTimeout(() => {
-      console.log("enable");
+      console.log('enable');
       this.ignoreMouseMovement = false;
       this.enableScrollMonitor = true;
     }, 2000);
   }
 
   setIndex(index, mark, update) {
-    let oldIndex = this.index;
-    if(index == oldIndex) {
-      console.log("unnecessary setIndex");
+    const oldIndex = this.index;
+    if (index == oldIndex) {
+      console.log('unnecessary setIndex');
       return;
     }
     if (oldIndex != null) {
-      if (mark)
-      {
-        this.markItemRead(oldIndex, true)
+      if (mark) {
+        this.markItemRead(oldIndex, true);
       }
     }
     if (index < 0 || index >= this.items.length) {
@@ -1358,28 +1318,26 @@ this.itemStats.oldest
 
     this.expandItem(this.selectedItem);
 
-    $(this.selectedItem).find('video').each(
-      (i, video) => {
-        debugger;
-        if (
-          (this.config.get("videoPreviewPlayback") == "Pause all")
-            ||
-            ( (this.config.get("videoPreviewPlayback") == "Play selected") && !selected)
-        ) {
+    // Handle video playback for the newly selected item
+    $(this.selectedItem)
+      .find('video')
+      .each((_i, video) => {
+        const playbackMode = this.config.get('videoPreviewPlayback');
+        if (playbackMode === 'Pause all') {
           this.pauseVideo(video);
-        } else if ((this.config.get("videoPreviewPlayback") == "Play selected") && selected) {
+        } else if (playbackMode === 'Play selected') {
           this.playVideo(video);
         }
 
-        if (this.config.get("videoDisableLoop")) {
-          debugger;
-          video.removeAttribute("autoplay");
-          video.addEventListener('ended', function() { video.load(); });
+        if (this.config.get('videoDisableLoop')) {
+          video.removeAttribute('autoplay');
+          video.addEventListener('ended', function () {
+            video.load();
+          });
         }
-      }
-    )
+      });
 
-    if(update) {
+    if (update) {
       this.updateItems();
     }
     return true;
@@ -1388,8 +1346,7 @@ this.itemStats.oldest
   jumpToPost(postId) {
     for (const [i, item] of $(this.items).get().entries()) {
       const other = this.postIdForItem(item);
-      if (postId == other)
-      {
+      if (postId == other) {
         // console.log(`jumping to ${postId} (${i})`);
         this.setIndex(i);
         this.updateItems();
@@ -1400,47 +1357,40 @@ this.itemStats.oldest
   }
 
   markItemRead(index, isRead) {
-    if (this.name == "post" && !this.config.get("savePostState")) {
+    if (this.name == 'post' && !this.config.get('savePostState')) {
       return;
     }
-    let mainItem = $(this.items)[index];
-    let item = (
-      this.threadIndex != null
-        ? this.getPostForThreadIndex(this.threadIndex)
-        : mainItem
-    );
-    console.log(item);
-    let postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
+    const mainItem = $(this.items)[index];
+    const item = this.threadIndex != null ? this.getPostForThreadIndex(this.threadIndex) : mainItem;
+    const postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
     if (!postId) {
-      debugger;
-      console.log("no post");
+      console.warn('markItemRead: no postId found');
       return;
     }
-    var markedRead = this.markPostRead(postId, isRead);
+    const markedRead = this.markPostRead(postId, isRead);
     console.log(isRead, markedRead);
-    if(this.unrolledReplies.length) {
+    if (this.unrolledReplies.length) {
       // debugger;
-      $(item).addClass(markedRead ? "item-read" : "item-unread");
-      $(item).removeClass(markedRead ? "item-unread" : "item-read");
+      $(item).addClass(markedRead ? 'item-read' : 'item-unread');
+      $(item).removeClass(markedRead ? 'item-unread' : 'item-read');
     } else {
       this.applyItemStyle(mainItem, index == this.index);
     }
-    if (this.unrolledReplies.length && this.unrolledReplies.get().every(
-      (r) => $(r).hasClass("item-read")
-    )) {
+    if (
+      this.unrolledReplies.length &&
+      this.unrolledReplies.get().every((r) => $(r).hasClass('item-read'))
+    ) {
       this.markPostRead(this.postIdForItem(mainItem), isRead);
-      this.applyItemStyle(this.items[index], index == this.index)
+      this.applyItemStyle(this.items[index], index == this.index);
     }
     this.updateInfoIndicator();
   }
 
-
   markPostRead(postId, isRead) {
-
     const currentTime = new Date().toISOString();
     const seen = { ...this.state.seen };
 
-    if (isRead || (isRead == null && !seen[postId]) ) {
+    if (isRead || (isRead == null && !seen[postId])) {
       seen[postId] = currentTime;
     } else {
       seen[postId] = null;
@@ -1452,19 +1402,16 @@ this.itemStats.oldest
   }
 
   markVisibleRead() {
-    $(this.items).each(
-      (i, item) => {
-        this.markItemRead(i, true);
-      }
-    )
+    $(this.items).each((i, item) => {
+      this.markItemRead(i, true);
+    });
   }
-
 
   // FIXME: move to PostItemHanler
   handleNewThreadPage(element) {
     // console.log(`new page: ${element}`)
-    console.log(this.items.length)
-    this.loadPageObserver.disconnect()
+    console.log(this.items.length);
+    this.loadPageObserver.disconnect();
   }
 
   jumpToPrev(mark) {
@@ -1473,42 +1420,37 @@ this.itemStats.oldest
   }
 
   jumpToNext(mark) {
-
     if (this.index < this.items.length) {
       // this.index += 1
       this.setIndex(this.index + 1, mark, true);
     } else {
-      var next = $(this.selectedItem).parent().parent().parent().next()
+      const next = $(this.selectedItem).parent().parent().parent().next();
       // console.log(next.text())
-      if (next && $.trim(next.text()) == "Continue thread...") {
+      if (next && $.trim(next.text()) == 'Continue thread...') {
         // console.log("click")
-        this.loadPageObserver = waitForElement(
-          this.THREAD_PAGE_SELECTOR,
-          this.handleNewThreadPage
-        );
-        console.log(this.loadPageObserver)
-        $(next).find("div").click()
+        this.loadPageObserver = waitForElement(this.THREAD_PAGE_SELECTOR, this.handleNewThreadPage);
+        console.log(this.loadPageObserver);
+        $(next).find('div').click();
       }
     }
     return true;
   }
 
   jumpToNextUnseenItem(mark) {
-    var i
-    for (i = this.index+1; i < this.items.length-1; i++)
-    {
+    let i;
+    for (i = this.index + 1; i < this.items.length - 1; i++) {
       //var item = this.items[i]
-      var postId = this.postIdForItem(this.items[i])
-      if (! this.state.seen[postId]) {
+      const postId = this.postIdForItem(this.items[i]);
+      if (!this.state.seen[postId]) {
         break;
       }
     }
-    this.setIndex(i, mark)
+    this.setIndex(i, mark);
     this.updateItems();
   }
 
   toggleFocus() {
-    if(this.replyIndex == null) {
+    if (this.replyIndex == null) {
       this.replyIndex = 0;
     } else {
       this.replyIndex = null;
@@ -1516,85 +1458,87 @@ this.itemStats.oldest
   }
 
   handleMovementKey(event) {
-    var moved = false;
-    var mark = false;
-    var old_index = this.index;
+    let moved = false;
+    let mark = false;
+    const old_index = this.index;
     if (this.isPopupVisible) {
-      return
+      return;
     }
     // mouse movement may be triggered, so ignore it
     this.ignoreMouseMovement = true;
 
     if (this.keyState.length == 0) {
-      if (["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"].includes(event.key))
-      {
-        if (["j", "ArrowDown"].indexOf(event.key) != -1) {
+      if (
+        ['j', 'k', 'h', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'J', 'G'].includes(
+          event.key
+        )
+      ) {
+        if (['j', 'ArrowDown'].indexOf(event.key) != -1) {
           event.preventDefault();
-          if(this.config.get("showReplySidecar") && this.replyIndex != null) {
+          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
             this.replyIndex += 1;
-          } else if (this.config.get("unrolledPostSelection")) {
-            if (event.key == "j") {
+          } else if (this.config.get('unrolledPostSelection')) {
+            if (event.key == 'j') {
               this.markItemRead(this.index, true);
             }
             this.threadIndex += 1;
           } else {
-            moved = this.jumpToNext(event.key == "j");
+            moved = this.jumpToNext(event.key == 'j');
           }
-        } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
+        } else if (['k', 'ArrowUp'].indexOf(event.key) != -1) {
           event.preventDefault();
-          if(this.config.get("showReplySidecar") && this.replyIndex != null) {
+          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
             this.replyIndex -= 1;
-          } else if (this.config.get("unrolledPostSelection")) {
-            if (event.key == "k") {
+          } else if (this.config.get('unrolledPostSelection')) {
+            if (event.key == 'k') {
               this.markItemRead(this.index, true);
             }
             this.threadIndex -= 1;
           } else {
-            moved = this.jumpToPrev(event.key == "k");
+            moved = this.jumpToPrev(event.key == 'k');
           }
-        } else if(event.key == "h") {
+        } else if (event.key == 'h') {
           // h = back
-          var back_button = $("button[aria-label^='Back' i]").filter(":visible")
+          const back_button = $("button[aria-label^='Back' i]").filter(':visible');
           if (back_button.length) {
-            back_button.click()
+            back_button.click();
           } else {
-            history.back(1)
+            history.back(1);
           }
-        } else if (event.key == "ArrowLeft") {
+        } else if (event.key == 'ArrowLeft') {
           event.preventDefault();
-          if(!this.config.get("showReplySidecar") || this.replyIndex == null) {
+          if (!this.config.get('showReplySidecar') || this.replyIndex == null) {
             return;
           }
           this.toggleFocus();
-        } else if (event.key == "ArrowRight") {
-          event.preventDefault()
-          if(!this.config.get("showReplySidecar") || this.replyIndex != null) {
+        } else if (event.key == 'ArrowRight') {
+          event.preventDefault();
+          if (!this.config.get('showReplySidecar') || this.replyIndex != null) {
             return;
           }
           this.toggleFocus();
-        } else if (event.key == "G") {
+        } else if (event.key == 'G') {
           event.preventDefault();
           // G = end
-          moved = this.setIndex(this.items.length-1, false, true);
-        } else if (event.key == "J") {
-          mark = true
+          moved = this.setIndex(this.items.length - 1, false, true);
+        } else if (event.key == 'J') {
+          mark = true;
           this.jumpToNextUnseenItem(mark);
         }
-        moved = true
+        moved = true;
         // console.log(this.postIdForItem(this.selectedItem))
-      } else if (event.key == "g") {
-        this.keyState.push(event.key)
+      } else if (event.key == 'g') {
+        this.keyState.push(event.key);
       }
-    } else if (this.keyState[0] == "g") {
-      if (event.key == "g") {
+    } else if (this.keyState[0] == 'g') {
+      if (event.key == 'g') {
         // gg = home
-        if (this.index < this.items.length)
-        {
+        if (this.index < this.items.length) {
           this.setIndex(0, false, true);
         }
         moved = true;
       }
-      this.keyState = []
+      this.keyState = [];
     }
     if (moved) {
       this.lastMousePosition = null;
@@ -1602,39 +1546,40 @@ this.itemStats.oldest
   }
 
   getIndexFromItem(item) {
-    return $(".item").filter(":visible").index(item)
+    return $('.item').filter(':visible').index(item);
     //return $(item).parent().parent().index()-1
   }
 
   getSidecarIndexFromItem(item) {
-    return $(item).closest(".thread").find(".sidecar-post").filter(":visible").index(item)
+    return $(item).closest('.thread').find('.sidecar-post').filter(':visible').index(item);
     //return $(item).parent().parent().index()-1
   }
 
   shouldUnroll(item) {
-    return this.config.get("unrollThreads");
+    return this.config.get('unrollThreads');
   }
 
   shouldShowSidecar(item) {
-    return this.config.get("showReplySidecar") && $(item).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")
+    return (
+      this.config.get('showReplySidecar') &&
+      $(item).closest('.thread').outerWidth() >= this.config.get('showReplySidecarMinimumWidth')
+    );
   }
 
   shouldExpand(item) {
     return this.shouldUnroll(item) || this.shouldShowSidecar(item);
   }
 
-
   async expandItem(item) {
     if (!this.shouldExpand()) {
       return;
     }
     const thread = await this.getThreadForItem(item);
-    if(!thread) {
+    if (!thread) {
       return;
     }
     if (this.shouldUnroll(item)) {
       await this.unrollThread(item, thread, true);
-
     }
     if (this.shouldShowSidecar(item)) {
       await this.showSidecar(item, thread, true);
@@ -1642,31 +1587,44 @@ this.itemStats.oldest
   }
 
   async unrollThread(item, thread) {
-    const bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
+    const bodyTemplate = Handlebars.compile($('#sidecar-body-template').html());
     // const footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
-    Handlebars.registerPartial("bodyTemplate", bodyTemplate);
-    console.log(thread.parent, thread.parent?.post, thread.parent?.post?.author?.did, thread.post?.author?.did);
+    Handlebars.registerPartial('bodyTemplate', bodyTemplate);
+    console.log(
+      thread.parent,
+      thread.parent?.post,
+      thread.parent?.post?.author?.did,
+      thread.post?.author?.did
+    );
 
-    if (thread.parent && thread.parent.post && thread.parent.post.author.did == thread.post.author.did) {
+    if (
+      thread.parent &&
+      thread.parent.post &&
+      thread.parent.post.author.did == thread.post.author.did
+    ) {
       return;
     }
-    if (thread.replies.map(r => r.post && r.post.author.did).includes(thread.post.author.did)) {
-      const unrolledPosts = (await this.api.unrollThread(thread));
+    if (thread.replies.map((r) => r.post && r.post.author.did).includes(thread.post.author.did)) {
+      const unrolledPosts = await this.api.unrollThread(thread);
       // Use .first() to only select the main post's contentHider, not the one inside embedded quotes
       const parent = $(item).find('div[data-testid="contentHider-post"]').first().parent();
-      parent.css({"overflow-y": "scroll", "max-height": "80vH", "padding-top": "1em"});
-      var div = $(parent).find('div.unrolled-replies');
-      if($(div).length) {
+      parent.css({ 'overflow-y': 'scroll', 'max-height': '80vH', 'padding-top': '1em' });
+      let div = $(parent).find('div.unrolled-replies');
+      if ($(div).length) {
         $(div).empty();
       } else {
         div = $('<div class="unrolled-replies"/>');
         parent.append(div);
       }
-      unrolledPosts.slice(1).map( (p, i) => {
+      unrolledPosts.slice(1).map((p, i) => {
         // debugger;
-        var reply = $('<div class="unrolled-reply" style="position: relative"/>');
+        const reply = $('<div class="unrolled-reply" style="position: relative"/>');
         reply.append($('<hr class="unrolled-divider"/>'));
-        reply.append($(`<div class="unrolled-banner"><a href="${urlForPost(p)}"/>${i+2}/${unrolledPosts.length}</a></div>`));
+        reply.append(
+          $(
+            `<div class="unrolled-banner"><a href="${urlForPost(p)}"/>${i + 2}/${unrolledPosts.length}</a></div>`
+          )
+        );
         reply.append($(bodyTemplate(formatPost(p))));
         reply.append($(this.footerTemplate(formatPost(p))));
         div.append(reply);
@@ -1677,23 +1635,22 @@ this.itemStats.oldest
 
       function isRedundant(item, threadIndex) {
         // console.log(item);
-          return (
-            $(item).data('bsky-navigator-thread-offset') != 0
-            &&
-            $(item).closest(".thread").data('bsky-navigator-thread-index') == threadIndex
-          );
+        return (
+          $(item).data('bsky-navigator-thread-offset') != 0 &&
+          $(item).closest('.thread').data('bsky-navigator-thread-index') == threadIndex
+        );
       }
       // debugger;
-      this.items.each(
-        (i, item) => {
-          if (isRedundant(item, threadIndex)) {
-            console.log("filtered", item);
-            $(item).addClass("filtered");
-          }
+      this.items.each((i, item) => {
+        if (isRedundant(item, threadIndex)) {
+          console.log('filtered', item);
+          $(item).addClass('filtered');
         }
-      );
+      });
       console.log(this.items.length);
-      this.items = this.items.filter( (i, item) => { return !isRedundant(item, threadIndex)});;
+      this.items = this.items.filter((i, item) => {
+        return !isRedundant(item, threadIndex);
+      });
       console.log(this.items.length);
       // this.loadItems();
       this.threadIndex = 0;
@@ -1701,9 +1658,8 @@ this.itemStats.oldest
   }
 
   async getSidecarContent(item, thread) {
-
     // debugger;
-    if(!item) {
+    if (!item) {
       // render empty div
       return this.repliesTemplate({});
     }
@@ -1711,12 +1667,10 @@ this.itemStats.oldest
     const post = thread.post;
     // FIXME
 
-    const replies = thread.replies.filter(
-      (reply) => reply.post
-    ).map(
-      (reply) => reply?.post
-    ).sort(
-      (a, b) => {
+    const replies = thread.replies
+      .filter((reply) => reply.post)
+      .map((reply) => reply?.post)
+      .sort((a, b) => {
         switch (this.config.get('sidecarReplySortOrder')) {
           case 'Default':
             return 0;
@@ -1724,89 +1678,75 @@ this.itemStats.oldest
             return new Date(a.record.createdAt) - new Date(b.record.createdAt);
           case 'Newest First':
             return new Date(b.record.createdAt) - new Date(a.record.createdAt);
-          case "Most Liked First":
+          case 'Most Liked First':
             return b.likeCount - a.likeCount;
-          case "Most Reposted First":
+          case 'Most Reposted First':
             return b.repostCount - a.repostCount;
           default:
-            console.error(`unknown sort order: ${this.config.get('sidecarReplySortOrder')}`)
+            console.error(`unknown sort order: ${this.config.get('sidecarReplySortOrder')}`);
         }
-      }
-    ).map(formatPost);
+      })
+      .map(formatPost);
 
-
-    return this.repliesTemplate(
-      {
-        postId: post.cid,
-        parent: thread.parent ? formatPost(thread.parent.post) : null,
-        replies: replies
-      }
-    );
+    return this.repliesTemplate({
+      postId: post.cid,
+      parent: thread.parent ? formatPost(thread.parent.post) : null,
+      replies: replies,
+    });
   }
 
-  async showSidecar(item, thread, action=null) {
-
+  async showSidecar(item, thread, action = null) {
     const container = $(item).parent();
     const emptyContent = await this.getSidecarContent();
-    let sidecar = $(container).find('.sidecar-replies')[0];
+    const sidecar = $(container).find('.sidecar-replies')[0];
 
-    if(!sidecar) {
+    if (!sidecar) {
       $(container).append(emptyContent);
     }
 
     const sidecarContent = await this.getSidecarContent(item, thread);
     console.log(sidecarContent);
     container.find('.sidecar-replies').replaceWith($(sidecarContent));
-    container.find('.sidecar-post').each(
-      (i, post) => {
-        $(post).on("mouseover", this.onSidecarItemMouseOver)
-      }
-    );
+    container.find('.sidecar-post').each((i, post) => {
+      $(post).on('mouseover', this.onSidecarItemMouseOver);
+    });
 
-    const display = (
-      (action == null)
-        ?
-        (
-          sidecar && $(sidecar).is(":visible")
-            ?
-            "none"
-            : "flex"
-        )
-        : (
-          action ? "flex" : "none"
-        )
-    );
+    const display =
+      action == null
+        ? sidecar && $(sidecar).is(':visible')
+          ? 'none'
+          : 'flex'
+        : action
+          ? 'flex'
+          : 'none';
     console.log(display);
-    container.find('.sidecar-replies').css("display", display);
+    container.find('.sidecar-replies').css('display', display);
   }
 
   likePost(post) {
-    var likes = parseInt($(post).find(".sidecar-count-label-likes").text());
-    this.api.getAtprotoUri(this.urlForItem(post)).then(
-      (uri) => this.api.getThread(uri).then(
-        (thread) => {
-          var likes = thread.post.likeCount;
-          if (thread.post.viewer.like) {
-            this.api.agent.deleteLike(thread.post.viewer.like).then(
-              (response) => {
-                console.log(response);
-                $(post).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[0]);
-                $(post).find(".sidecar-count-label-likes").html(Math.max(0, likes-1));
-              }
-            )
-          } else {
-            this.api.agent.like(uri, thread.post.cid).then(
-              (response) => {
-                console.log(response);
-                $(post).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[1]);
-                $(post).find(".sidecar-count-label-likes").html(Math.max(0, likes+1));
-              }
-            )
-          }
+    const likes = parseInt($(post).find('.sidecar-count-label-likes').text());
+    this.api.getAtprotoUri(this.urlForItem(post)).then((uri) =>
+      this.api.getThread(uri).then((thread) => {
+        const likes = thread.post.likeCount;
+        if (thread.post.viewer.like) {
+          this.api.agent.deleteLike(thread.post.viewer.like).then((response) => {
+            console.log(response);
+            $(post).find('.sidecar-like-button').html(constants.SIDECAR_SVG_LIKE[0]);
+            $(post)
+              .find('.sidecar-count-label-likes')
+              .html(Math.max(0, likes - 1));
+          });
+        } else {
+          this.api.agent.like(uri, thread.post.cid).then((response) => {
+            console.log(response);
+            $(post).find('.sidecar-like-button').html(constants.SIDECAR_SVG_LIKE[1]);
+            $(post)
+              .find('.sidecar-count-label-likes')
+              .html(Math.max(0, likes + 1));
+          });
         }
-      )
+      })
     );
-
   }
 
   async captureScreenshot(item) {
@@ -1816,7 +1756,7 @@ this.itemStats.oldest
         backgroundColor: null,
         scale: 2, // Higher quality
         logging: false,
-        useCORS: true
+        useCORS: true,
       });
 
       // Convert canvas to blob
@@ -1825,23 +1765,25 @@ this.itemStats.oldest
           // Copy to clipboard
           await navigator.clipboard.write([
             new ClipboardItem({
-              'image/png': blob
-            })
+              'image/png': blob,
+            }),
           ]);
           console.log('Screenshot copied to clipboard!');
 
           // Optional: Show a brief notification
-          const notification = $('<div>').css({
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            padding: '10px 20px',
-            backgroundColor: '#4CAF50',
-            color: 'white',
-            borderRadius: '4px',
-            zIndex: 10000,
-            fontSize: '14px'
-          }).text('Screenshot copied to clipboard!');
+          const notification = $('<div>')
+            .css({
+              position: 'fixed',
+              top: '20px',
+              right: '20px',
+              padding: '10px 20px',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              borderRadius: '4px',
+              zIndex: 10000,
+              fontSize: '14px',
+            })
+            .text('Screenshot copied to clipboard!');
 
           $('body').append(notification);
           setTimeout(() => notification.fadeOut(500, () => notification.remove()), 2000);
@@ -1855,66 +1797,56 @@ this.itemStats.oldest
   }
 
   handleItemKey(event) {
-
-    if(this.isPopupVisible) {
+    if (this.isPopupVisible) {
       return false;
     } else if (event.altKey && !event.metaKey) {
-      if(event.code.startsWith("Digit")) {
-        const num = parseInt(event.code.substr(5))-1;
-        $("#bsky-navigator-search").autocomplete("disable");
+      if (event.code.startsWith('Digit')) {
+        const num = parseInt(event.code.substr(5)) - 1;
+        $('#bsky-navigator-search').autocomplete('disable');
         if (num >= 0) {
           const ruleName = Object.keys(this.state.rules)[num];
           console.log(ruleName);
           // const rule = this.state.rules[ruleName];
-          $("#bsky-navigator-search").val(`${event.shiftKey ? "!" : ""}\$${ruleName}`);
+          $('#bsky-navigator-search').val(`${event.shiftKey ? '!' : ''}$${ruleName}`);
         } else {
-          $("#bsky-navigator-search").val(null);
+          $('#bsky-navigator-search').val(null);
         }
-        $("#bsky-navigator-search").trigger("input");
-        $("#bsky-navigator-search").autocomplete("enable");
+        $('#bsky-navigator-search').trigger('input');
+        $('#bsky-navigator-search').autocomplete('enable');
         return event.key;
       } else {
         return false;
       }
     } else if (!event.metaKey) {
       // console.log(event.key)
-      var item = this.selectedItem;
+      const item = this.selectedItem;
       //if(event.key == "o")
-      if (["o", "Enter"].includes(event.key) && !this.isPopupVisible)
-      {
+      if (['o', 'Enter'].includes(event.key) && !this.isPopupVisible) {
         // o = open
-        if(this.replyIndex == null) {
+        if (this.replyIndex == null) {
           $(item).click();
         } else {
           console.log(this.selectedReply);
-          this.selectedReply.find(".sidecar-post-timestamp a")[0].click();
+          this.selectedReply.find('.sidecar-post-timestamp a')[0].click();
         }
         //bindKeys(post_key_event)
-      }
-      else if(event.key == "O")
-      {
+      } else if (event.key == 'O') {
         // O = open inner post
-        var inner = $(item).find("div[aria-label^='Post by']");
+        const inner = $(item).find("div[aria-label^='Post by']");
         inner.click();
-      }
-      else if(event.key == "i")
-      {
+      } else if (event.key == 'i') {
         // i = open link
-        if($(item).find(constants.LINK_SELECTOR).length)
-        {
+        if ($(item).find(constants.LINK_SELECTOR).length) {
           $(item).find(constants.LINK_SELECTOR)[0].click();
         }
-      }
-      else if(event.key == "m")
-      {
+      } else if (event.key == 'm') {
         // m = media?
-        var media = $(item).find("img[src*='feed_thumbnail']");
-        if (media.length > 0)
-        {
+        const media = $(item).find("img[src*='feed_thumbnail']");
+        if (media.length > 0) {
           media[0].click();
         } else {
           const video = $(item).find('video')[0];
-          if(video) {
+          if (video) {
             event.preventDefault();
             if (video.muted) {
               video.muted = false;
@@ -1926,13 +1858,13 @@ this.itemStats.oldest
             }
           }
         }
-      } else if(event.key == "r") {
+      } else if (event.key == 'r') {
         // r = reply
-        var button = $(item).find("button[aria-label^='Reply']")
+        const button = $(item).find("button[aria-label^='Reply']");
         button.focus();
         button.click();
-      } else if(event.key == "l") {
-        if(this.config.get("showReplySidecar") && this.replyIndex != null) {
+      } else if (event.key == 'l') {
+        if (this.config.get('showReplySidecar') && this.replyIndex != null) {
           this.likePost(this.selectedReply);
         } else if (this.threadIndex) {
           console.log(this.selectedPost);
@@ -1941,174 +1873,154 @@ this.itemStats.oldest
         } else {
           $(item).find("button[data-testid='likeBtn']").click();
         }
-      } else if(event.key == "p") {
+      } else if (event.key == 'p') {
         // p = repost menu
         $(item).find("button[aria-label^='Repost']").click();
-      } else if(event.key == "P") {
+      } else if (event.key == 'P') {
         // P = repost
         $(item).find("button[aria-label^='Repost']").click();
-        setTimeout(function() {
+        setTimeout(function () {
           $("div[aria-label^='Repost'][role='menuitem']").click();
-        }, 1000)
-      } else if (event.key == ".") {
+        }, 1000);
+      } else if (event.key == '.') {
         // toggle read/unread
-        this.markItemRead(this.index, null)
-      } else if (event.key == "A") {
+        this.markItemRead(this.index, null);
+      } else if (event.key == 'A') {
         // mark all visible items read
         this.markVisibleRead();
-      } else if(!isNaN(parseInt(event.key))) {
-        $("div[role='tablist'] > div > div > div").filter(":visible")[parseInt(event.key)-1].click()
-      } else if (event.key == ";") {
-        if(!this.api) {
+      } else if (!isNaN(parseInt(event.key))) {
+        const tabs = $("div[role='tablist'] > div > div > div").filter(':visible');
+        const tabIndex = parseInt(event.key) - 1;
+        if (tabs[tabIndex]) {
+          tabs[tabIndex].click();
+        }
+      } else if (event.key == ';') {
+        if (!this.api) {
           return;
         }
         this.expandItem(this.selectedItem);
-      } else if (event.key == "c") {
+      } else if (event.key == 'c') {
         // c = capture screenshot
         this.captureScreenshot(item[0]);
       } else {
-        return false
+        return false;
       }
     }
-    return event.key
+    return event.key;
   }
-
 }
 
 export class FeedItemHandler extends ItemHandler {
-
   INDICATOR_IMAGES = {
-    loadTop: [
-      "https://www.svgrepo.com/show/502348/circleupmajor.svg"
-    ],
-    loadBottom: [
-      "https://www.svgrepo.com/show/502338/circledownmajor.svg"
-    ],
-    loadTime: [
-      "https://www.svgrepo.com/show/446075/time-history.svg"
-    ],
+    loadTop: ['https://www.svgrepo.com/show/502348/circleupmajor.svg'],
+    loadBottom: ['https://www.svgrepo.com/show/502338/circledownmajor.svg'],
+    loadTime: ['https://www.svgrepo.com/show/446075/time-history.svg'],
     filter: [
-      "https://www.svgrepo.com/show/347140/mail.svg",
-      "https://www.svgrepo.com/show/347147/mail-unread.svg"
+      'https://www.svgrepo.com/show/347140/mail.svg',
+      'https://www.svgrepo.com/show/347147/mail-unread.svg',
     ],
     sort: [
-      "https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg",
-      "https://www.svgrepo.com/show/506582/sort-numeric-up.svg"
+      'https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg',
+      'https://www.svgrepo.com/show/506582/sort-numeric-up.svg',
     ],
     preferences: [
-      "https://www.svgrepo.com/show/522235/preferences.svg",
-      "https://www.svgrepo.com/show/522236/preferences.svg"
-    ]
-  }
+      'https://www.svgrepo.com/show/522235/preferences.svg',
+      'https://www.svgrepo.com/show/522236/preferences.svg',
+    ],
+  };
 
   constructor(name, config, state, api, selector) {
-    super(name, config, state, api, selector)
+    super(name, config, state, api, selector);
     this.toggleSortOrder = this.toggleSortOrder.bind(this);
     this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
     this.onSearchKeydown = this.onSearchKeydown.bind(this);
     this.setFilter = this.setFilter.bind(this);
-    this.feedTabObserver = waitForElement(
-      constants.FEED_TAB_SELECTOR,
-      (tab) => {
-        utils.observeChanges(
-          tab,
-          (attributeName, oldValue, newValue, target) => {
-            // console.log(attributeName, oldValue, newValue, target);
-            if(attributeName == "class" && newValue.includes("r-13awgt0")) {
-              console.log("refresh");
-              this.refreshItems();
-            }
-          },
-          false
-        );
-      }
-    )
+    this.feedTabObserver = waitForElement(constants.FEED_TAB_SELECTOR, (tab) => {
+      utils.observeChanges(
+        tab,
+        (attributeName, oldValue, newValue, target) => {
+          // console.log(attributeName, oldValue, newValue, target);
+          if (attributeName == 'class' && newValue.includes('r-13awgt0')) {
+            console.log('refresh');
+            this.refreshItems();
+          }
+        },
+        false
+      );
+    });
   }
 
   applyItemStyle(element, selected) {
     super.applyItemStyle(element, selected);
-    const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]')
-    if (this.config.get("postActionButtonPosition") == "Left") {
-      const buttonsDiv = $(element).find('button[data-testid="postDropdownBtn"]').parent().parent().parent();
+    const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
+    if (this.config.get('postActionButtonPosition') == 'Left') {
+      const buttonsDiv = $(element)
+        .find('button[data-testid="postDropdownBtn"]')
+        .parent()
+        .parent()
+        .parent();
 
-      $(buttonsDiv).parent().css(
-        {
-          "min-height": "160px",
-          "min-width": "80px",
-          // "margin-left": "10px"
-        }
-      );
-      $(buttonsDiv).parent().children().first().css(
-        "flex", ""
-      );
+      $(buttonsDiv).parent().css({
+        'min-height': '160px',
+        'min-width': '80px',
+        // "margin-left": "10px"
+      });
+      $(buttonsDiv).parent().children().first().css('flex', '');
       // buttonsDiv.css("flex-direction", "column");
-      buttonsDiv.css(
-        {
-          "display": "flex",
-          "flex-direction": "column",
-          "align-items": "flex-start",
-          "position": "absolute",
-          "bottom": "0px",
-          "z-index": "10",
-        }
-      )
-      $(buttonsDiv).find("> div").css(
-        {
-          "margin-left": "0px",
-          "width": "100%"
-        }
-      )
-      $(buttonsDiv).find("> div > div").css(
-        {
-          "width": "100%"
-        }
-      )
+      buttonsDiv.css({
+        display: 'flex',
+        'flex-direction': 'column',
+        'align-items': 'flex-start',
+        position: 'absolute',
+        bottom: '0px',
+        'z-index': '10',
+      });
+      $(buttonsDiv).find('> div').css({
+        'margin-left': '0px',
+        width: '100%',
+      });
+      $(buttonsDiv).find('> div > div').css({
+        width: '100%',
+      });
       const buttons = $(buttonsDiv).find('button[data-testid!="postDropdownBtn"]');
-      buttons.each(
-        (i, button) => {
-          $(button).css(
-            {
-              "display": "flex",
-              "align-items": "center", /* Ensures vertical alignment */
-              "justify-content": "space-between", /* Pushes text to the right */
-              "gap": "12px", /* Space between the icon and text */
-              "width": "100%",
-              "padding": "5px 2px"
-            }
-          );
-          const div = $(button).find('> div').first();
-          if(div.length) {
-            $(div).css({
-              "display": "flex",
-              "align-items": "center", /* Ensures vertical alignment */
-              "justify-content": "space-between", /* Pushes text to the right */
-              "gap": "12px", /* Space between the icon and text */
-              // "width": "100%",
-              "padding": "0px"
-            });
-          }
-          if ($(button).attr('aria-label').startsWith("Repost")) {
-            $(div).css(
-              "width", "100%"
-            );
-          }
-
-          const svg = $(button).find('svg').first();
-          // $(button).append(svg);
-          $(svg).css({
-            "flex-shrink": "0", /* Prevents icon from resizing */
-            // "vertical-align": "middle", /* Ensures SVG is aligned with the text */
-            "display": "block" /* Removes inline spacing issues */
+      buttons.each((i, button) => {
+        $(button).css({
+          display: 'flex',
+          'align-items': 'center' /* Ensures vertical alignment */,
+          'justify-content': 'space-between' /* Pushes text to the right */,
+          gap: '12px' /* Space between the icon and text */,
+          width: '100%',
+          padding: '5px 2px',
+        });
+        const div = $(button).find('> div').first();
+        if (div.length) {
+          $(div).css({
+            display: 'flex',
+            'align-items': 'center' /* Ensures vertical alignment */,
+            'justify-content': 'space-between' /* Pushes text to the right */,
+            gap: '12px' /* Space between the icon and text */,
+            // "width": "100%",
+            padding: '0px',
           });
         }
-      )
+        if ($(button).attr('aria-label').startsWith('Repost')) {
+          $(div).css('width', '100%');
+        }
+
+        const svg = $(button).find('svg').first();
+        // $(button).append(svg);
+        $(svg).css({
+          'flex-shrink': '0' /* Prevents icon from resizing */,
+          // "vertical-align": "middle", /* Ensures SVG is aligned with the text */
+          display: 'block' /* Removes inline spacing issues */,
+        });
+      });
 
       avatarDiv.closest('div.r-c97pre').children().eq(0).after(buttonsDiv);
     }
   }
 
   addToolbar(beforeDiv) {
-
     // debugger;
     this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
     $(beforeDiv).before(this.toolbarDiv);
@@ -2118,17 +2030,21 @@ export class FeedItemHandler extends ItemHandler {
 </div>`);
     $(this.toolbarDiv).append(this.topLoadIndicator);
 
-    this.sortIndicator = $(`<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[+this.state.feedSortReverse]}"/></div>`);
+    this.sortIndicator = $(
+      `<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[+this.state.feedSortReverse]}"/></div>`
+    );
     $(this.toolbarDiv).append(this.sortIndicator);
-    $(".indicator-image path").attr("fill", "currentColor");
-    $('#sortIndicator').on("click", (event) => {
+    $('.indicator-image path').attr('fill', 'currentColor');
+    $('#sortIndicator').on('click', (event) => {
       event.preventDefault();
       this.toggleSortOrder();
     });
 
-    this.filterIndicator = $(`<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[+this.state.feedHideRead]}"/></div>`);
+    this.filterIndicator = $(
+      `<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[+this.state.feedHideRead]}"/></div>`
+    );
     $(this.toolbarDiv).append(this.filterIndicator);
-    $('#filterIndicator').on("click", (event) => {
+    $('#filterIndicator').on('click', (event) => {
       event.preventDefault();
       this.toggleHideRead();
     });
@@ -2136,43 +2052,39 @@ export class FeedItemHandler extends ItemHandler {
     this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
 
     $(this.toolbarDiv).append(this.searchField);
-    $("#bsky-navigator-search").autocomplete({
+    $('#bsky-navigator-search').autocomplete({
       minLength: 0,
       appendTo: 'div[data-testid="homeScreenFeedTabs"]',
       source: this.onSearchAutocomplete,
-      focus: function(event, ui) {
+      focus: function (event, _ui) {
         event.preventDefault(); // Prevent autocomplete from auto-filling input on hover
       },
-      focus: function(event, ui) {
-        event.preventDefault();
-      },
-      select: function(event, ui) {
+      select: function (event, ui) {
         event.preventDefault(); // Prevent default selection behavior
 
-        let input = this;
-        let terms = utils.splitTerms(input.value);
+        const input = this;
+        const terms = utils.splitTerms(input.value);
         terms.pop(); // Remove the last typed term
         terms.push(ui.item.value); // Add the selected suggestion
-        input.value = terms.join(" ") + " "; // Ensure a space after selection
+        input.value = terms.join(' ') + ' '; // Ensure a space after selection
 
-        $(this).autocomplete("close"); // Close the dropdown after selection
-      }
-
+        $(this).autocomplete('close'); // Close the dropdown after selection
+      },
     });
 
-    $("#bsky-navigator-search").on("keydown", function(event) {
-      if (event.key === "Tab") {
-        let autocompleteMenu = $(".ui-autocomplete:visible");
-        let firstItem = autocompleteMenu.children(".ui-menu-item").first();
+    $('#bsky-navigator-search').on('keydown', function (event) {
+      if (event.key === 'Tab') {
+        const autocompleteMenu = $('.ui-autocomplete:visible');
+        const firstItem = autocompleteMenu.children('.ui-menu-item').first();
 
         if (firstItem.length) {
-          let uiItem = firstItem.data("ui-autocomplete-item"); // Get the first suggested item
-          $(this).autocomplete("close"); // Close autocomplete after selection
+          const uiItem = firstItem.data('ui-autocomplete-item'); // Get the first suggested item
+          $(this).autocomplete('close'); // Close autocomplete after selection
 
-          let terms = utils.splitTerms(this.value);
+          const terms = utils.splitTerms(this.value);
           terms.pop(); // Remove the last typed term
           terms.push(uiItem.value); // Add the selected suggestion
-          this.value = terms.join(" ") + " "; // Ensure a space after selection
+          this.value = terms.join(' ') + ' '; // Ensure a space after selection
           event.preventDefault();
         }
       }
@@ -2182,10 +2094,10 @@ export class FeedItemHandler extends ItemHandler {
       const val = $(event.target).val();
       console.log(val);
 
-      if (val === "/") {
+      if (val === '/') {
         // Handle "/" case immediately
-        $("#bsky-navigator-search").val("");
-        $(this.searchField).autocomplete("close");
+        $('#bsky-navigator-search').val('');
+        $(this.searchField).autocomplete('close');
         $("a[aria-label='Search']")[0].click();
         return;
       }
@@ -2201,106 +2113,95 @@ export class FeedItemHandler extends ItemHandler {
       this.loadItems();
     }, 300);
 
-    this.onSearchUpdate = this.onSearchUpdate.bind(this)
-    $(this.searchField).on("keydown", this.onSearchKeydown);
+    this.onSearchUpdate = this.onSearchUpdate.bind(this);
+    $(this.searchField).on('keydown', this.onSearchKeydown);
 
-    $(this.searchField).on("input", this.onSearchUpdate);
-    $(this.searchField).on("focus", function() {
-      $(this).autocomplete("search", ""); // Trigger search with an empty string
+    $(this.searchField).on('input', this.onSearchUpdate);
+    $(this.searchField).on('focus', function () {
+      $(this).autocomplete('search', ''); // Trigger search with an empty string
     });
     // Trigger when autocomplete modifies the input
-    $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
+    $(this.searchField).on('autocompletechange autocompleteclose', this.onSearchUpdate);
 
     // Also trigger when an item is selected from autocomplete
-    $(this.searchField).on("autocompleteselect", this.onSearchUpdate);
+    $(this.searchField).on('autocompleteselect', this.onSearchUpdate);
 
     // $(this.searchField).on("input", this.onSearchUpdate);
 
-    waitForElement(
-      "#bsky-navigator-toolbar",
-      null,
-      (div) => {
-        this.addToolbar(beforeDiv);
-      }
-    )
-
+    waitForElement('#bsky-navigator-toolbar', null, (div) => {
+      this.addToolbar(beforeDiv);
+    });
   }
 
   onSearchKeydown(event) {
-      if (event.altKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        this.handleInput(event);
+    if (event.altKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.handleInput(event);
     }
   }
 
   refreshToolbars() {
-    waitForElement(
-      constants.TOOLBAR_CONTAINER_SELECTOR, (indicatorContainer) => {
-        waitForElement(
-          'div[data-testid="homeScreenFeedTabs"]',
-          (homeScreenFeedTabsDiv) => {
-            if (!$('#bsky-navigator-toolbar').length) {
-              this.addToolbar(homeScreenFeedTabsDiv);
-            }
-          }
-        );
-      }
-    )
-
-    waitForElement(
-      constants.STATUS_BAR_CONTAINER_SELECTOR,
-      (statusBarContainer, observer) => {
-        if (!$('#statusBar').length) {
-          // FIXME: it would be easier to match from top down, but HTML changes
-          // between desktop/mobile viewport size, so this works better.
-          this.addStatusBar($(statusBarContainer).parent().parent().parent().parent().parent());
-          observer.disconnect();
+    waitForElement(constants.TOOLBAR_CONTAINER_SELECTOR, (indicatorContainer) => {
+      waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
+        if (!$('#bsky-navigator-toolbar').length) {
+          this.addToolbar(homeScreenFeedTabsDiv);
         }
-      }
-    );
+      });
+    });
 
-    waitForElement(
-      '#bsky-navigator-toolbar',
-      (div) => {
-        waitForElement(
-          '#statusBar', (div) => { this.setSortIcons() }
-        );
+    waitForElement(constants.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer, observer) => {
+      if (!$('#statusBar').length) {
+        // FIXME: it would be easier to match from top down, but HTML changes
+        // between desktop/mobile viewport size, so this works better.
+        this.addStatusBar($(statusBarContainer).parent().parent().parent().parent().parent());
+        observer.disconnect();
       }
-    );
+    });
+
+    waitForElement('#bsky-navigator-toolbar', (div) => {
+      waitForElement('#statusBar', (div) => {
+        this.setSortIcons();
+      });
+    });
   }
 
   onSearchAutocomplete(request, response) {
-
     // debugger;
-    const authors = this.getAuthors().sort((a, b) => a.handle.localeCompare(b.handle, undefined, {sensitivity: 'base'}));;
+    const authors = this.getAuthors().sort((a, b) =>
+      a.handle.localeCompare(b.handle, undefined, { sensitivity: 'base' })
+    );
     const rules = Object.keys(this.state.rules);
 
     let term = utils.extractLastTerm(request.term).toLowerCase();
-    let isNegation = term.startsWith("!"); // Check if `!` is present
+    const isNegation = term.startsWith('!'); // Check if `!` is present
     if (isNegation) term = term.substring(1); // Strip `!`
 
     let results = [];
 
-    if (term === "") {
-      results = rules.map(r => ({ label: `$${r}`, value: `$${r}` }));
-    } else if (term.startsWith("@") || term.startsWith("$")) {
-      let type = term.charAt(0);
-      let search = term.substring(1).toLowerCase(); // Remove prefix for matching
+    if (term === '') {
+      results = rules.map((r) => ({ label: `$${r}`, value: `$${r}` }));
+    } else if (term.startsWith('@') || term.startsWith('$')) {
+      const type = term.charAt(0);
+      const search = term.substring(1).toLowerCase(); // Remove prefix for matching
 
-      if (type === "@") {
-        results = authors.filter(a =>
-          a.handle.toLowerCase().includes(search) ||
-            a.displayName.toLowerCase().includes(search)
-        ).map(a => ({
-          label: `${isNegation ? "!" : ""}@${a.handle} (${a.displayName})`,
-          value: `${isNegation ? "!" : ""}@${a.handle}`
-        }));
-      } else if (type === "$") {
-        results = rules.filter(r => r.toLowerCase().includes(search))
-                       .map(r => ({
-                         label: `${isNegation ? "!" : ""}$${r}`,
-                       }));
+      if (type === '@') {
+        results = authors
+          .filter(
+            (a) =>
+              a.handle.toLowerCase().includes(search) ||
+              a.displayName.toLowerCase().includes(search)
+          )
+          .map((a) => ({
+            label: `${isNegation ? '!' : ''}@${a.handle} (${a.displayName})`,
+            value: `${isNegation ? '!' : ''}@${a.handle}`,
+          }));
+      } else if (type === '$') {
+        results = rules
+          .filter((r) => r.toLowerCase().includes(search))
+          .map((r) => ({
+            label: `${isNegation ? '!' : ''}$${r}`,
+          }));
       }
     }
     response(results);
@@ -2323,17 +2224,20 @@ export class FeedItemHandler extends ItemHandler {
 `);
     $(this.statusBarLeft).append(this.bottomLoadIndicator);
 
-
     if (!this.infoIndicator) {
-      this.infoIndicator = $(`<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="infoIndicatorText"/></div>`);
+      this.infoIndicator = $(
+        `<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="infoIndicatorText"/></div>`
+      );
       $(this.statusBarCenter).append(this.infoIndicator);
     }
 
     if (!this.preferencesIcon) {
-      this.preferencesIcon = $(`<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`);
-      $(this.preferencesIcon).on("click", () => {
-        $("#preferencesIconImage").attr("src", this.INDICATOR_IMAGES.preferences[1])
-        this.config.open()
+      this.preferencesIcon = $(
+        `<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`
+      );
+      $(this.preferencesIcon).on('click', () => {
+        $('#preferencesIconImage').attr('src', this.INDICATOR_IMAGES.preferences[1]);
+        this.config.open();
       });
       $(this.statusBarRight).append(this.preferencesIcon);
     }
@@ -2342,12 +2246,9 @@ export class FeedItemHandler extends ItemHandler {
   activate() {
     super.activate();
     this.refreshToolbars();
-    waitForElement(
-      "#bsky-navigator-search",
-      (el) => {
-        $(el).val(this.state.filter);
-      }
-    );
+    waitForElement('#bsky-navigator-search', (el) => {
+      $(el).val(this.state.filter);
+    });
   }
 
   deactivate() {
@@ -2355,27 +2256,29 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   isActive() {
-    return window.location.pathname == "/"
+    return window.location.pathname == '/';
   }
 
   toggleSortOrder() {
-    this.state.stateManager.updateState({feedSortReverse: !this.state.feedSortReverse});
+    this.state.stateManager.updateState({ feedSortReverse: !this.state.feedSortReverse });
     this.setSortIcons();
-    $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen");
+    $(this.selector).closest('div.thread').removeClass('bsky-navigator-seen');
     this.loadItems();
   }
 
   setSortIcons() {
-    ["top", "bottom"].forEach(
-      (bar) => {
-        const which = (
-          !this.state.feedSortReverse && bar == "bottom"
-            ||
-            this.state.feedSortReverse && bar == "top"
-        ) ? "Older" : "Newer";
-        const img = this.INDICATOR_IMAGES[`load${bar.toLowerCase().replace(/\b\w/g, char => char.toUpperCase())}`][0];
-        $(`#${bar}LoadIndicator`).empty();
-        $(`#${bar}LoadIndicator`).append(`
+    ['top', 'bottom'].forEach((bar) => {
+      const which =
+        (!this.state.feedSortReverse && bar == 'bottom') ||
+        (this.state.feedSortReverse && bar == 'top')
+          ? 'Older'
+          : 'Newer';
+      const img =
+        this.INDICATOR_IMAGES[
+          `load${bar.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())}`
+        ][0];
+      $(`#${bar}LoadIndicator`).empty();
+      $(`#${bar}LoadIndicator`).append(`
 <div id="load${which}Indicator" title="Load ${which.toLowerCase()} items" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
       <a id="load${which}IndicatorLink">
 <img id="load${which}IndicatorImage" class="indicator-image" src="${img}"/>
@@ -2383,16 +2286,15 @@ export class FeedItemHandler extends ItemHandler {
 </a>
 </div>
 `);
-      }
-    )
+    });
     // $('img#loadOlderIndicatorImage').css("opacity", "1");
-    $('img#loadOlderIndicatorImage').addClass("image-highlight");
-    $('a#loadOlderIndicatorLink').on("click", () => this.loadOlderItems());
+    $('img#loadOlderIndicatorImage').addClass('image-highlight');
+    $('a#loadOlderIndicatorLink').on('click', () => this.loadOlderItems());
   }
 
   toggleHideRead() {
-    this.state.stateManager.updateState({feedHideRead: !this.state.feedHideRead})
-    $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen")
+    this.state.stateManager.updateState({ feedHideRead: !this.state.feedHideRead });
+    $(this.selector).closest('div.thread').removeClass('bsky-navigator-seen');
     this.loadItems();
   }
 
@@ -2402,65 +2304,67 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   filterItem(item, thread) {
-    if(this.state.feedHideRead) {
-      if($(item).hasClass("item-read")) {
+    if (this.state.feedHideRead) {
+      if ($(item).hasClass('item-read')) {
         return false;
       }
     }
 
-    if(this.state.filter && this.state.rules) {
-      const activeRules = this.state.filter.split(/[ ]+/).map(
-        (ruleStatement) => {
-          const [_, invert, matchType, query] = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
-          return {
-            invert,
-            matchType,
-            query
-          }
-        }
-      );
+    if (this.state.filter && this.state.rules) {
+      const activeRules = this.state.filter.split(/[ ]+/).map((ruleStatement) => {
+        const [_, invert, matchType, query] = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
+        return {
+          invert,
+          matchType,
+          query,
+        };
+      });
 
-      return activeRules.map(
-        (activeRule) => {
-          var allowed = null;
+      return activeRules
+        .map((activeRule) => {
+          let allowed = null;
           switch (activeRule.matchType) {
-            case '$':
+            case '$': {
               const rules = this.state.rules[activeRule.query];
               if (!rules) {
                 console.log(`no rule ${activeRule.query}`);
                 return null;
               }
-              rules.forEach(rule => {
-                // console.log(rule, allowed);
-                if (rule.type === "all") {
-                  allowed = rule.action === "allow";
-                } else if (rule.type === "from" && !!this.filterAuthor(item, rule.value.substring(1))) {
-                  allowed = allowed || rule.action === "allow";
-                } else if (rule.type === "content" && !!this.filterContent(item, rule.value)) {
-                  allowed = allowed || rule.action === "allow";
+              rules.forEach((rule) => {
+                if (rule.type === 'all') {
+                  allowed = rule.action === 'allow';
+                } else if (
+                  rule.type === 'from' &&
+                  !!this.filterAuthor(item, rule.value.substring(1))
+                ) {
+                  allowed = allowed || rule.action === 'allow';
+                } else if (rule.type === 'content' && !!this.filterContent(item, rule.value)) {
+                  allowed = allowed || rule.action === 'allow';
                 }
               });
               break;
+            }
             case '@':
-              allowed = !!this.filterAuthor(item, activeRule.query)
+              allowed = !!this.filterAuthor(item, activeRule.query);
               break;
             case '%':
-              allowed = !!this.filterContent(item, activeRule.query)
+              allowed = !!this.filterContent(item, activeRule.query);
               break;
             default:
-              allowed = !!this.filterAuthor(item, activeRule.query) || !!this.filterContent(item, activeRule.query)
+              allowed =
+                !!this.filterAuthor(item, activeRule.query) ||
+                !!this.filterContent(item, activeRule.query);
               break;
           }
           return activeRule.invert ? !allowed : allowed;
-        }
-      ).every( (allowed) => allowed == true )
-
+        })
+        .every((allowed) => allowed == true);
     }
     return true;
   }
 
   filterAuthor(item, author) {
-    const pattern = new RegExp(author, "i");
+    const pattern = new RegExp(author, 'i');
     const handle = this.handleFromItem(item);
     const displayName = this.displayNameFromItem(item);
     // console.log(author, handle, displayName);
@@ -2471,108 +2375,117 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   filterContent(item, query) {
-    const pattern = new RegExp(query, "i");
+    const pattern = new RegExp(query, 'i');
     const content = $(item).find('div[data-testid="postText"]').text();
     return content.match(pattern);
   }
 
   filterThread(thread) {
-    return ($(thread).find(".item").length != $(thread).find(".filtered").length);
+    return $(thread).find('.item').length != $(thread).find('.filtered').length;
   }
 
   filterItems() {
     const hideRead = this.state.feedHideRead;
-    $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+hideRead])
-    $("#filterIndicator").attr("title", `show all or unread (currently ${hideRead ? 'unread' : 'all'})`);
-
-    const parent = $(this.selector).first().closest(".thread").parent()
-    const unseenThreads = parent.find(".thread");//.not("div.bsky-navigator-seen")
-    $(unseenThreads).map(
-      (i, thread) => {
-        $(thread).find(".item").each(
-          (i, item) => {
-            if(this.filterItem(item, thread)) {
-              $(item).removeClass("filtered");
-            } else {
-              $(item).addClass("filtered");
-            }
-          }
-        )
-
-        if(this.filterThread(thread)) {
-          $(thread).removeClass("filtered");
-        } else {
-          $(thread).addClass("filtered");
-        }
-
-      }
+    $('#filterIndicatorImage').attr('src', this.INDICATOR_IMAGES.filter[+hideRead]);
+    $('#filterIndicator').attr(
+      'title',
+      `show all or unread (currently ${hideRead ? 'unread' : 'all'})`
     );
 
+    const parent = $(this.selector).first().closest('.thread').parent();
+    const unseenThreads = parent.find('.thread'); //.not("div.bsky-navigator-seen")
+    $(unseenThreads).map((i, thread) => {
+      $(thread)
+        .find('.item')
+        .each((i, item) => {
+          if (this.filterItem(item, thread)) {
+            $(item).removeClass('filtered');
+          } else {
+            $(item).addClass('filtered');
+          }
+        });
+
+      if (this.filterThread(thread)) {
+        $(thread).removeClass('filtered');
+      } else {
+        $(thread).addClass('filtered');
+      }
+    });
+
     // FIXME: pretty inefficient to loop over these again
-    $(unseenThreads).map(
-      (i, thread) => {
-        $(thread).find(".item").each(
-          (i, item) => {
-            const offset = parseInt($(item).data("bsky-navigator-thread-offset"));
-            // console.log(offset);
-            if (offset > 0 && $(item).hasClass("item-unread") && this.config.get("showReplyContext")) {
-              const index = parseInt($(thread).data("bsky-navigator-thread-index"));
-              const prev = $(`div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset-1}"]`);
-              // console.log("prev", prev);
-              $(prev).removeClass("filtered");
-              $(prev).closest(".thread").removeClass("filtered");
-            }
-          });
-      });
+    $(unseenThreads).map((i, thread) => {
+      $(thread)
+        .find('.item')
+        .each((i, item) => {
+          const offset = parseInt($(item).data('bsky-navigator-thread-offset'));
+          // console.log(offset);
+          if (
+            offset > 0 &&
+            $(item).hasClass('item-unread') &&
+            this.config.get('showReplyContext')
+          ) {
+            const index = parseInt($(thread).data('bsky-navigator-thread-index'));
+            const prev = $(
+              `div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset - 1}"]`
+            );
+            // console.log("prev", prev);
+            $(prev).removeClass('filtered');
+            $(prev).closest('.thread').removeClass('filtered');
+          }
+        });
+    });
 
     this.refreshItems();
-    if(hideRead && $(this.selectedItem).hasClass("item-read")) {
-      console.log("jumping")
+    if (hideRead && $(this.selectedItem).hasClass('item-read')) {
+      console.log('jumping');
       this.jumpToNextUnseenItem();
     }
   }
 
   sortItems() {
-    const reversed = this.state.feedSortReverse
-    $("#sortIndicatorImage").attr("src", this.INDICATOR_IMAGES.sort[+reversed])
-    $("#sortIndicator").attr("title", `change sort order (currently ${reversed ? 'forward' : 'reverse'} chronological)`);
+    const reversed = this.state.feedSortReverse;
+    $('#sortIndicatorImage').attr('src', this.INDICATOR_IMAGES.sort[+reversed]);
+    $('#sortIndicator').attr(
+      'title',
+      `change sort order (currently ${reversed ? 'forward' : 'reverse'} chronological)`
+    );
 
-    const parent = $(this.selector).closest(".thread").first().parent()
-    const newItems = parent.children().filter(
-      (i, item) => $(item).hasClass("thread")
-    ).get().sort(
-      (a, b) => {
-        const threadIndexA = parseInt($(a).data("bsky-navigator-thread-index"));
-        const threadIndexB = parseInt($(b).data("bsky-navigator-thread-index"));
-        const itemIndexA = parseInt($(a).find(".item").data("bsky-navigator-item-index"));
-        const itemIndexB = parseInt($(b).find(".item").data("bsky-navigator-item-index"));
+    const parent = $(this.selector).closest('.thread').first().parent();
+    const newItems = parent
+      .children()
+      .filter((i, item) => $(item).hasClass('thread'))
+      .get()
+      .sort((a, b) => {
+        const threadIndexA = parseInt($(a).data('bsky-navigator-thread-index'));
+        const threadIndexB = parseInt($(b).data('bsky-navigator-thread-index'));
+        const itemIndexA = parseInt($(a).find('.item').data('bsky-navigator-item-index'));
+        const itemIndexB = parseInt($(b).find('.item').data('bsky-navigator-item-index'));
         // console.log(threadIndexA, threadIndexB, itemIndexA, itemIndexB);
         if (threadIndexA !== threadIndexB) {
-          return reversed
-            ? threadIndexB - threadIndexA
-            : threadIndexA - threadIndexB;
+          return reversed ? threadIndexB - threadIndexA : threadIndexA - threadIndexB;
         }
         return itemIndexA - itemIndexB;
-      }
-    );
+      });
     // debugger;
-    (reversed ^ this.loadingNew) ? parent.prepend(newItems) : parent.children(".thread").last().next().after(newItems);
+    reversed ^ this.loadingNew
+      ? parent.prepend(newItems)
+      : parent.children('.thread').last().next().after(newItems);
   }
 
   handleInput(event) {
-    var item = this.selectedItem
-    if(event.key == "a") {
-      $(item).find(constants.PROFILE_SELECTOR)[0].click()
-    } else if(event.key == "u") {
+    const item = this.selectedItem;
+    if (event.key == 'a') {
+      $(item).find(constants.PROFILE_SELECTOR)[0].click();
+    } else if (event.key == 'u') {
       this.loadNewerItems();
-    } else if (event.key == ":") {
+    } else if (event.key == ':') {
       this.toggleSortOrder();
     } else if (event.key == '"') {
       this.toggleHideRead();
     } else if (event.key == '/') {
       event.preventDefault();
-      $("input#bsky-navigator-search").focus();
-    } else if (event.key == ',' ) {
+      $('input#bsky-navigator-search').focus();
+    } else if (event.key == ',') {
       this.loadItems();
     } else {
       super.handleInput(event);
@@ -2581,35 +2494,34 @@ export class FeedItemHandler extends ItemHandler {
 }
 
 export class PostItemHandler extends ItemHandler {
-
   constructor(name, config, state, api, selector) {
-    super(name, config, state, api, selector)
-    this.indexMap = {}
-    this.handleInput = this.handleInput.bind(this)
+    super(name, config, state, api, selector);
+    this.indexMap = {};
+    this.handleInput = this.handleInput.bind(this);
   }
 
   get index() {
-    return this.indexMap?.[this.postId] ?? 0
+    return this.indexMap?.[this.postId] ?? 0;
   }
 
   set index(value) {
-    this.indexMap[this.postId] = value
+    this.indexMap[this.postId] = value;
   }
 
   activate() {
-    super.activate()
-    this.postId = this.postIdFromUrl()
+    super.activate();
+    this.postId = this.postIdFromUrl();
     // this.markPostRead(this.postId, null)
 
     // console.log(`postId: ${this.postId} ${this.index}`)
   }
 
   deactivate() {
-    super.deactivate()
+    super.deactivate();
   }
 
   isActive() {
-    return window.location.pathname.match(/\/post\//)
+    return window.location.pathname.match(/\/post\//);
   }
 
   get scrollMargin() {
@@ -2621,89 +2533,89 @@ export class PostItemHandler extends ItemHandler {
   // }
 
   handleInput(event) {
-
-    if (["o", "Enter"].includes(event.key) && !(event.altKey || event.metaKey) ) {
+    if (['o', 'Enter'].includes(event.key) && !(event.altKey || event.metaKey)) {
       // o/Enter = open inner post
-      var inner = $(item).find("div[aria-label^='Post by']")
-      inner.click()
+      const inner = $(item).find("div[aria-label^='Post by']");
+      inner.click();
     }
 
     if (super.handleInput(event)) {
-      return
+      return;
     }
 
-    if(this.isPopupVisible || event.altKey || event.metaKey) {
-      return
+    if (this.isPopupVisible || event.altKey || event.metaKey) {
+      return;
     }
 
-    var item = this.selectedItem
-    if(event.key == "a") {
-      var handle = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1])
-      $(item).find("div").filter( (i, el) =>
-        $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == `@${handle}`
-      )[0].click()
+    var item = this.selectedItem;
+    if (event.key == 'a') {
+      const handle = $.trim($(item).attr('data-testid').split('postThreadItem-by-')[1]);
+      $(item)
+        .find('div')
+        .filter(
+          (i, el) =>
+            $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, '') == `@${handle}`
+        )[0]
+        .click();
     }
-
   }
 }
 
 export class ProfileItemHandler extends FeedItemHandler {
-
   constructor(name, config, state, api, selector) {
-    super(name, config, state, api, selector)
+    super(name, config, state, api, selector);
   }
 
   activate() {
-    this.setIndex(0)
-    super.activate()
+    this.setIndex(0);
+    super.activate();
   }
 
   deactivate() {
-    super.deactivate()
+    super.deactivate();
   }
 
   isActive() {
-    return window.location.pathname.match(/^\/profile\//)
+    return window.location.pathname.match(/^\/profile\//);
   }
 
   handleInput(event) {
     if (super.handleInput(event)) {
-      return
+      return;
     }
-    if(event.altKey || event.metaKey) {
-      return
+    if (event.altKey || event.metaKey) {
+      return;
     }
-    if(event.key == "f") {
+    if (event.key == 'f') {
       // f = follow
-      $("button[data-testid='followBtn']").click()
-    } else if(event.key == "F") {
+      $("button[data-testid='followBtn']").click();
+    } else if (event.key == 'F') {
       // could make this a toggle but safer to make it a distinct shortcut
-      $("button[data-testid='unfollowBtn']").click()
-    } else if(event.key == "L") {
+      $("button[data-testid='unfollowBtn']").click();
+    } else if (event.key == 'L') {
       // L = add to list
-      $("button[aria-label^='More options']").click()
-      setTimeout(function() {
-        $("div[data-testid='profileHeaderDropdownListAddRemoveBtn']").click()
-      }, 200)
-    } else if(event.key == "M") {
+      $("button[aria-label^='More options']").click();
+      setTimeout(function () {
+        $("div[data-testid='profileHeaderDropdownListAddRemoveBtn']").click();
+      }, 200);
+    } else if (event.key == 'M') {
       // M = mute
-      $("button[aria-label^='More options']").click()
-      setTimeout(function() {
-        $("div[data-testid='profileHeaderDropdownMuteBtn']").click()
-      }, 200)
-    } else if(event.key == "B") {
+      $("button[aria-label^='More options']").click();
+      setTimeout(function () {
+        $("div[data-testid='profileHeaderDropdownMuteBtn']").click();
+      }, 200);
+    } else if (event.key == 'B') {
       // B = block
-      $("button[aria-label^='More options']").click()
-      setTimeout(function() {
-        $("div[data-testid='profileHeaderDropdownBlockBtn']").click()
-      }, 200)
-    } else if(event.key == "R") {
+      $("button[aria-label^='More options']").click();
+      setTimeout(function () {
+        $("div[data-testid='profileHeaderDropdownBlockBtn']").click();
+      }, 200);
+    } else if (event.key == 'R') {
       // R = report
-      $("button[aria-label^='More options']").click()
-      setTimeout(function() {
-        $("div[data-testid='profileHeaderDropdownReportBtn']").click()
-      }, 200)
+      $("button[aria-label^='More options']").click();
+      setTimeout(function () {
+        $("div[data-testid='profileHeaderDropdownReportBtn']").click();
+      }, 200);
     }
   }
 }
-;

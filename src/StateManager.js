@@ -1,13 +1,14 @@
 // StateManager.js
+import constants from './constants.js';
 
-const DEFAULT_HISTORY_MAX = 5000
+const DEFAULT_HISTORY_MAX = 5000;
 
 export class StateManager {
   constructor(key, defaultState = {}, config = {}) {
     this.key = key;
     this.config = config;
-    if(!this.config) {
-      debugger;
+    if (!this.config) {
+      console.warn('StateManager: config is undefined');
     }
     this.listeners = [];
     this.debounceTimeout = null;
@@ -18,7 +19,7 @@ export class StateManager {
     this.remoteSyncTimeout = null; // Timer for remote state sync
     this.handleBlockListResponse = this.handleBlockListResponse.bind(this);
     this.saveStateImmediately = this.saveStateImmediately.bind(this);
-    window.addEventListener("beforeunload", () => this.saveStateImmediately());
+    window.addEventListener('beforeunload', () => this.saveStateImmediately());
   }
 
   static async create(key, defaultState = {}, config = {}) {
@@ -43,19 +44,19 @@ export class StateManager {
   }
 
   setSyncStatus(status, title) {
-    const overlay = $(".preferences-icon-overlay")
-    if(!overlay) {
-      console.log("no overlay")
-      return
+    const overlay = $('.preferences-icon-overlay');
+    if (!overlay) {
+      console.log('no overlay');
+      return;
     }
-    $(overlay).attr("title", `sync: ${status} ${title || ''}`)
-    for (const s of ["ready", "pending", "success", "failure"]) {
-      $(overlay).removeClass(`preferences-icon-overlay-sync-${s}`)
+    $(overlay).attr('title', `sync: ${status} ${title || ''}`);
+    for (const s of ['ready', 'pending', 'success', 'failure']) {
+      $(overlay).removeClass(`preferences-icon-overlay-sync-${s}`);
     }
 
-    $(overlay).addClass(`preferences-icon-overlay-sync-${status}`)
-    if (status == "success") {
-      setTimeout( () => this.setSyncStatus("ready"), 3000);
+    $(overlay).addClass(`preferences-icon-overlay-sync-${status}`);
+    if (status == 'success') {
+      setTimeout(() => this.setSyncStatus('ready'), 3000);
     }
   }
 
@@ -65,16 +66,22 @@ export class StateManager {
    * @param {string} successStatus - The status to set on successful execution (e.g., "success").
    * @returns {Promise<Object>} - Resolves with the parsed result of the query.
    */
-  async executeRemoteQuery(query, successStatus = "success") {
-    const { url, namespace = "bluesky_navigator", database = "state", username, password } = JSON.parse(this.config.stateSyncConfig);
+  async executeRemoteQuery(query, successStatus = 'success') {
+    const {
+      url,
+      namespace = 'bluesky_navigator',
+      database = 'state',
+      username,
+      password,
+    } = JSON.parse(this.config.stateSyncConfig);
 
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
-        method: "POST",
-        url: `${url.replace(/\/$/, "")}/sql`,
+        method: 'POST',
+        url: `${url.replace(/\/$/, '')}/sql`,
         headers: {
-          "Accept": "application/json",
-          "Authorization": "Basic " + btoa(`${username}:${password}`)
+          Accept: 'application/json',
+          Authorization: 'Basic ' + btoa(`${username}:${password}`),
         },
         data: `USE NS ${namespace} DB ${database}; ${query}`,
         onload: (response) => {
@@ -86,24 +93,24 @@ export class StateManager {
             this.setSyncStatus(successStatus);
             resolve(result);
           } catch (error) {
-            console.error("Error executing query:", error.message);
-            this.setSyncStatus("failure", error.message);
+            console.error('Error executing query:', error.message);
+            this.setSyncStatus('failure', error.message);
             reject(error);
           }
         },
         onerror: (error) => {
-          console.error("Network error executing query:", error.message);
-          this.setSyncStatus("failure", error.message);
+          console.error('Network error executing query:', error.message);
+          this.setSyncStatus('failure', error.message);
           reject(error);
-        }
+        },
       });
     });
   }
 
   async getRemoteStateUpdated() {
-    const sinceResult = await this.executeRemoteQuery(`SELECT lastUpdated FROM state:current;`)
-    const lastUpdated = sinceResult["lastUpdated"]
-    return sinceResult["lastUpdated"]
+    const sinceResult = await this.executeRemoteQuery(`SELECT lastUpdated FROM state:current;`);
+    const lastUpdated = sinceResult['lastUpdated'];
+    return sinceResult['lastUpdated'];
   }
 
   /**
@@ -111,18 +118,19 @@ export class StateManager {
    */
   async loadState(defaultState) {
     try {
-      const savedState = JSON.parse(GM_getValue(this.key, "{}"));
+      const savedState = JSON.parse(GM_getValue(this.key, '{}'));
 
       if (this.config.stateSyncEnabled) {
         const remoteState = await this.loadRemoteState(this.state.lastUpdated);
         // console.dir(remoteState);
-        return remoteState ? { ...defaultState, ...remoteState } :  { ...defaultState, ...savedState };
+        return remoteState
+          ? { ...defaultState, ...remoteState }
+          : { ...defaultState, ...savedState };
       } else {
         return { ...defaultState, ...savedState };
       }
-
     } catch (error) {
-      console.error("Error loading state, using defaults:", error);
+      console.error('Error loading state, using defaults:', error);
       return defaultState;
     }
   }
@@ -131,26 +139,25 @@ export class StateManager {
     // const query = `SELECT * FROM state:current;`;
 
     try {
-      console.log("Loading remote state...");
-      this.setSyncStatus("pending");
-      const lastUpdated = await this.getRemoteStateUpdated()
-      if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated) ) {
+      console.log('Loading remote state...');
+      this.setSyncStatus('pending');
+      const lastUpdated = await this.getRemoteStateUpdated();
+      if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
         console.log(`Remote state is newer: ${since} < ${lastUpdated}`);
         const result = await this.executeRemoteQuery('SELECT * FROM state:current;');
         const stateObj = result || {};
         delete stateObj.id;
-        console.log("Remote state loaded successfully.");
+        console.log('Remote state loaded successfully.');
         return stateObj;
       } else {
         console.log(`Local state is newer: ${since} >= ${lastUpdated}`);
         return null;
       }
     } catch (error) {
-      console.error("Failed to load remote state:", error);
+      console.error('Failed to load remote state:', error);
       return {};
     }
   }
-
 
   /**
    * Updates the state and schedules a chained local and remote save.
@@ -171,7 +178,8 @@ export class StateManager {
     this.localSaveTimeout = setTimeout(() => {
       const shouldSyncRemote = this.isLocalStateDirty; // Capture the current state of the flag
       this.saveLocalState().then(() => {
-        if (shouldSyncRemote) { // Use the captured flag to decide if remote sync is needed
+        if (shouldSyncRemote) {
+          // Use the captured flag to decide if remote sync is needed
           this.scheduleRemoteSync();
         }
       });
@@ -183,10 +191,10 @@ export class StateManager {
    * @returns {Promise<void>}
    */
   async saveLocalState() {
-    console.log("Saving local state...");
+    console.log('Saving local state...');
     this.cleanupState(); // Ensure state is pruned before saving
     GM_setValue(this.key, JSON.stringify(this.state));
-    console.log("Local state saved.");
+    console.log('Local state saved.');
     this.isLocalStateDirty = false; // Reset dirty flag
     this.notifyListeners();
   }
@@ -196,7 +204,7 @@ export class StateManager {
    */
   scheduleRemoteSync() {
     if (!this.config.stateSyncEnabled) {
-      console.log("sync disabled")
+      console.log('sync disabled');
       return;
     }
 
@@ -210,24 +218,29 @@ export class StateManager {
    * Saves the remote state if needed.
    */
   async saveRemoteState(since) {
-    const { url, namespace = "bluesky_navigator", database = "state", username, password } =
-          JSON.parse(this.config.stateSyncConfig);
+    const {
+      url,
+      namespace = 'bluesky_navigator',
+      database = 'state',
+      username,
+      password,
+    } = JSON.parse(this.config.stateSyncConfig);
 
     try {
       const lastUpdated = await this.getRemoteStateUpdated();
       if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
-        console.log("Not saving because remote state is newer.");
+        console.log('Not saving because remote state is newer.');
         return;
       }
 
-      console.log("Saving remote state...");
-      this.setSyncStatus("pending");
+      console.log('Saving remote state...');
+      this.setSyncStatus('pending');
       await this.executeRemoteQuery(
         `UPSERT state:current MERGE {${JSON.stringify(this.state).slice(1, -1)}, created_at: time::now()}`,
-        "success"
+        'success'
       );
     } catch (error) {
-      console.error("Failed to save remote state:", error);
+      console.error('Failed to save remote state:', error);
     }
   }
 
@@ -281,7 +294,7 @@ export class StateManager {
    * @param {function} callback - The listener function to invoke on state change.
    */
   addListener(callback) {
-    if (typeof callback === "function") {
+    if (typeof callback === 'function') {
       this.listeners.push(callback);
     }
   }
@@ -290,21 +303,21 @@ export class StateManager {
    * Notifies all registered listeners of a state change.
    */
   notifyListeners() {
-    this.listeners.forEach(callback => callback(this.state));
+    this.listeners.forEach((callback) => callback(this.state));
   }
 
   handleBlockListResponse(response, responseKey, stateKey) {
     // console.dir(responseKey, stateKey)
-    var jsonResponse = $.parseJSON(response.response)
+    const jsonResponse = $.parseJSON(response.response);
     // console.dir(jsonResponse.data)
 
     try {
       this.state.blocks[stateKey].handles = jsonResponse.data[responseKey].map(
         (entry) => entry.Handle
-      )
-      this.state.blocks[stateKey].updated = Date.now()
+      );
+      this.state.blocks[stateKey].updated = Date.now();
     } catch (error) {
-      console.warn("couldn't fetch block list")
+      console.warn("couldn't fetch block list");
     }
   }
 
@@ -312,32 +325,30 @@ export class StateManager {
     // console.log("updateBlockList")
     const blockConfig = {
       all: {
-        url: "https://api.clearsky.services/api/v1/anon/lists/fun-facts",
-        responseKey: "blocked",
+        url: 'https://api.clearsky.services/api/v1/anon/lists/fun-facts',
+        responseKey: 'blocked',
       },
       recent: {
-        url: "https://api.clearsky.services/api/v1/anon/lists/funer-facts",
-        responseKey: "blocked24",
+        url: 'https://api.clearsky.services/api/v1/anon/lists/funer-facts',
+        responseKey: 'blocked24',
       },
-    }
+    };
 
-    for (const [stateKey, cfg] of Object.entries(blockConfig) ) {
+    for (const [stateKey, cfg] of Object.entries(blockConfig)) {
       // console.log(stateKey, cfg)
       if (
-        this.state.blocks[stateKey].updated == null
-          ||
-          Date.now() + constants.CLEARSKY_LIST_REFRESH_INTERVAL > this.state.blocks[stateKey].updated
+        this.state.blocks[stateKey].updated == null ||
+        Date.now() + constants.CLEARSKY_LIST_REFRESH_INTERVAL > this.state.blocks[stateKey].updated
       ) {
         GM_xmlhttpRequest({
-          method: "GET",
+          method: 'GET',
           url: cfg.url,
           headers: {
-            Accept: "application/json",
+            Accept: 'application/json',
           },
           onload: (response) => this.handleBlockListResponse(response, cfg.responseKey, stateKey),
         });
       }
-
     }
   }
 }

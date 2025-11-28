@@ -1,13 +1,16 @@
 {
   "name": "bluesky-navigator",
   "private": true,
-  "version": "1.0.31+357.fed5f528",
+  "version": "1.0.31+358.ff8f36ab",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "vite build"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "prettier": "^3.7.1",
     "vite": "^6.0.5",
     "vite-userscript-plugin": "^1.11.0"
   },

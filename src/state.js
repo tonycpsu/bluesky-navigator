@@ -1,13 +1,13 @@
-import {StateManager} from './StateManager.js'
-import constants from './constants.js'
+import { StateManager } from './StateManager.js';
+import constants from './constants.js';
 
 const DEFAULT_STATE = {
   seen: {},
   lastUpdated: null,
-  page: "home",
-  "blocks": {"all": [], "recent": []},
+  page: 'home',
+  blocks: { all: [], recent: [] },
   feedSortReverse: false,
-  feedHideRead: false
+  feedHideRead: false,
 };
 
 let stateManager;
@@ -15,17 +15,17 @@ let stateManager;
 const target = {
   init(key, config, onSuccess) {
     StateManager.create(key, DEFAULT_STATE, config)
-                .then((initializedStateManager) => {
-                  stateManager = initializedStateManager;
-                  console.log("State initialized");
-                  console.dir(stateManager.state);
-                  onSuccess()
-                })
-                .catch((error) => {
-                  console.error("Failed to initialize StateManager:", error);
-                });
-  }
-}
+      .then((initializedStateManager) => {
+        stateManager = initializedStateManager;
+        console.log('State initialized');
+        console.dir(stateManager.state);
+        onSuccess();
+      })
+      .catch((error) => {
+        console.error('Failed to initialize StateManager:', error);
+      });
+  },
+};
 
 // Proxy to dynamically get values from `stateManager`
 const state = new Proxy(target, {
@@ -35,10 +35,9 @@ const state = new Proxy(target, {
       return typeof target[prop] === 'function'
         ? target[prop].bind(receiver) // Ensure correct 'this' context
         : target[prop];
-    } else if (prop == "stateManager") {
+    } else if (prop == 'stateManager') {
       return stateManager;
-    }
-    else if (prop in stateManager.state) {
+    } else if (prop in stateManager.state) {
       return stateManager.state[prop];
     }
     console.warn(`State Warning: ${prop} is not defined`);
@@ -48,8 +47,7 @@ const state = new Proxy(target, {
     console.log(`State Update: ${prop} = ${value}`);
     stateManager.state[prop] = value;
     return true;
-  }
+  },
 });
-
 
 export { state };

@@ -1,6 +1,29 @@
 const constants = {
+  // Timing constants
   DEFAULT_STATE_SAVE_TIMEOUT: 5000,
   URL_MONITOR_INTERVAL: 500,
+  REPOST_MENU_DELAY: 1000, // Delay before clicking repost menu item
+
+  // Video playback modes
+  VIDEO_PLAYBACK: {
+    PLAY_ALL: 'Play all',
+    PLAY_SELECTED: 'Play selected',
+    PAUSE_ALL: 'Pause all',
+  },
+
+  // Layout constants for sidebar positioning
+  SIDEBAR_LAYOUT: {
+    LEFT_TRANSLATE_X_DEFAULT: -540,
+    RIGHT_TRANSLATE_X_DEFAULT: 300,
+  },
+
+  // Embed dimensions
+  EMBED_DIMENSIONS: {
+    YOUTUBE: { width: 320, height: 200 },
+    TIKTOK: { maxWidth: 605, minWidth: 325 },
+  },
+
+  // State management
   STATE_KEY: 'bluesky_state',
   DRAWER_MENU_SELECTOR: 'button[aria-label="Open drawer menu"]',
   SCREEN_SELECTOR: 'main > div > div > div',

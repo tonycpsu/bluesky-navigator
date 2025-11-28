@@ -1,5 +1,4 @@
 import { StateManager } from './StateManager.js';
-import constants from './constants.js';
 
 const DEFAULT_STATE = {
   seen: {},

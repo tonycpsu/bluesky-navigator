@@ -15,8 +15,9 @@ export class BlueskyAPI {
     });
   }
 
-  async getPost(uri) {
-    const res = await this.agent.getPostThread({ uri: 'at://...' });
+  async getPost(_uri) {
+    // TODO: implement this method
+    const _res = await this.agent.getPostThread({ uri: 'at://...' });
   }
 
   async getTimeline() {

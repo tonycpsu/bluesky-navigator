@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+358.ff8f36ab
+// @version     1.0.31+359.22079172
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -27,6 +27,9 @@
   "use strict";
   const constants = {
     URL_MONITOR_INTERVAL: 500,
+    REPOST_MENU_DELAY: 1e3,
+    // Delay before clicking repost menu item
+    // State management
     STATE_KEY: "bluesky_state",
     DRAWER_MENU_SELECTOR: 'button[aria-label="Open drawer menu"]',
     SCREEN_SELECTOR: "main > div > div > div",
@@ -70,7 +73,7 @@
   };
   const DEFAULT_HISTORY_MAX = 5e3;
   class StateManager {
-    constructor(key, defaultState = {}, config2 = {}) {
+    constructor(key, _defaultState = {}, config2 = {}) {
       this.key = key;
       this.config = config2;
       if (!this.config) {
@@ -167,7 +170,6 @@
     }
     async getRemoteStateUpdated() {
       const sinceResult = await this.executeRemoteQuery(`SELECT lastUpdated FROM state:current;`);
-      sinceResult["lastUpdated"];
       return sinceResult["lastUpdated"];
     }
     /**
@@ -261,13 +263,6 @@
      * Saves the remote state if needed.
      */
     async saveRemoteState(since) {
-      const {
-        url,
-        namespace = "bluesky_navigator",
-        database = "state",
-        username,
-        password
-      } = JSON.parse(this.config.stateSyncConfig);
       try {
         const lastUpdated = await this.getRemoteStateUpdated();
         if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
@@ -343,7 +338,7 @@
           (entry) => entry.Handle
         );
         this.state.blocks[stateKey].updated = Date.now();
-      } catch (error) {
+      } catch (_error) {
         console.warn("couldn't fetch block list");
       }
     }
@@ -44575,7 +44570,7 @@ if (cid) {
         password: this.password
       });
     }
-    async getPost(uri) {
+    async getPost(_uri) {
       await this.agent.getPostThread({ uri: "at://..." });
     }
     async getTimeline() {
@@ -59970,35 +59965,44 @@ if (cid) {
   function formatPostText(post2) {
     let text = post2.text;
     if (!post2.facets) return text;
-    const charOffsets = [];
-    let runningByteCount = 0;
-    let utf16CharIndex = 0;
-    for (const char of text) {
-      const charSize = new TextEncoder().encode(char).length;
-      charOffsets.push({ byteOffset: runningByteCount, charIndex: utf16CharIndex });
-      runningByteCount += charSize;
-      utf16CharIndex++;
-    }
-    post2.facets.slice().reverse().forEach((facet2) => {
+    const charOffsets = buildByteToCharMap(text);
+    const sortedFacets = [...post2.facets].reverse();
+    for (const facet2 of sortedFacets) {
       const { index, features } = facet2;
       const start = charOffsets.findLast((c) => c.byteOffset <= index.byteStart)?.charIndex || 0;
       const end = charOffsets.findLast((c) => c.byteOffset <= index.byteEnd)?.charIndex || text.length;
-      const originalSubstring = text.slice(start, end);
-      features.forEach((feature) => {
-        if (feature.$type === "app.bsky.richtext.facet#mention") {
-          const mentionLink = `<a href="https://bsky.app/profile/${feature.did}" class="mention">${originalSubstring}</a>`;
-          text = text.slice(0, start) + mentionLink + text.slice(end + 1);
-        } else if (feature.$type === "app.bsky.richtext.facet#link") {
-          const url = feature.uri;
-          const embedHtml = convertToEmbed(url);
-          text = text.slice(0, start) + embedHtml + text.slice(end + 1);
-        } else if (feature.$type === "app.bsky.richtext.facet#tag") {
-          const hashtagLink = `<a href="https://bsky.app/search?q=%23${feature.tag}" class="hashtag">${originalSubstring}</a>`;
-          text = text.slice(0, start) + hashtagLink + text.slice(end + 1);
+      const originalText = text.slice(start, end);
+      for (const feature of features) {
+        const replacement = formatFacetFeature(feature, originalText);
+        if (replacement) {
+          text = text.slice(0, start) + replacement + text.slice(end + 1);
         }
-      });
-    });
+      }
+    }
     return text;
+  }
+  function buildByteToCharMap(text) {
+    const charOffsets = [];
+    const encoder = new TextEncoder();
+    let byteOffset = 0;
+    for (let charIndex = 0; charIndex < [...text].length; charIndex++) {
+      const char = [...text][charIndex];
+      charOffsets.push({ byteOffset, charIndex });
+      byteOffset += encoder.encode(char).length;
+    }
+    return charOffsets;
+  }
+  function formatFacetFeature(feature, originalText) {
+    switch (feature.$type) {
+      case "app.bsky.richtext.facet#mention":
+        return `<a href="https://bsky.app/profile/${feature.did}" class="mention">${originalText}</a>`;
+      case "app.bsky.richtext.facet#link":
+        return convertToEmbed(feature.uri);
+      case "app.bsky.richtext.facet#tag":
+        return `<a href="https://bsky.app/search?q=%23${feature.tag}" class="hashtag">${originalText}</a>`;
+      default:
+        return null;
+    }
   }
   function urlForPost(post2) {
     return `https://bsky.app/profile/${post2.author.handle}/post/${post2.uri.split("/").slice(-1)[0]}`;
@@ -60426,7 +60430,7 @@ if (cid) {
         this.intersectionObserver.disconnect(element);
       }
     }
-    onScroll(event) {
+    onScroll(_event) {
       if (!this.enableScrollMonitor) {
         console.log("!this.enableScrollMonitor");
         return;
@@ -60462,7 +60466,7 @@ if (cid) {
       video2.dataset.allowPlay = "true";
       video2.pause();
     }
-    setupIntersectionObserver(entries) {
+    setupIntersectionObserver(_entries) {
       if (this.intersectionObserver) {
         $(this.items).each((i2, item) => {
           this.intersectionObserver.observe($(item)[0]);
@@ -60818,7 +60822,7 @@ You're all caught up.
       this.ignoreMouseMovement = false;
     }
     refreshItems() {
-      $(this.items).each((index, item) => {
+      $(this.items).each((index, _item) => {
         this.applyItemStyle(this.items[index], index == this.index);
       });
       $(this.items).css("opacity", "100%");
@@ -60898,7 +60902,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     postIdForItem(item) {
       try {
         return this.urlForItem(item).match(/post\/([^/]+)/)[1];
-      } catch (e2) {
+      } catch (_e) {
         return this.postIdFromUrl();
       }
     }
@@ -61040,12 +61044,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return !!seen[postId];
     }
     markVisibleRead() {
-      $(this.items).each((i2, item) => {
+      $(this.items).each((i2, _item) => {
         this.markItemRead(i2, true);
       });
     }
     // FIXME: move to PostItemHanler
-    handleNewThreadPage(element) {
+    handleNewThreadPage(_element) {
       console.log(this.items.length);
       this.loadPageObserver.disconnect();
     }
@@ -61169,7 +61173,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     getSidecarIndexFromItem(item) {
       return $(item).closest(".thread").find(".sidecar-post").filter(":visible").index(item);
     }
-    shouldUnroll(item) {
+    shouldUnroll(_item) {
       return this.config.get("unrollThreads");
     }
     shouldShowSidecar(item) {
@@ -61290,26 +61294,35 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       console.log(display2);
       container.find(".sidecar-replies").css("display", display2);
     }
-    likePost(post2) {
-      parseInt($(post2).find(".sidecar-count-label-likes").text());
-      this.api.getAtprotoUri(this.urlForItem(post2)).then(
-        (uri) => this.api.getThread(uri).then((thread) => {
-          const likes = thread.post.likeCount;
-          if (thread.post.viewer.like) {
-            this.api.agent.deleteLike(thread.post.viewer.like).then((response) => {
-              console.log(response);
-              $(post2).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[0]);
-              $(post2).find(".sidecar-count-label-likes").html(Math.max(0, likes - 1));
-            });
-          } else {
-            this.api.agent.like(uri, thread.post.cid).then((response) => {
-              console.log(response);
-              $(post2).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[1]);
-              $(post2).find(".sidecar-count-label-likes").html(Math.max(0, likes + 1));
-            });
-          }
-        })
-      );
+    /**
+     * Toggles like status on a post via the API and updates the UI.
+     * @param {jQuery} post - The post element to like/unlike
+     */
+    async likePost(post2) {
+      try {
+        const uri = await this.api.getAtprotoUri(this.urlForItem(post2));
+        const thread = await this.api.getThread(uri);
+        const { likeCount, viewer, cid: cid2 } = thread.post;
+        const isLiked = !!viewer.like;
+        if (isLiked) {
+          await this.api.agent.deleteLike(viewer.like);
+        } else {
+          await this.api.agent.like(uri, cid2);
+        }
+        this.updateLikeUI(post2, likeCount, isLiked);
+      } catch (error) {
+        console.error("Failed to toggle like:", error);
+      }
+    }
+    /**
+     * Updates the like button UI after a like/unlike action.
+     * @private
+     */
+    updateLikeUI(post2, currentLikeCount, wasLiked) {
+      const newCount = wasLiked ? currentLikeCount - 1 : currentLikeCount + 1;
+      const svgIndex = wasLiked ? 0 : 1;
+      $(post2).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[svgIndex]);
+      $(post2).find(".sidecar-count-label-likes").html(Math.max(0, newCount));
     }
     async captureScreenshot(item) {
       try {
@@ -61349,102 +61362,170 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         console.error("Failed to capture screenshot:", err);
       }
     }
+    /**
+     * Handles keyboard shortcuts for item-level actions.
+     * @param {KeyboardEvent} event - The keyboard event
+     * @returns {string|boolean} The key pressed if handled, false otherwise
+     */
     handleItemKey(event) {
       if (this.isPopupVisible) {
         return false;
-      } else if (event.altKey && !event.metaKey) {
-        if (event.code.startsWith("Digit")) {
-          const num = parseInt(event.code.substr(5)) - 1;
-          $("#bsky-navigator-search").autocomplete("disable");
-          if (num >= 0) {
-            const ruleName = Object.keys(this.state.rules)[num];
-            console.log(ruleName);
-            $("#bsky-navigator-search").val(`${event.shiftKey ? "!" : ""}$${ruleName}`);
-          } else {
-            $("#bsky-navigator-search").val(null);
-          }
-          $("#bsky-navigator-search").trigger("input");
-          $("#bsky-navigator-search").autocomplete("enable");
-          return event.key;
-        } else {
-          return false;
-        }
-      } else if (!event.metaKey) {
-        const item = this.selectedItem;
-        if (["o", "Enter"].includes(event.key) && !this.isPopupVisible) {
-          if (this.replyIndex == null) {
-            $(item).click();
-          } else {
-            console.log(this.selectedReply);
-            this.selectedReply.find(".sidecar-post-timestamp a")[0].click();
-          }
-        } else if (event.key == "O") {
-          const inner = $(item).find("div[aria-label^='Post by']");
-          inner.click();
-        } else if (event.key == "i") {
-          if ($(item).find(constants.LINK_SELECTOR).length) {
-            $(item).find(constants.LINK_SELECTOR)[0].click();
-          }
-        } else if (event.key == "m") {
-          const media = $(item).find("img[src*='feed_thumbnail']");
-          if (media.length > 0) {
-            media[0].click();
-          } else {
-            const video2 = $(item).find("video")[0];
-            if (video2) {
-              event.preventDefault();
-              if (video2.muted) {
-                video2.muted = false;
-              }
-              if (video2.paused) {
-                this.playVideo(video2);
-              } else {
-                this.pauseVideo(video2);
-              }
-            }
-          }
-        } else if (event.key == "r") {
-          const button = $(item).find("button[aria-label^='Reply']");
-          button.focus();
-          button.click();
-        } else if (event.key == "l") {
-          if (this.config.get("showReplySidecar") && this.replyIndex != null) {
-            this.likePost(this.selectedReply);
-          } else if (this.threadIndex) {
-            console.log(this.selectedPost);
-            this.likePost(this.selectedPost);
-          } else {
-            $(item).find("button[data-testid='likeBtn']").click();
-          }
-        } else if (event.key == "p") {
-          $(item).find("button[aria-label^='Repost']").click();
-        } else if (event.key == "P") {
-          $(item).find("button[aria-label^='Repost']").click();
-          setTimeout(function() {
-            $("div[aria-label^='Repost'][role='menuitem']").click();
-          }, 1e3);
-        } else if (event.key == ".") {
+      }
+      if (event.altKey && !event.metaKey) {
+        return this.handleRuleShortcut(event);
+      }
+      if (!event.metaKey) {
+        return this.handleItemAction(event);
+      }
+      return false;
+    }
+    /**
+     * Handles Alt+number shortcuts to quickly apply filter rules.
+     * @private
+     */
+    handleRuleShortcut(event) {
+      if (!event.code.startsWith("Digit")) {
+        return false;
+      }
+      const num = parseInt(event.code.substr(5)) - 1;
+      $("#bsky-navigator-search").autocomplete("disable");
+      if (num >= 0) {
+        const ruleName = Object.keys(this.state.rules)[num];
+        $("#bsky-navigator-search").val(`${event.shiftKey ? "!" : ""}$${ruleName}`);
+      } else {
+        $("#bsky-navigator-search").val(null);
+      }
+      $("#bsky-navigator-search").trigger("input");
+      $("#bsky-navigator-search").autocomplete("enable");
+      return event.key;
+    }
+    /**
+     * Handles item-level keyboard actions (open, like, repost, etc.).
+     * @private
+     */
+    handleItemAction(event) {
+      const item = this.selectedItem;
+      switch (event.key) {
+        case "o":
+        case "Enter":
+          this.openCurrentItem(item);
+          break;
+        case "O":
+          this.openInnerPost(item);
+          break;
+        case "i":
+          this.openFirstLink(item);
+          break;
+        case "m":
+          this.toggleMedia(item, event);
+          break;
+        case "r":
+          this.openReplyDialog(item);
+          break;
+        case "l":
+          this.handleLikeAction(item);
+          break;
+        case "p":
+          this.openRepostMenu(item);
+          break;
+        case "P":
+          this.repostImmediately(item);
+          break;
+        case ".":
           this.markItemRead(this.index, null);
-        } else if (event.key == "A") {
+          break;
+        case "A":
           this.markVisibleRead();
-        } else if (!isNaN(parseInt(event.key))) {
-          const tabs = $("div[role='tablist'] > div > div > div").filter(":visible");
-          const tabIndex = parseInt(event.key) - 1;
-          if (tabs[tabIndex]) {
-            tabs[tabIndex].click();
+          break;
+        case ";":
+          if (this.api) {
+            this.expandItem(this.selectedItem);
           }
-        } else if (event.key == ";") {
-          if (!this.api) {
-            return;
-          }
-          this.expandItem(this.selectedItem);
-        } else if (event.key == "c") {
+          break;
+        case "c":
           this.captureScreenshot(item[0]);
-        } else {
-          return false;
-        }
+          break;
+        default:
+          if (!isNaN(parseInt(event.key))) {
+            this.switchToTab(parseInt(event.key) - 1);
+          } else {
+            return false;
+          }
       }
       return event.key;
+    }
+    /** Opens the current item or selected reply. @private */
+    openCurrentItem(item) {
+      if (this.replyIndex == null) {
+        $(item).click();
+      } else {
+        this.selectedReply.find(".sidecar-post-timestamp a")[0].click();
+      }
+    }
+    /** Opens the inner/quoted post. @private */
+    openInnerPost(item) {
+      $(item).find("div[aria-label^='Post by']").click();
+    }
+    /** Opens the first external link in the item. @private */
+    openFirstLink(item) {
+      const link = $(item).find(constants.LINK_SELECTOR);
+      if (link.length) {
+        link[0].click();
+      }
+    }
+    /** Toggles media playback (image lightbox or video play/pause). @private */
+    toggleMedia(item, event) {
+      const media = $(item).find("img[src*='feed_thumbnail']");
+      if (media.length > 0) {
+        media[0].click();
+        return;
+      }
+      const video2 = $(item).find("video")[0];
+      if (video2) {
+        event.preventDefault();
+        if (video2.muted) {
+          video2.muted = false;
+        }
+        if (video2.paused) {
+          this.playVideo(video2);
+        } else {
+          this.pauseVideo(video2);
+        }
+      }
+    }
+    /** Opens the reply dialog. @private */
+    openReplyDialog(item) {
+      const button = $(item).find("button[aria-label^='Reply']");
+      button.focus();
+      button.click();
+    }
+    /** Handles like action for item, reply, or unrolled post. @private */
+    handleLikeAction(item) {
+      if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+        this.likePost(this.selectedReply);
+      } else if (this.threadIndex) {
+        this.likePost(this.selectedPost);
+      } else {
+        $(item).find("button[data-testid='likeBtn']").click();
+      }
+    }
+    /** Opens the repost menu. @private */
+    openRepostMenu(item) {
+      $(item).find("button[aria-label^='Repost']").click();
+    }
+    /** Clicks repost button and selects repost option after delay. @private */
+    repostImmediately(item) {
+      $(item).find("button[aria-label^='Repost']").click();
+      setTimeout(() => {
+        $("div[aria-label^='Repost'][role='menuitem']").click();
+      }, constants.REPOST_MENU_DELAY);
+    }
+    /** Switches to a specific feed tab by index. @private */
+    switchToTab(tabIndex) {
+      const tabs = $("div[role='tablist'] > div > div > div").filter(":visible");
+      if (tabs[tabIndex]) {
+        tabs[tabIndex].click();
+      }
     }
   }
   class FeedItemHandler extends ItemHandler {
@@ -61474,7 +61555,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.feedTabObserver = waitForElement$1(constants.FEED_TAB_SELECTOR, (tab) => {
         observeChanges$1(
           tab,
-          (attributeName, oldValue, newValue, target2) => {
+          (attributeName, _oldValue, newValue, _target) => {
             if (attributeName == "class" && newValue.includes("r-13awgt0")) {
               console.log("refresh");
               this.refreshItems();
@@ -61626,7 +61707,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
       $(this.searchField).on("autocompleteselect", this.onSearchUpdate);
-      waitForElement$1("#bsky-navigator-toolbar", null, (div) => {
+      waitForElement$1("#bsky-navigator-toolbar", null, (_div) => {
         this.addToolbar(beforeDiv);
       });
     }
@@ -61638,7 +61719,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
     refreshToolbars() {
-      waitForElement$1(constants.TOOLBAR_CONTAINER_SELECTOR, (indicatorContainer) => {
+      waitForElement$1(constants.TOOLBAR_CONTAINER_SELECTOR, (_indicatorContainer) => {
         waitForElement$1('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
           if (!$("#bsky-navigator-toolbar").length) {
             this.addToolbar(homeScreenFeedTabsDiv);
@@ -61651,8 +61732,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           observer.disconnect();
         }
       });
-      waitForElement$1("#bsky-navigator-toolbar", (div) => {
-        waitForElement$1("#statusBar", (div2) => {
+      waitForElement$1("#bsky-navigator-toolbar", (_div) => {
+        waitForElement$1("#statusBar", (_div2) => {
           this.setSortIcons();
         });
       });
@@ -61761,64 +61842,99 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.state.stateManager.saveStateImmediately(true, true);
       this.state.filter = text;
     }
-    filterItem(item, thread) {
-      if (this.state.feedHideRead) {
-        if ($(item).hasClass("item-read")) {
-          return false;
+    /**
+     * Determines if an item should be shown based on read status and filter rules.
+     * @param {Element} item - The feed item element
+     * @param {Element} _thread - The parent thread element (unused)
+     * @returns {boolean} True if item should be shown, false if filtered out
+     */
+    filterItem(item, _thread) {
+      if (this.state.feedHideRead && $(item).hasClass("item-read")) {
+        return false;
+      }
+      if (!this.state.filter || !this.state.rules) {
+        return true;
+      }
+      const activeRules = this.parseFilterRules(this.state.filter);
+      return activeRules.map((rule) => this.evaluateFilterRule(item, rule)).every((result) => result === true);
+    }
+    /**
+     * Parses filter text into structured rule objects.
+     * @private
+     * @param {string} filterText - Space-separated filter rules
+     * @returns {Array} Array of rule objects with invert, matchType, and query
+     *
+     * Rule format: [!][$@%]"query" or [!][$@%]query
+     * - ! = invert/negate the match
+     * - $ = match against named rule set
+     * - @ = match author handle/display name
+     * - % = match post content
+     * - no prefix = match author OR content
+     */
+    parseFilterRules(filterText) {
+      return filterText.split(/[ ]+/).map((ruleStatement) => {
+        const match2 = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
+        return {
+          invert: match2[1] === "!",
+          matchType: match2[2] || null,
+          query: match2[3]
+        };
+      });
+    }
+    /**
+     * Evaluates a single filter rule against an item.
+     * @private
+     */
+    evaluateFilterRule(item, rule) {
+      let allowed = null;
+      switch (rule.matchType) {
+        case "$":
+          allowed = this.evaluateNamedRule(item, rule.query);
+          break;
+        case "@":
+          allowed = this.filterAuthor(item, rule.query);
+          break;
+        case "%":
+          allowed = this.filterContent(item, rule.query);
+          break;
+        default:
+          allowed = this.filterAuthor(item, rule.query) || this.filterContent(item, rule.query);
+      }
+      return rule.invert ? !allowed : allowed;
+    }
+    /**
+     * Evaluates a named rule set against an item.
+     * @private
+     */
+    evaluateNamedRule(item, ruleName) {
+      const rules = this.state.rules[ruleName];
+      if (!rules) {
+        console.warn(`Filter rule not found: ${ruleName}`);
+        return null;
+      }
+      let allowed = null;
+      for (const rule of rules) {
+        if (rule.type === "all") {
+          allowed = rule.action === "allow";
+        } else if (rule.type === "from" && this.filterAuthor(item, rule.value.substring(1))) {
+          allowed = allowed || rule.action === "allow";
+        } else if (rule.type === "content" && this.filterContent(item, rule.value)) {
+          allowed = allowed || rule.action === "allow";
         }
       }
-      if (this.state.filter && this.state.rules) {
-        const activeRules = this.state.filter.split(/[ ]+/).map((ruleStatement) => {
-          const [_, invert, matchType, query] = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
-          return {
-            invert,
-            matchType,
-            query
-          };
-        });
-        return activeRules.map((activeRule) => {
-          let allowed = null;
-          switch (activeRule.matchType) {
-            case "$": {
-              const rules = this.state.rules[activeRule.query];
-              if (!rules) {
-                console.log(`no rule ${activeRule.query}`);
-                return null;
-              }
-              rules.forEach((rule) => {
-                if (rule.type === "all") {
-                  allowed = rule.action === "allow";
-                } else if (rule.type === "from" && !!this.filterAuthor(item, rule.value.substring(1))) {
-                  allowed = allowed || rule.action === "allow";
-                } else if (rule.type === "content" && !!this.filterContent(item, rule.value)) {
-                  allowed = allowed || rule.action === "allow";
-                }
-              });
-              break;
-            }
-            case "@":
-              allowed = !!this.filterAuthor(item, activeRule.query);
-              break;
-            case "%":
-              allowed = !!this.filterContent(item, activeRule.query);
-              break;
-            default:
-              allowed = !!this.filterAuthor(item, activeRule.query) || !!this.filterContent(item, activeRule.query);
-              break;
-          }
-          return activeRule.invert ? !allowed : allowed;
-        }).every((allowed) => allowed == true);
-      }
-      return true;
+      return allowed;
     }
+    /**
+     * Checks if an item's author matches a pattern.
+     * @param {Element} item - The feed item
+     * @param {string} author - Pattern to match against handle or display name
+     * @returns {boolean} True if author matches
+     */
     filterAuthor(item, author) {
       const pattern = new RegExp(author, "i");
       const handle2 = this.handleFromItem(item);
       const displayName = this.displayNameFromItem(item);
-      if (!handle2.match(pattern) && !displayName.match(pattern)) {
-        return false;
-      }
-      return true;
+      return pattern.test(handle2) || pattern.test(displayName);
     }
     filterContent(item, query) {
       const pattern = new RegExp(query, "i");
@@ -61949,7 +62065,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.isPopupVisible || event.altKey || event.metaKey) {
         return;
       }
-      var item = this.selectedItem;
+      const item = this.selectedItem;
       if (event.key == "a") {
         const handle2 = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1]);
         $(item).find("div").filter(

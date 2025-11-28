@@ -4,7 +4,7 @@ import constants from './constants.js';
 const DEFAULT_HISTORY_MAX = 5000;
 
 export class StateManager {
-  constructor(key, defaultState = {}, config = {}) {
+  constructor(key, _defaultState = {}, config = {}) {
     this.key = key;
     this.config = config;
     if (!this.config) {
@@ -109,7 +109,6 @@ export class StateManager {
 
   async getRemoteStateUpdated() {
     const sinceResult = await this.executeRemoteQuery(`SELECT lastUpdated FROM state:current;`);
-    const lastUpdated = sinceResult['lastUpdated'];
     return sinceResult['lastUpdated'];
   }
 
@@ -218,14 +217,6 @@ export class StateManager {
    * Saves the remote state if needed.
    */
   async saveRemoteState(since) {
-    const {
-      url,
-      namespace = 'bluesky_navigator',
-      database = 'state',
-      username,
-      password,
-    } = JSON.parse(this.config.stateSyncConfig);
-
     try {
       const lastUpdated = await this.getRemoteStateUpdated();
       if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
@@ -316,7 +307,7 @@ export class StateManager {
         (entry) => entry.Handle
       );
       this.state.blocks[stateKey].updated = Date.now();
-    } catch (error) {
+    } catch (_error) {
       console.warn("couldn't fetch block list");
     }
   }

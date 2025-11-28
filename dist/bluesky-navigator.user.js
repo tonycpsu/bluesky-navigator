@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+361.32d0937d
+// @version     1.0.31+362.de14164d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -54256,7 +54256,7 @@ if (cid) {
     var xDiff = Math.cos(radian - Math.PI / 2) * halfLineLength;
     return [lineLength, halfWidth - xDiff, halfWidth + xDiff, halfHeight - yDiff, halfHeight + yDiff];
   };
-  var distance = function(a2, b) {
+  var distance$1 = function(a2, b) {
     return Math.sqrt(a2 * a2 + b * b);
   };
   var findCorner = function(width, height, x, y, closest) {
@@ -54268,7 +54268,7 @@ if (cid) {
     ];
     return corners.reduce(function(stat, corner) {
       var cx = corner[0], cy = corner[1];
-      var d = distance(x - cx, y - cy);
+      var d = distance$1(x - cx, y - cy);
       if (closest ? d < stat.optimumDistance : d > stat.optimumDistance) {
         return {
           optimumCorner: corner,
@@ -54295,11 +54295,11 @@ if (cid) {
         break;
       case 2:
         if (gradient.shape === 0) {
-          rx = ry = Math.min(distance(x, y), distance(x, y - height), distance(x - width, y), distance(x - width, y - height));
+          rx = ry = Math.min(distance$1(x, y), distance$1(x, y - height), distance$1(x - width, y), distance$1(x - width, y - height));
         } else if (gradient.shape === 1) {
           var c = Math.min(Math.abs(y), Math.abs(y - height)) / Math.min(Math.abs(x), Math.abs(x - width));
           var _a = findCorner(width, height, x, y, true), cx = _a[0], cy = _a[1];
-          rx = distance(cx - x, (cy - y) / c);
+          rx = distance$1(cx - x, (cy - y) / c);
           ry = c * rx;
         }
         break;
@@ -54313,11 +54313,11 @@ if (cid) {
         break;
       case 3:
         if (gradient.shape === 0) {
-          rx = ry = Math.max(distance(x, y), distance(x, y - height), distance(x - width, y), distance(x - width, y - height));
+          rx = ry = Math.max(distance$1(x, y), distance$1(x, y - height), distance$1(x - width, y), distance$1(x - width, y - height));
         } else if (gradient.shape === 1) {
           var c = Math.max(Math.abs(y), Math.abs(y - height)) / Math.max(Math.abs(x), Math.abs(x - width));
           var _b = findCorner(width, height, x, y, false), cx = _b[0], cy = _b[1];
-          rx = distance(cx - x, (cy - y) / c);
+          rx = distance$1(cx - x, (cy - y) / c);
           ry = c * rx;
         }
         break;
@@ -60141,10 +60141,15 @@ if (cid) {
     };
   }
   const { waitForElement: waitForElement$2 } = utils$1;
+  function extractPostIdFromUrl(url) {
+    const match2 = url.match(/post\/([^/]+)/);
+    return match2 ? match2[1] : null;
+  }
+  function distance(p1, p2) {
+    return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+  }
   class ItemHandler extends Handler {
-    // POPUP_MENU_SELECTOR = "div[data-radix-popper-content-wrapper]"
     POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
-    // FIXME: this belongs in PostItemHandler
     THREAD_PAGE_SELECTOR = "main > div > div > div";
     MOUSE_MOVEMENT_THRESHOLD = 10;
     FLOATING_BUTTON_IMAGES = {
@@ -60154,15 +60159,23 @@ if (cid) {
     constructor(name, config2, state2, api, selector) {
       super(name, config2, state2, api);
       this.selector = selector;
-      this._index = null;
-      this._replyIndex = null;
-      this._threadIndex = null;
-      this.postId = null;
+      this.initSelection();
+      this.initSidecarTemplates();
       this.loadNewerCallback = null;
       this.debounceTimeout = null;
       this.lastMousePosition = null;
       this.isPopupVisible = false;
       this.ignoreMouseMovement = false;
+      this.loading = false;
+      this.loadingNew = false;
+      this.enableScrollMonitor = false;
+      this.enableIntersectionObserver = false;
+      this.handlingClick = false;
+      this.itemStats = {};
+      this.visibleItems = [];
+      this.scrollTick = false;
+      this.scrollTop = 0;
+      this.scrollDirection = 0;
       this.onPopupAdd = this.onPopupAdd.bind(this);
       this.onPopupRemove = this.onPopupRemove.bind(this);
       this.onIntersection = this.onIntersection.bind(this);
@@ -60174,43 +60187,6 @@ if (cid) {
       this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
       this.didMouseMove = this.didMouseMove.bind(this);
       this.getTimestampForItem = this.getTimestampForItem.bind(this);
-      this.loading = false;
-      this.loadingNew = false;
-      this.enableScrollMonitor = false;
-      this.enableIntersectionObserver = false;
-      this.handlingClick = false;
-      this.itemStats = {};
-      this.visibleItems = [];
-      this.scrollTick = false;
-      this.scrollTop = 0;
-      this.scrollDirection = 0;
-      waitForElement$2("#sidecar-replies-template", () => {
-        this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
-      });
-      waitForElement$2("#sidecar-post-template", () => {
-        this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
-        Handlebars.registerPartial("postTemplate", this.postTemplate);
-      });
-      waitForElement$2("#sidecar-footer-template", () => {
-        this.footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
-        Handlebars.registerPartial("footerTemplate", this.footerTemplate);
-      });
-      waitForElement$2("#sidecar-post-counts-template", () => {
-        this.postCountsTemplate = Handlebars.compile($("#sidecar-post-counts-template").html());
-        Handlebars.registerPartial("postCountsTemplate", this.postCountsTemplate);
-      });
-      waitForElement$2("#sidecar-embed-image-template", () => {
-        this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
-        Handlebars.registerPartial("imageTemplate", this.imageTemplate);
-      });
-      waitForElement$2("#sidecar-embed-quote-template", () => {
-        this.quoteTemplate = Handlebars.compile($("#sidecar-embed-quote-template").html());
-        Handlebars.registerPartial("quoteTemplate", this.quoteTemplate);
-      });
-      waitForElement$2("#sidecar-embed-external-template", () => {
-        this.externalTemplate = Handlebars.compile($("#sidecar-embed-external-template").html());
-        Handlebars.registerPartial("externalTemplate", this.externalTemplate);
-      });
     }
     isActive() {
       return false;
@@ -60222,100 +60198,35 @@ if (cid) {
         this.onPopupAdd,
         this.onPopupRemove
       );
-      this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
-        root: null,
-        threshold: Array.from({ length: 101 }, (_, i2) => i2 / 100)
-      });
-      this.setupIntersectionObserver();
-      this.footerIntersectionObserver = new IntersectionObserver(this.onFooterIntersection, {
-        root: null,
-        threshold: Array.from({ length: 101 }, (_, i2) => i2 / 100)
-      });
-      const safeSelector = `${this.selector}:not(.thread ${this.selector})`;
-      this.observer = waitForElement$2(safeSelector, (element) => {
-        this.onItemAdded(element), this.onItemRemoved(element);
-      });
-      this.loadNewerObserver = waitForElement$2(constants.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
-        this.loadNewerButton = $(button)[0];
-        $("a#loadNewerIndicatorLink").on("click", () => this.loadNewerItems());
-        $("img#loadNewerIndicatorImage").addClass("image-highlight");
-        $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
-        if ($("#loadNewerAction").length == 0) {
-          $("#messageActions").append($('<div id="loadNewerAction"><a> Load newer posts</a></div>'));
-          $("#loadNewerAction > a").on("click", () => this.loadNewerItems());
-        }
-        this.loadNewerButton.addEventListener(
-          "click",
-          (event) => {
-            if (this.loadingNew) {
-              return;
-            }
-            event.target;
-            event.stopImmediatePropagation();
-            setTimeout(() => {
-              this.loadNewerItems();
-            }, 0);
-          },
-          true
-        );
-      });
+      this.setupIntersectionObservers();
+      this.setupItemObserver();
+      this.setupLoadNewerObserver();
+      this.setupFloatingButtons();
       this.enableIntersectionObserver = true;
       $(document).on("scroll", this.onScroll);
       $(document).on("scrollend", () => {
         setTimeout(() => this.ignoreMouseMovement = false, 500);
       });
-      console.log(this.state.mobileView);
-      this.floatingButtonsObserver = waitForElement$2(
-        this.state.mobileView ? constants.HOME_SCREEN_SELECTOR : constants.LEFT_SIDEBAR_SELECTOR,
-        (container) => {
-          console.log(container);
-          if (!this.prevButton) {
-            this.prevButton = $(
-              `<div id="prevButton" title="previous post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`
-            );
-            $(container).append(this.prevButton);
-            if (this.state.mobileView) {
-              $("#prevButton").addClass("mobile");
-            }
-            $("#prevButton").on("click", (event) => {
-              event.preventDefault();
-              this.jumpToPrev(true);
-            });
-          }
-          if (!this.nextButton) {
-            this.nextButton = $(
-              `<div id="nextButton" title="next post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.next[0]}"/></div>`
-            );
-            $(this.prevButton).after(this.nextButton);
-            if (this.state.mobileView) {
-              $("#nextButton").addClass("mobile");
-            }
-            $("#nextButton").on("click", (event) => {
-              event.preventDefault();
-              this.jumpToNext(true);
-            });
-          }
-        }
-      );
       super.activate();
     }
     deactivate() {
-      if (this.floatingButtonsObserver) {
-        this.floatingButtonsObserver.disconnect();
-      }
-      if (this.observer) {
-        this.observer.disconnect();
-      }
-      if (this.popupObserver) {
-        this.popupObserver.disconnect();
-      }
-      if (this.intersectionObserver) {
-        this.intersectionObserver.disconnect();
-      }
+      if (this.floatingButtonsObserver) this.floatingButtonsObserver.disconnect();
+      if (this.observer) this.observer.disconnect();
+      if (this.popupObserver) this.popupObserver.disconnect();
+      if (this.intersectionObserver) this.intersectionObserver.disconnect();
       this.disableFooterObserver();
       $(this.selector).off("mouseover mouseleave");
       $(document).off("scroll", this.onScroll);
       super.deactivate();
+    }
+    // ===========================================================================
+    // Selection State Management
+    // ===========================================================================
+    initSelection() {
+      this._index = null;
+      this._replyIndex = null;
+      this._threadIndex = null;
+      this.postId = null;
     }
     set index(value) {
       this._index = value;
@@ -60406,546 +60317,6 @@ if (cid) {
     get selectedPost() {
       return this.getPostForThreadIndex(this.threadIndex);
     }
-    onItemAdded(element) {
-      this.applyItemStyle(element);
-      clearTimeout(this.debounceTimeout);
-      this.debounceTimeout = setTimeout(() => {
-        this.loadItems();
-      }, 500);
-    }
-    onItemRemoved(element) {
-      if (this.intersectionObserver) {
-        this.intersectionObserver.disconnect(element);
-      }
-    }
-    onScroll(_event) {
-      if (!this.enableScrollMonitor) {
-        console.log("!this.enableScrollMonitor");
-        return;
-      }
-      this.ignoreMouseMovement = true;
-      if (!this.scrollTick) {
-        requestAnimationFrame(() => {
-          const currentScroll = $(window).scrollTop();
-          if (currentScroll > this.scrollTop) {
-            this.scrollDirection = -1;
-          } else if (currentScroll < this.scrollTop) {
-            this.scrollDirection = 1;
-          }
-          this.scrollTop = currentScroll;
-          this.scrollTick = false;
-        });
-        this.scrollTick = true;
-      }
-    }
-    scrollToElement(target2, block2 = null) {
-      this.enableIntersectionObserver = false;
-      target2.scrollIntoView({
-        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
-        block: block2 == null ? "start" : block2
-      });
-    }
-    playVideo(video2) {
-      video2.dataset.allowPlay = "true";
-      video2.play();
-    }
-    pauseVideo(video2) {
-      video2.dataset.allowPlay = "true";
-      video2.pause();
-    }
-    setupIntersectionObserver(_entries) {
-      if (this.intersectionObserver) {
-        $(this.items).each((i2, item) => {
-          this.intersectionObserver.observe($(item)[0]);
-        });
-      }
-    }
-    onIntersection(entries) {
-      if (!this.enableIntersectionObserver || this.loading || this.loadingNew) {
-        return;
-      }
-      let target2 = null;
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
-          this.visibleItems.push(entry);
-        } else {
-          const oldLength = this.visibleItems.length;
-          this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
-          if (this.visibleItems.length < oldLength) {
-            console.log("removed", entry.target);
-            if (this.config.get("markReadOnScroll")) {
-              const index2 = this.getIndexFromItem(entry.target);
-              this.markItemRead(index2, true);
-            }
-          }
-        }
-      });
-      const visibleItems = this.visibleItems.sort(
-        (a2, b) => this.scrollDirection == 1 ? b.target.getBoundingClientRect().top - a2.target.getBoundingClientRect().top : a2.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
-      );
-      if (!visibleItems.length) {
-        return;
-      }
-      for (const [_i, item] of visibleItems.entries()) {
-        if (item.intersectionRatio == 1) {
-          target2 = item.target;
-          break;
-        }
-      }
-      if (target2 == null) {
-        target2 = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
-      }
-      const index = this.getIndexFromItem(target2);
-      this.setIndex(index);
-    }
-    onFooterIntersection(entries) {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target;
-          this.disableFooterObserver();
-          this.loadOlderItems();
-        }
-      });
-    }
-    enableFooterObserver() {
-      if (this.config.get("disableLoadMoreOnScroll")) {
-        return;
-      }
-      if (!this.state.feedSortReverse && this.items.length > 0) {
-        this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
-      }
-    }
-    disableFooterObserver() {
-      if (this.footerIntersectionObserver) {
-        this.footerIntersectionObserver.disconnect();
-      }
-    }
-    onPopupAdd() {
-      this.isPopupVisible = true;
-    }
-    onPopupRemove() {
-      this.isPopupVisible = false;
-    }
-    get scrollMargin() {
-      let margin;
-      let el;
-      if (this.state.mobileView) {
-        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
-        el = el.first().children().filter(":visible").first();
-        if (this.index) {
-          const transform2 = el[0].style.transform;
-          const translateY = transform2.indexOf("(") == -1 ? 0 : parseInt(transform2.split("(")[1].split("px")[0]);
-          margin = el.outerHeight() + translateY;
-        } else {
-          margin = el.outerHeight();
-        }
-      } else {
-        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
-        margin = el.outerHeight();
-      }
-      const itemMargin = parseInt($(this.selector).css("margin-top").replace("px", ""));
-      return margin + itemMargin;
-    }
-    applyItemStyle(element, selected) {
-      $(element).addClass("item");
-      if (this.config.get("postActionButtonPosition") == "Left") {
-        const postContainer = $(element).find(constants.POST_CONTENT_SELECTOR).prev();
-        if (postContainer.length) {
-          postContainer.css("flex", "");
-        }
-      }
-      const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
-      if (!postTimestampElement.attr("data-bsky-navigator-age")) {
-        postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text());
-      }
-      const userFormat = this.config.get(
-        this.state.mobileView ? "postTimestampFormatMobile" : "postTimestampFormat"
-      );
-      const postTimeString = postTimestampElement.attr("aria-label");
-      if (postTimeString && userFormat) {
-        const postTimestamp = new Date(postTimeString.replace(" at", ""));
-        if (userFormat) {
-          const formattedDate = format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
-          if (this.config.get("showDebuggingInfo")) {
-            postTimestampElement.text(
-              `${formattedDate} (${$(element).parent().parent().attr("data-bsky-navigator-thread-index")}, ${$(element).attr("data-bsky-navigator-item-index")})`
-            );
-          } else {
-            postTimestampElement.text(formattedDate);
-          }
-        }
-      }
-      const threadIndicator = $(element).find("div.r-lchren, div.r-1mhb1uw > svg");
-      const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
-      $(element).parent().parent().addClass("thread");
-      $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
-      if (selected) {
-        $(element).parent().parent().addClass("thread-selection-active");
-        $(element).parent().parent().removeClass("thread-selection-inactive");
-      } else {
-        $(element).parent().parent().removeClass("thread-selection-active");
-        $(element).parent().parent().addClass("thread-selection-inactive");
-      }
-      if (threadIndicator.length) {
-        const parent = threadIndicator.parents().has(avatarDiv).first();
-        const children = parent.find("*");
-        if (threadIndicator.length == 1) {
-          if (children.index(threadIndicator) < children.index(avatarDiv)) {
-            $(element).parent().parent().addClass("thread-last");
-          } else {
-            $(element).parent().parent().addClass("thread-first");
-          }
-        } else {
-          $(element).parent().parent().addClass("thread-middle");
-        }
-      } else {
-        $(element).parent().parent().addClass(["thread-first", "thread-middle", "thread-last"]);
-      }
-      if (selected) {
-        $(element).addClass("item-selection-active");
-        $(element).removeClass("item-selection-child-focused");
-        $(element).removeClass("item-selection-inactive");
-      } else {
-        $(element).removeClass("item-selection-active");
-        $(element).removeClass("item-selection-child-focused");
-        $(element).addClass("item-selection-inactive");
-      }
-      const postId = this.postIdForItem($(element));
-      if (postId != null && this.state.seen[postId]) {
-        $(element).addClass("item-read");
-        $(element).removeClass("item-unread");
-      } else {
-        $(element).addClass("item-unread");
-        $(element).removeClass("item-read");
-      }
-      const handle2 = this.handleFromItem(element);
-      if (this.state.blocks.all.includes(handle2)) {
-        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_ALL_CSS);
-      }
-      if (this.state.blocks.recent.includes(handle2)) {
-        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_RECENT_CSS);
-      }
-    }
-    didMouseMove(event) {
-      const currentPosition = { x: event.pageX, y: event.pageY };
-      if (this.lastMousePosition) {
-        const distanceMoved = Math.sqrt(
-          Math.pow(currentPosition.x - this.lastMousePosition.x, 2) + Math.pow(currentPosition.y - this.lastMousePosition.y, 2)
-        );
-        this.lastMousePosition = currentPosition;
-        if (distanceMoved >= this.MOUSE_MOVEMENT_THRESHOLD) {
-          return true;
-        }
-      } else {
-        this.lastMousePosition = currentPosition;
-      }
-      return false;
-    }
-    onItemMouseOver(event) {
-      if (this.ignoreMouseMovement) {
-        return;
-      }
-      const target2 = $(event.target).closest(this.selector);
-      const index = this.getIndexFromItem(target2);
-      this.replyIndex = null;
-      if (index != this.index) {
-        this.setIndex(index);
-      }
-    }
-    onSidecarItemMouseOver(event) {
-      if (this.ignoreMouseMovement) {
-        return;
-      }
-      const target2 = $(event.target).closest(".sidecar-post");
-      const index = this.getSidecarIndexFromItem(target2);
-      const parent = target2.closest(".thread").find(".item");
-      const parentIndex = this.getIndexFromItem(parent);
-      this.setIndex(parentIndex);
-      this.replyIndex = index;
-    }
-    handleInput(event) {
-      if (this.handleMovementKey(event)) {
-        return event.key;
-      } else if (this.handleItemKey(event)) {
-        return event.key;
-      } else if (event.key == "U") {
-        this.loadOlderItems();
-      } else {
-        return super.handleInput(event);
-      }
-    }
-    filterItems() {
-      return;
-    }
-    sortItems() {
-      return;
-    }
-    showMessage(title, message2) {
-      this.hideMessage();
-      this.messageContainer = $('<div id="messageContainer">');
-      if (title) {
-        const messageTitle = $('<div class="messageTitle">');
-        $(messageTitle).html(title);
-        this.messageContainer.append(messageTitle);
-      }
-      const messageBody = $('<div class="messageBody">');
-      this.messageContainer.append(messageBody);
-      $(messageBody).html(message2);
-      $(constants.FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
-      window.scrollTo(0, 0);
-    }
-    hideMessage() {
-      $("#messageContainer").remove();
-      this.messageContainer = null;
-    }
-    getTimestampForItem(item) {
-      const postTimestampElement = $(item).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
-      const postTimeString = postTimestampElement.attr("aria-label");
-      if (!postTimeString) {
-        return null;
-      }
-      return new Date(postTimeString.replace(" at", ""));
-    }
-    loadItems(focusedPostId) {
-      this.items.length;
-      this.index;
-      const classes = ["thread-first", "thread-middle", "thread-last"];
-      const set = [];
-      $(this.items).css("opacity", "0%");
-      let itemIndex = 0;
-      let threadIndex = 0;
-      let threadOffset = 0;
-      $(this.selector).filter(":visible").each((i2, item) => {
-        $(item).attr("data-bsky-navigator-item-index", itemIndex++);
-        $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
-        const threadDiv = $(item).parent().parent();
-        if (classes.some((cls) => $(threadDiv).hasClass(cls))) {
-          set.push(threadDiv[0]);
-          $(item).attr("data-bsky-navigator-thread-offset", threadOffset);
-          threadOffset++;
-          if ($(threadDiv).hasClass("thread-last")) {
-            threadIndex++;
-            threadOffset = 0;
-          }
-        }
-      });
-      this.sortItems();
-      this.filterItems();
-      this.items = $(this.selector).filter(":visible");
-      this.itemStats.oldest = this.itemStats.newest = null;
-      $(this.selector).filter(":visible").each((i2, item) => {
-        const timestamp = this.getTimestampForItem(item);
-        if (!this.itemStats.oldest || timestamp < this.itemStats.oldest) {
-          this.itemStats.oldest = timestamp;
-        }
-        if (!this.itemStats.newest || timestamp > this.itemStats.newest) {
-          this.itemStats.newest = timestamp;
-        }
-        if (this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
-          this.getSidecarContent().then((content2) => {
-            if (!$(item).parent().find(".sidecar-replies").length) {
-              $(item).parent().append(content2);
-            }
-          });
-        }
-      });
-      this.setupIntersectionObserver();
-      this.enableFooterObserver();
-      if (this.index != null) {
-        this.applyItemStyle(this.selectedItem, true);
-      }
-      $("div.r-1mhb1uw").each((i2, el) => {
-        const ancestor = $(el).parent().parent().parent().parent();
-        $(el).parent().parent().parent().addClass("item-selection-inactive");
-        if ($(ancestor).prev().find("div.item-unread").length) {
-          $(el).parent().parent().parent().addClass("item-unread");
-          $(el).parent().parent().parent().removeClass("item-read");
-        } else {
-          $(el).parent().parent().parent().addClass("item-read");
-          $(el).parent().parent().parent().removeClass("item-unread");
-        }
-      });
-      $("div.r-1mhb1uw svg").each((i2, el) => {
-        $(el).find("line").attr("stroke", this.config.get("threadIndicatorColor"));
-        $(el).find("circle").attr("fill", this.config.get("threadIndicatorColor"));
-      });
-      $(this.selector).on("mouseover", this.onItemMouseOver);
-      $(this.selector).closest("div.thread").addClass("bsky-navigator-seen");
-      $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
-      this.refreshItems();
-      this.loading = false;
-      $("img#loadOlderIndicatorImage").addClass("image-highlight");
-      $("img#loadOlderIndicatorImage").removeClass("toolbar-icon-pending");
-      if (focusedPostId) {
-        this.jumpToPost(focusedPostId);
-      } else if (!this.jumpToPost(this.postId)) {
-        this.setIndex(0);
-      }
-      this.updateInfoIndicator();
-      this.enableFooterObserver();
-      if ($(this.items).filter(":visible").length == 0) {
-        this.showMessage(
-          "No more unread posts.",
-          `
-<p>
-You're all caught up.
-</p>
-
-<div id="messageActions"/>
-`
-        );
-        if ($("#loadOlderAction").length == 0) {
-          $("#messageActions").append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
-          $("#loadOlderAction > a").on("click", () => this.loadOlderItems());
-        }
-        if ($("img#loadNewerIndicatorImage").hasClass("image-highlight")) {
-          $("#messageActions").append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
-          $("#loadNewerAction > a").on("click", () => this.loadNewerItems());
-        }
-      } else {
-        this.hideMessage();
-      }
-      this.ignoreMouseMovement = false;
-    }
-    refreshItems() {
-      $(this.items).each((index, _item) => {
-        this.applyItemStyle(this.items[index], index == this.index);
-      });
-      $(this.items).css("opacity", "100%");
-    }
-    updateInfoIndicator() {
-      this.itemStats.unreadCount = this.items.filter(
-        (i2, item) => $(item).hasClass("item-unread")
-      ).length;
-      this.itemStats.filteredCount = this.items.filter(".filtered").length;
-      this.itemStats.shownCount = this.items.length - this.itemStats.filteredCount;
-      const index = this.itemStats.shownCount ? this.index + 1 : 0;
-      $("div#infoIndicatorText").html(`
-<div id="itemCountStats">
-<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
-</div>
-<div id="itemTimestampStats">
-${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa")} - ${format(this.itemStats.newest, "yyyy-MM-dd hh:mmaaa")}</div>` : ``}`);
-      if (this.config.get("showPostCounts") == "All" || this.selectedItem && this.config.get("showPostCounts") == "Selection") {
-        const bannerDiv = $(this.selectedItem).find("div.item-banner").first().length ? $(this.selectedItem).find("div.item-banner").first() : $(this.selectedItem).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
-        $(bannerDiv).html(
-          `<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}/${this.unrolledReplies.length + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong>`
-        );
-      }
-    }
-    loadNewerItems() {
-      if (!this.loadNewerButton) {
-        console.log("no button");
-        return;
-      }
-      this.loadingNew = true;
-      this.applyItemStyle(this.selectedItem, false);
-      const oldPostId = this.postIdForItem(this.selectedItem);
-      $(this.loadNewerButton).click();
-      setTimeout(() => {
-        this.loadItems(oldPostId);
-        $("img#loadNewerIndicatorImage").removeClass("image-highlight");
-        $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
-        $("#loadNewerAction").remove();
-        this.loadingNew = false;
-      }, 1e3);
-    }
-    loadOlderItems() {
-      if (this.loading) {
-        return;
-      }
-      console.log("loading more");
-      $("img#loadOlderIndicatorImage").removeClass("image-highlight");
-      $("img#loadOlderIndicatorImage").addClass("toolbar-icon-pending");
-      this.loading = true;
-      const reversed = this.state.feedSortReverse;
-      const index = reversed ? 0 : this.items.length - 1;
-      this.setIndex(index);
-      this.updateItems();
-      const indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
-      const loadElement = this.items.length ? this.items[this.items.length - 1] : $(this.selector).first()[0];
-      $(indicatorElement).closest("div.thread").addClass(
-        this.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse"
-      );
-      this.loadOlderItemsCallback([
-        {
-          time: performance.now(),
-          target: loadElement,
-          isIntersecting: true,
-          intersectionRatio: 1,
-          boundingClientRect: loadElement.getBoundingClientRect(),
-          intersectionRect: loadElement.getBoundingClientRect(),
-          rootBounds: document.documentElement.getBoundingClientRect()
-        }
-      ]);
-    }
-    postIdFromUrl() {
-      return window.location.href.split("/")[6];
-    }
-    urlForItem(item) {
-      return `https://bsky.app${$(item).find("a[href*='/post/']").attr("href")}`;
-    }
-    postIdForItem(item) {
-      try {
-        return this.urlForItem(item).match(/post\/([^/]+)/)[1];
-      } catch (_e) {
-        return this.postIdFromUrl();
-      }
-    }
-    handleFromItem(item) {
-      return $.trim(
-        $(item).find(constants.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")
-      ).slice(1);
-    }
-    async getThreadForItem(item) {
-      const url = this.urlForItem(item);
-      if (!url) {
-        return;
-      }
-      const uri = await this.api.getAtprotoUri(url);
-      if (!uri) {
-        return;
-      }
-      const thread = await this.api.getThread(uri);
-      return thread;
-    }
-    displayNameFromItem(item) {
-      return $.trim(
-        $(item).find(constants.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")
-      );
-    }
-    getHandles() {
-      return Array.from(new Set(this.items.map((i2, item) => this.handleFromItem(item))));
-    }
-    getDisplayNames() {
-      return Array.from(new Set(this.items.map((i2, item) => this.displayNameFromItem(item))));
-    }
-    getAuthors() {
-      const authors = $(this.items).get().map((item) => ({
-        handle: this.handleFromItem(item),
-        displayName: this.displayNameFromItem(item)
-      })).filter((author) => author.handle.length > 0);
-      const uniqueMap = /* @__PURE__ */ new Map();
-      authors.forEach((author) => {
-        uniqueMap.set(author.handle, author);
-      });
-      return Array.from(uniqueMap.values());
-    }
-    updateItems() {
-      this.enableScrollMonitor = false;
-      this.ignoreMouseMovement = true;
-      if (this.index == 0) {
-        window.scrollTo(0, 0);
-      } else if ($(this.selectedItem).length) {
-        this.scrollToElement($(this.selectedItem)[0]);
-      }
-      setTimeout(() => {
-        console.log("enable");
-        this.ignoreMouseMovement = false;
-        this.enableScrollMonitor = true;
-      }, 2e3);
-    }
     setIndex(index, mark, update) {
       const oldIndex = this.index;
       if (index == oldIndex) {
@@ -60983,182 +60354,43 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       return true;
     }
-    jumpToPost(postId) {
-      for (const [i2, item] of $(this.items).get().entries()) {
-        const other = this.postIdForItem(item);
-        if (postId == other) {
-          this.setIndex(i2);
-          this.updateItems();
-          return true;
-        }
-      }
-      return false;
-    }
-    markItemRead(index, isRead) {
-      if (this.name == "post" && !this.config.get("savePostState")) {
-        return;
-      }
-      const mainItem = $(this.items)[index];
-      const item = this.threadIndex != null ? this.getPostForThreadIndex(this.threadIndex) : mainItem;
-      const postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
-      if (!postId) {
-        console.warn("markItemRead: no postId found");
-        return;
-      }
-      const markedRead = this.markPostRead(postId, isRead);
-      console.log(isRead, markedRead);
-      if (this.unrolledReplies.length) {
-        $(item).addClass(markedRead ? "item-read" : "item-unread");
-        $(item).removeClass(markedRead ? "item-unread" : "item-read");
-      } else {
-        this.applyItemStyle(mainItem, index == this.index);
-      }
-      if (this.unrolledReplies.length && this.unrolledReplies.get().every((r) => $(r).hasClass("item-read"))) {
-        this.markPostRead(this.postIdForItem(mainItem), isRead);
-        this.applyItemStyle(this.items[index], index == this.index);
-      }
-      this.updateInfoIndicator();
-    }
-    markPostRead(postId, isRead) {
-      const currentTime = (/* @__PURE__ */ new Date()).toISOString();
-      const seen = { ...this.state.seen };
-      if (isRead || isRead == null && !seen[postId]) {
-        seen[postId] = currentTime;
-      } else {
-        seen[postId] = null;
-      }
-      this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
-      return !!seen[postId];
-    }
-    markVisibleRead() {
-      $(this.items).each((i2, _item) => {
-        this.markItemRead(i2, true);
-      });
-    }
-    // FIXME: move to PostItemHandler
-    handleNewThreadPage(_element) {
-      console.log(this.items.length);
-      this.loadPageObserver.disconnect();
-    }
-    jumpToPrev(mark) {
-      this.setIndex(this.index - 1, mark, true);
-      return true;
-    }
-    jumpToNext(mark) {
-      if (this.index < this.items.length) {
-        this.setIndex(this.index + 1, mark, true);
-      } else {
-        const next = $(this.selectedItem).parent().parent().parent().next();
-        if (next && $.trim(next.text()) == "Continue thread...") {
-          this.loadPageObserver = waitForElement$2(this.THREAD_PAGE_SELECTOR, this.handleNewThreadPage);
-          console.log(this.loadPageObserver);
-          $(next).find("div").click();
-        }
-      }
-      return true;
-    }
-    jumpToNextUnseenItem(mark) {
-      let i2;
-      for (i2 = this.index + 1; i2 < this.items.length - 1; i2++) {
-        const postId = this.postIdForItem(this.items[i2]);
-        if (!this.state.seen[postId]) {
-          break;
-        }
-      }
-      this.setIndex(i2, mark);
-      this.updateItems();
-    }
-    toggleFocus() {
-      if (this.replyIndex == null) {
-        this.replyIndex = 0;
-      } else {
-        this.replyIndex = null;
-      }
-    }
-    handleMovementKey(event) {
-      let moved = false;
-      let mark = false;
-      this.index;
-      if (this.isPopupVisible) {
-        return;
-      }
-      this.ignoreMouseMovement = true;
-      if (this.keyState.length == 0) {
-        if (["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"].includes(
-          event.key
-        )) {
-          if (["j", "ArrowDown"].indexOf(event.key) != -1) {
-            event.preventDefault();
-            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
-              this.replyIndex += 1;
-            } else if (this.config.get("unrolledPostSelection")) {
-              if (event.key == "j") {
-                this.markItemRead(this.index, true);
-              }
-              this.threadIndex += 1;
-            } else {
-              moved = this.jumpToNext(event.key == "j");
-            }
-          } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
-            event.preventDefault();
-            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
-              this.replyIndex -= 1;
-            } else if (this.config.get("unrolledPostSelection")) {
-              if (event.key == "k") {
-                this.markItemRead(this.index, true);
-              }
-              this.threadIndex -= 1;
-            } else {
-              moved = this.jumpToPrev(event.key == "k");
-            }
-          } else if (event.key == "h") {
-            const back_button = $("button[aria-label^='Back' i]").filter(":visible");
-            if (back_button.length) {
-              back_button.click();
-            } else {
-              history.back(1);
-            }
-          } else if (event.key == "ArrowLeft") {
-            event.preventDefault();
-            if (!this.config.get("showReplySidecar") || this.replyIndex == null) {
-              return;
-            }
-            this.toggleFocus();
-          } else if (event.key == "ArrowRight") {
-            event.preventDefault();
-            if (!this.config.get("showReplySidecar") || this.replyIndex != null) {
-              return;
-            }
-            this.toggleFocus();
-          } else if (event.key == "G") {
-            event.preventDefault();
-            moved = this.setIndex(this.items.length - 1, false, true);
-          } else if (event.key == "J") {
-            mark = true;
-            this.jumpToNextUnseenItem(mark);
-          }
-          moved = true;
-        } else if (event.key == "g") {
-          this.keyState.push(event.key);
-        }
-      } else if (this.keyState[0] == "g") {
-        if (event.key == "g") {
-          if (this.index < this.items.length) {
-            this.setIndex(0, false, true);
-          }
-          moved = true;
-        }
-        this.keyState = [];
-      }
-      if (moved) {
-        this.lastMousePosition = null;
-      }
-    }
     getIndexFromItem(item) {
       return $(".item").filter(":visible").index(item);
     }
     getSidecarIndexFromItem(item) {
       return $(item).closest(".thread").find(".sidecar-post").filter(":visible").index(item);
+    }
+    // ===========================================================================
+    // Sidecar & Thread Unrolling
+    // ===========================================================================
+    initSidecarTemplates() {
+      waitForElement$2("#sidecar-replies-template", () => {
+        this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
+      });
+      waitForElement$2("#sidecar-post-template", () => {
+        this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
+        Handlebars.registerPartial("postTemplate", this.postTemplate);
+      });
+      waitForElement$2("#sidecar-footer-template", () => {
+        this.footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
+        Handlebars.registerPartial("footerTemplate", this.footerTemplate);
+      });
+      waitForElement$2("#sidecar-post-counts-template", () => {
+        this.postCountsTemplate = Handlebars.compile($("#sidecar-post-counts-template").html());
+        Handlebars.registerPartial("postCountsTemplate", this.postCountsTemplate);
+      });
+      waitForElement$2("#sidecar-embed-image-template", () => {
+        this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
+        Handlebars.registerPartial("imageTemplate", this.imageTemplate);
+      });
+      waitForElement$2("#sidecar-embed-quote-template", () => {
+        this.quoteTemplate = Handlebars.compile($("#sidecar-embed-quote-template").html());
+        Handlebars.registerPartial("quoteTemplate", this.quoteTemplate);
+      });
+      waitForElement$2("#sidecar-embed-external-template", () => {
+        this.externalTemplate = Handlebars.compile($("#sidecar-embed-external-template").html());
+        Handlebars.registerPartial("externalTemplate", this.externalTemplate);
+      });
     }
     shouldUnroll(_item) {
       return this.config.get("unrollThreads");
@@ -61281,78 +60513,20 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       console.log(display2);
       container.find(".sidecar-replies").css("display", display2);
     }
-    /**
-     * Toggles like status on a post via the API and updates the UI.
-     * @param {jQuery} post - The post element to like/unlike
-     */
-    async likePost(post2) {
-      try {
-        const uri = await this.api.getAtprotoUri(this.urlForItem(post2));
-        const thread = await this.api.getThread(uri);
-        const { likeCount, viewer, cid: cid2 } = thread.post;
-        const isLiked = !!viewer.like;
-        if (isLiked) {
-          await this.api.agent.deleteLike(viewer.like);
-        } else {
-          await this.api.agent.like(uri, cid2);
-        }
-        this.updateLikeUI(post2, likeCount, isLiked);
-      } catch (error) {
-        console.error("Failed to toggle like:", error);
+    // ===========================================================================
+    // Keyboard Handling
+    // ===========================================================================
+    handleInput(event) {
+      if (this.handleMovementKey(event)) {
+        return event.key;
+      } else if (this.handleItemKey(event)) {
+        return event.key;
+      } else if (event.key == "U") {
+        this.loadOlderItems();
+      } else {
+        return super.handleInput(event);
       }
     }
-    /**
-     * Updates the like button UI after a like/unlike action.
-     * @private
-     */
-    updateLikeUI(post2, currentLikeCount, wasLiked) {
-      const newCount = wasLiked ? currentLikeCount - 1 : currentLikeCount + 1;
-      const svgIndex = wasLiked ? 0 : 1;
-      $(post2).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[svgIndex]);
-      $(post2).find(".sidecar-count-label-likes").html(Math.max(0, newCount));
-    }
-    async captureScreenshot(item) {
-      try {
-        const canvas = await html2canvas(item, {
-          backgroundColor: null,
-          scale: 2,
-          logging: false,
-          useCORS: true
-        });
-        canvas.toBlob(async (blob2) => {
-          try {
-            await navigator.clipboard.write([
-              new ClipboardItem({
-                "image/png": blob2
-              })
-            ]);
-            console.log("Screenshot copied to clipboard!");
-            const notification2 = $("<div>").css({
-              position: "fixed",
-              top: "20px",
-              right: "20px",
-              padding: "10px 20px",
-              backgroundColor: "#4CAF50",
-              color: "white",
-              borderRadius: "4px",
-              zIndex: 1e4,
-              fontSize: "14px"
-            }).text("Screenshot copied to clipboard!");
-            $("body").append(notification2);
-            setTimeout(() => notification2.fadeOut(500, () => notification2.remove()), 2e3);
-          } catch (err) {
-            console.error("Failed to copy screenshot to clipboard:", err);
-          }
-        });
-      } catch (err) {
-        console.error("Failed to capture screenshot:", err);
-      }
-    }
-    /**
-     * Handles keyboard shortcuts for item-level actions.
-     * @param {KeyboardEvent} event - The keyboard event
-     * @returns {string|boolean} The key pressed if handled, false otherwise
-     */
     handleItemKey(event) {
       if (this.isPopupVisible) {
         return false;
@@ -61365,10 +60539,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       return false;
     }
-    /**
-     * Handles Alt+number shortcuts to quickly apply filter rules.
-     * @private
-     */
     handleRuleShortcut(event) {
       if (!event.code.startsWith("Digit")) {
         return false;
@@ -61385,10 +60555,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       $("#bsky-navigator-search").autocomplete("enable");
       return event.key;
     }
-    /**
-     * Handles item-level keyboard actions (open, like, repost, etc.).
-     * @private
-     */
     handleItemAction(event) {
       const item = this.selectedItem;
       switch (event.key) {
@@ -61440,7 +60606,84 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       return event.key;
     }
-    /** Opens the current item or selected reply. @private */
+    handleMovementKey(event) {
+      let moved = false;
+      let mark = false;
+      if (this.isPopupVisible) {
+        return;
+      }
+      this.ignoreMouseMovement = true;
+      if (this.keyState.length == 0) {
+        if (["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"].includes(
+          event.key
+        )) {
+          if (["j", "ArrowDown"].indexOf(event.key) != -1) {
+            event.preventDefault();
+            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+              this.replyIndex += 1;
+            } else if (this.config.get("unrolledPostSelection")) {
+              if (event.key == "j") {
+                this.markItemRead(this.index, true);
+              }
+              this.threadIndex += 1;
+            } else {
+              moved = this.jumpToNext(event.key == "j");
+            }
+          } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
+            event.preventDefault();
+            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+              this.replyIndex -= 1;
+            } else if (this.config.get("unrolledPostSelection")) {
+              if (event.key == "k") {
+                this.markItemRead(this.index, true);
+              }
+              this.threadIndex -= 1;
+            } else {
+              moved = this.jumpToPrev(event.key == "k");
+            }
+          } else if (event.key == "h") {
+            const back_button = $("button[aria-label^='Back' i]").filter(":visible");
+            if (back_button.length) {
+              back_button.click();
+            } else {
+              history.back(1);
+            }
+          } else if (event.key == "ArrowLeft") {
+            event.preventDefault();
+            if (!this.config.get("showReplySidecar") || this.replyIndex == null) {
+              return;
+            }
+            this.toggleFocus();
+          } else if (event.key == "ArrowRight") {
+            event.preventDefault();
+            if (!this.config.get("showReplySidecar") || this.replyIndex != null) {
+              return;
+            }
+            this.toggleFocus();
+          } else if (event.key == "G") {
+            event.preventDefault();
+            moved = this.setIndex(this.items.length - 1, false, true);
+          } else if (event.key == "J") {
+            mark = true;
+            this.jumpToNextUnseenItem(mark);
+          }
+          moved = true;
+        } else if (event.key == "g") {
+          this.keyState.push(event.key);
+        }
+      } else if (this.keyState[0] == "g") {
+        if (event.key == "g") {
+          if (this.index < this.items.length) {
+            this.setIndex(0, false, true);
+          }
+          moved = true;
+        }
+        this.keyState = [];
+      }
+      if (moved) {
+        this.lastMousePosition = null;
+      }
+    }
     openCurrentItem(item) {
       if (this.replyIndex == null) {
         $(item).click();
@@ -61448,18 +60691,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.selectedReply.find(".sidecar-post-timestamp a")[0].click();
       }
     }
-    /** Opens the inner/quoted post. @private */
     openInnerPost(item) {
       $(item).find("div[aria-label^='Post by']").click();
     }
-    /** Opens the first external link in the item. @private */
     openFirstLink(item) {
       const link = $(item).find(constants.LINK_SELECTOR);
       if (link.length) {
         link[0].click();
       }
     }
-    /** Toggles media playback (image lightbox or video play/pause). @private */
     toggleMedia(item, event) {
       const media = $(item).find("img[src*='feed_thumbnail']");
       if (media.length > 0) {
@@ -61479,13 +60719,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
     }
-    /** Opens the reply dialog. @private */
     openReplyDialog(item) {
       const button = $(item).find("button[aria-label^='Reply']");
       button.focus();
       button.click();
     }
-    /** Handles like action for item, reply, or unrolled post. @private */
     handleLikeAction(item) {
       if (this.config.get("showReplySidecar") && this.replyIndex != null) {
         this.likePost(this.selectedReply);
@@ -61495,23 +60733,784 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $(item).find("button[data-testid='likeBtn']").click();
       }
     }
-    /** Opens the repost menu. @private */
     openRepostMenu(item) {
       $(item).find("button[aria-label^='Repost']").click();
     }
-    /** Clicks repost button and selects repost option after delay. @private */
     repostImmediately(item) {
       $(item).find("button[aria-label^='Repost']").click();
       setTimeout(() => {
         $("div[aria-label^='Repost'][role='menuitem']").click();
       }, constants.REPOST_MENU_DELAY);
     }
-    /** Switches to a specific feed tab by index. @private */
     switchToTab(tabIndex) {
       const tabs = $("div[role='tablist'] > div > div > div").filter(":visible");
       if (tabs[tabIndex]) {
         tabs[tabIndex].click();
       }
+    }
+    toggleFocus() {
+      if (this.replyIndex == null) {
+        this.replyIndex = 0;
+      } else {
+        this.replyIndex = null;
+      }
+    }
+    jumpToPrev(mark) {
+      this.setIndex(this.index - 1, mark, true);
+      return true;
+    }
+    jumpToNext(mark) {
+      if (this.index < this.items.length) {
+        this.setIndex(this.index + 1, mark, true);
+      } else {
+        const next = $(this.selectedItem).parent().parent().parent().next();
+        if (next && $.trim(next.text()) == "Continue thread...") {
+          this.loadPageObserver = waitForElement$2(
+            this.THREAD_PAGE_SELECTOR,
+            this.handleNewThreadPage
+          );
+          console.log(this.loadPageObserver);
+          $(next).find("div").click();
+        }
+      }
+      return true;
+    }
+    jumpToNextUnseenItem(mark) {
+      let i2;
+      for (i2 = this.index + 1; i2 < this.items.length - 1; i2++) {
+        const postId = this.postIdForItem(this.items[i2]);
+        if (!this.state.seen[postId]) {
+          break;
+        }
+      }
+      this.setIndex(i2, mark);
+      this.updateItems();
+    }
+    jumpToPost(postId) {
+      for (const [i2, item] of $(this.items).get().entries()) {
+        const other = this.postIdForItem(item);
+        if (postId == other) {
+          this.setIndex(i2);
+          this.updateItems();
+          return true;
+        }
+      }
+      return false;
+    }
+    // ===========================================================================
+    // Item Actions (like, screenshot, mark read, video)
+    // ===========================================================================
+    async likePost(post2) {
+      try {
+        const uri = await this.api.getAtprotoUri(this.urlForItem(post2));
+        const thread = await this.api.getThread(uri);
+        const { likeCount, viewer, cid: cid2 } = thread.post;
+        const isLiked = !!viewer.like;
+        if (isLiked) {
+          await this.api.agent.deleteLike(viewer.like);
+        } else {
+          await this.api.agent.like(uri, cid2);
+        }
+        this.updateLikeUI(post2, likeCount, isLiked);
+      } catch (error) {
+        console.error("Failed to toggle like:", error);
+      }
+    }
+    updateLikeUI(post2, currentLikeCount, wasLiked) {
+      const newCount = wasLiked ? currentLikeCount - 1 : currentLikeCount + 1;
+      const svgIndex = wasLiked ? 0 : 1;
+      $(post2).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[svgIndex]);
+      $(post2).find(".sidecar-count-label-likes").html(Math.max(0, newCount));
+    }
+    async captureScreenshot(item) {
+      try {
+        const canvas = await html2canvas(item, {
+          backgroundColor: null,
+          scale: 2,
+          logging: false,
+          useCORS: true
+        });
+        canvas.toBlob(async (blob2) => {
+          try {
+            await navigator.clipboard.write([
+              new ClipboardItem({
+                "image/png": blob2
+              })
+            ]);
+            console.log("Screenshot copied to clipboard!");
+            const notification2 = $("<div>").css({
+              position: "fixed",
+              top: "20px",
+              right: "20px",
+              padding: "10px 20px",
+              backgroundColor: "#4CAF50",
+              color: "white",
+              borderRadius: "4px",
+              zIndex: 1e4,
+              fontSize: "14px"
+            }).text("Screenshot copied to clipboard!");
+            $("body").append(notification2);
+            setTimeout(() => notification2.fadeOut(500, () => notification2.remove()), 2e3);
+          } catch (err) {
+            console.error("Failed to copy screenshot to clipboard:", err);
+          }
+        });
+      } catch (err) {
+        console.error("Failed to capture screenshot:", err);
+      }
+    }
+    markItemRead(index, isRead) {
+      if (this.name == "post" && !this.config.get("savePostState")) {
+        return;
+      }
+      const mainItem = $(this.items)[index];
+      const item = this.threadIndex != null ? this.getPostForThreadIndex(this.threadIndex) : mainItem;
+      const postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
+      if (!postId) {
+        console.warn("markItemRead: no postId found");
+        return;
+      }
+      const markedRead = this.markPostRead(postId, isRead);
+      console.log(isRead, markedRead);
+      if (this.unrolledReplies.length) {
+        $(item).addClass(markedRead ? "item-read" : "item-unread");
+        $(item).removeClass(markedRead ? "item-unread" : "item-read");
+      } else {
+        this.applyItemStyle(mainItem, index == this.index);
+      }
+      if (this.unrolledReplies.length && this.unrolledReplies.get().every((r) => $(r).hasClass("item-read"))) {
+        this.markPostRead(this.postIdForItem(mainItem), isRead);
+        this.applyItemStyle(this.items[index], index == this.index);
+      }
+      this.updateInfoIndicator();
+    }
+    markPostRead(postId, isRead) {
+      const currentTime = (/* @__PURE__ */ new Date()).toISOString();
+      const seen = { ...this.state.seen };
+      if (isRead || isRead == null && !seen[postId]) {
+        seen[postId] = currentTime;
+      } else {
+        seen[postId] = null;
+      }
+      this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
+      return !!seen[postId];
+    }
+    markVisibleRead() {
+      $(this.items).each((i2, _item) => {
+        this.markItemRead(i2, true);
+      });
+    }
+    playVideo(video2) {
+      video2.dataset.allowPlay = "true";
+      video2.play();
+    }
+    pauseVideo(video2) {
+      video2.dataset.allowPlay = "true";
+      video2.pause();
+    }
+    // ===========================================================================
+    // Observer Setup
+    // ===========================================================================
+    setupIntersectionObservers() {
+      this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
+        root: null,
+        threshold: Array.from({ length: 101 }, (_, i2) => i2 / 100)
+      });
+      this.setupIntersectionObserver();
+      this.footerIntersectionObserver = new IntersectionObserver(this.onFooterIntersection, {
+        root: null,
+        threshold: Array.from({ length: 101 }, (_, i2) => i2 / 100)
+      });
+    }
+    setupItemObserver() {
+      const safeSelector = `${this.selector}:not(.thread ${this.selector})`;
+      this.observer = waitForElement$2(safeSelector, (element) => {
+        this.onItemAdded(element);
+        this.onItemRemoved(element);
+      });
+    }
+    setupLoadNewerObserver() {
+      this.loadNewerObserver = waitForElement$2(constants.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
+        this.loadNewerButton = $(button)[0];
+        $("a#loadNewerIndicatorLink").on("click", () => this.loadNewerItems());
+        $("img#loadNewerIndicatorImage").addClass("image-highlight");
+        $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
+        if ($("#loadNewerAction").length == 0) {
+          $("#messageActions").append($('<div id="loadNewerAction"><a> Load newer posts</a></div>'));
+          $("#loadNewerAction > a").on("click", () => this.loadNewerItems());
+        }
+        this.loadNewerButton.addEventListener(
+          "click",
+          (event) => {
+            if (this.loadingNew) return;
+            event.stopImmediatePropagation();
+            setTimeout(() => this.loadNewerItems(), 0);
+          },
+          true
+        );
+      });
+    }
+    setupFloatingButtons() {
+      console.log(this.state.mobileView);
+      this.floatingButtonsObserver = waitForElement$2(
+        this.state.mobileView ? constants.HOME_SCREEN_SELECTOR : constants.LEFT_SIDEBAR_SELECTOR,
+        (container) => {
+          console.log(container);
+          if (!this.prevButton) {
+            this.prevButton = $(
+              `<div id="prevButton" title="previous post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`
+            );
+            $(container).append(this.prevButton);
+            if (this.state.mobileView) {
+              $("#prevButton").addClass("mobile");
+            }
+            $("#prevButton").on("click", (event) => {
+              event.preventDefault();
+              this.jumpToPrev(true);
+            });
+          }
+          if (!this.nextButton) {
+            this.nextButton = $(
+              `<div id="nextButton" title="next post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.next[0]}"/></div>`
+            );
+            $(this.prevButton).after(this.nextButton);
+            if (this.state.mobileView) {
+              $("#nextButton").addClass("mobile");
+            }
+            $("#nextButton").on("click", (event) => {
+              event.preventDefault();
+              this.jumpToNext(true);
+            });
+          }
+        }
+      );
+    }
+    setupIntersectionObserver(_entries) {
+      if (this.intersectionObserver) {
+        $(this.items).each((i2, item) => {
+          this.intersectionObserver.observe($(item)[0]);
+        });
+      }
+    }
+    enableFooterObserver() {
+      if (this.config.get("disableLoadMoreOnScroll")) return;
+      if (!this.state.feedSortReverse && this.items.length > 0) {
+        this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
+      }
+    }
+    disableFooterObserver() {
+      if (this.footerIntersectionObserver) {
+        this.footerIntersectionObserver.disconnect();
+      }
+    }
+    // ===========================================================================
+    // Event Handlers
+    // ===========================================================================
+    onItemAdded(element) {
+      this.applyItemStyle(element);
+      clearTimeout(this.debounceTimeout);
+      this.debounceTimeout = setTimeout(() => this.loadItems(), 500);
+    }
+    onItemRemoved(element) {
+      if (this.intersectionObserver) {
+        this.intersectionObserver.disconnect(element);
+      }
+    }
+    onScroll(_event) {
+      if (!this.enableScrollMonitor) {
+        console.log("!this.enableScrollMonitor");
+        return;
+      }
+      this.ignoreMouseMovement = true;
+      if (!this.scrollTick) {
+        requestAnimationFrame(() => {
+          const currentScroll = $(window).scrollTop();
+          if (currentScroll > this.scrollTop) {
+            this.scrollDirection = -1;
+          } else if (currentScroll < this.scrollTop) {
+            this.scrollDirection = 1;
+          }
+          this.scrollTop = currentScroll;
+          this.scrollTick = false;
+        });
+        this.scrollTick = true;
+      }
+    }
+    onPopupAdd() {
+      this.isPopupVisible = true;
+    }
+    onPopupRemove() {
+      this.isPopupVisible = false;
+    }
+    onIntersection(entries) {
+      if (!this.enableIntersectionObserver || this.loading || this.loadingNew) {
+        return;
+      }
+      let target2 = null;
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
+          this.visibleItems.push(entry);
+        } else {
+          const oldLength = this.visibleItems.length;
+          this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
+          if (this.visibleItems.length < oldLength) {
+            console.log("removed", entry.target);
+            if (this.config.get("markReadOnScroll")) {
+              const index2 = this.getIndexFromItem(entry.target);
+              this.markItemRead(index2, true);
+            }
+          }
+        }
+      });
+      const visibleItems = this.visibleItems.sort(
+        (a2, b) => this.scrollDirection == 1 ? b.target.getBoundingClientRect().top - a2.target.getBoundingClientRect().top : a2.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
+      );
+      if (!visibleItems.length) return;
+      for (const [_i, item] of visibleItems.entries()) {
+        if (item.intersectionRatio == 1) {
+          target2 = item.target;
+          break;
+        }
+      }
+      if (target2 == null) {
+        target2 = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
+      }
+      const index = this.getIndexFromItem(target2);
+      this.setIndex(index);
+    }
+    onFooterIntersection(entries) {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          this.disableFooterObserver();
+          this.loadOlderItems();
+        }
+      });
+    }
+    // ===========================================================================
+    // Mouse Handling
+    // ===========================================================================
+    didMouseMove(event) {
+      const currentPosition = { x: event.pageX, y: event.pageY };
+      if (this.lastMousePosition) {
+        const distanceMoved = distance(this.lastMousePosition, currentPosition);
+        this.lastMousePosition = currentPosition;
+        if (distanceMoved >= this.MOUSE_MOVEMENT_THRESHOLD) {
+          return true;
+        }
+      } else {
+        this.lastMousePosition = currentPosition;
+      }
+      return false;
+    }
+    onItemMouseOver(event) {
+      if (this.ignoreMouseMovement) return;
+      const target2 = $(event.target).closest(this.selector);
+      const index = this.getIndexFromItem(target2);
+      this.replyIndex = null;
+      if (index != this.index) {
+        this.setIndex(index);
+      }
+    }
+    onSidecarItemMouseOver(event) {
+      if (this.ignoreMouseMovement) return;
+      const target2 = $(event.target).closest(".sidecar-post");
+      const index = this.getSidecarIndexFromItem(target2);
+      const parent = target2.closest(".thread").find(".item");
+      const parentIndex = this.getIndexFromItem(parent);
+      this.setIndex(parentIndex);
+      this.replyIndex = index;
+    }
+    // ===========================================================================
+    // Scroll & Navigation Helpers
+    // ===========================================================================
+    scrollToElement(target2, block2 = null) {
+      this.enableIntersectionObserver = false;
+      target2.scrollIntoView({
+        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
+        block: block2 == null ? "start" : block2
+      });
+    }
+    get scrollMargin() {
+      let margin;
+      let el;
+      if (this.state.mobileView) {
+        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
+        el = el.first().children().filter(":visible").first();
+        if (this.index) {
+          const transform2 = el[0].style.transform;
+          const translateY = transform2.indexOf("(") == -1 ? 0 : parseInt(transform2.split("(")[1].split("px")[0]);
+          margin = el.outerHeight() + translateY;
+        } else {
+          margin = el.outerHeight();
+        }
+      } else {
+        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
+        margin = el.outerHeight();
+      }
+      const itemMargin = parseInt($(this.selector).css("margin-top").replace("px", ""));
+      return margin + itemMargin;
+    }
+    updateItems() {
+      this.enableScrollMonitor = false;
+      this.ignoreMouseMovement = true;
+      if (this.index == 0) {
+        window.scrollTo(0, 0);
+      } else if ($(this.selectedItem).length) {
+        this.scrollToElement($(this.selectedItem)[0]);
+      }
+      setTimeout(() => {
+        console.log("enable");
+        this.ignoreMouseMovement = false;
+        this.enableScrollMonitor = true;
+      }, 2e3);
+    }
+    handleNewThreadPage(_element) {
+      console.log(this.items.length);
+      this.loadPageObserver.disconnect();
+    }
+    // ===========================================================================
+    // Item Utilities
+    // ===========================================================================
+    postIdFromUrl() {
+      return window.location.href.split("/")[6];
+    }
+    urlForItem(item) {
+      return `https://bsky.app${$(item).find("a[href*='/post/']").attr("href")}`;
+    }
+    postIdForItem(item) {
+      try {
+        return extractPostIdFromUrl(this.urlForItem(item));
+      } catch (_e) {
+        return this.postIdFromUrl();
+      }
+    }
+    handleFromItem(item) {
+      return $.trim(
+        $(item).find(constants.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")
+      ).slice(1);
+    }
+    displayNameFromItem(item) {
+      return $.trim(
+        $(item).find(constants.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")
+      );
+    }
+    async getThreadForItem(item) {
+      const url = this.urlForItem(item);
+      if (!url) return;
+      const uri = await this.api.getAtprotoUri(url);
+      if (!uri) return;
+      return await this.api.getThread(uri);
+    }
+    getHandles() {
+      return Array.from(new Set(this.items.map((i2, item) => this.handleFromItem(item))));
+    }
+    getDisplayNames() {
+      return Array.from(new Set(this.items.map((i2, item) => this.displayNameFromItem(item))));
+    }
+    getAuthors() {
+      const authors = $(this.items).get().map((item) => ({
+        handle: this.handleFromItem(item),
+        displayName: this.displayNameFromItem(item)
+      })).filter((author) => author.handle.length > 0);
+      const uniqueMap = /* @__PURE__ */ new Map();
+      authors.forEach((author) => uniqueMap.set(author.handle, author));
+      return Array.from(uniqueMap.values());
+    }
+    getTimestampForItem(item) {
+      const postTimestampElement = $(item).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
+      const postTimeString = postTimestampElement.attr("aria-label");
+      if (!postTimeString) return null;
+      return new Date(postTimeString.replace(" at", ""));
+    }
+    // ===========================================================================
+    // Item Styling
+    // ===========================================================================
+    applyItemStyle(element, selected) {
+      $(element).addClass("item");
+      if (this.config.get("postActionButtonPosition") == "Left") {
+        const postContainer = $(element).find(constants.POST_CONTENT_SELECTOR).prev();
+        if (postContainer.length) {
+          postContainer.css("flex", "");
+        }
+      }
+      this.applyTimestampFormat(element);
+      this.applyThreadStyling(element, selected);
+      this.applySelectionStyling(element, selected);
+      this.applyReadStatus(element);
+      this.applyBlockStatus(element);
+    }
+    applyTimestampFormat(element) {
+      const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
+      if (!postTimestampElement.attr("data-bsky-navigator-age")) {
+        postTimestampElement.attr("data-bsky-navigator-age", postTimestampElement.text());
+      }
+      const userFormat = this.config.get(
+        this.state.mobileView ? "postTimestampFormatMobile" : "postTimestampFormat"
+      );
+      const postTimeString = postTimestampElement.attr("aria-label");
+      if (postTimeString && userFormat) {
+        const postTimestamp = new Date(postTimeString.replace(" at", ""));
+        const formattedDate = format(postTimestamp, userFormat).replace("$age", postTimestampElement.attr("data-bsky-navigator-age"));
+        if (this.config.get("showDebuggingInfo")) {
+          postTimestampElement.text(
+            `${formattedDate} (${$(element).parent().parent().attr("data-bsky-navigator-thread-index")}, ${$(element).attr("data-bsky-navigator-item-index")})`
+          );
+        } else {
+          postTimestampElement.text(formattedDate);
+        }
+      }
+    }
+    applyThreadStyling(element, selected) {
+      const threadIndicator = $(element).find("div.r-lchren, div.r-1mhb1uw > svg");
+      const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
+      $(element).parent().parent().addClass("thread");
+      $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
+      if (selected) {
+        $(element).parent().parent().addClass("thread-selection-active");
+        $(element).parent().parent().removeClass("thread-selection-inactive");
+      } else {
+        $(element).parent().parent().removeClass("thread-selection-active");
+        $(element).parent().parent().addClass("thread-selection-inactive");
+      }
+      if (threadIndicator.length) {
+        const parent = threadIndicator.parents().has(avatarDiv).first();
+        const children = parent.find("*");
+        if (threadIndicator.length == 1) {
+          if (children.index(threadIndicator) < children.index(avatarDiv)) {
+            $(element).parent().parent().addClass("thread-last");
+          } else {
+            $(element).parent().parent().addClass("thread-first");
+          }
+        } else {
+          $(element).parent().parent().addClass("thread-middle");
+        }
+      } else {
+        $(element).parent().parent().addClass(["thread-first", "thread-middle", "thread-last"]);
+      }
+    }
+    applySelectionStyling(element, selected) {
+      if (selected) {
+        $(element).addClass("item-selection-active");
+        $(element).removeClass("item-selection-child-focused");
+        $(element).removeClass("item-selection-inactive");
+      } else {
+        $(element).removeClass("item-selection-active");
+        $(element).removeClass("item-selection-child-focused");
+        $(element).addClass("item-selection-inactive");
+      }
+    }
+    applyReadStatus(element) {
+      const postId = this.postIdForItem($(element));
+      if (postId != null && this.state.seen[postId]) {
+        $(element).addClass("item-read");
+        $(element).removeClass("item-unread");
+      } else {
+        $(element).addClass("item-unread");
+        $(element).removeClass("item-read");
+      }
+    }
+    applyBlockStatus(element) {
+      const handle2 = this.handleFromItem(element);
+      if (this.state.blocks.all.includes(handle2)) {
+        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_ALL_CSS);
+      }
+      if (this.state.blocks.recent.includes(handle2)) {
+        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_RECENT_CSS);
+      }
+    }
+    // ===========================================================================
+    // Item Loading
+    // ===========================================================================
+    filterItems() {
+      return;
+    }
+    sortItems() {
+      return;
+    }
+    showMessage(title, message2) {
+      this.hideMessage();
+      this.messageContainer = $('<div id="messageContainer">');
+      if (title) {
+        const messageTitle = $('<div class="messageTitle">');
+        $(messageTitle).html(title);
+        this.messageContainer.append(messageTitle);
+      }
+      const messageBody = $('<div class="messageBody">');
+      this.messageContainer.append(messageBody);
+      $(messageBody).html(message2);
+      $(constants.FEED_CONTAINER_SELECTOR).filter(":visible").append(this.messageContainer);
+      window.scrollTo(0, 0);
+    }
+    hideMessage() {
+      $("#messageContainer").remove();
+      this.messageContainer = null;
+    }
+    loadItems(focusedPostId) {
+      const classes = ["thread-first", "thread-middle", "thread-last"];
+      const set = [];
+      $(this.items).css("opacity", "0%");
+      let itemIndex = 0;
+      let threadIndex = 0;
+      let threadOffset = 0;
+      $(this.selector).filter(":visible").each((i2, item) => {
+        $(item).attr("data-bsky-navigator-item-index", itemIndex++);
+        $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
+        const threadDiv = $(item).parent().parent();
+        if (classes.some((cls) => $(threadDiv).hasClass(cls))) {
+          set.push(threadDiv[0]);
+          $(item).attr("data-bsky-navigator-thread-offset", threadOffset);
+          threadOffset++;
+          if ($(threadDiv).hasClass("thread-last")) {
+            threadIndex++;
+            threadOffset = 0;
+          }
+        }
+      });
+      this.sortItems();
+      this.filterItems();
+      this.items = $(this.selector).filter(":visible");
+      this.itemStats.oldest = this.itemStats.newest = null;
+      $(this.selector).filter(":visible").each((i2, item) => {
+        const timestamp = this.getTimestampForItem(item);
+        if (!this.itemStats.oldest || timestamp < this.itemStats.oldest) {
+          this.itemStats.oldest = timestamp;
+        }
+        if (!this.itemStats.newest || timestamp > this.itemStats.newest) {
+          this.itemStats.newest = timestamp;
+        }
+        if (this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
+          this.getSidecarContent().then((content2) => {
+            if (!$(item).parent().find(".sidecar-replies").length) {
+              $(item).parent().append(content2);
+            }
+          });
+        }
+      });
+      this.setupIntersectionObserver();
+      this.enableFooterObserver();
+      if (this.index != null) {
+        this.applyItemStyle(this.selectedItem, true);
+      }
+      this.applyThreadIndicatorStyles();
+      $(this.selector).on("mouseover", this.onItemMouseOver);
+      $(this.selector).closest("div.thread").addClass("bsky-navigator-seen");
+      $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
+      this.refreshItems();
+      this.loading = false;
+      $("img#loadOlderIndicatorImage").addClass("image-highlight");
+      $("img#loadOlderIndicatorImage").removeClass("toolbar-icon-pending");
+      if (focusedPostId) {
+        this.jumpToPost(focusedPostId);
+      } else if (!this.jumpToPost(this.postId)) {
+        this.setIndex(0);
+      }
+      this.updateInfoIndicator();
+      this.enableFooterObserver();
+      if ($(this.items).filter(":visible").length == 0) {
+        this.showMessage(
+          "No more unread posts.",
+          `<p>You're all caught up.</p><div id="messageActions"/>`
+        );
+        if ($("#loadOlderAction").length == 0) {
+          $("#messageActions").append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
+          $("#loadOlderAction > a").on("click", () => this.loadOlderItems());
+        }
+        if ($("img#loadNewerIndicatorImage").hasClass("image-highlight")) {
+          $("#messageActions").append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
+          $("#loadNewerAction > a").on("click", () => this.loadNewerItems());
+        }
+      } else {
+        this.hideMessage();
+      }
+      this.ignoreMouseMovement = false;
+    }
+    applyThreadIndicatorStyles() {
+      $("div.r-1mhb1uw").each((i2, el) => {
+        const ancestor = $(el).parent().parent().parent().parent();
+        $(el).parent().parent().parent().addClass("item-selection-inactive");
+        if ($(ancestor).prev().find("div.item-unread").length) {
+          $(el).parent().parent().parent().addClass("item-unread");
+          $(el).parent().parent().parent().removeClass("item-read");
+        } else {
+          $(el).parent().parent().parent().addClass("item-read");
+          $(el).parent().parent().parent().removeClass("item-unread");
+        }
+      });
+      $("div.r-1mhb1uw svg").each((i2, el) => {
+        $(el).find("line").attr("stroke", this.config.get("threadIndicatorColor"));
+        $(el).find("circle").attr("fill", this.config.get("threadIndicatorColor"));
+      });
+    }
+    refreshItems() {
+      $(this.items).each((index, _item) => {
+        this.applyItemStyle(this.items[index], index == this.index);
+      });
+      $(this.items).css("opacity", "100%");
+    }
+    updateInfoIndicator() {
+      this.itemStats.unreadCount = this.items.filter(
+        (i2, item) => $(item).hasClass("item-unread")
+      ).length;
+      this.itemStats.filteredCount = this.items.filter(".filtered").length;
+      this.itemStats.shownCount = this.items.length - this.itemStats.filteredCount;
+      const index = this.itemStats.shownCount ? this.index + 1 : 0;
+      $("div#infoIndicatorText").html(`
+<div id="itemCountStats">
+<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
+</div>
+<div id="itemTimestampStats">
+${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa")} - ${format(this.itemStats.newest, "yyyy-MM-dd hh:mmaaa")}</div>` : ``}`);
+      if (this.config.get("showPostCounts") == "All" || this.selectedItem && this.config.get("showPostCounts") == "Selection") {
+        const bannerDiv = $(this.selectedItem).find("div.item-banner").first().length ? $(this.selectedItem).find("div.item-banner").first() : $(this.selectedItem).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
+        $(bannerDiv).html(
+          `<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}/${this.unrolledReplies.length + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong>`
+        );
+      }
+    }
+    loadNewerItems() {
+      if (!this.loadNewerButton) {
+        console.log("no button");
+        return;
+      }
+      this.loadingNew = true;
+      this.applyItemStyle(this.selectedItem, false);
+      const oldPostId = this.postIdForItem(this.selectedItem);
+      $(this.loadNewerButton).click();
+      setTimeout(() => {
+        this.loadItems(oldPostId);
+        $("img#loadNewerIndicatorImage").removeClass("image-highlight");
+        $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
+        $("#loadNewerAction").remove();
+        this.loadingNew = false;
+      }, 1e3);
+    }
+    loadOlderItems() {
+      if (this.loading) return;
+      console.log("loading more");
+      $("img#loadOlderIndicatorImage").removeClass("image-highlight");
+      $("img#loadOlderIndicatorImage").addClass("toolbar-icon-pending");
+      this.loading = true;
+      const reversed = this.state.feedSortReverse;
+      const index = reversed ? 0 : this.items.length - 1;
+      this.setIndex(index);
+      this.updateItems();
+      const indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
+      const loadElement = this.items.length ? this.items[this.items.length - 1] : $(this.selector).first()[0];
+      $(indicatorElement).closest("div.thread").addClass(
+        this.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse"
+      );
+      this.loadOlderItemsCallback([
+        {
+          time: performance.now(),
+          target: loadElement,
+          isIntersecting: true,
+          intersectionRatio: 1,
+          boundingClientRect: loadElement.getBoundingClientRect(),
+          intersectionRect: loadElement.getBoundingClientRect(),
+          rootBounds: document.documentElement.getBoundingClientRect()
+        }
+      ]);
     }
   }
   const { waitForElement: waitForElement$1 } = utils$1;

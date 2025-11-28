@@ -133,6 +133,38 @@ function extractQuotedPost(embed) {
   return null;
 }
 
+function extractExternalLink(embed) {
+  if (!embed) return null;
+
+  // Direct external link: embed.external
+  // Type is "app.bsky.embed.external#view"
+  if (embed.external) {
+    const ext = embed.external;
+    return {
+      uri: ext.uri,
+      title: ext.title || '',
+      description: ext.description || '',
+      thumb: ext.thumb || null,
+      domain: ext.uri ? new URL(ext.uri).hostname : ''
+    };
+  }
+
+  // External link with media: embed.media.external
+  // Type is "app.bsky.embed.recordWithMedia#view"
+  if (embed.media?.external) {
+    const ext = embed.media.external;
+    return {
+      uri: ext.uri,
+      title: ext.title || '',
+      description: ext.description || '',
+      thumb: ext.thumb || null,
+      domain: ext.uri ? new URL(ext.uri).hostname : ''
+    };
+  }
+
+  return null;
+}
+
 function formatPost(post) {
   const formatter = Intl.NumberFormat('en', { notation: 'compact' });
 
@@ -149,6 +181,7 @@ function formatPost(post) {
     // content: post.record.text,
     embed: post.embed,
     quotedPost: extractQuotedPost(post.embed),
+    externalLink: extractExternalLink(post.embed),
     timestamp: new Date(post.record.createdAt).toLocaleString(),
     replySvg: constants.SIDECAR_SVG_REPLY,
     replyCount: formatter.format(post.replyCount),
@@ -343,6 +376,13 @@ export class ItemHandler extends Handler {
       () => {
         this.quoteTemplate = Handlebars.compile($("#sidecar-embed-quote-template").html());
         Handlebars.registerPartial("quoteTemplate", this.quoteTemplate);
+      }
+    );
+    waitForElement(
+      '#sidecar-embed-external-template',
+      () => {
+        this.externalTemplate = Handlebars.compile($("#sidecar-embed-external-template").html());
+        Handlebars.registerPartial("externalTemplate", this.externalTemplate);
       }
     );
     // this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());

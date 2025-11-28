@@ -1,316 +1,20 @@
-// handlers.js
+// ItemHandler.js - Base handler for item-based navigation (feed items, posts, etc.)
 
-import constants from './constants.js';
-import * as utils from './utils.js';
+import constants from '../constants.js';
+import * as utils from '../utils.js';
 import * as dateFns from 'date-fns';
 import Handlebars from 'handlebars';
 import html2canvas from 'html2canvas';
+import { Handler } from './Handler.js';
+import { formatPost, urlForPost } from './postFormatting.js';
 
 const { waitForElement } = utils;
 
-function convertToEmbed(url) {
-  try {
-    let embedHtml = '';
-
-    // YouTube Embed
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      const videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
-      if (videoId) {
-        embedHtml = `<iframe width="320" height="200" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
-      }
-    }
-
-    // Twitter/X Embed
-    else if (url.includes('twitter.com') || url.includes('x.com')) {
-      embedHtml = `<blockquote class="twitter-tweet"><a href="${url}"></a></blockquote>
-                         <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>`;
-    }
-
-    // TikTok Embed
-    else if (url.includes('tiktok.com')) {
-      embedHtml = `<blockquote class="tiktok-embed" cite="${url}" data-video-id="${url.split('/').pop()}" style="max-width: 605px; min-width: 325px;">
-                            <a href="${url}">Watch on TikTok</a>
-                         </blockquote>
-                         <script async src="https://www.tiktok.com/embed.js"></script>`;
-    }
-
-    // Instagram Embed
-    else if (url.includes('instagram.com/p/')) {
-      embedHtml = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="13">
-                            <a href="${url}">View on Instagram</a>
-                         </blockquote>
-                         <script async src="https://www.instagram.com/embed.js"></script>`;
-    }
-
-    // Default: Just return a linked URL if not recognized
-    return embedHtml || `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
-  } catch (error) {
-    console.error('Error generating embed:', error);
-    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
-  }
-}
-
 /**
- * Formats post text by converting facets (mentions, links, hashtags) to HTML.
- *
- * AT Protocol uses UTF-8 byte offsets for facet indices, but JavaScript strings
- * use UTF-16 code units. This function builds a mapping between byte offsets
- * and character indices to correctly locate and replace facet text.
- *
- * @param {Object} post - The post record object
- * @param {string} post.text - The raw post text
- * @param {Array} [post.facets] - Array of facet objects with byte-based indices
- * @returns {string} HTML-formatted text with clickable mentions, links, and hashtags
- *
- * @example
- * // Input post with mention and link
- * const post = {
- *   text: "Hi @alice check this https://example.com",
- *   facets: [
- *     { index: { byteStart: 3, byteEnd: 9 }, features: [{ $type: 'app.bsky.richtext.facet#mention', did: 'did:plc:...' }] }
- *   ]
- * };
- * const html = formatPostText(post);
- * // Returns: 'Hi <a href="https://bsky.app/profile/did:plc:..." class="mention">@alice</a> check this...'
+ * Handler for navigating and interacting with scrollable item lists.
+ * Provides keyboard navigation, mouse hover selection, intersection observers,
+ * sidecar rendering, and various item actions (like, repost, reply, etc.).
  */
-function formatPostText(post) {
-  let text = post.text;
-  if (!post.facets) return text;
-
-  // Build byte offset -> character index mapping
-  // This is needed because facet indices are UTF-8 byte offsets
-  const charOffsets = buildByteToCharMap(text);
-
-  // Process facets in reverse order to preserve earlier indices
-  const sortedFacets = [...post.facets].reverse();
-
-  for (const facet of sortedFacets) {
-    const { index, features } = facet;
-    const start = charOffsets.findLast((c) => c.byteOffset <= index.byteStart)?.charIndex || 0;
-    const end = charOffsets.findLast((c) => c.byteOffset <= index.byteEnd)?.charIndex || text.length;
-    const originalText = text.slice(start, end);
-
-    for (const feature of features) {
-      const replacement = formatFacetFeature(feature, originalText);
-      if (replacement) {
-        text = text.slice(0, start) + replacement + text.slice(end + 1);
-      }
-    }
-  }
-
-  return text;
-}
-
-/**
- * Builds a mapping from UTF-8 byte offsets to JavaScript string character indices.
- * @private
- */
-function buildByteToCharMap(text) {
-  const charOffsets = [];
-  const encoder = new TextEncoder();
-  let byteOffset = 0;
-
-  for (let charIndex = 0; charIndex < [...text].length; charIndex++) {
-    const char = [...text][charIndex];
-    charOffsets.push({ byteOffset, charIndex });
-    byteOffset += encoder.encode(char).length;
-  }
-
-  return charOffsets;
-}
-
-/**
- * Converts a facet feature to its HTML representation.
- * @private
- */
-function formatFacetFeature(feature, originalText) {
-  switch (feature.$type) {
-    case 'app.bsky.richtext.facet#mention':
-      return `<a href="https://bsky.app/profile/${feature.did}" class="mention">${originalText}</a>`;
-
-    case 'app.bsky.richtext.facet#link':
-      return convertToEmbed(feature.uri);
-
-    case 'app.bsky.richtext.facet#tag':
-      return `<a href="https://bsky.app/search?q=%23${feature.tag}" class="hashtag">${originalText}</a>`;
-
-    default:
-      return null;
-  }
-}
-
-function urlForPost(post) {
-  return `https://bsky.app/profile/${post.author.handle}/post/${post.uri.split('/').slice(-1)[0]}`;
-}
-
-function extractQuotedPost(embed) {
-  if (!embed) return null;
-
-  // Direct quote post: embed.record contains the quoted post
-  // Type is "app.bsky.embed.record#view"
-  if (embed.record && embed.record.author) {
-    const record = embed.record;
-    return {
-      avatar: record.author?.avatar,
-      displayName: record.author?.displayName || record.author?.handle,
-      handle: record.author?.handle,
-      text: record.value?.text || '',
-      images: record.embeds?.[0]?.images || null,
-    };
-  }
-
-  // Quote post with media: embed.record.record contains the quoted post
-  // Type is "app.bsky.embed.recordWithMedia#view"
-  if (embed.record?.record?.author) {
-    const record = embed.record.record;
-    return {
-      avatar: record.author?.avatar,
-      displayName: record.author?.displayName || record.author?.handle,
-      handle: record.author?.handle,
-      text: record.value?.text || '',
-      images: record.embeds?.[0]?.images || null,
-    };
-  }
-
-  return null;
-}
-
-function extractExternalLink(embed) {
-  if (!embed) return null;
-
-  // Direct external link: embed.external
-  // Type is "app.bsky.embed.external#view"
-  if (embed.external) {
-    const ext = embed.external;
-    return {
-      uri: ext.uri,
-      title: ext.title || '',
-      description: ext.description || '',
-      thumb: ext.thumb || null,
-      domain: ext.uri ? new URL(ext.uri).hostname : '',
-    };
-  }
-
-  // External link with media: embed.media.external
-  // Type is "app.bsky.embed.recordWithMedia#view"
-  if (embed.media?.external) {
-    const ext = embed.media.external;
-    return {
-      uri: ext.uri,
-      title: ext.title || '',
-      description: ext.description || '',
-      thumb: ext.thumb || null,
-      domain: ext.uri ? new URL(ext.uri).hostname : '',
-    };
-  }
-
-  return null;
-}
-
-function formatPost(post) {
-  const formatter = Intl.NumberFormat('en', { notation: 'compact' });
-
-  // if(post.record.facets) {
-  //   debugger;
-  // }
-  return {
-    postId: post.cid,
-    postUrl: urlForPost(post),
-    avatar: post.author.avatar,
-    displayName: post.author.displayName || post.author.handle,
-    handle: post.author.handle,
-    content: formatPostText(post.record),
-    // content: post.record.text,
-    embed: post.embed,
-    quotedPost: extractQuotedPost(post.embed),
-    externalLink: extractExternalLink(post.embed),
-    timestamp: new Date(post.record.createdAt).toLocaleString(),
-    replySvg: constants.SIDECAR_SVG_REPLY,
-    replyCount: formatter.format(post.replyCount),
-    repostSvg: constants.SIDECAR_SVG_REPOST[post.viewer.repost ? 1 : 0],
-    repostCount: formatter.format(post.repostCount),
-    likeSvg: constants.SIDECAR_SVG_LIKE[post.viewer.like ? 1 : 0],
-    likeCount: formatter.format(post.likeCount),
-  };
-}
-
-export class Handler {
-  constructor(name, config, state, api) {
-    //console.log(name)
-    this.name = name;
-    this.config = config;
-    this.state = state;
-    this.api = api;
-    this.items = [];
-    this.handleInput = this.handleInput.bind(this);
-  }
-
-  activate() {
-    this.bindKeys();
-  }
-
-  deactivate() {
-    this.unbindKeys();
-  }
-
-  isActive() {
-    return true;
-  }
-
-  bindKeys() {
-    //console.log(`${this.name}: bind`)
-    document.addEventListener('keydown', this.handleInput, true);
-  }
-
-  unbindKeys() {
-    //console.log(`${this.name}: unbind`)
-    document.removeEventListener('keydown', this.handleInput, true);
-  }
-
-  handleInput(event) {
-    //console.log(`handleInput: ${this}, ${this.name}: ${event}`)
-    //console.dir(event)
-    if (event.altKey && !event.metaKey) {
-      if (event.code === 'KeyH') {
-        event.preventDefault();
-        $("nav a[aria-label='Home']")[0].click();
-      } else if (event.code === 'KeyS') {
-        event.preventDefault();
-        $("nav a[aria-label='Search']")[0].click();
-      } else if (event.code === 'KeyN') {
-        event.preventDefault();
-        $("nav a[aria-label='Notifications']")[0].click();
-      } else if (event.code === 'KeyM') {
-        event.preventDefault();
-        $("nav a[aria-label='Chat']")[0].click();
-      } else if (event.code === 'KeyF') {
-        event.preventDefault();
-        $("nav a[aria-label='Feeds']")[0].click();
-      } else if (event.code === 'KeyL') {
-        event.preventDefault();
-        $("nav a[aria-label='Lists']")[0].click();
-      } else if (event.code === 'KeyP') {
-        event.preventDefault();
-        $("nav a[aria-label='Profile']")[0].click();
-      } else if (event.code === 'Comma') {
-        event.preventDefault();
-        $("nav a[aria-label='Settings']")[0].click();
-      } else if (event.code === 'Period') {
-        event.preventDefault();
-        this.config.open();
-      } else if (event.code === 'Enter' && $('#GM_config').is(':visible')) {
-        event.preventDefault();
-        this.config.save();
-      }
-    } else if (!event.altKey && !event.metaKey) {
-      if (event.code == 'Escape' && $('#GM_config').is(':visible')) {
-        event.preventDefault();
-        this.config.close();
-      }
-    }
-  }
-}
-
 export class ItemHandler extends Handler {
   // POPUP_MENU_SELECTOR = "div[data-radix-popper-content-wrapper]"
   POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
@@ -321,14 +25,8 @@ export class ItemHandler extends Handler {
   MOUSE_MOVEMENT_THRESHOLD = 10;
 
   FLOATING_BUTTON_IMAGES = {
-    prev: [
-      // 'https://www.svgrepo.com/show/491060/prev.svg'
-      'https://www.svgrepo.com/show/238452/up-arrow.svg',
-    ],
-    next: [
-      // 'https://www.svgrepo.com/show/491054/next.svg'
-      'https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg',
-    ],
+    prev: ['https://www.svgrepo.com/show/238452/up-arrow.svg'],
+    next: ['https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg'],
   };
 
   constructor(name, config, state, api, selector) {
@@ -360,7 +58,6 @@ export class ItemHandler extends Handler {
     this.enableIntersectionObserver = false;
     this.handlingClick = false;
     this.itemStats = {};
-    // this.visibleItems = new Set();
     this.visibleItems = [];
     this.scrollTick = false;
     this.scrollTop = 0;
@@ -393,11 +90,6 @@ export class ItemHandler extends Handler {
       this.externalTemplate = Handlebars.compile($('#sidecar-embed-external-template').html());
       Handlebars.registerPartial('externalTemplate', this.externalTemplate);
     });
-    // this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
-    // this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
-    // Handlebars.registerPartial("postTemplate", this.postTemplate);
-    // this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
-    // Handlebars.registerPartial("imageTemplate", this.imageTemplate);
   }
 
   isActive() {
@@ -412,15 +104,13 @@ export class ItemHandler extends Handler {
       this.onPopupRemove
     );
     this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
-      root: null, // Observing within the viewport
-      // rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
+      root: null,
       threshold: Array.from({ length: 101 }, (_, i) => i / 100),
     });
     this.setupIntersectionObserver();
 
     this.footerIntersectionObserver = new IntersectionObserver(this.onFooterIntersection, {
-      root: null, // Observing within the viewport
-      // threshold: [1]
+      root: null,
       threshold: Array.from({ length: 101 }, (_, i) => i / 100),
     });
 
@@ -433,7 +123,6 @@ export class ItemHandler extends Handler {
       this.loadNewerButton = $(button)[0];
       $('a#loadNewerIndicatorLink').on('click', () => this.loadNewerItems());
 
-      // $('img#loadNewerIndicatorImage').css("opacity", "1");
       $('img#loadNewerIndicatorImage').addClass('image-highlight');
       $('img#loadNewerIndicatorImage').removeClass('toolbar-icon-pending');
       if ($('#loadNewerAction').length == 0) {
@@ -444,22 +133,17 @@ export class ItemHandler extends Handler {
         'click',
         (event) => {
           if (this.loadingNew) {
-            return; // Avoid re-entry
+            return;
           }
 
-          // Save the target and event details for later
-          const target = event.target;
-          // const originalHandler = target.onclick;
-
-          // Stop propagation but allow calling the original logic manually
+          const _target = event.target;
           event.stopImmediatePropagation();
 
-          // // Call the application's original handler if necessary
           setTimeout(() => {
             this.loadNewerItems();
           }, 0);
         },
-        true // Capture phase
+        true
       );
     });
 
@@ -473,7 +157,6 @@ export class ItemHandler extends Handler {
     this.floatingButtonsObserver = waitForElement(
       this.state.mobileView ? constants.HOME_SCREEN_SELECTOR : constants.LEFT_SIDEBAR_SELECTOR,
       (container) => {
-        // debugger;
         console.log(container);
         if (!this.prevButton) {
           this.prevButton = $(
@@ -585,7 +268,6 @@ export class ItemHandler extends Handler {
   }
 
   set threadIndex(value) {
-    // debugger;
     const oldIndex = this._threadIndex;
     if (value == oldIndex) {
       return;
@@ -599,17 +281,13 @@ export class ItemHandler extends Handler {
       return;
     }
     if (oldIndex != null) {
-      // const oldPost = oldIndex > 0 ? posts.eq(oldIndex-1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
       this.getPostForThreadIndex(oldIndex).removeClass('reply-selection-active');
     }
     this._threadIndex = value;
     if (this.threadIndex == null) {
       $(this.selectedItem).addClass('item-selection-active');
       $(this.selectedItem).removeClass('item-selection-child-focused');
-      // posts.removeClass("reply-selection-active");
     } else {
-      // const selectedPost = this.threadIndex > 0 ? posts.eq(this.threadIndex-1) : $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
-      // console.log(selectedPost);
       if (this.unrolledReplies.length && this.selectedPost) {
         $(this.selectedItem).addClass('item-selection-child-focused');
         $(this.selectedItem).removeClass('item-selection-active');
@@ -634,15 +312,10 @@ export class ItemHandler extends Handler {
 
   get selectedPost() {
     return this.getPostForThreadIndex(this.threadIndex);
-    // return this.threadIndex > 0 ? posts.eq(this.threadIndex-1) : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
   }
 
   onItemAdded(element) {
-    // console.log(element)
-
     this.applyItemStyle(element);
-
-    // $(element).on("mouseleave", this.onItemMouseLeave)
 
     clearTimeout(this.debounceTimeout);
 
@@ -686,17 +359,14 @@ export class ItemHandler extends Handler {
     });
   }
 
-  // Function to programmatically play a video from the userscript
   playVideo(video) {
-    video.dataset.allowPlay = 'true'; // Set the custom flag
-    // console.log('Userscript playing video:', video);
-    video.play(); // Call the overridden play method
+    video.dataset.allowPlay = 'true';
+    video.play();
   }
 
   pauseVideo(video) {
-    video.dataset.allowPlay = 'true'; // Set the custom flag
-    // console.log('Userscript playing video:', video);
-    video.pause(); // Call the overridden play method
+    video.dataset.allowPlay = 'true';
+    video.pause();
   }
 
   setupIntersectionObserver(_entries) {
@@ -715,7 +385,6 @@ export class ItemHandler extends Handler {
 
     entries.forEach((entry) => {
       if (entry.isIntersecting) {
-        // remove existing so intersectionRatio can be updated
         this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
         this.visibleItems.push(entry);
       } else {
@@ -731,17 +400,11 @@ export class ItemHandler extends Handler {
       }
     });
 
-    const visibleItems = this.visibleItems
-      //                          .filter(
-      //   (item) => {
-      //     return item.target.getBoundingClientRect().top > 0
-      //   }
-      // )
-      .sort((a, b) =>
-        this.scrollDirection == 1
-          ? b.target.getBoundingClientRect().top - a.target.getBoundingClientRect().top
-          : a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
-      );
+    const visibleItems = this.visibleItems.sort((a, b) =>
+      this.scrollDirection == 1
+        ? b.target.getBoundingClientRect().top - a.target.getBoundingClientRect().top
+        : a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
+    );
     if (!visibleItems.length) {
       return;
     }
@@ -763,8 +426,7 @@ export class ItemHandler extends Handler {
   onFooterIntersection(entries) {
     entries.forEach((entry) => {
       if (entry.isIntersecting) {
-        // console.log("footer")
-        const target = entry.target;
+        const _target = entry.target;
         this.disableFooterObserver();
         this.loadOlderItems();
       }
@@ -818,9 +480,7 @@ export class ItemHandler extends Handler {
 
   applyItemStyle(element, selected) {
     $(element).addClass('item');
-    // $(element).find("div").first().children().last().css("flex", "");
 
-    // the flex property here creates problems if post actions are on the left
     if (this.config.get('postActionButtonPosition') == 'Left') {
       const postContainer = $(element).find(constants.POST_CONTENT_SELECTOR).prev();
       if (postContainer.length) {
@@ -838,7 +498,6 @@ export class ItemHandler extends Handler {
     );
     const postTimeString = postTimestampElement.attr('aria-label');
     if (postTimeString && userFormat) {
-      // console.log(postTimeString)
       const postTimestamp = new Date(postTimeString.replace(' at', ''));
       if (userFormat) {
         const formattedDate = dateFns
@@ -854,7 +513,6 @@ export class ItemHandler extends Handler {
       }
     }
 
-    // FIXME: This method of finding threads is likely to be unstable.
     const threadIndicator = $(element).find('div.r-lchren, div.r-1mhb1uw > svg');
     const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
 
@@ -906,7 +564,6 @@ export class ItemHandler extends Handler {
       $(element).removeClass('item-read');
     }
     const handle = this.handleFromItem(element);
-    // console.log(handle)
     if (this.state.blocks.all.includes(handle)) {
       $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_ALL_CSS);
     }
@@ -919,7 +576,6 @@ export class ItemHandler extends Handler {
     const currentPosition = { x: event.pageX, y: event.pageY };
 
     if (this.lastMousePosition) {
-      // Calculate the distance moved
       const distanceMoved = Math.sqrt(
         Math.pow(currentPosition.x - this.lastMousePosition.x, 2) +
           Math.pow(currentPosition.y - this.lastMousePosition.y, 2)
@@ -930,7 +586,6 @@ export class ItemHandler extends Handler {
         return true;
       }
     } else {
-      // Set the initial mouse position
       this.lastMousePosition = currentPosition;
     }
     return false;
@@ -944,7 +599,6 @@ export class ItemHandler extends Handler {
     const index = this.getIndexFromItem(target);
     this.replyIndex = null;
     if (index != this.index) {
-      // this.applyItemStyle(this.selectedItem, false);
       this.setIndex(index);
     }
   }
@@ -1011,8 +665,8 @@ export class ItemHandler extends Handler {
   }
 
   loadItems(focusedPostId) {
-    const old_length = this.items.length;
-    const old_index = this.index;
+    const _old_length = this.items.length;
+    const _old_index = this.index;
 
     const classes = ['thread-first', 'thread-middle', 'thread-last'];
     const set = [];
@@ -1029,9 +683,8 @@ export class ItemHandler extends Handler {
         $(item).parent().parent().attr('data-bsky-navigator-thread-index', threadIndex);
 
         const threadDiv = $(item).parent().parent();
-        // Check if the div contains any of the target classes
         if (classes.some((cls) => $(threadDiv).hasClass(cls))) {
-          set.push(threadDiv[0]); // Collect the div
+          set.push(threadDiv[0]);
           $(item).attr('data-bsky-navigator-thread-offset', threadOffset);
           threadOffset++;
           if ($(threadDiv).hasClass('thread-last')) {
@@ -1073,16 +726,13 @@ export class ItemHandler extends Handler {
 
     this.setupIntersectionObserver();
 
-    // this.activate()
     this.enableFooterObserver();
 
-    // console.log(this.items)
     if (this.index != null) {
       this.applyItemStyle(this.selectedItem, true);
     }
     $('div.r-1mhb1uw').each((i, el) => {
       const ancestor = $(el).parent().parent().parent().parent();
-      // $(ancestor).addClass(["thread"])
       $(el).parent().parent().parent().addClass('item-selection-inactive');
       if ($(ancestor).prev().find('div.item-unread').length) {
         $(el).parent().parent().parent().addClass('item-unread');
@@ -1097,10 +747,8 @@ export class ItemHandler extends Handler {
       $(el).find('circle').attr('fill', this.config.get('threadIndicatorColor'));
     });
     $(this.selector).on('mouseover', this.onItemMouseOver);
-    // $(this.selector).on("mouseleave", this.onItemMouseLeave)
 
     $(this.selector).closest('div.thread').addClass('bsky-navigator-seen');
-    // console.log("set loading false")
     $(this.selector)
       .closest('div.thread')
       .removeClass(['loading-indicator-reverse', 'loading-indicator-forward']);
@@ -1108,7 +756,6 @@ export class ItemHandler extends Handler {
     this.refreshItems();
 
     this.loading = false;
-    // $('img#loadOlderIndicatorImage').css("opacity", "1");
     $('img#loadOlderIndicatorImage').addClass('image-highlight');
     $('img#loadOlderIndicatorImage').removeClass('toolbar-icon-pending');
     if (focusedPostId) {
@@ -1134,7 +781,6 @@ You're all caught up.
         $('#messageActions').append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
         $('#loadOlderAction > a').on('click', () => this.loadOlderItems());
       }
-      // if ($('img#loadNewerIndicatorImage').css("opacity") == "1") {
       if ($('img#loadNewerIndicatorImage').hasClass('image-highlight')) {
         $('#messageActions').append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
         $('#loadNewerAction > a').on('click', () => this.loadNewerItems());
@@ -1183,8 +829,6 @@ ${
             .prepend($('<div class="item-banner"/>'))
             .children('.item-banner')
             .last();
-      // $(bannerDiv).html(`<strong>${this.getIndexFromItem(element)+1}</strong>/<strong>${this.itemStats.shownCount}</strong>`);
-      // debugger;
       $(bannerDiv).html(
         `<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}/${this.unrolledReplies.length + 1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong>`
       );
@@ -1202,7 +846,6 @@ ${
     $(this.loadNewerButton).click();
     setTimeout(() => {
       this.loadItems(oldPostId);
-      // $('img#loadNewerIndicatorImage').css("opacity", "0.2");
       $('img#loadNewerIndicatorImage').removeClass('image-highlight');
       $('img#loadNewerIndicatorImage').removeClass('toolbar-icon-pending');
       $('#loadNewerAction').remove();
@@ -1212,11 +855,9 @@ ${
 
   loadOlderItems() {
     if (this.loading) {
-      // console.log("already loading, returning")
       return;
     }
     console.log('loading more');
-    // $('img#loadOlderIndicatorImage').css("opacity", "0.2");
     $('img#loadOlderIndicatorImage').removeClass('image-highlight');
     $('img#loadOlderIndicatorImage').addClass('toolbar-icon-pending');
     this.loading = true;
@@ -1247,7 +888,6 @@ ${
   }
 
   postIdFromUrl() {
-    //return $(document).find("meta[property='og:url']").attr("content").split("/")[6]
     return window.location.href.split('/')[6];
   }
 
@@ -1285,7 +925,6 @@ ${
     }
     const thread = await this.api.getThread(uri);
     return thread;
-    // debugger;
   }
 
   displayNameFromItem(item) {
@@ -1317,9 +956,9 @@ ${
       .filter((author) => author.handle.length > 0);
     const uniqueMap = new Map();
     authors.forEach((author) => {
-      uniqueMap.set(author.handle, author); // Only keeps the last occurrence
+      uniqueMap.set(author.handle, author);
     });
-    return Array.from(uniqueMap.values()); // Convert back to an array
+    return Array.from(uniqueMap.values());
   }
 
   updateItems() {
@@ -1329,8 +968,6 @@ ${
       window.scrollTo(0, 0);
     } else if ($(this.selectedItem).length) {
       this.scrollToElement($(this.selectedItem)[0]);
-    } else {
-      // console.log(this.index, this.items.length)
     }
     setTimeout(() => {
       console.log('enable');
@@ -1359,7 +996,6 @@ ${
 
     this.expandItem(this.selectedItem);
 
-    // Handle video playback for the newly selected item
     $(this.selectedItem)
       .find('video')
       .each((_i, video) => {
@@ -1388,7 +1024,6 @@ ${
     for (const [i, item] of $(this.items).get().entries()) {
       const other = this.postIdForItem(item);
       if (postId == other) {
-        // console.log(`jumping to ${postId} (${i})`);
         this.setIndex(i);
         this.updateItems();
         return true;
@@ -1411,7 +1046,6 @@ ${
     const markedRead = this.markPostRead(postId, isRead);
     console.log(isRead, markedRead);
     if (this.unrolledReplies.length) {
-      // debugger;
       $(item).addClass(markedRead ? 'item-read' : 'item-unread');
       $(item).removeClass(markedRead ? 'item-unread' : 'item-read');
     } else {
@@ -1435,11 +1069,9 @@ ${
       seen[postId] = currentTime;
     } else {
       seen[postId] = null;
-      // delete seen[postId];
     }
     this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
     return !!seen[postId];
-    // this.updateItems()
   }
 
   markVisibleRead() {
@@ -1448,9 +1080,8 @@ ${
     });
   }
 
-  // FIXME: move to PostItemHanler
+  // FIXME: move to PostItemHandler
   handleNewThreadPage(_element) {
-    // console.log(`new page: ${element}`)
     console.log(this.items.length);
     this.loadPageObserver.disconnect();
   }
@@ -1462,13 +1093,10 @@ ${
 
   jumpToNext(mark) {
     if (this.index < this.items.length) {
-      // this.index += 1
       this.setIndex(this.index + 1, mark, true);
     } else {
       const next = $(this.selectedItem).parent().parent().parent().next();
-      // console.log(next.text())
       if (next && $.trim(next.text()) == 'Continue thread...') {
-        // console.log("click")
         this.loadPageObserver = waitForElement(this.THREAD_PAGE_SELECTOR, this.handleNewThreadPage);
         console.log(this.loadPageObserver);
         $(next).find('div').click();
@@ -1480,7 +1108,6 @@ ${
   jumpToNextUnseenItem(mark) {
     let i;
     for (i = this.index + 1; i < this.items.length - 1; i++) {
-      //var item = this.items[i]
       const postId = this.postIdForItem(this.items[i]);
       if (!this.state.seen[postId]) {
         break;
@@ -1501,11 +1128,10 @@ ${
   handleMovementKey(event) {
     let moved = false;
     let mark = false;
-    const old_index = this.index;
+    const _old_index = this.index;
     if (this.isPopupVisible) {
       return;
     }
-    // mouse movement may be triggered, so ignore it
     this.ignoreMouseMovement = true;
 
     if (this.keyState.length == 0) {
@@ -1539,7 +1165,6 @@ ${
             moved = this.jumpToPrev(event.key == 'k');
           }
         } else if (event.key == 'h') {
-          // h = back
           const back_button = $("button[aria-label^='Back' i]").filter(':visible');
           if (back_button.length) {
             back_button.click();
@@ -1560,20 +1185,17 @@ ${
           this.toggleFocus();
         } else if (event.key == 'G') {
           event.preventDefault();
-          // G = end
           moved = this.setIndex(this.items.length - 1, false, true);
         } else if (event.key == 'J') {
           mark = true;
           this.jumpToNextUnseenItem(mark);
         }
         moved = true;
-        // console.log(this.postIdForItem(this.selectedItem))
       } else if (event.key == 'g') {
         this.keyState.push(event.key);
       }
     } else if (this.keyState[0] == 'g') {
       if (event.key == 'g') {
-        // gg = home
         if (this.index < this.items.length) {
           this.setIndex(0, false, true);
         }
@@ -1588,12 +1210,10 @@ ${
 
   getIndexFromItem(item) {
     return $('.item').filter(':visible').index(item);
-    //return $(item).parent().parent().index()-1
   }
 
   getSidecarIndexFromItem(item) {
     return $(item).closest('.thread').find('.sidecar-post').filter(':visible').index(item);
-    //return $(item).parent().parent().index()-1
   }
 
   shouldUnroll(_item) {
@@ -1629,7 +1249,6 @@ ${
 
   async unrollThread(item, thread) {
     const bodyTemplate = Handlebars.compile($('#sidecar-body-template').html());
-    // const footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
     Handlebars.registerPartial('bodyTemplate', bodyTemplate);
     console.log(
       thread.parent,
@@ -1647,7 +1266,6 @@ ${
     }
     if (thread.replies.map((r) => r.post && r.post.author.did).includes(thread.post.author.did)) {
       const unrolledPosts = await this.api.unrollThread(thread);
-      // Use .first() to only select the main post's contentHider, not the one inside embedded quotes
       const parent = $(item).find('div[data-testid="contentHider-post"]').first().parent();
       parent.css({ 'overflow-y': 'scroll', 'max-height': '80vH', 'padding-top': '1em' });
       let div = $(parent).find('div.unrolled-replies');
@@ -1658,7 +1276,6 @@ ${
         parent.append(div);
       }
       unrolledPosts.slice(1).map((p, i) => {
-        // debugger;
         const reply = $('<div class="unrolled-reply" style="position: relative"/>');
         reply.append($('<hr class="unrolled-divider"/>'));
         reply.append(
@@ -1669,19 +1286,15 @@ ${
         reply.append($(bodyTemplate(formatPost(p))));
         reply.append($(this.footerTemplate(formatPost(p))));
         div.append(reply);
-        // $(`div.thread:has(a[href$="${p.uri.split("/").pop()}"])`).addClass("filtered");
       });
-      // remove redundant replies after unrolling
       const threadIndex = $(item).closest('.thread').data('bsky-navigator-thread-index');
 
       function isRedundant(item, threadIndex) {
-        // console.log(item);
         return (
           $(item).data('bsky-navigator-thread-offset') != 0 &&
           $(item).closest('.thread').data('bsky-navigator-thread-index') == threadIndex
         );
       }
-      // debugger;
       this.items.each((i, item) => {
         if (isRedundant(item, threadIndex)) {
           console.log('filtered', item);
@@ -1693,20 +1306,16 @@ ${
         return !isRedundant(item, threadIndex);
       });
       console.log(this.items.length);
-      // this.loadItems();
       this.threadIndex = 0;
     }
   }
 
   async getSidecarContent(item, thread) {
-    // debugger;
     if (!item) {
-      // render empty div
       return this.repliesTemplate({});
     }
 
     const post = thread.post;
-    // FIXME
 
     const replies = thread.replies
       .filter((reply) => reply.post)
@@ -1801,18 +1410,15 @@ ${
 
   async captureScreenshot(item) {
     try {
-      // Capture the item element as a canvas
       const canvas = await html2canvas(item, {
         backgroundColor: null,
-        scale: 2, // Higher quality
+        scale: 2,
         logging: false,
         useCORS: true,
       });
 
-      // Convert canvas to blob
       canvas.toBlob(async (blob) => {
         try {
-          // Copy to clipboard
           await navigator.clipboard.write([
             new ClipboardItem({
               'image/png': blob,
@@ -1820,7 +1426,6 @@ ${
           ]);
           console.log('Screenshot copied to clipboard!');
 
-          // Optional: Show a brief notification
           const notification = $('<div>')
             .css({
               position: 'fixed',
@@ -1856,12 +1461,10 @@ ${
       return false;
     }
 
-    // Alt+Digit: Quick filter by rule number
     if (event.altKey && !event.metaKey) {
       return this.handleRuleShortcut(event);
     }
 
-    // Regular key actions (no meta key)
     if (!event.metaKey) {
       return this.handleItemAction(event);
     }
@@ -1953,7 +1556,6 @@ ${
         break;
 
       default:
-        // Handle numeric keys for tab switching
         if (!isNaN(parseInt(event.key))) {
           this.switchToTab(parseInt(event.key) - 1);
         } else {
@@ -2044,755 +1646,6 @@ ${
     const tabs = $("div[role='tablist'] > div > div > div").filter(':visible');
     if (tabs[tabIndex]) {
       tabs[tabIndex].click();
-    }
-  }
-}
-
-export class FeedItemHandler extends ItemHandler {
-  INDICATOR_IMAGES = {
-    loadTop: ['https://www.svgrepo.com/show/502348/circleupmajor.svg'],
-    loadBottom: ['https://www.svgrepo.com/show/502338/circledownmajor.svg'],
-    loadTime: ['https://www.svgrepo.com/show/446075/time-history.svg'],
-    filter: [
-      'https://www.svgrepo.com/show/347140/mail.svg',
-      'https://www.svgrepo.com/show/347147/mail-unread.svg',
-    ],
-    sort: [
-      'https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg',
-      'https://www.svgrepo.com/show/506582/sort-numeric-up.svg',
-    ],
-    preferences: [
-      'https://www.svgrepo.com/show/522235/preferences.svg',
-      'https://www.svgrepo.com/show/522236/preferences.svg',
-    ],
-  };
-
-  constructor(name, config, state, api, selector) {
-    super(name, config, state, api, selector);
-    this.toggleSortOrder = this.toggleSortOrder.bind(this);
-    this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
-    this.onSearchKeydown = this.onSearchKeydown.bind(this);
-    this.setFilter = this.setFilter.bind(this);
-    this.feedTabObserver = waitForElement(constants.FEED_TAB_SELECTOR, (tab) => {
-      utils.observeChanges(
-        tab,
-        (attributeName, _oldValue, newValue, _target) => {
-          // console.log(attributeName, _oldValue, newValue, _target);
-          if (attributeName == 'class' && newValue.includes('r-13awgt0')) {
-            console.log('refresh');
-            this.refreshItems();
-          }
-        },
-        false
-      );
-    });
-  }
-
-  applyItemStyle(element, selected) {
-    super.applyItemStyle(element, selected);
-    const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
-    if (this.config.get('postActionButtonPosition') == 'Left') {
-      const buttonsDiv = $(element)
-        .find('button[data-testid="postDropdownBtn"]')
-        .parent()
-        .parent()
-        .parent();
-
-      $(buttonsDiv).parent().css({
-        'min-height': '160px',
-        'min-width': '80px',
-        // "margin-left": "10px"
-      });
-      $(buttonsDiv).parent().children().first().css('flex', '');
-      // buttonsDiv.css("flex-direction", "column");
-      buttonsDiv.css({
-        display: 'flex',
-        'flex-direction': 'column',
-        'align-items': 'flex-start',
-        position: 'absolute',
-        bottom: '0px',
-        'z-index': '10',
-      });
-      $(buttonsDiv).find('> div').css({
-        'margin-left': '0px',
-        width: '100%',
-      });
-      $(buttonsDiv).find('> div > div').css({
-        width: '100%',
-      });
-      const buttons = $(buttonsDiv).find('button[data-testid!="postDropdownBtn"]');
-      buttons.each((i, button) => {
-        $(button).css({
-          display: 'flex',
-          'align-items': 'center' /* Ensures vertical alignment */,
-          'justify-content': 'space-between' /* Pushes text to the right */,
-          gap: '12px' /* Space between the icon and text */,
-          width: '100%',
-          padding: '5px 2px',
-        });
-        const div = $(button).find('> div').first();
-        if (div.length) {
-          $(div).css({
-            display: 'flex',
-            'align-items': 'center' /* Ensures vertical alignment */,
-            'justify-content': 'space-between' /* Pushes text to the right */,
-            gap: '12px' /* Space between the icon and text */,
-            // "width": "100%",
-            padding: '0px',
-          });
-        }
-        if ($(button).attr('aria-label').startsWith('Repost')) {
-          $(div).css('width', '100%');
-        }
-
-        const svg = $(button).find('svg').first();
-        // $(button).append(svg);
-        $(svg).css({
-          'flex-shrink': '0' /* Prevents icon from resizing */,
-          // "vertical-align": "middle", /* Ensures SVG is aligned with the text */
-          display: 'block' /* Removes inline spacing issues */,
-        });
-      });
-
-      avatarDiv.closest('div.r-c97pre').children().eq(0).after(buttonsDiv);
-    }
-  }
-
-  addToolbar(beforeDiv) {
-    // debugger;
-    this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
-    $(beforeDiv).before(this.toolbarDiv);
-
-    this.topLoadIndicator = $(`
-<div id="topLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
-</div>`);
-    $(this.toolbarDiv).append(this.topLoadIndicator);
-
-    this.sortIndicator = $(
-      `<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[+this.state.feedSortReverse]}"/></div>`
-    );
-    $(this.toolbarDiv).append(this.sortIndicator);
-    $('.indicator-image path').attr('fill', 'currentColor');
-    $('#sortIndicator').on('click', (event) => {
-      event.preventDefault();
-      this.toggleSortOrder();
-    });
-
-    this.filterIndicator = $(
-      `<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[+this.state.feedHideRead]}"/></div>`
-    );
-    $(this.toolbarDiv).append(this.filterIndicator);
-    $('#filterIndicator').on('click', (event) => {
-      event.preventDefault();
-      this.toggleHideRead();
-    });
-
-    this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
-
-    $(this.toolbarDiv).append(this.searchField);
-    $('#bsky-navigator-search').autocomplete({
-      minLength: 0,
-      appendTo: 'div[data-testid="homeScreenFeedTabs"]',
-      source: this.onSearchAutocomplete,
-      focus: function (event, _ui) {
-        event.preventDefault(); // Prevent autocomplete from auto-filling input on hover
-      },
-      select: function (event, ui) {
-        event.preventDefault(); // Prevent default selection behavior
-
-        const input = this;
-        const terms = utils.splitTerms(input.value);
-        terms.pop(); // Remove the last typed term
-        terms.push(ui.item.value); // Add the selected suggestion
-        input.value = terms.join(' ') + ' '; // Ensure a space after selection
-
-        $(this).autocomplete('close'); // Close the dropdown after selection
-      },
-    });
-
-    $('#bsky-navigator-search').on('keydown', function (event) {
-      if (event.key === 'Tab') {
-        const autocompleteMenu = $('.ui-autocomplete:visible');
-        const firstItem = autocompleteMenu.children('.ui-menu-item').first();
-
-        if (firstItem.length) {
-          const uiItem = firstItem.data('ui-autocomplete-item'); // Get the first suggested item
-          $(this).autocomplete('close'); // Close autocomplete after selection
-
-          const terms = utils.splitTerms(this.value);
-          terms.pop(); // Remove the last typed term
-          terms.push(uiItem.value); // Add the selected suggestion
-          this.value = terms.join(' ') + ' '; // Ensure a space after selection
-          event.preventDefault();
-        }
-      }
-    });
-
-    this.onSearchUpdate = (event) => {
-      const val = $(event.target).val();
-      console.log(val);
-
-      if (val === '/') {
-        // Handle "/" case immediately
-        $('#bsky-navigator-search').val('');
-        $(this.searchField).autocomplete('close');
-        $("a[aria-label='Search']")[0].click();
-        return;
-      }
-
-      // Apply debounce for other cases
-      this.debouncedSearchUpdate(event);
-    };
-
-    // Use the improved debounce function
-    this.debouncedSearchUpdate = utils.debounce((event) => {
-      const val = $(event.target).val();
-      this.setFilter(val.trim());
-      this.loadItems();
-    }, 300);
-
-    this.onSearchUpdate = this.onSearchUpdate.bind(this);
-    $(this.searchField).on('keydown', this.onSearchKeydown);
-
-    $(this.searchField).on('input', this.onSearchUpdate);
-    $(this.searchField).on('focus', function () {
-      $(this).autocomplete('search', ''); // Trigger search with an empty string
-    });
-    // Trigger when autocomplete modifies the input
-    $(this.searchField).on('autocompletechange autocompleteclose', this.onSearchUpdate);
-
-    // Also trigger when an item is selected from autocomplete
-    $(this.searchField).on('autocompleteselect', this.onSearchUpdate);
-
-    // $(this.searchField).on("input", this.onSearchUpdate);
-
-    waitForElement('#bsky-navigator-toolbar', null, (_div) => {
-      this.addToolbar(beforeDiv);
-    });
-  }
-
-  onSearchKeydown(event) {
-    if (event.altKey) {
-      event.preventDefault();
-      event.stopPropagation();
-      this.handleInput(event);
-    }
-  }
-
-  refreshToolbars() {
-    waitForElement(constants.TOOLBAR_CONTAINER_SELECTOR, (_indicatorContainer) => {
-      waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
-        if (!$('#bsky-navigator-toolbar').length) {
-          this.addToolbar(homeScreenFeedTabsDiv);
-        }
-      });
-    });
-
-    waitForElement(constants.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer, observer) => {
-      if (!$('#statusBar').length) {
-        // FIXME: it would be easier to match from top down, but HTML changes
-        // between desktop/mobile viewport size, so this works better.
-        this.addStatusBar($(statusBarContainer).parent().parent().parent().parent().parent());
-        observer.disconnect();
-      }
-    });
-
-    waitForElement('#bsky-navigator-toolbar', (_div) => {
-      waitForElement('#statusBar', (_div2) => {
-        this.setSortIcons();
-      });
-    });
-  }
-
-  onSearchAutocomplete(request, response) {
-    // debugger;
-    const authors = this.getAuthors().sort((a, b) =>
-      a.handle.localeCompare(b.handle, undefined, { sensitivity: 'base' })
-    );
-    const rules = Object.keys(this.state.rules);
-
-    let term = utils.extractLastTerm(request.term).toLowerCase();
-    const isNegation = term.startsWith('!'); // Check if `!` is present
-    if (isNegation) term = term.substring(1); // Strip `!`
-
-    let results = [];
-
-    if (term === '') {
-      results = rules.map((r) => ({ label: `$${r}`, value: `$${r}` }));
-    } else if (term.startsWith('@') || term.startsWith('$')) {
-      const type = term.charAt(0);
-      const search = term.substring(1).toLowerCase(); // Remove prefix for matching
-
-      if (type === '@') {
-        results = authors
-          .filter(
-            (a) =>
-              a.handle.toLowerCase().includes(search) ||
-              a.displayName.toLowerCase().includes(search)
-          )
-          .map((a) => ({
-            label: `${isNegation ? '!' : ''}@${a.handle} (${a.displayName})`,
-            value: `${isNegation ? '!' : ''}@${a.handle}`,
-          }));
-      } else if (type === '$') {
-        results = rules
-          .filter((r) => r.toLowerCase().includes(search))
-          .map((r) => ({
-            label: `${isNegation ? '!' : ''}$${r}`,
-          }));
-      }
-    }
-    response(results);
-  }
-
-  addStatusBar(statusBarContainer) {
-    // debugger;
-    // console.log($('div[style="min-height: 100vh; padding-top: 0px;"]'));
-    this.statusBar = $(`<div id="statusBar"></div>`);
-    this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
-    this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
-    this.statusBarRight = $(`<div id="statusBarRight"></div>`);
-    $(this.statusBar).append(this.statusBarLeft);
-    $(this.statusBar).append(this.statusBarCenter);
-    $(this.statusBar).append(this.statusBarRight);
-    $(statusBarContainer).append(this.statusBar);
-
-    this.bottomLoadIndicator = $(`
-<div id="bottomLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"/>
-`);
-    $(this.statusBarLeft).append(this.bottomLoadIndicator);
-
-    if (!this.infoIndicator) {
-      this.infoIndicator = $(
-        `<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="infoIndicatorText"/></div>`
-      );
-      $(this.statusBarCenter).append(this.infoIndicator);
-    }
-
-    if (!this.preferencesIcon) {
-      this.preferencesIcon = $(
-        `<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`
-      );
-      $(this.preferencesIcon).on('click', () => {
-        $('#preferencesIconImage').attr('src', this.INDICATOR_IMAGES.preferences[1]);
-        this.config.open();
-      });
-      $(this.statusBarRight).append(this.preferencesIcon);
-    }
-  }
-
-  activate() {
-    super.activate();
-    this.refreshToolbars();
-    waitForElement('#bsky-navigator-search', (el) => {
-      $(el).val(this.state.filter);
-    });
-  }
-
-  deactivate() {
-    super.deactivate();
-  }
-
-  isActive() {
-    return window.location.pathname == '/';
-  }
-
-  toggleSortOrder() {
-    this.state.stateManager.updateState({ feedSortReverse: !this.state.feedSortReverse });
-    this.setSortIcons();
-    $(this.selector).closest('div.thread').removeClass('bsky-navigator-seen');
-    this.loadItems();
-  }
-
-  setSortIcons() {
-    ['top', 'bottom'].forEach((bar) => {
-      const which =
-        (!this.state.feedSortReverse && bar == 'bottom') ||
-        (this.state.feedSortReverse && bar == 'top')
-          ? 'Older'
-          : 'Newer';
-      const img =
-        this.INDICATOR_IMAGES[
-          `load${bar.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())}`
-        ][0];
-      $(`#${bar}LoadIndicator`).empty();
-      $(`#${bar}LoadIndicator`).append(`
-<div id="load${which}Indicator" title="Load ${which.toLowerCase()} items" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
-      <a id="load${which}IndicatorLink">
-<img id="load${which}IndicatorImage" class="indicator-image" src="${img}"/>
-<img id="loadTime${which}IndicatorImage" class="indicator-image load-time-icon ${which == 'Newer' ? 'image-flip-x' : ''}" src="${this.INDICATOR_IMAGES.loadTime[0]}"/>
-</a>
-</div>
-`);
-    });
-    // $('img#loadOlderIndicatorImage').css("opacity", "1");
-    $('img#loadOlderIndicatorImage').addClass('image-highlight');
-    $('a#loadOlderIndicatorLink').on('click', () => this.loadOlderItems());
-  }
-
-  toggleHideRead() {
-    this.state.stateManager.updateState({ feedHideRead: !this.state.feedHideRead });
-    $(this.selector).closest('div.thread').removeClass('bsky-navigator-seen');
-    this.loadItems();
-  }
-
-  setFilter(text) {
-    this.state.stateManager.saveStateImmediately(true, true);
-    this.state.filter = text;
-  }
-
-  /**
-   * Determines if an item should be shown based on read status and filter rules.
-   * @param {Element} item - The feed item element
-   * @param {Element} _thread - The parent thread element (unused)
-   * @returns {boolean} True if item should be shown, false if filtered out
-   */
-  filterItem(item, _thread) {
-    // Hide read items if that option is enabled
-    if (this.state.feedHideRead && $(item).hasClass('item-read')) {
-      return false;
-    }
-
-    // If no filter is set, show everything
-    if (!this.state.filter || !this.state.rules) {
-      return true;
-    }
-
-    // Parse and evaluate filter rules
-    const activeRules = this.parseFilterRules(this.state.filter);
-    return activeRules
-      .map((rule) => this.evaluateFilterRule(item, rule))
-      .every((result) => result === true);
-  }
-
-  /**
-   * Parses filter text into structured rule objects.
-   * @private
-   * @param {string} filterText - Space-separated filter rules
-   * @returns {Array} Array of rule objects with invert, matchType, and query
-   *
-   * Rule format: [!][$@%]"query" or [!][$@%]query
-   * - ! = invert/negate the match
-   * - $ = match against named rule set
-   * - @ = match author handle/display name
-   * - % = match post content
-   * - no prefix = match author OR content
-   */
-  parseFilterRules(filterText) {
-    return filterText.split(/[ ]+/).map((ruleStatement) => {
-      const match = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
-      return {
-        invert: match[1] === '!',
-        matchType: match[2] || null,
-        query: match[3],
-      };
-    });
-  }
-
-  /**
-   * Evaluates a single filter rule against an item.
-   * @private
-   */
-  evaluateFilterRule(item, rule) {
-    let allowed = null;
-
-    switch (rule.matchType) {
-      case '$':
-        allowed = this.evaluateNamedRule(item, rule.query);
-        break;
-      case '@':
-        allowed = this.filterAuthor(item, rule.query);
-        break;
-      case '%':
-        allowed = this.filterContent(item, rule.query);
-        break;
-      default:
-        // No prefix: match author OR content
-        allowed = this.filterAuthor(item, rule.query) || this.filterContent(item, rule.query);
-    }
-
-    return rule.invert ? !allowed : allowed;
-  }
-
-  /**
-   * Evaluates a named rule set against an item.
-   * @private
-   */
-  evaluateNamedRule(item, ruleName) {
-    const rules = this.state.rules[ruleName];
-    if (!rules) {
-      console.warn(`Filter rule not found: ${ruleName}`);
-      return null;
-    }
-
-    let allowed = null;
-    for (const rule of rules) {
-      if (rule.type === 'all') {
-        allowed = rule.action === 'allow';
-      } else if (rule.type === 'from' && this.filterAuthor(item, rule.value.substring(1))) {
-        allowed = allowed || rule.action === 'allow';
-      } else if (rule.type === 'content' && this.filterContent(item, rule.value)) {
-        allowed = allowed || rule.action === 'allow';
-      }
-    }
-    return allowed;
-  }
-
-  /**
-   * Checks if an item's author matches a pattern.
-   * @param {Element} item - The feed item
-   * @param {string} author - Pattern to match against handle or display name
-   * @returns {boolean} True if author matches
-   */
-  filterAuthor(item, author) {
-    const pattern = new RegExp(author, 'i');
-    const handle = this.handleFromItem(item);
-    const displayName = this.displayNameFromItem(item);
-    return pattern.test(handle) || pattern.test(displayName);
-  }
-
-  filterContent(item, query) {
-    const pattern = new RegExp(query, 'i');
-    const content = $(item).find('div[data-testid="postText"]').text();
-    return content.match(pattern);
-  }
-
-  filterThread(thread) {
-    return $(thread).find('.item').length != $(thread).find('.filtered').length;
-  }
-
-  filterItems() {
-    const hideRead = this.state.feedHideRead;
-    $('#filterIndicatorImage').attr('src', this.INDICATOR_IMAGES.filter[+hideRead]);
-    $('#filterIndicator').attr(
-      'title',
-      `show all or unread (currently ${hideRead ? 'unread' : 'all'})`
-    );
-
-    const parent = $(this.selector).first().closest('.thread').parent();
-    const unseenThreads = parent.find('.thread'); //.not("div.bsky-navigator-seen")
-    $(unseenThreads).map((i, thread) => {
-      $(thread)
-        .find('.item')
-        .each((i, item) => {
-          if (this.filterItem(item, thread)) {
-            $(item).removeClass('filtered');
-          } else {
-            $(item).addClass('filtered');
-          }
-        });
-
-      if (this.filterThread(thread)) {
-        $(thread).removeClass('filtered');
-      } else {
-        $(thread).addClass('filtered');
-      }
-    });
-
-    // FIXME: pretty inefficient to loop over these again
-    $(unseenThreads).map((i, thread) => {
-      $(thread)
-        .find('.item')
-        .each((i, item) => {
-          const offset = parseInt($(item).data('bsky-navigator-thread-offset'));
-          // console.log(offset);
-          if (
-            offset > 0 &&
-            $(item).hasClass('item-unread') &&
-            this.config.get('showReplyContext')
-          ) {
-            const index = parseInt($(thread).data('bsky-navigator-thread-index'));
-            const prev = $(
-              `div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset - 1}"]`
-            );
-            // console.log("prev", prev);
-            $(prev).removeClass('filtered');
-            $(prev).closest('.thread').removeClass('filtered');
-          }
-        });
-    });
-
-    this.refreshItems();
-    if (hideRead && $(this.selectedItem).hasClass('item-read')) {
-      console.log('jumping');
-      this.jumpToNextUnseenItem();
-    }
-  }
-
-  sortItems() {
-    const reversed = this.state.feedSortReverse;
-    $('#sortIndicatorImage').attr('src', this.INDICATOR_IMAGES.sort[+reversed]);
-    $('#sortIndicator').attr(
-      'title',
-      `change sort order (currently ${reversed ? 'forward' : 'reverse'} chronological)`
-    );
-
-    const parent = $(this.selector).closest('.thread').first().parent();
-    const newItems = parent
-      .children()
-      .filter((i, item) => $(item).hasClass('thread'))
-      .get()
-      .sort((a, b) => {
-        const threadIndexA = parseInt($(a).data('bsky-navigator-thread-index'));
-        const threadIndexB = parseInt($(b).data('bsky-navigator-thread-index'));
-        const itemIndexA = parseInt($(a).find('.item').data('bsky-navigator-item-index'));
-        const itemIndexB = parseInt($(b).find('.item').data('bsky-navigator-item-index'));
-        // console.log(threadIndexA, threadIndexB, itemIndexA, itemIndexB);
-        if (threadIndexA !== threadIndexB) {
-          return reversed ? threadIndexB - threadIndexA : threadIndexA - threadIndexB;
-        }
-        return itemIndexA - itemIndexB;
-      });
-    // debugger;
-    reversed ^ this.loadingNew
-      ? parent.prepend(newItems)
-      : parent.children('.thread').last().next().after(newItems);
-  }
-
-  handleInput(event) {
-    const item = this.selectedItem;
-    if (event.key == 'a') {
-      $(item).find(constants.PROFILE_SELECTOR)[0].click();
-    } else if (event.key == 'u') {
-      this.loadNewerItems();
-    } else if (event.key == ':') {
-      this.toggleSortOrder();
-    } else if (event.key == '"') {
-      this.toggleHideRead();
-    } else if (event.key == '/') {
-      event.preventDefault();
-      $('input#bsky-navigator-search').focus();
-    } else if (event.key == ',') {
-      this.loadItems();
-    } else {
-      super.handleInput(event);
-    }
-  }
-}
-
-export class PostItemHandler extends ItemHandler {
-  constructor(name, config, state, api, selector) {
-    super(name, config, state, api, selector);
-    this.indexMap = {};
-    this.handleInput = this.handleInput.bind(this);
-  }
-
-  get index() {
-    return this.indexMap?.[this.postId] ?? 0;
-  }
-
-  set index(value) {
-    this.indexMap[this.postId] = value;
-  }
-
-  activate() {
-    super.activate();
-    this.postId = this.postIdFromUrl();
-    // this.markPostRead(this.postId, null)
-
-    // console.log(`postId: ${this.postId} ${this.index}`)
-  }
-
-  deactivate() {
-    super.deactivate();
-  }
-
-  isActive() {
-    return window.location.pathname.match(/\/post\//);
-  }
-
-  get scrollMargin() {
-    return $('div[data-testid="postThreadScreen"] > div:visible').eq(0).outerHeight();
-  }
-
-  // getIndexFromItem(item) {
-  //     return $(item).parent().parent().parent().parent().index() - 3
-  // }
-
-  handleInput(event) {
-    if (['o', 'Enter'].includes(event.key) && !(event.altKey || event.metaKey)) {
-      // o/Enter = open inner post
-      const inner = $(item).find("div[aria-label^='Post by']");
-      inner.click();
-    }
-
-    if (super.handleInput(event)) {
-      return;
-    }
-
-    if (this.isPopupVisible || event.altKey || event.metaKey) {
-      return;
-    }
-
-    const item = this.selectedItem;
-    if (event.key == 'a') {
-      const handle = $.trim($(item).attr('data-testid').split('postThreadItem-by-')[1]);
-      $(item)
-        .find('div')
-        .filter(
-          (i, el) =>
-            $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, '') == `@${handle}`
-        )[0]
-        .click();
-    }
-  }
-}
-
-export class ProfileItemHandler extends FeedItemHandler {
-  constructor(name, config, state, api, selector) {
-    super(name, config, state, api, selector);
-  }
-
-  activate() {
-    this.setIndex(0);
-    super.activate();
-  }
-
-  deactivate() {
-    super.deactivate();
-  }
-
-  isActive() {
-    return window.location.pathname.match(/^\/profile\//);
-  }
-
-  handleInput(event) {
-    if (super.handleInput(event)) {
-      return;
-    }
-    if (event.altKey || event.metaKey) {
-      return;
-    }
-    if (event.key == 'f') {
-      // f = follow
-      $("button[data-testid='followBtn']").click();
-    } else if (event.key == 'F') {
-      // could make this a toggle but safer to make it a distinct shortcut
-      $("button[data-testid='unfollowBtn']").click();
-    } else if (event.key == 'L') {
-      // L = add to list
-      $("button[aria-label^='More options']").click();
-      setTimeout(function () {
-        $("div[data-testid='profileHeaderDropdownListAddRemoveBtn']").click();
-      }, 200);
-    } else if (event.key == 'M') {
-      // M = mute
-      $("button[aria-label^='More options']").click();
-      setTimeout(function () {
-        $("div[data-testid='profileHeaderDropdownMuteBtn']").click();
-      }, 200);
-    } else if (event.key == 'B') {
-      // B = block
-      $("button[aria-label^='More options']").click();
-      setTimeout(function () {
-        $("div[data-testid='profileHeaderDropdownBlockBtn']").click();
-      }, 200);
-    } else if (event.key == 'R') {
-      // R = report
-      $("button[aria-label^='More options']").click();
-      setTimeout(function () {
-        $("div[data-testid='profileHeaderDropdownReportBtn']").click();
-      }, 200);
     }
   }
 }

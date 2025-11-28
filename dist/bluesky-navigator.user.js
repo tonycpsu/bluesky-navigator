@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+360.dbc4e001
+// @version     1.0.31+361.32d0937d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44642,7 +44642,7 @@ if (cid) {
       debounceTimeout = setTimeout(() => func.apply(this, args), delay);
     };
   }
-  function waitForElement$2(selector, onAdd, onRemove, onChange, ignoreExisting) {
+  function waitForElement$3(selector, onAdd, onRemove, onChange, ignoreExisting) {
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (onAdd) {
@@ -44727,7 +44727,7 @@ if (cid) {
     observeChanges: observeChanges$1,
     observeVisibilityChange: observeVisibilityChange$1,
     splitTerms,
-    waitForElement: waitForElement$2
+    waitForElement: waitForElement$3
   }, Symbol.toStringTag, { value: "Module" }));
   const CONFIG_FIELDS = {
     displaySection: {
@@ -45002,6 +45002,71 @@ if (cid) {
   const style = '/* style.css */\n\ndiv[style^="position: fixed; inset: 0px 0px 0px 50%;"] {\n    border: none;\n}\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    width: 100%;\n    height: 32px;\n    background-color: inherit;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n@media (prefers-color-scheme: dark) {\n    div#bsky-navigator-toolbar {\n        background-color: #29333d\n    }\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n@media (prefers-color-scheme: dark) {\n    .indicator-image {\n        filter: invert(1) brightness(2);\n    }\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\ndiv#infoIndicatorText {\n    font-size: 0.8em;\n}\n\ndiv#itemTimestampStats {\n    font-size: 0.7em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n        overflow: clip;\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n        overflow: clip;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    div#statusBar {\n        background-color: #29333d;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n#prevButton {\n    z-index: 1000;\n    position: absolute;\n    top: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#prevButton.mobile {\n    position: fixed;\n    left: 1%;\n    top: 25%;\n}\n\n#nextButton {\n    z-index: 1000;\n    position: absolute;\n    bottom: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#nextButton.mobile {\n    position: fixed;\n    left: 1%;\n    bottom: 20%;\n}\n\nnav.r-1wyvozj {\n    overflow: inherit;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    bottom: 2px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n\n.popup {\n    display: none;\n    position: fixed;\n    max-height: 80vH;\n    top: 50%;\n    left: 50%;\n    transform: translate(-50%, -50%);\n    /* transform: scale(0.25); /\\* Scale down to 75% *\\/ */\n    background: white;\n    padding: 15px;\n    border-radius: 12px;\n    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n    width: 400px;\n    z-index: 1000;\n}\n\nnav + div {\n    display: none;\n}\n\ndiv:has(>div.item) {\n    display: flex;\n    flex-direction: row;\n    align-items: stretch;\n}\n\n.item {\n    display: flex;\n    flex: 2;\n    max-height: 100%;\n}\n\n.item > div:first-of-type {\n    flex: 1;\n    align-items: stretch;\n\n}\n\n.item > div:first-of-type > div:last-of-type {\n    flex: 1;\n}\n\n.unrolled-banner {\n    position: absolute;\n    top: -0.5em;\n    left: 10px;\n    padding: 0px 5px;\n    backdrop-filter: blur(10px);\n    color: #888;\n}\n\n.unrolled-divider {\n    margin-top: 1em;\n    border: 1px solid #eee;\n    color: white;\n}\n\n.unrolled-reply {\n    /* border: 1px transparent; */\n    margin: 1px;\n    border: 1px solid transparent;\n    box-sizing: border-box;\n}\n\n.sidecar-replies {\n    flex: 1 1 0;\n    min-height: 0;\n    overflow-y: auto;\n    font-size: 0.8em;\n    padding-left: 10px;\n    display: flex;\n    flex-direction: column;\n    max-height: 50vH;\n}\n\n.sidecar-parent-indicator {\n    position: absolute;\n}\n\n.sidecar-post {\n    display: flex;\n    flex-direction: column;\n    padding: 5px;\n    flex-shrink: 0;\n    font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";\n}\n\n.sidecar-post a {\n    text-decoration: none;\n}\n\n.sidecar-post a:hover {\n    text-decoration: underline;\n}\n\n.sidecar-post-user-info {\n    display: flex;\n    flex-direction: row;\n    font-size: 0.9em;\n}\n\n.sidecar-post-avatar {\n    width: 24px;\n    height: 24px;\n    padding: 2px;\n}\n\n.sidecar-post-username {\n    font-weight: 600;\n    color: rgb(11, 15, 20);\n}\n\n.sidecar-post-handle {\n    color: rgb(66, 87, 108);\n    font-variant: no-contextual;\n}\n\n.sidecar-post-content {\n    padding: 5px 0px;\n}\n\n.sidecar-post-content a {\n    color: rgb(16, 131, 254);\n}\n\n.sidecar-post-footer {\n    color: rgb(66, 87, 108);\n    display: flex;\n    flex-direction: row;\n    font-size: 11px;\n}\n\n.sidecar-post-footer svg, .sidecar-post-footer span {\n    display: inline-flex;\n    vertical-align: middle;\n    /* flex: 1; */\n    color: rgb(111, 134, 159);\n}\n\n.sidecar-post-timestamp {\n    display: inline-flex;\n    vertical-align: middle;\n    flex: 3;\n}\n\n.sidecar-parent .sidecar-post {\n    border: 3px dashed rgb(111, 134, 159);\n    padding: 5px;\n}\n\n.sidecar-post-counts {\n    display: flex;\n    flex: 2;\n}\n\n.sidecar-count {\n    display: flex;\n    flex: 1;\n    justify-content: right;\n    align-items: center;\n}\n\n.sidecar-count-icon > svg {\n  height: 1em;\n}\n';
   const configCss = "h1 {\n    font-size: 18pt;\n}\n\nh2 {\n    font-size: 14pt;\n}\n.config_var textarea {\n    width: 100%;\n    height: 1.5em;\n}\n\n#GM_config_rulesConfig_var textarea {\n    height: 10em;\n}\n\n#GM_config_stateSyncConfig_var textarea {\n    height: 10em;\n}\n\n\n\n#GM_config_header {\n    position: fixed;\n    background-color: inherit;\n    top: -10px;\n    width: 100%;\n}\n\n@media (prefers-color-scheme: light) {\n    #GM_config_header {\n        background-color: #ffffff;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    #GM_config_header {\n        background-color: #29333d;\n    }\n}\n\n#GM_config_section_0 {\n    padding-top: 100px;\n}\n\n#GM_config_buttons_holder {\n    position: fixed;\n    top: 0;\n    right: 0;\n}\n";
   const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-parent">\n  <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n  {{> postTemplate parent}}\n  </div>\n  {{/if}}\n  {{#each replies}}\n  {{> postTemplate this}}\n  {{/each}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>    \n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this}}\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title="{{alt}}"></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">\n  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">\n      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>\n      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{{text}}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images" style="margin-top: 8px;">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a href="{{uri}}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">\n  <div class="sidecar-embed-external" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; margin-top: 8px; overflow: hidden;">\n    {{#if thumb}}\n    <div class="sidecar-external-thumb" style="width: 100%; max-height: 200px; overflow: hidden;">\n      <img src="{{thumb}}" alt="{{title}}" style="width: 100%; object-fit: cover;" loading="lazy">\n    </div>\n    {{/if}}\n    <div class="sidecar-external-info" style="padding: 12px;">\n      <div class="sidecar-external-domain" style="font-size: 12px; color: rgb(112, 127, 140); margin-bottom: 4px;">{{domain}}</div>\n      <div class="sidecar-external-title" style="font-weight: 600; margin-bottom: 4px;">{{title}}</div>\n      {{#if description}}\n      <div class="sidecar-external-description" style="font-size: 14px; color: rgb(66, 87, 108); line-height: 1.3;">{{description}}</div>\n      {{/if}}\n    </div>\n  </div>\n</a>\n<\/script>\n';
+  class Handler {
+    constructor(name, config2, state2, api) {
+      this.name = name;
+      this.config = config2;
+      this.state = state2;
+      this.api = api;
+      this.items = [];
+      this.handleInput = this.handleInput.bind(this);
+    }
+    activate() {
+      this.bindKeys();
+    }
+    deactivate() {
+      this.unbindKeys();
+    }
+    isActive() {
+      return true;
+    }
+    bindKeys() {
+      document.addEventListener("keydown", this.handleInput, true);
+    }
+    unbindKeys() {
+      document.removeEventListener("keydown", this.handleInput, true);
+    }
+    handleInput(event) {
+      if (event.altKey && !event.metaKey) {
+        if (event.code === "KeyH") {
+          event.preventDefault();
+          $("nav a[aria-label='Home']")[0].click();
+        } else if (event.code === "KeyS") {
+          event.preventDefault();
+          $("nav a[aria-label='Search']")[0].click();
+        } else if (event.code === "KeyN") {
+          event.preventDefault();
+          $("nav a[aria-label='Notifications']")[0].click();
+        } else if (event.code === "KeyM") {
+          event.preventDefault();
+          $("nav a[aria-label='Chat']")[0].click();
+        } else if (event.code === "KeyF") {
+          event.preventDefault();
+          $("nav a[aria-label='Feeds']")[0].click();
+        } else if (event.code === "KeyL") {
+          event.preventDefault();
+          $("nav a[aria-label='Lists']")[0].click();
+        } else if (event.code === "KeyP") {
+          event.preventDefault();
+          $("nav a[aria-label='Profile']")[0].click();
+        } else if (event.code === "Comma") {
+          event.preventDefault();
+          $("nav a[aria-label='Settings']")[0].click();
+        } else if (event.code === "Period") {
+          event.preventDefault();
+          this.config.open();
+        } else if (event.code === "Enter" && $("#GM_config").is(":visible")) {
+          event.preventDefault();
+          this.config.save();
+        }
+      } else if (!event.altKey && !event.metaKey) {
+        if (event.code == "Escape" && $("#GM_config").is(":visible")) {
+          event.preventDefault();
+          this.config.close();
+        }
+      }
+    }
+  }
   const millisecondsInWeek = 6048e5;
   const millisecondsInDay = 864e5;
   const constructFromSymbol = Symbol.for("constructDateFrom");
@@ -59933,7 +59998,6 @@ if (cid) {
     var defaultBackgroundColor = typeof backgroundColorOverride === "string" ? parseColor(context, backgroundColorOverride) : backgroundColorOverride === null ? COLORS.TRANSPARENT : 4294967295;
     return element === ownerDocument.documentElement ? isTransparent(documentBackgroundColor) ? isTransparent(bodyBackgroundColor) ? defaultBackgroundColor : bodyBackgroundColor : documentBackgroundColor : defaultBackgroundColor;
   };
-  const { waitForElement: waitForElement$1 } = utils$1;
   function convertToEmbed(url) {
     try {
       let embedHtml = "";
@@ -60064,7 +60128,6 @@ if (cid) {
       displayName: post2.author.displayName || post2.author.handle,
       handle: post2.author.handle,
       content: formatPostText(post2.record),
-      // content: post.record.text,
       embed: post2.embed,
       quotedPost: extractQuotedPost(post2.embed),
       externalLink: extractExternalLink(post2.embed),
@@ -60077,71 +60140,7 @@ if (cid) {
       likeCount: formatter.format(post2.likeCount)
     };
   }
-  class Handler {
-    constructor(name, config2, state2, api) {
-      this.name = name;
-      this.config = config2;
-      this.state = state2;
-      this.api = api;
-      this.items = [];
-      this.handleInput = this.handleInput.bind(this);
-    }
-    activate() {
-      this.bindKeys();
-    }
-    deactivate() {
-      this.unbindKeys();
-    }
-    isActive() {
-      return true;
-    }
-    bindKeys() {
-      document.addEventListener("keydown", this.handleInput, true);
-    }
-    unbindKeys() {
-      document.removeEventListener("keydown", this.handleInput, true);
-    }
-    handleInput(event) {
-      if (event.altKey && !event.metaKey) {
-        if (event.code === "KeyH") {
-          event.preventDefault();
-          $("nav a[aria-label='Home']")[0].click();
-        } else if (event.code === "KeyS") {
-          event.preventDefault();
-          $("nav a[aria-label='Search']")[0].click();
-        } else if (event.code === "KeyN") {
-          event.preventDefault();
-          $("nav a[aria-label='Notifications']")[0].click();
-        } else if (event.code === "KeyM") {
-          event.preventDefault();
-          $("nav a[aria-label='Chat']")[0].click();
-        } else if (event.code === "KeyF") {
-          event.preventDefault();
-          $("nav a[aria-label='Feeds']")[0].click();
-        } else if (event.code === "KeyL") {
-          event.preventDefault();
-          $("nav a[aria-label='Lists']")[0].click();
-        } else if (event.code === "KeyP") {
-          event.preventDefault();
-          $("nav a[aria-label='Profile']")[0].click();
-        } else if (event.code === "Comma") {
-          event.preventDefault();
-          $("nav a[aria-label='Settings']")[0].click();
-        } else if (event.code === "Period") {
-          event.preventDefault();
-          this.config.open();
-        } else if (event.code === "Enter" && $("#GM_config").is(":visible")) {
-          event.preventDefault();
-          this.config.save();
-        }
-      } else if (!event.altKey && !event.metaKey) {
-        if (event.code == "Escape" && $("#GM_config").is(":visible")) {
-          event.preventDefault();
-          this.config.close();
-        }
-      }
-    }
-  }
+  const { waitForElement: waitForElement$2 } = utils$1;
   class ItemHandler extends Handler {
     // POPUP_MENU_SELECTOR = "div[data-radix-popper-content-wrapper]"
     POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
@@ -60149,14 +60148,8 @@ if (cid) {
     THREAD_PAGE_SELECTOR = "main > div > div > div";
     MOUSE_MOVEMENT_THRESHOLD = 10;
     FLOATING_BUTTON_IMAGES = {
-      prev: [
-        // 'https://www.svgrepo.com/show/491060/prev.svg'
-        "https://www.svgrepo.com/show/238452/up-arrow.svg"
-      ],
-      next: [
-        // 'https://www.svgrepo.com/show/491054/next.svg'
-        "https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg"
-      ]
+      prev: ["https://www.svgrepo.com/show/238452/up-arrow.svg"],
+      next: ["https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg"]
     };
     constructor(name, config2, state2, api, selector) {
       super(name, config2, state2, api);
@@ -60191,30 +60184,30 @@ if (cid) {
       this.scrollTick = false;
       this.scrollTop = 0;
       this.scrollDirection = 0;
-      waitForElement$1("#sidecar-replies-template", () => {
+      waitForElement$2("#sidecar-replies-template", () => {
         this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
       });
-      waitForElement$1("#sidecar-post-template", () => {
+      waitForElement$2("#sidecar-post-template", () => {
         this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
         Handlebars.registerPartial("postTemplate", this.postTemplate);
       });
-      waitForElement$1("#sidecar-footer-template", () => {
+      waitForElement$2("#sidecar-footer-template", () => {
         this.footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
         Handlebars.registerPartial("footerTemplate", this.footerTemplate);
       });
-      waitForElement$1("#sidecar-post-counts-template", () => {
+      waitForElement$2("#sidecar-post-counts-template", () => {
         this.postCountsTemplate = Handlebars.compile($("#sidecar-post-counts-template").html());
         Handlebars.registerPartial("postCountsTemplate", this.postCountsTemplate);
       });
-      waitForElement$1("#sidecar-embed-image-template", () => {
+      waitForElement$2("#sidecar-embed-image-template", () => {
         this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
         Handlebars.registerPartial("imageTemplate", this.imageTemplate);
       });
-      waitForElement$1("#sidecar-embed-quote-template", () => {
+      waitForElement$2("#sidecar-embed-quote-template", () => {
         this.quoteTemplate = Handlebars.compile($("#sidecar-embed-quote-template").html());
         Handlebars.registerPartial("quoteTemplate", this.quoteTemplate);
       });
-      waitForElement$1("#sidecar-embed-external-template", () => {
+      waitForElement$2("#sidecar-embed-external-template", () => {
         this.externalTemplate = Handlebars.compile($("#sidecar-embed-external-template").html());
         Handlebars.registerPartial("externalTemplate", this.externalTemplate);
       });
@@ -60224,29 +60217,25 @@ if (cid) {
     }
     activate() {
       this.keyState = [];
-      this.popupObserver = waitForElement$1(
+      this.popupObserver = waitForElement$2(
         this.POPUP_MENU_SELECTOR,
         this.onPopupAdd,
         this.onPopupRemove
       );
       this.intersectionObserver = new IntersectionObserver(this.onIntersection, {
         root: null,
-        // Observing within the viewport
-        // rootMargin: `-${ITEM_SCROLL_MARGIN}px 0px 0px 0px`,
         threshold: Array.from({ length: 101 }, (_, i2) => i2 / 100)
       });
       this.setupIntersectionObserver();
       this.footerIntersectionObserver = new IntersectionObserver(this.onFooterIntersection, {
         root: null,
-        // Observing within the viewport
-        // threshold: [1]
         threshold: Array.from({ length: 101 }, (_, i2) => i2 / 100)
       });
       const safeSelector = `${this.selector}:not(.thread ${this.selector})`;
-      this.observer = waitForElement$1(safeSelector, (element) => {
+      this.observer = waitForElement$2(safeSelector, (element) => {
         this.onItemAdded(element), this.onItemRemoved(element);
       });
-      this.loadNewerObserver = waitForElement$1(constants.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
+      this.loadNewerObserver = waitForElement$2(constants.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
         this.loadNewerButton = $(button)[0];
         $("a#loadNewerIndicatorLink").on("click", () => this.loadNewerItems());
         $("img#loadNewerIndicatorImage").addClass("image-highlight");
@@ -60268,7 +60257,6 @@ if (cid) {
             }, 0);
           },
           true
-          // Capture phase
         );
       });
       this.enableIntersectionObserver = true;
@@ -60277,7 +60265,7 @@ if (cid) {
         setTimeout(() => this.ignoreMouseMovement = false, 500);
       });
       console.log(this.state.mobileView);
-      this.floatingButtonsObserver = waitForElement$1(
+      this.floatingButtonsObserver = waitForElement$2(
         this.state.mobileView ? constants.HOME_SCREEN_SELECTOR : constants.LEFT_SIDEBAR_SELECTOR,
         (container) => {
           console.log(container);
@@ -60457,7 +60445,6 @@ if (cid) {
         block: block2 == null ? "start" : block2
       });
     }
-    // Function to programmatically play a video from the userscript
     playVideo(video2) {
       video2.dataset.allowPlay = "true";
       video2.play();
@@ -60952,7 +60939,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         window.scrollTo(0, 0);
       } else if ($(this.selectedItem).length) {
         this.scrollToElement($(this.selectedItem)[0]);
-      } else ;
+      }
       setTimeout(() => {
         console.log("enable");
         this.ignoreMouseMovement = false;
@@ -61048,7 +61035,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.markItemRead(i2, true);
       });
     }
-    // FIXME: move to PostItemHanler
+    // FIXME: move to PostItemHandler
     handleNewThreadPage(_element) {
       console.log(this.items.length);
       this.loadPageObserver.disconnect();
@@ -61063,7 +61050,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       } else {
         const next = $(this.selectedItem).parent().parent().parent().next();
         if (next && $.trim(next.text()) == "Continue thread...") {
-          this.loadPageObserver = waitForElement$1(this.THREAD_PAGE_SELECTOR, this.handleNewThreadPage);
+          this.loadPageObserver = waitForElement$2(this.THREAD_PAGE_SELECTOR, this.handleNewThreadPage);
           console.log(this.loadPageObserver);
           $(next).find("div").click();
         }
@@ -61329,7 +61316,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const canvas = await html2canvas(item, {
           backgroundColor: null,
           scale: 2,
-          // Higher quality
           logging: false,
           useCORS: true
         });
@@ -61528,6 +61514,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
   }
+  const { waitForElement: waitForElement$1 } = utils$1;
   class FeedItemHandler extends ItemHandler {
     INDICATOR_IMAGES = {
       loadTop: ["https://www.svgrepo.com/show/502348/circleupmajor.svg"],
@@ -61573,7 +61560,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $(buttonsDiv).parent().css({
           "min-height": "160px",
           "min-width": "80px"
-          // "margin-left": "10px"
         });
         $(buttonsDiv).parent().children().first().css("flex", "");
         buttonsDiv.css({
@@ -61608,7 +61594,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               "align-items": "center",
               "justify-content": "space-between",
               gap: "12px",
-              // "width": "100%",
               padding: "0px"
             });
           }
@@ -61618,7 +61603,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const svg = $(button).find("svg").first();
           $(svg).css({
             "flex-shrink": "0",
-            // "vertical-align": "middle", /* Ensures SVG is aligned with the text */
             display: "block"
           });
         });
@@ -61861,15 +61845,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     /**
      * Parses filter text into structured rule objects.
      * @private
-     * @param {string} filterText - Space-separated filter rules
-     * @returns {Array} Array of rule objects with invert, matchType, and query
-     *
-     * Rule format: [!][$@%]"query" or [!][$@%]query
-     * - ! = invert/negate the match
-     * - $ = match against named rule set
-     * - @ = match author handle/display name
-     * - % = match post content
-     * - no prefix = match author OR content
      */
     parseFilterRules(filterText) {
       return filterText.split(/[ ]+/).map((ruleStatement) => {
@@ -61926,9 +61901,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     /**
      * Checks if an item's author matches a pattern.
-     * @param {Element} item - The feed item
-     * @param {string} author - Pattern to match against handle or display name
-     * @returns {boolean} True if author matches
      */
     filterAuthor(item, author) {
       const pattern = new RegExp(author, "i");
@@ -62051,10 +62023,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     get scrollMargin() {
       return $('div[data-testid="postThreadScreen"] > div:visible').eq(0).outerHeight();
     }
-    // getIndexFromItem(item) {
-    //     return $(item).parent().parent().parent().parent().index() - 3
-    // }
     handleInput(event) {
+      const item = this.selectedItem;
       if (["o", "Enter"].includes(event.key) && !(event.altKey || event.metaKey)) {
         const inner = $(item).find("div[aria-label^='Post by']");
         inner.click();
@@ -62065,7 +62035,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.isPopupVisible || event.altKey || event.metaKey) {
         return;
       }
-      const item = this.selectedItem;
       if (event.key == "a") {
         const handle2 = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1]);
         $(item).find("div").filter(

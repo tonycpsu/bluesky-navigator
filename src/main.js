@@ -18,7 +18,7 @@ import {
   FeedItemHandler,
   PostItemHandler,
   ProfileItemHandler,
-} from './handlers.js';
+} from './handlers/index.js';
 
 GM_addStyle(style);
 

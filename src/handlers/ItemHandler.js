@@ -1624,7 +1624,9 @@ export class ItemHandler extends Handler {
         }
 
         // Add empty sidecar container placeholder (actual content loads on selection)
+        // Skip on mobile view
         if (
+          !this.state.mobileView &&
           this.config.get('showReplySidecar') &&
           $(this.selectedItem).closest('.thread').outerWidth() >=
             this.config.get('showReplySidecarMinimumWidth')

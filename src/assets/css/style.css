@@ -460,30 +460,35 @@ div.item-banner {
     z-index: 1000;
 }
 
-nav + div {
-    display: none;
+/* Hide the reply connector line in threaded posts - only on desktop */
+@media only screen and (min-width: 801px) {
+    div:has(>div.item) > nav + div {
+        display: none;
+    }
 }
 
-div:has(>div.item) {
-    display: flex;
-    flex-direction: row;
-    align-items: stretch;
-}
+/* Sidecar layout - desktop only */
+@media only screen and (min-width: 801px) {
+    div:has(>div.item) {
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+    }
 
-.item {
-    display: flex;
-    flex: 2;
-    max-height: 100%;
-}
+    .item {
+        display: flex;
+        flex: 2;
+        max-height: 100%;
+    }
 
-.item > div:first-of-type {
-    flex: 1;
-    align-items: stretch;
+    .item > div:first-of-type {
+        flex: 1;
+        align-items: stretch;
+    }
 
-}
-
-.item > div:first-of-type > div:last-of-type {
-    flex: 1;
+    .item > div:first-of-type > div:last-of-type {
+        flex: 1;
+    }
 }
 
 .unrolled-banner {
@@ -517,6 +522,13 @@ div:has(>div.item) {
     display: flex;
     flex-direction: column;
     max-height: 50vH;
+}
+
+/* Hide sidecar on mobile */
+@media only screen and (max-width: 800px) {
+    .sidecar-replies {
+        display: none;
+    }
 }
 
 .sidecar-parent-indicator {

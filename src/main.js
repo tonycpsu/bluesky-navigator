@@ -477,7 +477,8 @@ function getScreenFromElement(element) {
           $('input[role="search"]').focus();
         }
       }
-      if (!widthWatcher) {
+      // Only set up width watcher on desktop
+      if (!widthWatcher && !state.mobileView) {
         widthWatcher = waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
       }
     }
@@ -585,16 +586,26 @@ function getScreenFromElement(element) {
     }
 
     // set up observer to detect if mobile interface is active
-    state.mobileView = false;
+    // Use both element detection AND screen width as fallback
+    state.mobileView = window.innerWidth <= 800;
+    console.log('Initial mobileView (by width):', state.mobileView, 'width:', window.innerWidth);
 
     const viewportChangeObserver = waitForElement(
       `${constants.DRAWER_MENU_SELECTOR}, ${constants.LEFT_SIDEBAR_SELECTOR}`,
       (element) => {
-        console.log('viewport');
-        state.mobileView = $(element).is(constants.DRAWER_MENU_SELECTOR);
-        console.log(state.mobileView);
+        console.log('viewport element found:', element);
+        // Check both element type AND screen width for more reliable detection
+        const isMobileByElement = $(element).is(constants.DRAWER_MENU_SELECTOR);
+        const isMobileByWidth = window.innerWidth <= 800;
+        state.mobileView = isMobileByElement || isMobileByWidth;
+        console.log('mobileView:', state.mobileView, '(byElement:', isMobileByElement, ', byWidth:', isMobileByWidth, ')');
         startMonitor();
         setContextFromUrl();
+
+        // Only set up width management on desktop, after mobileView is determined
+        if (!state.mobileView) {
+          waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
+        }
       }
     );
 
@@ -613,6 +624,13 @@ function getScreenFromElement(element) {
     }
 
     function setWidth(leftSidebar, width) {
+      // Skip width adjustments on mobile
+      if (state.mobileView) {
+        console.log('[bsky-navigator] setWidth skipped - mobile view');
+        return;
+      }
+      console.log('[bsky-navigator] setWidth called with width:', width);
+
       const LEFT_TRANSLATE_X_DEFAULT = -540;
       const RIGHT_TRANSLATE_X_DEFAULT = 300;
 
@@ -712,11 +730,10 @@ function getScreenFromElement(element) {
     }
 
     $(window).resize(function () {
+      if (state.mobileView) return;
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(onWindowResize, 500); // Adjust delay as needed
     });
-
-    waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
   }
 
   const configTitleDiv = `

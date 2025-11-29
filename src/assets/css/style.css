@@ -138,6 +138,7 @@ div#bsky-navigator-toolbar {
 }
 
 .toolbar-icon {
+    position: relative;
     margin: 0px;
     width: 24px;
     height: 24px;
@@ -427,7 +428,8 @@ div.item-banner {
 
 .load-time-icon {
     position: absolute;
-    bottom: 2px;
+    left: 8px;
+    bottom: -1px;
     width: 24px;
     height: 24px;
     opacity: 0.8;

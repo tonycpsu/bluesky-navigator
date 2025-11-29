@@ -202,7 +202,11 @@ export class FeedItemHandler extends ItemHandler {
     });
 
     $('#bsky-navigator-search').on('keydown', function (event) {
-      if (event.key === 'Tab') {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        $(this).autocomplete('close');
+        $(this).blur();
+      } else if (event.key === 'Tab') {
         const autocompleteMenu = $('.ui-autocomplete:visible');
         const firstItem = autocompleteMenu.children('.ui-menu-item').first();
 

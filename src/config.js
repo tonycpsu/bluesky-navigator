@@ -146,22 +146,22 @@ export const CONFIG_FIELDS = {
   selectionActive: {
     label: 'CSS Style: Selected Post',
     type: 'textarea',
-    default: 'outline: 3px rgba(255, 0, 0, .6) solid !important;',
+    default: 'outline: var(--focus-ring-width, 2px) var(--focus-ring-color, #0066cc) solid !important;',
   },
   selectionChildFocused: {
     label: 'CSS Style: Selected Child Post Focused',
     type: 'textarea',
-    default: 'outline: 3px rgba(128, 0, 0, .2) solid !important;',
+    default: 'outline: var(--focus-ring-width, 2px) color-mix(in srgb, var(--focus-ring-color, #0066cc) 40%, transparent) solid !important;',
   },
   selectionInactive: {
     label: 'CSS Style: Unselected Post',
     type: 'textarea',
-    default: 'outline: 3px solid transparent;',
+    default: 'outline: var(--focus-ring-width, 2px) solid transparent;',
   },
   replySelectionActive: {
     label: 'CSS Style: Selected Reply',
     type: 'textarea',
-    default: 'outline: 1px rgba(255, 0, 0, .8) solid !important;',
+    default: 'outline: 1px var(--focus-ring-color, #0066cc) solid !important;',
   },
   replySelectionInactive: {
     label: 'CSS Style: Unselected Replies',
@@ -234,6 +234,47 @@ export const CONFIG_FIELDS = {
   rulesConfig: {
     label: 'Filters Configuration',
     type: 'textarea',
+  },
+  accessibilitySection: {
+    section: [GM_config.create('Accessibility'), 'Accessibility and display preferences'],
+    type: 'hidden',
+  },
+  focusRingColor: {
+    label: 'Focus ring color',
+    title: 'Color of the focus ring for keyboard navigation (CSS color value)',
+    type: 'text',
+    default: '#0066cc',
+  },
+  focusRingWidth: {
+    label: 'Focus ring width (px)',
+    title: 'Width of the focus ring in pixels',
+    type: 'int',
+    default: 2,
+  },
+  reducedMotion: {
+    label: 'Reduced motion',
+    title: 'Control animation behavior: System follows OS preference, Always disables all animations, Never enables all animations',
+    type: 'select',
+    options: ['System', 'Always', 'Never'],
+    default: 'System',
+  },
+  highContrastMode: {
+    label: 'High contrast mode',
+    title: 'Enable high contrast mode for better visibility',
+    type: 'checkbox',
+    default: false,
+  },
+  savedSearches: {
+    label: 'Saved searches (JSON)',
+    title: 'Saved search filters stored as JSON array',
+    type: 'hidden',
+    default: '[]',
+  },
+  enableSwipeGestures: {
+    label: 'Enable swipe gestures (mobile)',
+    title: 'Enable swipe gestures on mobile: swipe right to like, swipe left to mark read and dismiss',
+    type: 'checkbox',
+    default: true,
   },
   miscellaneousSection: {
     section: [GM_config.create('Miscellaneous'), 'Other settings'],

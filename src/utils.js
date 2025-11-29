@@ -106,3 +106,57 @@ export function extractLastTerm(input) {
   const terms = splitTerms(input);
   return terms.length > 0 ? terms[terms.length - 1] : '';
 }
+
+// Accessibility utilities
+
+/**
+ * Check if user prefers reduced motion.
+ * @param {Object} config - GM_config instance (optional)
+ * @returns {boolean}
+ */
+export function prefersReducedMotion(config = null) {
+  if (config) {
+    const setting = config.get('reducedMotion');
+    if (setting === 'Always') return true;
+    if (setting === 'Never') return false;
+  }
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
+ * Check if user prefers high contrast.
+ * @param {Object} config - GM_config instance (optional)
+ * @returns {boolean}
+ */
+export function prefersHighContrast(config = null) {
+  if (config && config.get('highContrastMode')) return true;
+  return window.matchMedia('(prefers-contrast: more)').matches;
+}
+
+/**
+ * Get animation duration respecting reduced motion preference.
+ * @param {number} defaultMs - Default duration in milliseconds
+ * @param {Object} config - GM_config instance (optional)
+ * @returns {number}
+ */
+export function getAnimationDuration(defaultMs, config = null) {
+  return prefersReducedMotion(config) ? 0 : defaultMs;
+}
+
+/**
+ * Announce message to screen readers via aria-live region.
+ * @param {string} message - Message to announce
+ * @param {string} priority - 'polite' or 'assertive'
+ */
+export function announceToScreenReader(message, priority = 'polite') {
+  const el = $('<div>')
+    .attr({
+      role: 'status',
+      'aria-live': priority,
+      'aria-atomic': 'true',
+    })
+    .addClass('sr-only')
+    .text(message);
+  $('body').append(el);
+  setTimeout(() => el.remove(), 1000);
+}

@@ -2,18 +2,36 @@
   {{#if this.postId}}
   <div id="sidecar-replies-{{postId}}" class="sidecar-replies">
   {{#if parent}}
-  <div class="sidecar-parent">
-  <div class="sidecar-parent-indicator">↙️</div>
-  {{> postTemplate parent}}
+  <div class="sidecar-section sidecar-parent-section">
+    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">
+      <span class="sidecar-section-icon">▼</span>
+      <span class="sidecar-section-title">Parent</span>
+    </button>
+    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">
+      <div class="sidecar-parent">
+        <div class="sidecar-parent-indicator">↙️</div>
+        {{> postTemplate parent}}
+      </div>
+    </div>
   </div>
   {{/if}}
-  {{#each replies}}
-  {{> postTemplate this}}
-  {{/each}}
+  {{#if replies.length}}
+  <div class="sidecar-section sidecar-replies-section">
+    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">
+      <span class="sidecar-section-icon">▼</span>
+      <span class="sidecar-section-title">Replies ({{replies.length}})</span>
+    </button>
+    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">
+      {{#each replies}}
+      {{> postTemplate this}}
+      {{/each}}
+    </div>
+  </div>
+  {{/if}}
   </div>
   {{else}}
   <div class="sidecar-replies-empty sidecar-replies">
-  </div>    
+  </div>
   {{/if}}
 </script>
 
@@ -138,4 +156,37 @@
     </div>
   </div>
 </a>
+</script>
+
+<script id="sidecar-skeleton-template" type="text/x-handlebars-template">
+<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">
+  <div class="skeleton-post">
+    <div class="skeleton-header">
+      <div class="skeleton-avatar skeleton-shimmer"></div>
+      <div class="skeleton-author">
+        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>
+        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+      </div>
+    </div>
+    <div class="skeleton-body">
+      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+    </div>
+  </div>
+  <div class="skeleton-post">
+    <div class="skeleton-header">
+      <div class="skeleton-avatar skeleton-shimmer"></div>
+      <div class="skeleton-author">
+        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>
+        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+      </div>
+    </div>
+    <div class="skeleton-body">
+      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+    </div>
+  </div>
+  <span class="sr-only">Loading replies...</span>
+</div>
 </script>

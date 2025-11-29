@@ -4,7 +4,7 @@ import constants from '../constants.js';
 import * as utils from '../utils.js';
 import { ItemHandler } from './ItemHandler.js';
 
-const { waitForElement } = utils;
+const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
 
 /**
  * Handler for the home feed page with toolbar, filtering, sorting, and search.
@@ -141,9 +141,46 @@ export class FeedItemHandler extends ItemHandler {
       this.toggleHideRead();
     });
 
-    this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
+    // Search wrapper with saved searches
+    this.searchWrapper = $(`<div class="search-wrapper"></div>`);
+    $(this.toolbarDiv).append(this.searchWrapper);
 
-    $(this.toolbarDiv).append(this.searchField);
+    // Saved searches dropdown
+    this.savedSearchesBtn = $(`
+      <button id="saved-searches-btn" class="saved-searches-btn" title="Saved searches" aria-label="Saved searches" aria-haspopup="listbox">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+        </svg>
+      </button>
+    `);
+    $(this.searchWrapper).append(this.savedSearchesBtn);
+
+    this.searchField = $(`<input id="bsky-navigator-search" type="text" placeholder="Filter..."/>`);
+    $(this.searchWrapper).append(this.searchField);
+
+    // Save current search button
+    this.saveSearchBtn = $(`
+      <button id="save-search-btn" class="save-search-btn" title="Save current search" aria-label="Save current search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+    `);
+    $(this.searchWrapper).append(this.saveSearchBtn);
+
+    // Event handlers for saved searches
+    this.savedSearchesBtn.on('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.toggleSavedSearchesDropdown();
+    });
+
+    this.saveSearchBtn.on('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.saveCurrentSearch();
+    });
     $('#bsky-navigator-search').autocomplete({
       minLength: 0,
       appendTo: 'div[data-testid="homeScreenFeedTabs"]',
@@ -299,6 +336,10 @@ export class FeedItemHandler extends ItemHandler {
     $(this.statusBar).append(this.statusBarRight);
     $(statusBarContainer).append(this.statusBar);
 
+    // Add scroll position indicator
+    this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+    $(statusBarContainer).append(this.scrollIndicator);
+
     this.bottomLoadIndicator = $(`
 <div id="bottomLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"/>
 `);
@@ -380,6 +421,135 @@ export class FeedItemHandler extends ItemHandler {
   setFilter(text) {
     this.state.stateManager.saveStateImmediately(true, true);
     this.state.filter = text;
+    this.updateFilterPill();
+  }
+
+  updateFilterPill() {
+    const existingPill = $('#bsky-navigator-filter-pill');
+
+    if (!this.state.filter) {
+      existingPill.remove();
+      return;
+    }
+
+    if (!existingPill.length) {
+      const pill = $(`
+        <div id="bsky-navigator-filter-pill" class="filter-pill" role="status" aria-live="polite">
+          <span class="filter-pill-text"></span>
+          <button class="filter-pill-clear" aria-label="Clear filter" title="Clear filter">×</button>
+        </div>
+      `);
+      pill.find('.filter-pill-clear').on('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.clearFilter();
+      });
+      $('#bsky-navigator-toolbar').append(pill);
+    }
+
+    $('#bsky-navigator-filter-pill .filter-pill-text').text(this.state.filter);
+    announceToScreenReader(`Filter active: ${this.state.filter}`);
+  }
+
+  clearFilter() {
+    $('#bsky-navigator-search').val('');
+    this.setFilter('');
+    this.loadItems();
+    announceToScreenReader('Filter cleared');
+  }
+
+  getSavedSearches() {
+    try {
+      const saved = this.config.get('savedSearches') || '[]';
+      return JSON.parse(saved);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  saveSavedSearches(searches) {
+    this.config.set('savedSearches', JSON.stringify(searches));
+    this.config.save();
+  }
+
+  saveCurrentSearch() {
+    const currentSearch = this.state.filter;
+    if (!currentSearch || !currentSearch.trim()) {
+      announceToScreenReader('No filter to save');
+      return;
+    }
+
+    const searches = this.getSavedSearches();
+    if (searches.includes(currentSearch)) {
+      announceToScreenReader('Search already saved');
+      return;
+    }
+
+    searches.push(currentSearch);
+    this.saveSavedSearches(searches);
+    announceToScreenReader(`Search "${currentSearch}" saved`);
+
+    // Visual feedback
+    this.saveSearchBtn.addClass('save-search-btn-saved');
+    setTimeout(() => this.saveSearchBtn.removeClass('save-search-btn-saved'), 300);
+  }
+
+  toggleSavedSearchesDropdown() {
+    const existing = $('#saved-searches-dropdown');
+    if (existing.length) {
+      existing.remove();
+      return;
+    }
+
+    const searches = this.getSavedSearches();
+    if (searches.length === 0) {
+      announceToScreenReader('No saved searches');
+      return;
+    }
+
+    const dropdown = $(`
+      <div id="saved-searches-dropdown" class="saved-searches-dropdown" role="listbox" aria-label="Saved searches">
+        ${searches.map((search, i) => `
+          <div class="saved-search-item" role="option" data-search="${this.escapeHtml(search)}">
+            <span class="saved-search-text">${this.escapeHtml(search)}</span>
+            <button class="saved-search-delete" data-index="${i}" aria-label="Delete saved search" title="Delete">×</button>
+          </div>
+        `).join('')}
+      </div>
+    `);
+
+    dropdown.find('.saved-search-item').on('click', (e) => {
+      if (!$(e.target).hasClass('saved-search-delete')) {
+        const search = $(e.currentTarget).data('search');
+        $('#bsky-navigator-search').val(search);
+        this.setFilter(search);
+        this.loadItems();
+        dropdown.remove();
+        announceToScreenReader(`Applied saved search: ${search}`);
+      }
+    });
+
+    dropdown.find('.saved-search-delete').on('click', (e) => {
+      e.stopPropagation();
+      const index = parseInt($(e.currentTarget).data('index'), 10);
+      const searches = this.getSavedSearches();
+      const removed = searches.splice(index, 1);
+      this.saveSavedSearches(searches);
+      $(e.currentTarget).parent().remove();
+      announceToScreenReader(`Deleted saved search: ${removed[0]}`);
+      if (searches.length === 0) {
+        dropdown.remove();
+      }
+    });
+
+    this.searchWrapper.append(dropdown);
+
+    // Close on click outside
+    $(document).one('click', (e) => {
+      if (!$(e.target).closest('.search-wrapper').length) {
+        dropdown.remove();
+      }
+    });
   }
 
   /**
@@ -482,8 +652,53 @@ export class FeedItemHandler extends ItemHandler {
     return content.match(pattern);
   }
 
+  highlightFilterMatches(item) {
+    // Remove existing highlights
+    $(item).find('.filter-highlight').contents().unwrap();
+
+    if (!this.state.filter) return;
+
+    // Parse filter for content terms to highlight
+    const terms = this.state.filter.split(/\s+/).filter((term) => {
+      // Only highlight content-based searches, not @ or $ prefixed
+      return term && !term.startsWith('@') && !term.startsWith('$') && !term.startsWith('!');
+    }).map((term) => {
+      // Remove % prefix if present
+      return term.startsWith('%') ? term.substring(1) : term;
+    });
+
+    if (terms.length === 0) return;
+
+    const postText = $(item).find('div[data-testid="postText"]');
+    if (!postText.length) return;
+
+    // Create a regex for all terms
+    const pattern = new RegExp(`(${terms.map(t => this.escapeRegex(t)).join('|')})`, 'gi');
+
+    postText.contents().each(function () {
+      if (this.nodeType === Node.TEXT_NODE) {
+        const text = this.textContent;
+        if (pattern.test(text)) {
+          const highlighted = text.replace(pattern, '<mark class="filter-highlight">$1</mark>');
+          $(this).replaceWith(highlighted);
+        }
+      }
+    });
+  }
+
+  escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  clearAllHighlights() {
+    $('.filter-highlight').contents().unwrap();
+  }
+
   filterThread(thread) {
-    return $(thread).find('.item').length != $(thread).find('.filtered').length;
+    // Only consider direct child items, not items nested in embedded posts
+    const items = $(thread).find('> div > .item');
+    const filteredItems = items.filter('.filtered');
+    return items.length !== filteredItems.length;
   }
 
   filterItems() {
@@ -494,6 +709,9 @@ export class FeedItemHandler extends ItemHandler {
       `show all or unread (currently ${hideRead ? 'unread' : 'all'})`
     );
 
+    // Clear all highlights before re-filtering
+    this.clearAllHighlights();
+
     const parent = $(this.selector).first().closest('.thread').parent();
     const unseenThreads = parent.find('.thread');
     $(unseenThreads).map((i, thread) => {
@@ -502,6 +720,8 @@ export class FeedItemHandler extends ItemHandler {
         .each((i, item) => {
           if (this.filterItem(item, thread)) {
             $(item).removeClass('filtered');
+            // Highlight matching text
+            this.highlightFilterMatches(item);
           } else {
             $(item).addClass('filtered');
           }
@@ -567,6 +787,90 @@ export class FeedItemHandler extends ItemHandler {
     reversed ^ this.loadingNew
       ? parent.prepend(newItems)
       : parent.children('.thread').last().next().after(newItems);
+  }
+
+  updateInfoIndicator() {
+    super.updateInfoIndicator();
+    this.updateScrollPosition();
+    this.updateBreadcrumb();
+  }
+
+  updateBreadcrumb() {
+    // Create breadcrumb container if it doesn't exist
+    let breadcrumb = $('#bsky-navigator-breadcrumb');
+    if (!breadcrumb.length) {
+      breadcrumb = $(`<nav id="bsky-navigator-breadcrumb" class="breadcrumb" aria-label="Current location"></nav>`);
+      $('#bsky-navigator-toolbar').append(breadcrumb);
+    }
+
+    if (!this.selectedItem || !this.items.length) {
+      breadcrumb.empty();
+      return;
+    }
+
+    const parts = [];
+
+    // Feed name from current tab
+    const activeTab = $('div[role="tablist"] [aria-selected="true"]').text().trim();
+    if (activeTab) {
+      parts.push({ label: activeTab, type: 'feed' });
+    } else {
+      parts.push({ label: 'Feed', type: 'feed' });
+    }
+
+    // Author
+    const handle = this.handleFromItem(this.selectedItem);
+    const displayName = this.displayNameFromItem(this.selectedItem);
+    if (handle) {
+      parts.push({ label: displayName || `@${handle}`, type: 'author', handle });
+    }
+
+    // Thread/reply position
+    if (this.threadIndex != null && this.unrolledReplies.length > 0) {
+      parts.push({ label: `Post ${this.threadIndex + 1}/${this.unrolledReplies.length + 1}`, type: 'position' });
+    } else if (this.replyIndex != null) {
+      const replyCount = $(this.selectedItem).parent().find('.sidecar-post').length;
+      parts.push({ label: `Reply ${this.replyIndex + 1}/${replyCount}`, type: 'reply' });
+    }
+
+    // Build breadcrumb HTML
+    const html = parts.map((part, i) => {
+      const isLast = i === parts.length - 1;
+      let content = '';
+
+      if (part.type === 'author' && part.handle) {
+        content = `<a href="/profile/${part.handle}" class="breadcrumb-link">${this.escapeHtml(part.label)}</a>`;
+      } else {
+        content = `<span class="breadcrumb-text">${this.escapeHtml(part.label)}</span>`;
+      }
+
+      if (!isLast) {
+        content += '<span class="breadcrumb-separator" aria-hidden="true">›</span>';
+      }
+
+      return `<span class="breadcrumb-item">${content}</span>`;
+    }).join('');
+
+    breadcrumb.html(html);
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  updateScrollPosition() {
+    const indicator = $('#scroll-position-indicator');
+    if (!indicator.length || !this.items.length) return;
+
+    const position = this.index + 1;
+    const total = this.itemStats.shownCount || this.items.length;
+    const percentage = total > 0 ? Math.round((position / total) * 100) : 0;
+
+    indicator.find('.scroll-position-fill').css('width', `${percentage}%`);
+    indicator.attr('aria-valuenow', percentage);
+    indicator.attr('title', `${position} of ${total} items (${percentage}%)`);
   }
 
   handleInput(event) {

@@ -195,6 +195,63 @@ function getScreenFromElement(element) {
       window.console = unsafeWindow.console;
     }
 
+    // Apply accessibility preferences
+    function applyAccessibilityStyles() {
+      const reducedMotion = config.get('reducedMotion');
+      const highContrast = config.get('highContrastMode');
+      const focusRingColor = config.get('focusRingColor') || '#0066cc';
+      const focusRingWidth = config.get('focusRingWidth') || 2;
+
+      // Build accessibility CSS overrides
+      let accessibilityStyles = `:root {
+        --focus-ring-color: ${focusRingColor};
+        --focus-ring-width: ${focusRingWidth}px;
+      }`;
+
+      // Override reduced motion if user has explicit preference
+      if (reducedMotion === 'Always') {
+        accessibilityStyles += `
+          :root {
+            --transition-duration: 0ms;
+            --animation-duration: 0ms;
+          }
+          *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+          }
+        `;
+      } else if (reducedMotion === 'Never') {
+        accessibilityStyles += `
+          :root {
+            --transition-duration: 200ms;
+            --animation-duration: 300ms;
+          }
+        `;
+      }
+
+      // High contrast mode overrides
+      if (highContrast) {
+        accessibilityStyles += `
+          :root {
+            --focus-ring-color: #000000;
+            --focus-ring-width: 3px;
+          }
+        `;
+      }
+
+      // Inject accessibility styles
+      let accessibilityStyleEl = document.getElementById('bsky-nav-accessibility-styles');
+      if (!accessibilityStyleEl) {
+        accessibilityStyleEl = document.createElement('style');
+        accessibilityStyleEl.id = 'bsky-nav-accessibility-styles';
+        document.head.appendChild(accessibilityStyleEl);
+      }
+      accessibilityStyleEl.textContent = accessibilityStyles;
+    }
+
+    applyAccessibilityStyles();
+
     // Define the reusable style
     const stylesheet = `
 

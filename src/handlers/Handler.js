@@ -1,5 +1,7 @@
 // Handler.js - Base handler class for keyboard input handling
 
+import { ShortcutOverlay } from '../components/ShortcutOverlay.js';
+
 /**
  * Base handler class that provides keyboard binding and global navigation shortcuts.
  * All page-specific handlers extend from this class.
@@ -12,6 +14,7 @@ export class Handler {
     this.api = api;
     this.items = [];
     this.handleInput = this.handleInput.bind(this);
+    this.shortcutOverlay = new ShortcutOverlay(config);
   }
 
   activate() {
@@ -71,6 +74,9 @@ export class Handler {
       if (event.code == 'Escape' && $('#GM_config').is(':visible')) {
         event.preventDefault();
         this.config.close();
+      } else if (event.key === '?') {
+        event.preventDefault();
+        this.shortcutOverlay.toggle();
       }
     }
   }

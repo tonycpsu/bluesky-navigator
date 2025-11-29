@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+362.de14164d
+// @version     1.0.31+363.53abc70d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -91,9 +91,9 @@
       window.addEventListener("beforeunload", () => this.saveStateImmediately());
     }
     static async create(key, defaultState = {}, config2 = {}) {
-      const instance = new StateManager(key, defaultState, config2);
-      await instance.initializeState(defaultState);
-      return instance;
+      const instance2 = new StateManager(key, defaultState, config2);
+      await instance2.initializeState(defaultState);
+      return instance2;
     }
     async initializeState(defaultState) {
       this.state = await this.loadState(defaultState);
@@ -44720,12 +44720,40 @@ if (cid) {
     const terms = splitTerms(input);
     return terms.length > 0 ? terms[terms.length - 1] : "";
   }
+  function prefersReducedMotion(config2 = null) {
+    if (config2) {
+      const setting = config2.get("reducedMotion");
+      if (setting === "Always") return true;
+      if (setting === "Never") return false;
+    }
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+  function prefersHighContrast(config2 = null) {
+    if (config2 && config2.get("highContrastMode")) return true;
+    return window.matchMedia("(prefers-contrast: more)").matches;
+  }
+  function getAnimationDuration$1(defaultMs, config2 = null) {
+    return prefersReducedMotion(config2) ? 0 : defaultMs;
+  }
+  function announceToScreenReader$2(message2, priority = "polite") {
+    const el = $("<div>").attr({
+      role: "status",
+      "aria-live": priority,
+      "aria-atomic": "true"
+    }).addClass("sr-only").text(message2);
+    $("body").append(el);
+    setTimeout(() => el.remove(), 1e3);
+  }
   const utils$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
     __proto__: null,
+    announceToScreenReader: announceToScreenReader$2,
     debounce,
     extractLastTerm,
+    getAnimationDuration: getAnimationDuration$1,
     observeChanges: observeChanges$1,
     observeVisibilityChange: observeVisibilityChange$1,
+    prefersHighContrast,
+    prefersReducedMotion,
     splitTerms,
     waitForElement: waitForElement$3
   }, Symbol.toStringTag, { value: "Module" }));
@@ -44869,22 +44897,22 @@ if (cid) {
     selectionActive: {
       label: "CSS Style: Selected Post",
       type: "textarea",
-      default: "outline: 3px rgba(255, 0, 0, .6) solid !important;"
+      default: "outline: var(--focus-ring-width, 2px) var(--focus-ring-color, #0066cc) solid !important;"
     },
     selectionChildFocused: {
       label: "CSS Style: Selected Child Post Focused",
       type: "textarea",
-      default: "outline: 3px rgba(128, 0, 0, .2) solid !important;"
+      default: "outline: var(--focus-ring-width, 2px) color-mix(in srgb, var(--focus-ring-color, #0066cc) 40%, transparent) solid !important;"
     },
     selectionInactive: {
       label: "CSS Style: Unselected Post",
       type: "textarea",
-      default: "outline: 3px solid transparent;"
+      default: "outline: var(--focus-ring-width, 2px) solid transparent;"
     },
     replySelectionActive: {
       label: "CSS Style: Selected Reply",
       type: "textarea",
-      default: "outline: 1px rgba(255, 0, 0, .8) solid !important;"
+      default: "outline: 1px var(--focus-ring-color, #0066cc) solid !important;"
     },
     replySelectionInactive: {
       label: "CSS Style: Unselected Replies",
@@ -44958,6 +44986,47 @@ if (cid) {
       label: "Filters Configuration",
       type: "textarea"
     },
+    accessibilitySection: {
+      section: [GM_config.create("Accessibility"), "Accessibility and display preferences"],
+      type: "hidden"
+    },
+    focusRingColor: {
+      label: "Focus ring color",
+      title: "Color of the focus ring for keyboard navigation (CSS color value)",
+      type: "text",
+      default: "#0066cc"
+    },
+    focusRingWidth: {
+      label: "Focus ring width (px)",
+      title: "Width of the focus ring in pixels",
+      type: "int",
+      default: 2
+    },
+    reducedMotion: {
+      label: "Reduced motion",
+      title: "Control animation behavior: System follows OS preference, Always disables all animations, Never enables all animations",
+      type: "select",
+      options: ["System", "Always", "Never"],
+      default: "System"
+    },
+    highContrastMode: {
+      label: "High contrast mode",
+      title: "Enable high contrast mode for better visibility",
+      type: "checkbox",
+      default: false
+    },
+    savedSearches: {
+      label: "Saved searches (JSON)",
+      title: "Saved search filters stored as JSON array",
+      type: "hidden",
+      default: "[]"
+    },
+    enableSwipeGestures: {
+      label: "Enable swipe gestures (mobile)",
+      title: "Enable swipe gestures on mobile: swipe right to like, swipe left to mark read and dismiss",
+      type: "checkbox",
+      default: true
+    },
     miscellaneousSection: {
       section: [GM_config.create("Miscellaneous"), "Other settings"],
       type: "hidden"
@@ -44999,9 +45068,187 @@ if (cid) {
       default: false
     }
   };
-  const style = '/* style.css */\n\ndiv[style^="position: fixed; inset: 0px 0px 0px 50%;"] {\n    border: none;\n}\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    width: 100%;\n    height: 32px;\n    background-color: inherit;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n@media (prefers-color-scheme: dark) {\n    div#bsky-navigator-toolbar {\n        background-color: #29333d\n    }\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite !important;\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n@media (prefers-color-scheme: dark) {\n    .indicator-image {\n        filter: invert(1) brightness(2);\n    }\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\ndiv#infoIndicatorText {\n    font-size: 0.8em;\n}\n\ndiv#itemTimestampStats {\n    font-size: 0.7em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    margin: 0px 8px;\n    z-index: 10;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n        overflow: clip;\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n        overflow: clip;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    div#statusBar {\n        background-color: #29333d;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n#prevButton {\n    z-index: 1000;\n    position: absolute;\n    top: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#prevButton.mobile {\n    position: fixed;\n    left: 1%;\n    top: 25%;\n}\n\n#nextButton {\n    z-index: 1000;\n    position: absolute;\n    bottom: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#nextButton.mobile {\n    position: fixed;\n    left: 1%;\n    bottom: 20%;\n}\n\nnav.r-1wyvozj {\n    overflow: inherit;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    bottom: 2px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n\n.popup {\n    display: none;\n    position: fixed;\n    max-height: 80vH;\n    top: 50%;\n    left: 50%;\n    transform: translate(-50%, -50%);\n    /* transform: scale(0.25); /\\* Scale down to 75% *\\/ */\n    background: white;\n    padding: 15px;\n    border-radius: 12px;\n    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n    width: 400px;\n    z-index: 1000;\n}\n\nnav + div {\n    display: none;\n}\n\ndiv:has(>div.item) {\n    display: flex;\n    flex-direction: row;\n    align-items: stretch;\n}\n\n.item {\n    display: flex;\n    flex: 2;\n    max-height: 100%;\n}\n\n.item > div:first-of-type {\n    flex: 1;\n    align-items: stretch;\n\n}\n\n.item > div:first-of-type > div:last-of-type {\n    flex: 1;\n}\n\n.unrolled-banner {\n    position: absolute;\n    top: -0.5em;\n    left: 10px;\n    padding: 0px 5px;\n    backdrop-filter: blur(10px);\n    color: #888;\n}\n\n.unrolled-divider {\n    margin-top: 1em;\n    border: 1px solid #eee;\n    color: white;\n}\n\n.unrolled-reply {\n    /* border: 1px transparent; */\n    margin: 1px;\n    border: 1px solid transparent;\n    box-sizing: border-box;\n}\n\n.sidecar-replies {\n    flex: 1 1 0;\n    min-height: 0;\n    overflow-y: auto;\n    font-size: 0.8em;\n    padding-left: 10px;\n    display: flex;\n    flex-direction: column;\n    max-height: 50vH;\n}\n\n.sidecar-parent-indicator {\n    position: absolute;\n}\n\n.sidecar-post {\n    display: flex;\n    flex-direction: column;\n    padding: 5px;\n    flex-shrink: 0;\n    font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";\n}\n\n.sidecar-post a {\n    text-decoration: none;\n}\n\n.sidecar-post a:hover {\n    text-decoration: underline;\n}\n\n.sidecar-post-user-info {\n    display: flex;\n    flex-direction: row;\n    font-size: 0.9em;\n}\n\n.sidecar-post-avatar {\n    width: 24px;\n    height: 24px;\n    padding: 2px;\n}\n\n.sidecar-post-username {\n    font-weight: 600;\n    color: rgb(11, 15, 20);\n}\n\n.sidecar-post-handle {\n    color: rgb(66, 87, 108);\n    font-variant: no-contextual;\n}\n\n.sidecar-post-content {\n    padding: 5px 0px;\n}\n\n.sidecar-post-content a {\n    color: rgb(16, 131, 254);\n}\n\n.sidecar-post-footer {\n    color: rgb(66, 87, 108);\n    display: flex;\n    flex-direction: row;\n    font-size: 11px;\n}\n\n.sidecar-post-footer svg, .sidecar-post-footer span {\n    display: inline-flex;\n    vertical-align: middle;\n    /* flex: 1; */\n    color: rgb(111, 134, 159);\n}\n\n.sidecar-post-timestamp {\n    display: inline-flex;\n    vertical-align: middle;\n    flex: 3;\n}\n\n.sidecar-parent .sidecar-post {\n    border: 3px dashed rgb(111, 134, 159);\n    padding: 5px;\n}\n\n.sidecar-post-counts {\n    display: flex;\n    flex: 2;\n}\n\n.sidecar-count {\n    display: flex;\n    flex: 1;\n    justify-content: right;\n    align-items: center;\n}\n\n.sidecar-count-icon > svg {\n  height: 1em;\n}\n';
+  const style = '/* style.css */\n\n/* ==========================================================================\n   CSS Custom Properties (Accessibility & Theming)\n   ========================================================================== */\n\n:root {\n  --focus-ring-color: #0066cc;\n  --focus-ring-width: 2px;\n  --transition-duration: 200ms;\n  --animation-duration: 300ms;\n}\n\n/* High Contrast Mode */\n@media (prefers-contrast: more) {\n  :root {\n    --focus-ring-color: #000000;\n    --focus-ring-width: 3px;\n  }\n}\n\n/* Reduced Motion Support */\n@media (prefers-reduced-motion: reduce) {\n  :root {\n    --transition-duration: 0ms;\n    --animation-duration: 0ms;\n  }\n\n  *,\n  *::before,\n  *::after {\n    animation-duration: 0.01ms !important;\n    animation-iteration-count: 1 !important;\n    transition-duration: 0.01ms !important;\n  }\n}\n\n/* Screen reader only utility class */\n.sr-only {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  padding: 0;\n  margin: -1px;\n  overflow: hidden;\n  clip: rect(0, 0, 0, 0);\n  white-space: nowrap;\n  border: 0;\n}\n\n/* ==========================================================================\n   Base Styles\n   ========================================================================== */\n\ndiv[style^="position: fixed; inset: 0px 0px 0px 50%;"] {\n    border: none;\n}\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: row;\n    position: sticky;\n    top: 0;\n    align-items: center;\n    width: 100%;\n    height: 32px;\n    background-color: inherit;\n    border-bottom: 1px solid rgb(192, 192, 192);\n}\n\n@media (prefers-color-scheme: dark) {\n    div#bsky-navigator-toolbar {\n        background-color: #29333d\n    }\n}\n\n.toolbar-icon {\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite;\n    animation-duration: var(--animation-duration, 1s);\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n@media (prefers-color-scheme: dark) {\n    .indicator-image {\n        filter: invert(1) brightness(2);\n    }\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\ndiv#infoIndicatorText {\n    font-size: 0.8em;\n}\n\ndiv#itemTimestampStats {\n    font-size: 0.7em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    min-width: 0;\n    margin: 0px 8px;\n    z-index: 10;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n        overflow: clip;\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n        overflow: clip;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    div#statusBar {\n        background-color: #29333d;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n#prevButton {\n    z-index: 1000;\n    position: absolute;\n    top: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#prevButton.mobile {\n    position: fixed;\n    left: 1%;\n    top: 25%;\n}\n\n#nextButton {\n    z-index: 1000;\n    position: absolute;\n    bottom: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#nextButton.mobile {\n    position: fixed;\n    left: 1%;\n    bottom: 20%;\n}\n\nnav.r-1wyvozj {\n    overflow: inherit;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n    animation-duration: var(--animation-duration, 0.2s);\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n    animation-duration: var(--animation-duration, 0.2s);\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    animation-duration: var(--animation-duration, 1s);\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    bottom: 2px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n\n.popup {\n    display: none;\n    position: fixed;\n    max-height: 80vH;\n    top: 50%;\n    left: 50%;\n    transform: translate(-50%, -50%);\n    /* transform: scale(0.25); /\\* Scale down to 75% *\\/ */\n    background: white;\n    padding: 15px;\n    border-radius: 12px;\n    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n    width: 400px;\n    z-index: 1000;\n}\n\nnav + div {\n    display: none;\n}\n\ndiv:has(>div.item) {\n    display: flex;\n    flex-direction: row;\n    align-items: stretch;\n}\n\n.item {\n    display: flex;\n    flex: 2;\n    max-height: 100%;\n}\n\n.item > div:first-of-type {\n    flex: 1;\n    align-items: stretch;\n\n}\n\n.item > div:first-of-type > div:last-of-type {\n    flex: 1;\n}\n\n.unrolled-banner {\n    position: absolute;\n    top: -0.5em;\n    left: 10px;\n    padding: 0px 5px;\n    backdrop-filter: blur(10px);\n    color: #888;\n}\n\n.unrolled-divider {\n    margin-top: 1em;\n    border: 1px solid #eee;\n    color: white;\n}\n\n.unrolled-reply {\n    /* border: 1px transparent; */\n    margin: 1px;\n    border: 1px solid transparent;\n    box-sizing: border-box;\n}\n\n.sidecar-replies {\n    flex: 1 1 0;\n    min-height: 0;\n    overflow-y: auto;\n    font-size: 0.8em;\n    padding-left: 10px;\n    display: flex;\n    flex-direction: column;\n    max-height: 50vH;\n}\n\n.sidecar-parent-indicator {\n    position: absolute;\n}\n\n.sidecar-post {\n    display: flex;\n    flex-direction: column;\n    padding: 5px;\n    flex-shrink: 0;\n    font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";\n}\n\n.sidecar-post a {\n    text-decoration: none;\n}\n\n.sidecar-post a:hover {\n    text-decoration: underline;\n}\n\n.sidecar-post-user-info {\n    display: flex;\n    flex-direction: row;\n    font-size: 0.9em;\n}\n\n.sidecar-post-avatar {\n    width: 24px;\n    height: 24px;\n    padding: 2px;\n}\n\n.sidecar-post-username {\n    font-weight: 600;\n    color: rgb(11, 15, 20);\n}\n\n.sidecar-post-handle {\n    color: rgb(66, 87, 108);\n    font-variant: no-contextual;\n}\n\n.sidecar-post-content {\n    padding: 5px 0px;\n}\n\n.sidecar-post-content a {\n    color: rgb(16, 131, 254);\n}\n\n.sidecar-post-footer {\n    color: rgb(66, 87, 108);\n    display: flex;\n    flex-direction: row;\n    font-size: 11px;\n}\n\n.sidecar-post-footer svg, .sidecar-post-footer span {\n    display: inline-flex;\n    vertical-align: middle;\n    /* flex: 1; */\n    color: rgb(111, 134, 159);\n}\n\n.sidecar-post-timestamp {\n    display: inline-flex;\n    vertical-align: middle;\n    flex: 3;\n}\n\n.sidecar-parent .sidecar-post {\n    border: 3px dashed rgb(111, 134, 159);\n    padding: 5px;\n}\n\n.sidecar-post-counts {\n    display: flex;\n    flex: 2;\n}\n\n.sidecar-count {\n    display: flex;\n    flex: 1;\n    justify-content: right;\n    align-items: center;\n}\n\n.sidecar-count-icon > svg {\n  height: 1em;\n}\n\n/* ==========================================================================\n   Like/Repost Animation Feedback\n   ========================================================================== */\n\n@keyframes likeHeartPop {\n  0% {\n    transform: scale(1);\n  }\n  50% {\n    transform: scale(1.3);\n  }\n  100% {\n    transform: scale(1);\n  }\n}\n\n@keyframes unlikeHeartShrink {\n  0% {\n    transform: scale(1);\n  }\n  50% {\n    transform: scale(0.8);\n  }\n  100% {\n    transform: scale(1);\n  }\n}\n\n.like-animation-like {\n  animation: likeHeartPop var(--animation-duration, 300ms) ease-out;\n}\n\n.like-animation-like svg {\n  fill: #ec4899;\n  color: #ec4899;\n}\n\n.like-animation-unlike {\n  animation: unlikeHeartShrink var(--animation-duration, 300ms) ease-out;\n}\n\n@keyframes repostPop {\n  0% {\n    transform: scale(1) rotate(0deg);\n  }\n  50% {\n    transform: scale(1.2) rotate(15deg);\n  }\n  100% {\n    transform: scale(1) rotate(0deg);\n  }\n}\n\n.repost-animation {\n  animation: repostPop var(--animation-duration, 300ms) ease-out;\n}\n\n.repost-animation svg {\n  fill: #22c55e;\n  color: #22c55e;\n}\n\n/* ==========================================================================\n   Filter Indicator Pill\n   ========================================================================== */\n\n.filter-pill {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 4px 8px 4px 12px;\n  margin: 0 8px;\n  background-color: #3b82f6;\n  color: white;\n  border-radius: 16px;\n  font-size: 12px;\n  font-weight: 500;\n  max-width: 200px;\n  animation: pillSlideIn var(--animation-duration, 200ms) ease-out;\n}\n\n@keyframes pillSlideIn {\n  from {\n    opacity: 0;\n    transform: translateX(-10px);\n  }\n  to {\n    opacity: 1;\n    transform: translateX(0);\n  }\n}\n\n.filter-pill-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.filter-pill-clear {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 18px;\n  height: 18px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 50%;\n  background-color: rgba(255, 255, 255, 0.3);\n  color: white;\n  font-size: 14px;\n  font-weight: bold;\n  line-height: 1;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.filter-pill-clear:hover {\n  background-color: rgba(255, 255, 255, 0.5);\n}\n\n.filter-pill-clear:focus {\n  outline: 2px solid white;\n  outline-offset: 1px;\n}\n\n@media (prefers-color-scheme: dark) {\n  .filter-pill {\n    background-color: #2563eb;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .filter-pill {\n    background-color: #1d4ed8;\n    border: 2px solid white;\n  }\n}\n\n/* ==========================================================================\n   New Posts Floating Pill\n   ========================================================================== */\n\n.new-posts-pill {\n  position: fixed;\n  top: 80px;\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 10px 20px;\n  background-color: #3b82f6;\n  color: white;\n  border: none;\n  border-radius: 24px;\n  font-size: 14px;\n  font-weight: 600;\n  cursor: pointer;\n  z-index: 9999;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);\n  animation: newPostsPillBounce var(--animation-duration, 500ms) ease-out;\n  transition: transform var(--transition-duration, 200ms) ease,\n              background-color var(--transition-duration, 200ms) ease;\n}\n\n.new-posts-pill:hover {\n  background-color: #2563eb;\n  transform: translateX(-50%) scale(1.05);\n}\n\n.new-posts-pill:focus {\n  outline: 2px solid white;\n  outline-offset: 2px;\n}\n\n.new-posts-pill:active {\n  transform: translateX(-50%) scale(0.98);\n}\n\n.new-posts-pill svg {\n  flex-shrink: 0;\n}\n\n@keyframes newPostsPillBounce {\n  0% {\n    opacity: 0;\n    transform: translateX(-50%) translateY(-20px);\n  }\n  60% {\n    transform: translateX(-50%) translateY(5px);\n  }\n  100% {\n    opacity: 1;\n    transform: translateX(-50%) translateY(0);\n  }\n}\n\n.new-posts-pill-hiding {\n  animation: newPostsPillHide var(--animation-duration, 200ms) ease-in forwards;\n}\n\n@keyframes newPostsPillHide {\n  to {\n    opacity: 0;\n    transform: translateX(-50%) translateY(-20px);\n  }\n}\n\n@media (prefers-color-scheme: dark) {\n  .new-posts-pill {\n    background-color: #2563eb;\n    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);\n  }\n\n  .new-posts-pill:hover {\n    background-color: #3b82f6;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .new-posts-pill {\n    background-color: #1d4ed8;\n    border: 2px solid white;\n  }\n}\n\n/* Mobile positioning */\n@media only screen and (max-width: 800px) {\n  .new-posts-pill {\n    top: auto;\n    bottom: 70px;\n  }\n}\n\n/* ==========================================================================\n   Skeleton Loading States\n   ========================================================================== */\n\n.sidecar-skeleton {\n  padding: 10px;\n}\n\n.skeleton-post {\n  padding: 10px 0;\n  border-bottom: 1px solid #e5e7eb;\n}\n\n.skeleton-post:last-child {\n  border-bottom: none;\n}\n\n.skeleton-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  margin-bottom: 12px;\n}\n\n.skeleton-avatar {\n  width: 32px;\n  height: 32px;\n  border-radius: 50%;\n  flex-shrink: 0;\n}\n\n.skeleton-author {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n\n.skeleton-body {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.skeleton-line {\n  height: 12px;\n  border-radius: 4px;\n}\n\n.skeleton-line-short {\n  width: 30%;\n}\n\n.skeleton-line-medium {\n  width: 60%;\n}\n\n.skeleton-line-full {\n  width: 100%;\n}\n\n.skeleton-shimmer {\n  background: linear-gradient(\n    90deg,\n    #e5e7eb 25%,\n    #f3f4f6 50%,\n    #e5e7eb 75%\n  );\n  background-size: 200% 100%;\n  animation: shimmer 1.5s infinite;\n}\n\n@keyframes shimmer {\n  0% {\n    background-position: 200% 0;\n  }\n  100% {\n    background-position: -200% 0;\n  }\n}\n\n/* Respect reduced motion */\n@media (prefers-reduced-motion: reduce) {\n  .skeleton-shimmer {\n    animation: none;\n    background: #e5e7eb;\n  }\n}\n\n/* Dark mode skeleton */\n@media (prefers-color-scheme: dark) {\n  .skeleton-shimmer {\n    background: linear-gradient(\n      90deg,\n      #374151 25%,\n      #4b5563 50%,\n      #374151 75%\n    );\n    background-size: 200% 100%;\n  }\n\n  @media (prefers-reduced-motion: reduce) {\n    .skeleton-shimmer {\n      background: #374151;\n    }\n  }\n\n  .skeleton-post {\n    border-bottom-color: #374151;\n  }\n}\n\n/* ==========================================================================\n   Keyboard Shortcut Overlay\n   ========================================================================== */\n\n.shortcut-overlay {\n  position: fixed;\n  inset: 0;\n  z-index: 10000;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  animation: overlayFadeIn var(--animation-duration, 200ms) ease-out;\n}\n\n@keyframes overlayFadeIn {\n  from {\n    opacity: 0;\n  }\n  to {\n    opacity: 1;\n  }\n}\n\n.shortcut-overlay-hiding {\n  animation: overlayFadeOut var(--animation-duration, 200ms) ease-in forwards;\n}\n\n@keyframes overlayFadeOut {\n  to {\n    opacity: 0;\n  }\n}\n\n.shortcut-overlay-backdrop {\n  position: absolute;\n  inset: 0;\n  background-color: rgba(0, 0, 0, 0.5);\n}\n\n.shortcut-overlay-content {\n  position: relative;\n  background-color: white;\n  border-radius: 12px;\n  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);\n  max-width: 700px;\n  max-height: 80vh;\n  width: 90%;\n  display: flex;\n  flex-direction: column;\n  animation: overlaySlideUp var(--animation-duration, 200ms) ease-out;\n}\n\n@keyframes overlaySlideUp {\n  from {\n    transform: translateY(20px);\n    opacity: 0;\n  }\n  to {\n    transform: translateY(0);\n    opacity: 1;\n  }\n}\n\n.shortcut-overlay-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 16px 20px;\n  border-bottom: 1px solid #e5e7eb;\n}\n\n.shortcut-overlay-header h2 {\n  margin: 0;\n  font-size: 18px;\n  font-weight: 600;\n  color: #111827;\n}\n\n.shortcut-overlay-close {\n  width: 32px;\n  height: 32px;\n  border: none;\n  border-radius: 6px;\n  background-color: transparent;\n  color: #6b7280;\n  font-size: 24px;\n  line-height: 1;\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.shortcut-overlay-close:hover {\n  background-color: #f3f4f6;\n  color: #111827;\n}\n\n.shortcut-overlay-close:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n}\n\n.shortcut-overlay-body {\n  padding: 20px;\n  overflow-y: auto;\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));\n  gap: 24px;\n}\n\n.shortcut-category {\n  min-width: 0;\n}\n\n.shortcut-category-title {\n  margin: 0 0 12px 0;\n  font-size: 13px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.05em;\n  color: #6b7280;\n}\n\n.shortcut-list {\n  margin: 0;\n  padding: 0;\n}\n\n.shortcut-item {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 6px 0;\n  gap: 16px;\n}\n\n.shortcut-keys {\n  display: flex;\n  gap: 4px;\n  flex-shrink: 0;\n}\n\n.shortcut-keys kbd {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  min-width: 24px;\n  height: 24px;\n  padding: 0 6px;\n  background-color: #f3f4f6;\n  border: 1px solid #d1d5db;\n  border-radius: 4px;\n  font-family: inherit;\n  font-size: 12px;\n  font-weight: 500;\n  color: #374151;\n  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);\n}\n\n.shortcut-desc {\n  margin: 0;\n  font-size: 14px;\n  color: #374151;\n  text-align: right;\n}\n\n.shortcut-overlay-footer {\n  padding: 12px 20px;\n  border-top: 1px solid #e5e7eb;\n  text-align: center;\n  font-size: 13px;\n  color: #6b7280;\n}\n\n.shortcut-overlay-footer kbd {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  min-width: 20px;\n  height: 20px;\n  padding: 0 4px;\n  background-color: #f3f4f6;\n  border: 1px solid #d1d5db;\n  border-radius: 4px;\n  font-family: inherit;\n  font-size: 11px;\n  font-weight: 500;\n  color: #374151;\n  margin: 0 2px;\n}\n\n/* Dark mode */\n@media (prefers-color-scheme: dark) {\n  .shortcut-overlay-content {\n    background-color: #1f2937;\n  }\n\n  .shortcut-overlay-header {\n    border-bottom-color: #374151;\n  }\n\n  .shortcut-overlay-header h2 {\n    color: #f9fafb;\n  }\n\n  .shortcut-overlay-close {\n    color: #9ca3af;\n  }\n\n  .shortcut-overlay-close:hover {\n    background-color: #374151;\n    color: #f9fafb;\n  }\n\n  .shortcut-category-title {\n    color: #9ca3af;\n  }\n\n  .shortcut-keys kbd,\n  .shortcut-overlay-footer kbd {\n    background-color: #374151;\n    border-color: #4b5563;\n    color: #e5e7eb;\n  }\n\n  .shortcut-desc {\n    color: #d1d5db;\n  }\n\n  .shortcut-overlay-footer {\n    border-top-color: #374151;\n    color: #9ca3af;\n  }\n}\n\n/* High contrast */\n@media (prefers-contrast: more) {\n  .shortcut-overlay-content {\n    border: 2px solid black;\n  }\n\n  .shortcut-keys kbd {\n    border-width: 2px;\n    border-color: black;\n  }\n}\n\n/* ==========================================================================\n   Scroll Position Indicator\n   ========================================================================== */\n\n.scroll-position-indicator {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  height: 3px;\n  background-color: #e5e7eb;\n  overflow: hidden;\n}\n\n.scroll-position-fill {\n  height: 100%;\n  width: 0%;\n  background-color: #3b82f6;\n  transition: width var(--transition-duration, 200ms) ease-out;\n}\n\n@media (prefers-color-scheme: dark) {\n  .scroll-position-indicator {\n    background-color: #374151;\n  }\n\n  .scroll-position-fill {\n    background-color: #60a5fa;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .scroll-position-indicator {\n    height: 4px;\n    background-color: #9ca3af;\n  }\n\n  .scroll-position-fill {\n    background-color: #1d4ed8;\n  }\n}\n\n/* ==========================================================================\n   Breadcrumb Trail\n   ========================================================================== */\n\n.breadcrumb {\n  display: flex;\n  align-items: center;\n  flex-wrap: nowrap;\n  flex-shrink: 0;\n  gap: 0;\n  margin-left: auto;\n  padding: 4px 8px;\n  font-size: 12px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  max-width: 300px;\n}\n\n.breadcrumb-item {\n  display: flex;\n  align-items: center;\n}\n\n.breadcrumb-text {\n  color: #6b7280;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  max-width: 100px;\n}\n\n.breadcrumb-link {\n  color: #3b82f6;\n  text-decoration: none;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  max-width: 100px;\n  transition: color var(--transition-duration, 200ms) ease;\n}\n\n.breadcrumb-link:hover {\n  color: #2563eb;\n  text-decoration: underline;\n}\n\n.breadcrumb-link:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n  border-radius: 2px;\n}\n\n.breadcrumb-separator {\n  margin: 0 6px;\n  color: #9ca3af;\n  flex-shrink: 0;\n}\n\n@media (prefers-color-scheme: dark) {\n  .breadcrumb-text {\n    color: #9ca3af;\n  }\n\n  .breadcrumb-link {\n    color: #60a5fa;\n  }\n\n  .breadcrumb-link:hover {\n    color: #93c5fd;\n  }\n\n  .breadcrumb-separator {\n    color: #6b7280;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .breadcrumb-text {\n    color: #374151;\n  }\n\n  .breadcrumb-link {\n    color: #1d4ed8;\n    text-decoration: underline;\n  }\n\n  .breadcrumb-separator {\n    color: #374151;\n  }\n}\n\n/* ==========================================================================\n   Saved Searches\n   ========================================================================== */\n\n.search-wrapper {\n  display: flex;\n  align-items: center;\n  position: relative;\n  gap: 4px;\n  flex: 1;\n  min-width: 0;\n  max-width: 250px;\n}\n\n.saved-searches-btn,\n.save-search-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 28px;\n  height: 28px;\n  padding: 0;\n  border: none;\n  border-radius: 4px;\n  background-color: transparent;\n  color: #6b7280;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease,\n              color var(--transition-duration, 200ms) ease;\n}\n\n.saved-searches-btn:hover,\n.save-search-btn:hover {\n  background-color: #f3f4f6;\n  color: #374151;\n}\n\n.saved-searches-btn:focus,\n.save-search-btn:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n}\n\n.save-search-btn-saved {\n  color: #22c55e;\n  animation: savedPulse var(--animation-duration, 300ms) ease-out;\n}\n\n@keyframes savedPulse {\n  0%, 100% {\n    transform: scale(1);\n  }\n  50% {\n    transform: scale(1.2);\n  }\n}\n\n.saved-searches-dropdown {\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  min-width: 200px;\n  max-width: 300px;\n  max-height: 300px;\n  overflow-y: auto;\n  background-color: white;\n  border: 1px solid #e5e7eb;\n  border-radius: 8px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);\n  z-index: 1000;\n  animation: dropdownSlide var(--animation-duration, 150ms) ease-out;\n}\n\n@keyframes dropdownSlide {\n  from {\n    opacity: 0;\n    transform: translateY(-8px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n\n.saved-search-item {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 10px 12px;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.saved-search-item:hover {\n  background-color: #f3f4f6;\n}\n\n.saved-search-item:first-child {\n  border-radius: 8px 8px 0 0;\n}\n\n.saved-search-item:last-child {\n  border-radius: 0 0 8px 8px;\n}\n\n.saved-search-item:only-child {\n  border-radius: 8px;\n}\n\n.saved-search-text {\n  font-size: 13px;\n  color: #374151;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  flex: 1;\n}\n\n.saved-search-delete {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 20px;\n  height: 20px;\n  margin-left: 8px;\n  padding: 0;\n  border: none;\n  border-radius: 4px;\n  background-color: transparent;\n  color: #9ca3af;\n  font-size: 16px;\n  cursor: pointer;\n  opacity: 0;\n  transition: opacity var(--transition-duration, 200ms) ease,\n              background-color var(--transition-duration, 200ms) ease;\n}\n\n.saved-search-item:hover .saved-search-delete {\n  opacity: 1;\n}\n\n.saved-search-delete:hover {\n  background-color: #fecaca;\n  color: #dc2626;\n}\n\n@media (prefers-color-scheme: dark) {\n  .saved-searches-btn,\n  .save-search-btn {\n    color: #9ca3af;\n  }\n\n  .saved-searches-btn:hover,\n  .save-search-btn:hover {\n    background-color: #374151;\n    color: #e5e7eb;\n  }\n\n  .saved-searches-dropdown {\n    background-color: #1f2937;\n    border-color: #374151;\n  }\n\n  .saved-search-item:hover {\n    background-color: #374151;\n  }\n\n  .saved-search-text {\n    color: #e5e7eb;\n  }\n\n  .saved-search-delete {\n    color: #6b7280;\n  }\n\n  .saved-search-delete:hover {\n    background-color: #7f1d1d;\n    color: #fecaca;\n  }\n}\n\n/* ==========================================================================\n   Filter Highlight\n   ========================================================================== */\n\n.filter-highlight {\n  background-color: #fef08a;\n  color: #000;\n  border-radius: 2px;\n  padding: 0 2px;\n}\n\n@media (prefers-color-scheme: dark) {\n  .filter-highlight {\n    background-color: #ca8a04;\n    color: #fef9c3;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .filter-highlight {\n    background-color: #facc15;\n    outline: 2px solid #000;\n    outline-offset: -1px;\n  }\n}\n\n/* ==========================================================================\n   Collapsible Sidecar Sections\n   ========================================================================== */\n\n.sidecar-section {\n  margin-bottom: 8px;\n}\n\n.sidecar-section-toggle {\n  display: flex;\n  align-items: center;\n  width: 100%;\n  padding: 8px 10px;\n  border: none;\n  border-radius: 6px;\n  background-color: #f3f4f6;\n  color: #374151;\n  font-size: 13px;\n  font-weight: 600;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.sidecar-section-toggle:hover {\n  background-color: #e5e7eb;\n}\n\n.sidecar-section-toggle:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n}\n\n.sidecar-section-icon {\n  margin-right: 8px;\n  font-size: 10px;\n  transition: transform var(--transition-duration, 200ms) ease;\n}\n\n.sidecar-section-toggle[aria-expanded="false"] .sidecar-section-icon {\n  transform: rotate(-90deg);\n}\n\n.sidecar-section-title {\n  flex: 1;\n  text-align: left;\n}\n\n.sidecar-section-content {\n  overflow: hidden;\n}\n\n@media (prefers-color-scheme: dark) {\n  .sidecar-section-toggle {\n    background-color: #374151;\n    color: #e5e7eb;\n  }\n\n  .sidecar-section-toggle:hover {\n    background-color: #4b5563;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .sidecar-section-toggle {\n    border: 2px solid #000;\n  }\n}\n\n/* ==========================================================================\n   Mobile Swipe Gestures\n   ========================================================================== */\n\n.swipe-indicator {\n  position: absolute;\n  top: 50%;\n  transform: translateY(-50%);\n  width: 48px;\n  height: 48px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  border-radius: 50%;\n  opacity: 0;\n  transition: opacity var(--transition-duration, 200ms) ease,\n              transform var(--transition-duration, 200ms) ease;\n  z-index: 10;\n  pointer-events: none;\n}\n\n.swipe-indicator-left {\n  left: 10px;\n  background-color: #22c55e;\n  color: white;\n}\n\n.swipe-indicator-right {\n  right: 10px;\n  background-color: #ec4899;\n  color: white;\n}\n\n.swipe-indicator-active {\n  opacity: 1;\n  transform: translateY(-50%) scale(1.1);\n}\n\n/* Enable on touch devices only */\n@media (hover: none) and (pointer: coarse) {\n  .swipe-indicator {\n    display: flex;\n  }\n}\n\n@media (hover: hover) and (pointer: fine) {\n  .swipe-indicator {\n    display: none;\n  }\n}\n\n/* ==========================================================================\n   Mobile Bottom Sheet\n   ========================================================================== */\n\n.bottom-sheet-backdrop {\n  position: fixed;\n  inset: 0;\n  background-color: rgba(0, 0, 0, 0);\n  z-index: 10000;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.bottom-sheet-backdrop-visible {\n  background-color: rgba(0, 0, 0, 0.5);\n}\n\n.bottom-sheet {\n  position: fixed;\n  bottom: 0;\n  left: 0;\n  right: 0;\n  background-color: white;\n  border-radius: 16px 16px 0 0;\n  z-index: 10001;\n  transform: translateY(100%);\n  transition: transform var(--transition-duration, 200ms) ease;\n  max-height: 80vh;\n  overflow-y: auto;\n}\n\n.bottom-sheet-visible {\n  transform: translateY(0);\n}\n\n.bottom-sheet-handle {\n  width: 36px;\n  height: 4px;\n  margin: 12px auto;\n  background-color: #d1d5db;\n  border-radius: 2px;\n}\n\n.bottom-sheet-content {\n  padding: 8px 16px 16px;\n}\n\n.bottom-sheet-action {\n  display: flex;\n  align-items: center;\n  width: 100%;\n  padding: 14px 12px;\n  margin-bottom: 4px;\n  border: none;\n  border-radius: 12px;\n  background-color: transparent;\n  color: #374151;\n  font-size: 16px;\n  text-align: left;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.bottom-sheet-action:hover,\n.bottom-sheet-action:active {\n  background-color: #f3f4f6;\n}\n\n.bottom-sheet-action:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n}\n\n.bottom-sheet-action-icon {\n  width: 24px;\n  height: 24px;\n  margin-right: 12px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: #6b7280;\n}\n\n.bottom-sheet-action-label {\n  flex: 1;\n}\n\n.bottom-sheet-cancel {\n  display: block;\n  width: calc(100% - 32px);\n  margin: 8px 16px 16px;\n  padding: 14px;\n  border: none;\n  border-radius: 12px;\n  background-color: #f3f4f6;\n  color: #374151;\n  font-size: 16px;\n  font-weight: 600;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.bottom-sheet-cancel:hover,\n.bottom-sheet-cancel:active {\n  background-color: #e5e7eb;\n}\n\n.bottom-sheet-cancel:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n}\n\n/* Safe area for notched devices */\n@supports (padding-bottom: env(safe-area-inset-bottom)) {\n  .bottom-sheet {\n    padding-bottom: env(safe-area-inset-bottom);\n  }\n}\n\n@media (prefers-color-scheme: dark) {\n  .bottom-sheet {\n    background-color: #1f2937;\n  }\n\n  .bottom-sheet-handle {\n    background-color: #4b5563;\n  }\n\n  .bottom-sheet-action {\n    color: #e5e7eb;\n  }\n\n  .bottom-sheet-action:hover,\n  .bottom-sheet-action:active {\n    background-color: #374151;\n  }\n\n  .bottom-sheet-action-icon {\n    color: #9ca3af;\n  }\n\n  .bottom-sheet-cancel {\n    background-color: #374151;\n    color: #e5e7eb;\n  }\n\n  .bottom-sheet-cancel:hover,\n  .bottom-sheet-cancel:active {\n    background-color: #4b5563;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .bottom-sheet {\n    border: 2px solid black;\n    border-bottom: none;\n  }\n\n  .bottom-sheet-action {\n    border: 1px solid #9ca3af;\n  }\n}\n';
   const configCss = "h1 {\n    font-size: 18pt;\n}\n\nh2 {\n    font-size: 14pt;\n}\n.config_var textarea {\n    width: 100%;\n    height: 1.5em;\n}\n\n#GM_config_rulesConfig_var textarea {\n    height: 10em;\n}\n\n#GM_config_stateSyncConfig_var textarea {\n    height: 10em;\n}\n\n\n\n#GM_config_header {\n    position: fixed;\n    background-color: inherit;\n    top: -10px;\n    width: 100%;\n}\n\n@media (prefers-color-scheme: light) {\n    #GM_config_header {\n        background-color: #ffffff;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    #GM_config_header {\n        background-color: #29333d;\n    }\n}\n\n#GM_config_section_0 {\n    padding-top: 100px;\n}\n\n#GM_config_buttons_holder {\n    position: fixed;\n    top: 0;\n    right: 0;\n}\n";
-  const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-parent">\n  <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n  {{> postTemplate parent}}\n  </div>\n  {{/if}}\n  {{#each replies}}\n  {{> postTemplate this}}\n  {{/each}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>    \n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this}}\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title="{{alt}}"></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">\n  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">\n      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>\n      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{{text}}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images" style="margin-top: 8px;">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a href="{{uri}}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">\n  <div class="sidecar-embed-external" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; margin-top: 8px; overflow: hidden;">\n    {{#if thumb}}\n    <div class="sidecar-external-thumb" style="width: 100%; max-height: 200px; overflow: hidden;">\n      <img src="{{thumb}}" alt="{{title}}" style="width: 100%; object-fit: cover;" loading="lazy">\n    </div>\n    {{/if}}\n    <div class="sidecar-external-info" style="padding: 12px;">\n      <div class="sidecar-external-domain" style="font-size: 12px; color: rgb(112, 127, 140); margin-bottom: 4px;">{{domain}}</div>\n      <div class="sidecar-external-title" style="font-weight: 600; margin-bottom: 4px;">{{title}}</div>\n      {{#if description}}\n      <div class="sidecar-external-description" style="font-size: 14px; color: rgb(66, 87, 108); line-height: 1.3;">{{description}}</div>\n      {{/if}}\n    </div>\n  </div>\n</a>\n<\/script>\n';
+  const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-section sidecar-parent-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Parent</span>\n    </button>\n    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">\n      <div class="sidecar-parent">\n        <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n        {{> postTemplate parent}}\n      </div>\n    </div>\n  </div>\n  {{/if}}\n  {{#if replies.length}}\n  <div class="sidecar-section sidecar-replies-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Replies ({{replies.length}})</span>\n    </button>\n    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">\n      {{#each replies}}\n      {{> postTemplate this}}\n      {{/each}}\n    </div>\n  </div>\n  {{/if}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this}}\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title="{{alt}}"></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">\n  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">\n      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>\n      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{{text}}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images" style="margin-top: 8px;">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a href="{{uri}}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">\n  <div class="sidecar-embed-external" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; margin-top: 8px; overflow: hidden;">\n    {{#if thumb}}\n    <div class="sidecar-external-thumb" style="width: 100%; max-height: 200px; overflow: hidden;">\n      <img src="{{thumb}}" alt="{{title}}" style="width: 100%; object-fit: cover;" loading="lazy">\n    </div>\n    {{/if}}\n    <div class="sidecar-external-info" style="padding: 12px;">\n      <div class="sidecar-external-domain" style="font-size: 12px; color: rgb(112, 127, 140); margin-bottom: 4px;">{{domain}}</div>\n      <div class="sidecar-external-title" style="font-weight: 600; margin-bottom: 4px;">{{title}}</div>\n      {{#if description}}\n      <div class="sidecar-external-description" style="font-size: 14px; color: rgb(66, 87, 108); line-height: 1.3;">{{description}}</div>\n      {{/if}}\n    </div>\n  </div>\n</a>\n<\/script>\n\n<script id="sidecar-skeleton-template" type="text/x-handlebars-template">\n<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <span class="sr-only">Loading replies...</span>\n</div>\n<\/script>\n';
+  const SHORTCUTS = {
+    Navigation: [
+      { keys: ["j", "\u2193"], description: "Next item" },
+      { keys: ["k", "\u2191"], description: "Previous item" },
+      { keys: ["J"], description: "Next unread item" },
+      { keys: ["g", "g"], description: "Go to first item" },
+      { keys: ["G"], description: "Go to last item" },
+      { keys: ["h"], description: "Go back" },
+      { keys: ["\u2190", "\u2192"], description: "Toggle focus (post/replies)" }
+    ],
+    "Post Actions": [
+      { keys: ["o", "Enter"], description: "Open post" },
+      { keys: ["O"], description: "Open inner post" },
+      { keys: ["l"], description: "Like/Unlike" },
+      { keys: ["p"], description: "Repost menu" },
+      { keys: ["P"], description: "Repost immediately" },
+      { keys: ["r"], description: "Reply" },
+      { keys: ["i"], description: "Open first link" },
+      { keys: ["m"], description: "Toggle media/video" },
+      { keys: ["c"], description: "Screenshot to clipboard" }
+    ],
+    "Feed Controls": [
+      { keys: ["/"], description: "Focus search" },
+      { keys: ["u"], description: "Load newer posts" },
+      { keys: ["U"], description: "Load older posts" },
+      { keys: [":"], description: "Toggle sort order" },
+      { keys: ['"'], description: "Toggle hide read" },
+      { keys: [","], description: "Refresh items" },
+      { keys: ["."], description: "Toggle read status" },
+      { keys: ["A"], description: "Mark all visible as read" }
+    ],
+    "Quick Filters": [
+      { keys: ["Alt+1-9"], description: "Apply filter rule" },
+      { keys: ["Alt+Shift+1-9"], description: "Negate filter rule" },
+      { keys: ["Alt+0"], description: "Clear filter" }
+    ],
+    Other: [
+      { keys: [";"], description: "Expand sidecar" },
+      { keys: ["a"], description: "Open author profile" },
+      { keys: ["1-9"], description: "Switch to tab" },
+      { keys: ["?"], description: "Show/hide this help" },
+      { keys: ["Esc"], description: "Close overlay" }
+    ]
+  };
+  let instance = null;
+  class ShortcutOverlay {
+    constructor(config2) {
+      if (instance) {
+        instance.config = config2;
+        return instance;
+      }
+      this.config = config2;
+      this.isVisible = false;
+      this.overlayEl = null;
+      this.previousActiveElement = null;
+      this.ignoreNextKeydown = false;
+      instance = this;
+    }
+    /**
+     * Toggle overlay visibility
+     */
+    toggle() {
+      if (this.isVisible) {
+        this.hide();
+      } else {
+        this.show();
+      }
+    }
+    /**
+     * Show the overlay
+     */
+    show() {
+      if (this.isVisible) return;
+      this.previousActiveElement = document.activeElement;
+      this.isVisible = true;
+      this.overlayEl = this.createOverlay();
+      document.body.appendChild(this.overlayEl);
+      const firstFocusable = this.overlayEl.querySelector(".shortcut-overlay-close");
+      if (firstFocusable) {
+        firstFocusable.focus();
+      }
+      announceToScreenReader$2("Keyboard shortcuts dialog opened. Press Escape to close.");
+      this.ignoreNextKeydown = true;
+      this.escapeHandler = (e2) => {
+        if (this.ignoreNextKeydown) {
+          this.ignoreNextKeydown = false;
+          return;
+        }
+        if (e2.key === "Escape" || e2.key === "?") {
+          e2.preventDefault();
+          e2.stopPropagation();
+          this.hide();
+        }
+      };
+      document.addEventListener("keydown", this.escapeHandler, true);
+    }
+    /**
+     * Hide the overlay
+     */
+    hide() {
+      if (!this.isVisible || !this.overlayEl) return;
+      const animDuration = getAnimationDuration$1(200, this.config);
+      this.overlayEl.classList.add("shortcut-overlay-hiding");
+      setTimeout(() => {
+        if (this.overlayEl && this.overlayEl.parentNode) {
+          this.overlayEl.parentNode.removeChild(this.overlayEl);
+        }
+        this.overlayEl = null;
+        this.isVisible = false;
+        if (this.previousActiveElement) {
+          this.previousActiveElement.focus();
+        }
+      }, animDuration);
+      document.removeEventListener("keydown", this.escapeHandler);
+      announceToScreenReader$2("Keyboard shortcuts dialog closed.");
+    }
+    /**
+     * Create the overlay DOM element
+     */
+    createOverlay() {
+      const overlay = document.createElement("div");
+      overlay.className = "shortcut-overlay";
+      overlay.setAttribute("role", "dialog");
+      overlay.setAttribute("aria-modal", "true");
+      overlay.setAttribute("aria-labelledby", "shortcut-overlay-title");
+      overlay.innerHTML = `
+      <div class="shortcut-overlay-backdrop"></div>
+      <div class="shortcut-overlay-content">
+        <div class="shortcut-overlay-header">
+          <h2 id="shortcut-overlay-title">Keyboard Shortcuts</h2>
+          <button class="shortcut-overlay-close" aria-label="Close">\xD7</button>
+        </div>
+        <div class="shortcut-overlay-body">
+          ${this.renderCategories()}
+        </div>
+        <div class="shortcut-overlay-footer">
+          Press <kbd>?</kbd> or <kbd>Esc</kbd> to close
+        </div>
+      </div>
+    `;
+      overlay.querySelector(".shortcut-overlay-backdrop").addEventListener("click", () => this.hide());
+      overlay.querySelector(".shortcut-overlay-close").addEventListener("click", () => this.hide());
+      return overlay;
+    }
+    /**
+     * Render all shortcut categories
+     */
+    renderCategories() {
+      return Object.entries(SHORTCUTS).map(([category, shortcuts]) => `
+        <div class="shortcut-category">
+          <h3 class="shortcut-category-title">${category}</h3>
+          <dl class="shortcut-list">
+            ${shortcuts.map((s) => this.renderShortcut(s)).join("")}
+          </dl>
+        </div>
+      `).join("");
+    }
+    /**
+     * Render a single shortcut
+     */
+    renderShortcut({ keys, description }) {
+      const keyHtml = keys.map((key) => `<kbd>${this.escapeHtml(key)}</kbd>`).join(" ");
+      return `
+      <div class="shortcut-item">
+        <dt class="shortcut-keys">${keyHtml}</dt>
+        <dd class="shortcut-desc">${this.escapeHtml(description)}</dd>
+      </div>
+    `;
+    }
+    /**
+     * Escape HTML special characters
+     */
+    escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  }
   class Handler {
     constructor(name, config2, state2, api) {
       this.name = name;
@@ -45010,6 +45257,7 @@ if (cid) {
       this.api = api;
       this.items = [];
       this.handleInput = this.handleInput.bind(this);
+      this.shortcutOverlay = new ShortcutOverlay(config2);
     }
     activate() {
       this.bindKeys();
@@ -45063,6 +45311,9 @@ if (cid) {
         if (event.code == "Escape" && $("#GM_config").is(":visible")) {
           event.preventDefault();
           this.config.close();
+        } else if (event.key === "?") {
+          event.preventDefault();
+          this.shortcutOverlay.toggle();
         }
       }
     }
@@ -46714,8 +46965,8 @@ if (cid) {
     (function(module, exports) {
       exports.__esModule = true;
       var _utils = requireUtils();
-      exports["default"] = function(instance) {
-        instance.registerHelper("blockHelperMissing", function(context, options) {
+      exports["default"] = function(instance2) {
+        instance2.registerHelper("blockHelperMissing", function(context, options) {
           var inverse = options.inverse, fn = options.fn;
           if (context === true) {
             return fn(this);
@@ -46726,7 +46977,7 @@ if (cid) {
               if (options.ids) {
                 options.ids = [options.name];
               }
-              return instance.helpers.each(context, options);
+              return instance2.helpers.each(context, options);
             } else {
               return inverse(this);
             }
@@ -46757,8 +47008,8 @@ if (cid) {
       var _utils = requireUtils();
       var _exception = requireException();
       var _exception2 = _interopRequireDefault(_exception);
-      exports["default"] = function(instance) {
-        instance.registerHelper("each", function(context, options) {
+      exports["default"] = function(instance2) {
+        instance2.registerHelper("each", function(context, options) {
           if (!options) {
             throw new _exception2["default"]("Must pass iterator to #each");
           }
@@ -46842,8 +47093,8 @@ if (cid) {
       }
       var _exception = requireException();
       var _exception2 = _interopRequireDefault(_exception);
-      exports["default"] = function(instance) {
-        instance.registerHelper("helperMissing", function() {
+      exports["default"] = function(instance2) {
+        instance2.registerHelper("helperMissing", function() {
           if (arguments.length === 1) {
             return void 0;
           } else {
@@ -46868,8 +47119,8 @@ if (cid) {
       var _utils = requireUtils();
       var _exception = requireException();
       var _exception2 = _interopRequireDefault(_exception);
-      exports["default"] = function(instance) {
-        instance.registerHelper("if", function(conditional, options) {
+      exports["default"] = function(instance2) {
+        instance2.registerHelper("if", function(conditional, options) {
           if (arguments.length != 2) {
             throw new _exception2["default"]("#if requires exactly one argument");
           }
@@ -46882,11 +47133,11 @@ if (cid) {
             return options.fn(this);
           }
         });
-        instance.registerHelper("unless", function(conditional, options) {
+        instance2.registerHelper("unless", function(conditional, options) {
           if (arguments.length != 2) {
             throw new _exception2["default"]("#unless requires exactly one argument");
           }
-          return instance.helpers["if"].call(this, conditional, {
+          return instance2.helpers["if"].call(this, conditional, {
             fn: options.inverse,
             inverse: options.fn,
             hash: options.hash
@@ -46904,8 +47155,8 @@ if (cid) {
     hasRequiredLog = 1;
     (function(module, exports) {
       exports.__esModule = true;
-      exports["default"] = function(instance) {
-        instance.registerHelper("log", function() {
+      exports["default"] = function(instance2) {
+        instance2.registerHelper("log", function() {
           var args = [void 0], options = arguments[arguments.length - 1];
           for (var i2 = 0; i2 < arguments.length - 1; i2++) {
             args.push(arguments[i2]);
@@ -46917,7 +47168,7 @@ if (cid) {
             level = options.data.level;
           }
           args[0] = level;
-          instance.log.apply(instance, args);
+          instance2.log.apply(instance2, args);
         });
       };
       module.exports = exports["default"];
@@ -46931,8 +47182,8 @@ if (cid) {
     hasRequiredLookup = 1;
     (function(module, exports) {
       exports.__esModule = true;
-      exports["default"] = function(instance) {
-        instance.registerHelper("lookup", function(obj, field, options) {
+      exports["default"] = function(instance2) {
+        instance2.registerHelper("lookup", function(obj, field, options) {
           if (!obj) {
             return obj;
           }
@@ -46956,8 +47207,8 @@ if (cid) {
       var _utils = requireUtils();
       var _exception = requireException();
       var _exception2 = _interopRequireDefault(_exception);
-      exports["default"] = function(instance) {
-        instance.registerHelper("with", function(context, options) {
+      exports["default"] = function(instance2) {
+        instance2.registerHelper("with", function(context, options) {
           if (arguments.length != 2) {
             throw new _exception2["default"]("#with requires exactly one argument");
           }
@@ -47008,20 +47259,20 @@ if (cid) {
     var _helpersLookup2 = _interopRequireDefault(_helpersLookup);
     var _helpersWith = require_with();
     var _helpersWith2 = _interopRequireDefault(_helpersWith);
-    function registerDefaultHelpers(instance) {
-      _helpersBlockHelperMissing2["default"](instance);
-      _helpersEach2["default"](instance);
-      _helpersHelperMissing2["default"](instance);
-      _helpersIf2["default"](instance);
-      _helpersLog2["default"](instance);
-      _helpersLookup2["default"](instance);
-      _helpersWith2["default"](instance);
+    function registerDefaultHelpers(instance2) {
+      _helpersBlockHelperMissing2["default"](instance2);
+      _helpersEach2["default"](instance2);
+      _helpersHelperMissing2["default"](instance2);
+      _helpersIf2["default"](instance2);
+      _helpersLog2["default"](instance2);
+      _helpersLookup2["default"](instance2);
+      _helpersWith2["default"](instance2);
     }
-    function moveHelperToHooks(instance, helperName, keepHelper) {
-      if (instance.helpers[helperName]) {
-        instance.hooks[helperName] = instance.helpers[helperName];
+    function moveHelperToHooks(instance2, helperName, keepHelper) {
+      if (instance2.helpers[helperName]) {
+        instance2.hooks[helperName] = instance2.helpers[helperName];
         if (!keepHelper) {
-          delete instance.helpers[helperName];
+          delete instance2.helpers[helperName];
         }
       }
     }
@@ -47036,8 +47287,8 @@ if (cid) {
     (function(module, exports) {
       exports.__esModule = true;
       var _utils = requireUtils();
-      exports["default"] = function(instance) {
-        instance.registerDecorator("inline", function(fn, props, container, options) {
+      exports["default"] = function(instance2) {
+        instance2.registerDecorator("inline", function(fn, props, container, options) {
           var ret = fn;
           if (!props.partials) {
             props.partials = {};
@@ -47068,8 +47319,8 @@ if (cid) {
     }
     var _decoratorsInline = requireInline();
     var _decoratorsInline2 = _interopRequireDefault(_decoratorsInline);
-    function registerDefaultDecorators(instance) {
-      _decoratorsInline2["default"](instance);
+    function registerDefaultDecorators(instance2) {
+      _decoratorsInline2["default"](instance2);
     }
     return decorators;
   }
@@ -60140,7 +60391,334 @@ if (cid) {
       likeCount: formatter.format(post2.likeCount)
     };
   }
-  const { waitForElement: waitForElement$2 } = utils$1;
+  class GestureHandler {
+    constructor(config2, itemHandler) {
+      this.config = config2;
+      this.itemHandler = itemHandler;
+      this.minSwipeDistance = 50;
+      this.swipeThreshold = 0.3;
+      this.activeElement = null;
+      this.startX = 0;
+      this.startY = 0;
+      this.currentX = 0;
+      this.isHorizontalSwipe = null;
+      this.handleTouchStart = this.handleTouchStart.bind(this);
+      this.handleTouchMove = this.handleTouchMove.bind(this);
+      this.handleTouchEnd = this.handleTouchEnd.bind(this);
+    }
+    /**
+     * Initialize gesture handling on an item
+     */
+    init(item) {
+      if (!item) return;
+      item.addEventListener("touchstart", this.handleTouchStart, { passive: true });
+      item.addEventListener("touchmove", this.handleTouchMove, { passive: false });
+      item.addEventListener("touchend", this.handleTouchEnd, { passive: true });
+    }
+    /**
+     * Remove gesture handling from an item
+     */
+    destroy(item) {
+      if (!item) return;
+      item.removeEventListener("touchstart", this.handleTouchStart);
+      item.removeEventListener("touchmove", this.handleTouchMove);
+      item.removeEventListener("touchend", this.handleTouchEnd);
+    }
+    handleTouchStart(e2) {
+      if (e2.touches.length !== 1) return;
+      const touch = e2.touches[0];
+      this.startX = touch.clientX;
+      this.startY = touch.clientY;
+      this.currentX = touch.clientX;
+      this.activeElement = e2.currentTarget;
+      this.isHorizontalSwipe = null;
+      this.createSwipeIndicators();
+    }
+    handleTouchMove(e2) {
+      if (!this.activeElement || e2.touches.length !== 1) return;
+      const touch = e2.touches[0];
+      const deltaX = touch.clientX - this.startX;
+      const deltaY = touch.clientY - this.startY;
+      if (this.isHorizontalSwipe === null && (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10)) {
+        this.isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
+      }
+      if (this.isHorizontalSwipe) {
+        e2.preventDefault();
+        this.currentX = touch.clientX;
+        const translateX = Math.max(-100, Math.min(100, deltaX * 0.5));
+        this.activeElement.style.transform = `translateX(${translateX}px)`;
+        this.activeElement.style.transition = "none";
+        this.updateSwipeIndicators(deltaX);
+      }
+    }
+    handleTouchEnd(e2) {
+      if (!this.activeElement) return;
+      const deltaX = this.currentX - this.startX;
+      const itemWidth = this.activeElement.offsetWidth;
+      const swipeRatio = Math.abs(deltaX) / itemWidth;
+      const animDuration = getAnimationDuration$1(200, this.config);
+      this.activeElement.style.transition = `transform ${animDuration}ms ease-out`;
+      this.activeElement.style.transform = "";
+      if (this.isHorizontalSwipe && swipeRatio >= this.swipeThreshold) {
+        if (deltaX > this.minSwipeDistance) {
+          this.onSwipeRight();
+        } else if (deltaX < -this.minSwipeDistance) {
+          this.onSwipeLeft();
+        }
+      }
+      this.removeSwipeIndicators();
+      this.activeElement = null;
+      this.isHorizontalSwipe = null;
+    }
+    onSwipeRight() {
+      if (this.itemHandler && this.itemHandler.likePost) {
+        this.itemHandler.likePost(this.activeElement);
+        announceToScreenReader$2("Post liked");
+      }
+    }
+    onSwipeLeft() {
+      if (this.itemHandler) {
+        $(this.activeElement).removeClass("item-unread").addClass("item-read");
+        this.itemHandler.markItemRead(this.activeElement);
+        const animDuration = getAnimationDuration$1(200, this.config);
+        $(this.activeElement).css({
+          transition: `transform ${animDuration}ms ease-out, opacity ${animDuration}ms ease-out`,
+          transform: "translateX(-100%)",
+          opacity: 0
+        });
+        setTimeout(() => {
+          $(this.activeElement).css({
+            transform: "",
+            opacity: ""
+          });
+          this.itemHandler.jumpToNextUnseenItem();
+        }, animDuration);
+        announceToScreenReader$2("Post marked as read");
+      }
+    }
+    createSwipeIndicators() {
+      if (!this.activeElement) return;
+      const leftIndicator = document.createElement("div");
+      leftIndicator.className = "swipe-indicator swipe-indicator-left";
+      leftIndicator.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+      </svg>
+    `;
+      const rightIndicator = document.createElement("div");
+      rightIndicator.className = "swipe-indicator swipe-indicator-right";
+      rightIndicator.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+      </svg>
+    `;
+      this.activeElement.style.position = "relative";
+      this.activeElement.insertBefore(leftIndicator, this.activeElement.firstChild);
+      this.activeElement.insertBefore(rightIndicator, this.activeElement.firstChild);
+    }
+    updateSwipeIndicators(deltaX) {
+      const leftIndicator = this.activeElement?.querySelector(".swipe-indicator-left");
+      const rightIndicator = this.activeElement?.querySelector(".swipe-indicator-right");
+      if (leftIndicator) {
+        leftIndicator.classList.toggle("swipe-indicator-active", deltaX < -this.minSwipeDistance);
+      }
+      if (rightIndicator) {
+        rightIndicator.classList.toggle("swipe-indicator-active", deltaX > this.minSwipeDistance);
+      }
+    }
+    removeSwipeIndicators() {
+      if (!this.activeElement) return;
+      this.activeElement.querySelectorAll(".swipe-indicator").forEach((el) => el.remove());
+    }
+  }
+  class BottomSheet {
+    constructor(config2, itemHandler) {
+      this.config = config2;
+      this.itemHandler = itemHandler;
+      this.isVisible = false;
+      this.sheetElement = null;
+      this.backdropElement = null;
+      this.currentItem = null;
+      this.longPressTimer = null;
+      this.longPressDuration = 500;
+      this.handleLongPressStart = this.handleLongPressStart.bind(this);
+      this.handleLongPressEnd = this.handleLongPressEnd.bind(this);
+      this.hide = this.hide.bind(this);
+    }
+    /**
+     * Initialize long press detection on an item
+     */
+    init(item) {
+      if (!item) return;
+      item.addEventListener("touchstart", this.handleLongPressStart, { passive: true });
+      item.addEventListener("touchend", this.handleLongPressEnd, { passive: true });
+      item.addEventListener("touchmove", this.handleLongPressEnd, { passive: true });
+      item.addEventListener("touchcancel", this.handleLongPressEnd, { passive: true });
+    }
+    /**
+     * Remove long press detection from an item
+     */
+    destroy(item) {
+      if (!item) return;
+      item.removeEventListener("touchstart", this.handleLongPressStart);
+      item.removeEventListener("touchend", this.handleLongPressEnd);
+      item.removeEventListener("touchmove", this.handleLongPressEnd);
+      item.removeEventListener("touchcancel", this.handleLongPressEnd);
+    }
+    handleLongPressStart(e2) {
+      this.currentItem = e2.currentTarget;
+      this.longPressTimer = setTimeout(() => {
+        this.show(this.currentItem);
+        e2.preventDefault();
+      }, this.longPressDuration);
+    }
+    handleLongPressEnd() {
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+    }
+    /**
+     * Show the bottom sheet for an item
+     */
+    show(item) {
+      if (this.isVisible) return;
+      this.currentItem = item;
+      this.isVisible = true;
+      this.backdropElement = document.createElement("div");
+      this.backdropElement.className = "bottom-sheet-backdrop";
+      this.backdropElement.addEventListener("click", this.hide);
+      this.sheetElement = this.createSheet();
+      document.body.appendChild(this.backdropElement);
+      document.body.appendChild(this.sheetElement);
+      document.body.style.overflow = "hidden";
+      requestAnimationFrame(() => {
+        this.backdropElement.classList.add("bottom-sheet-backdrop-visible");
+        this.sheetElement.classList.add("bottom-sheet-visible");
+      });
+      announceToScreenReader$2("Action sheet opened. Select an action or tap outside to close.");
+    }
+    /**
+     * Hide the bottom sheet
+     */
+    hide() {
+      if (!this.isVisible) return;
+      const animDuration = getAnimationDuration$1(200, this.config);
+      this.backdropElement.classList.remove("bottom-sheet-backdrop-visible");
+      this.sheetElement.classList.remove("bottom-sheet-visible");
+      setTimeout(() => {
+        if (this.backdropElement && this.backdropElement.parentNode) {
+          this.backdropElement.parentNode.removeChild(this.backdropElement);
+        }
+        if (this.sheetElement && this.sheetElement.parentNode) {
+          this.sheetElement.parentNode.removeChild(this.sheetElement);
+        }
+        this.backdropElement = null;
+        this.sheetElement = null;
+        this.isVisible = false;
+        document.body.style.overflow = "";
+      }, animDuration);
+      announceToScreenReader$2("Action sheet closed.");
+    }
+    /**
+     * Create the sheet DOM element
+     */
+    createSheet() {
+      const sheet = document.createElement("div");
+      sheet.className = "bottom-sheet";
+      sheet.setAttribute("role", "dialog");
+      sheet.setAttribute("aria-modal", "true");
+      sheet.setAttribute("aria-label", "Post actions");
+      const actions = this.getActions();
+      sheet.innerHTML = `
+      <div class="bottom-sheet-handle"></div>
+      <div class="bottom-sheet-content">
+        ${actions.map((action) => `
+          <button class="bottom-sheet-action" data-action="${action.id}">
+            <span class="bottom-sheet-action-icon">${action.icon}</span>
+            <span class="bottom-sheet-action-label">${action.label}</span>
+          </button>
+        `).join("")}
+      </div>
+      <button class="bottom-sheet-cancel">Cancel</button>
+    `;
+      sheet.querySelector(".bottom-sheet-cancel").addEventListener("click", this.hide);
+      sheet.querySelectorAll(".bottom-sheet-action").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const actionId = e2.currentTarget.dataset.action;
+          this.executeAction(actionId);
+          this.hide();
+        });
+      });
+      return sheet;
+    }
+    /**
+     * Get available actions for the current item
+     */
+    getActions() {
+      return [
+        {
+          id: "like",
+          icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
+          label: "Like"
+        },
+        {
+          id: "repost",
+          icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>',
+          label: "Repost"
+        },
+        {
+          id: "reply",
+          icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>',
+          label: "Reply"
+        },
+        {
+          id: "open",
+          icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>',
+          label: "Open post"
+        },
+        {
+          id: "markRead",
+          icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>',
+          label: "Mark as read"
+        },
+        {
+          id: "screenshot",
+          icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>',
+          label: "Screenshot"
+        }
+      ];
+    }
+    /**
+     * Execute an action
+     */
+    executeAction(actionId) {
+      if (!this.currentItem || !this.itemHandler) return;
+      switch (actionId) {
+        case "like":
+          this.itemHandler.likePost(this.currentItem);
+          break;
+        case "repost":
+          $(this.currentItem).find('button[data-testid="repostBtn"]').click();
+          break;
+        case "reply":
+          $(this.currentItem).find('button[data-testid="replyBtn"]').click();
+          break;
+        case "open":
+          this.itemHandler.openItem(this.currentItem);
+          break;
+        case "markRead":
+          $(this.currentItem).removeClass("item-unread").addClass("item-read");
+          this.itemHandler.markItemRead(this.currentItem);
+          announceToScreenReader$2("Marked as read");
+          break;
+        case "screenshot":
+          this.itemHandler.captureScreenshot(this.currentItem);
+          break;
+      }
+    }
+  }
+  const { waitForElement: waitForElement$2, announceToScreenReader: announceToScreenReader$1, getAnimationDuration } = utils$1;
   function extractPostIdFromUrl(url) {
     const match2 = url.match(/post\/([^/]+)/);
     return match2 ? match2[1] : null;
@@ -60176,6 +60754,10 @@ if (cid) {
       this.scrollTick = false;
       this.scrollTop = 0;
       this.scrollDirection = 0;
+      if (this.state.mobileView && this.config.get("enableSwipeGestures")) {
+        this.gestureHandler = new GestureHandler(this.config, this);
+        this.bottomSheet = new BottomSheet(this.config, this);
+      }
       this.onPopupAdd = this.onPopupAdd.bind(this);
       this.onPopupRemove = this.onPopupRemove.bind(this);
       this.onIntersection = this.onIntersection.bind(this);
@@ -60391,6 +60973,31 @@ if (cid) {
         this.externalTemplate = Handlebars.compile($("#sidecar-embed-external-template").html());
         Handlebars.registerPartial("externalTemplate", this.externalTemplate);
       });
+      waitForElement$2("#sidecar-skeleton-template", () => {
+        this.skeletonTemplate = Handlebars.compile($("#sidecar-skeleton-template").html());
+      });
+    }
+    getSkeletonContent() {
+      if (this.skeletonTemplate) {
+        return this.skeletonTemplate({});
+      }
+      return `<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">
+      <div class="skeleton-post">
+        <div class="skeleton-header">
+          <div class="skeleton-avatar skeleton-shimmer"></div>
+          <div class="skeleton-author">
+            <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>
+            <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+          </div>
+        </div>
+        <div class="skeleton-body">
+          <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+          <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+          <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+        </div>
+      </div>
+      <span class="sr-only">Loading replies...</span>
+    </div>`;
     }
     shouldUnroll(_item) {
       return this.config.get("unrollThreads");
@@ -60498,10 +61105,12 @@ if (cid) {
     }
     async showSidecar(item, thread, action = null) {
       const container = $(item).parent();
-      const emptyContent = await this.getSidecarContent();
-      const sidecar = $(container).find(".sidecar-replies")[0];
-      if (!sidecar) {
-        $(container).append(emptyContent);
+      const existingSidecar = $(container).find(".sidecar-replies")[0];
+      if (!existingSidecar) {
+        const skeletonContent = this.getSkeletonContent();
+        $(container).append(skeletonContent);
+      } else if (!thread) {
+        $(existingSidecar).replaceWith($(this.getSkeletonContent()));
       }
       const sidecarContent = await this.getSidecarContent(item, thread);
       console.log(sidecarContent);
@@ -60509,6 +61118,23 @@ if (cid) {
       container.find(".sidecar-post").each((i2, post2) => {
         $(post2).on("mouseover", this.onSidecarItemMouseOver);
       });
+      container.find(".sidecar-section-toggle").each((i2, toggle) => {
+        $(toggle).on("click", (e2) => {
+          e2.preventDefault();
+          const btn = $(e2.currentTarget);
+          const contentId = btn.attr("aria-controls");
+          const content2 = $(`#${contentId}`);
+          const isExpanded = btn.attr("aria-expanded") === "true";
+          btn.attr("aria-expanded", !isExpanded);
+          btn.find(".sidecar-section-icon").text(isExpanded ? "\u25B6" : "\u25BC");
+          if (isExpanded) {
+            content2.slideUp(getAnimationDuration(200, this.config));
+          } else {
+            content2.slideDown(getAnimationDuration(200, this.config));
+          }
+        });
+      });
+      const sidecar = container.find(".sidecar-replies")[0];
       const display2 = action == null ? sidecar && $(sidecar).is(":visible") ? "none" : "flex" : action ? "flex" : "none";
       console.log(display2);
       container.find(".sidecar-replies").css("display", display2);
@@ -60819,8 +61445,18 @@ if (cid) {
     updateLikeUI(post2, currentLikeCount, wasLiked) {
       const newCount = wasLiked ? currentLikeCount - 1 : currentLikeCount + 1;
       const svgIndex = wasLiked ? 0 : 1;
-      $(post2).find(".sidecar-like-button").html(constants.SIDECAR_SVG_LIKE[svgIndex]);
+      const likeButton = $(post2).find(".sidecar-like-button");
+      likeButton.html(constants.SIDECAR_SVG_LIKE[svgIndex]);
       $(post2).find(".sidecar-count-label-likes").html(Math.max(0, newCount));
+      const animDuration = getAnimationDuration(300, this.config);
+      if (animDuration > 0) {
+        likeButton.addClass(wasLiked ? "like-animation-unlike" : "like-animation-like");
+        setTimeout(() => {
+          likeButton.removeClass("like-animation-like like-animation-unlike");
+        }, animDuration);
+      }
+      const action = wasLiked ? "unliked" : "liked";
+      announceToScreenReader$1(`Post ${action}. ${newCount} ${newCount === 1 ? "like" : "likes"}.`);
     }
     async captureScreenshot(item) {
       try {
@@ -60948,7 +61584,31 @@ if (cid) {
           },
           true
         );
+        this.showNewPostsPill();
       });
+    }
+    showNewPostsPill() {
+      $("#bsky-navigator-new-posts-pill").remove();
+      const pill = $(`
+      <button id="bsky-navigator-new-posts-pill" class="new-posts-pill" aria-label="Load new posts">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 4l-8 8h6v8h4v-8h6z"/>
+        </svg>
+        <span>New posts</span>
+      </button>
+    `);
+      pill.on("click", (e2) => {
+        e2.preventDefault();
+        this.hideNewPostsPill();
+        this.loadNewerItems();
+      });
+      $("body").append(pill);
+      announceToScreenReader$1("New posts available. Press u to load.");
+    }
+    hideNewPostsPill() {
+      const pill = $("#bsky-navigator-new-posts-pill");
+      pill.addClass("new-posts-pill-hiding");
+      setTimeout(() => pill.remove(), 200);
     }
     setupFloatingButtons() {
       console.log(this.state.mobileView);
@@ -61010,6 +61670,12 @@ if (cid) {
       this.applyItemStyle(element);
       clearTimeout(this.debounceTimeout);
       this.debounceTimeout = setTimeout(() => this.loadItems(), 500);
+      if (this.gestureHandler) {
+        this.gestureHandler.init(element);
+      }
+      if (this.bottomSheet) {
+        this.bottomSheet.init(element);
+      }
     }
     onItemRemoved(element) {
       if (this.intersectionObserver) {
@@ -61349,6 +62015,8 @@ if (cid) {
     loadItems(focusedPostId) {
       const classes = ["thread-first", "thread-middle", "thread-last"];
       const set = [];
+      $(".unrolled-replies").remove();
+      $(".sidecar-replies").remove();
       $(this.items).css("opacity", "0%");
       let itemIndex = 0;
       let threadIndex = 0;
@@ -61369,7 +62037,9 @@ if (cid) {
       });
       this.sortItems();
       this.filterItems();
-      this.items = $(this.selector).filter(":visible");
+      this.items = $(this.selector).filter(":visible").filter((i2, item) => {
+        return $(item).parents(this.selector).length === 0;
+      });
       this.itemStats.oldest = this.itemStats.newest = null;
       $(this.selector).filter(":visible").each((i2, item) => {
         const timestamp = this.getTimestampForItem(item);
@@ -61380,11 +62050,9 @@ if (cid) {
           this.itemStats.newest = timestamp;
         }
         if (this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
-          this.getSidecarContent().then((content2) => {
-            if (!$(item).parent().find(".sidecar-replies").length) {
-              $(item).parent().append(content2);
-            }
-          });
+          if (!$(item).parent().find(".sidecar-replies").length) {
+            $(item).parent().append('<div class="sidecar-replies sidecar-replies-empty"></div>');
+          }
         }
       });
       this.setupIntersectionObserver();
@@ -61474,6 +62142,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return;
       }
       this.loadingNew = true;
+      this.hideNewPostsPill();
       this.applyItemStyle(this.selectedItem, false);
       const oldPostId = this.postIdForItem(this.selectedItem);
       $(this.loadNewerButton).click();
@@ -61513,7 +62182,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       ]);
     }
   }
-  const { waitForElement: waitForElement$1 } = utils$1;
+  const { waitForElement: waitForElement$1, announceToScreenReader } = utils$1;
   class FeedItemHandler extends ItemHandler {
     INDICATOR_IMAGES = {
       loadTop: ["https://www.svgrepo.com/show/502348/circleupmajor.svg"],
@@ -61632,8 +62301,37 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         event.preventDefault();
         this.toggleHideRead();
       });
-      this.searchField = $(`<input id="bsky-navigator-search" type="text"/>`);
-      $(this.toolbarDiv).append(this.searchField);
+      this.searchWrapper = $(`<div class="search-wrapper"></div>`);
+      $(this.toolbarDiv).append(this.searchWrapper);
+      this.savedSearchesBtn = $(`
+      <button id="saved-searches-btn" class="saved-searches-btn" title="Saved searches" aria-label="Saved searches" aria-haspopup="listbox">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+        </svg>
+      </button>
+    `);
+      $(this.searchWrapper).append(this.savedSearchesBtn);
+      this.searchField = $(`<input id="bsky-navigator-search" type="text" placeholder="Filter..."/>`);
+      $(this.searchWrapper).append(this.searchField);
+      this.saveSearchBtn = $(`
+      <button id="save-search-btn" class="save-search-btn" title="Save current search" aria-label="Save current search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+    `);
+      $(this.searchWrapper).append(this.saveSearchBtn);
+      this.savedSearchesBtn.on("click", (e2) => {
+        e2.preventDefault();
+        e2.stopPropagation();
+        this.toggleSavedSearchesDropdown();
+      });
+      this.saveSearchBtn.on("click", (e2) => {
+        e2.preventDefault();
+        e2.stopPropagation();
+        this.saveCurrentSearch();
+      });
       $("#bsky-navigator-search").autocomplete({
         minLength: 0,
         appendTo: 'div[data-testid="homeScreenFeedTabs"]',
@@ -61759,6 +62457,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       $(this.statusBar).append(this.statusBarCenter);
       $(this.statusBar).append(this.statusBarRight);
       $(statusBarContainer).append(this.statusBar);
+      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+      $(statusBarContainer).append(this.scrollIndicator);
       this.bottomLoadIndicator = $(`
 <div id="bottomLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"/>
 `);
@@ -61824,6 +62524,115 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     setFilter(text) {
       this.state.stateManager.saveStateImmediately(true, true);
       this.state.filter = text;
+      this.updateFilterPill();
+    }
+    updateFilterPill() {
+      const existingPill = $("#bsky-navigator-filter-pill");
+      if (!this.state.filter) {
+        existingPill.remove();
+        return;
+      }
+      if (!existingPill.length) {
+        const pill = $(`
+        <div id="bsky-navigator-filter-pill" class="filter-pill" role="status" aria-live="polite">
+          <span class="filter-pill-text"></span>
+          <button class="filter-pill-clear" aria-label="Clear filter" title="Clear filter">\xD7</button>
+        </div>
+      `);
+        pill.find(".filter-pill-clear").on("click", (e2) => {
+          e2.preventDefault();
+          e2.stopPropagation();
+          this.clearFilter();
+        });
+        $("#bsky-navigator-toolbar").append(pill);
+      }
+      $("#bsky-navigator-filter-pill .filter-pill-text").text(this.state.filter);
+      announceToScreenReader(`Filter active: ${this.state.filter}`);
+    }
+    clearFilter() {
+      $("#bsky-navigator-search").val("");
+      this.setFilter("");
+      this.loadItems();
+      announceToScreenReader("Filter cleared");
+    }
+    getSavedSearches() {
+      try {
+        const saved = this.config.get("savedSearches") || "[]";
+        return JSON.parse(saved);
+      } catch (e2) {
+        return [];
+      }
+    }
+    saveSavedSearches(searches) {
+      this.config.set("savedSearches", JSON.stringify(searches));
+      this.config.save();
+    }
+    saveCurrentSearch() {
+      const currentSearch = this.state.filter;
+      if (!currentSearch || !currentSearch.trim()) {
+        announceToScreenReader("No filter to save");
+        return;
+      }
+      const searches = this.getSavedSearches();
+      if (searches.includes(currentSearch)) {
+        announceToScreenReader("Search already saved");
+        return;
+      }
+      searches.push(currentSearch);
+      this.saveSavedSearches(searches);
+      announceToScreenReader(`Search "${currentSearch}" saved`);
+      this.saveSearchBtn.addClass("save-search-btn-saved");
+      setTimeout(() => this.saveSearchBtn.removeClass("save-search-btn-saved"), 300);
+    }
+    toggleSavedSearchesDropdown() {
+      const existing = $("#saved-searches-dropdown");
+      if (existing.length) {
+        existing.remove();
+        return;
+      }
+      const searches = this.getSavedSearches();
+      if (searches.length === 0) {
+        announceToScreenReader("No saved searches");
+        return;
+      }
+      const dropdown = $(`
+      <div id="saved-searches-dropdown" class="saved-searches-dropdown" role="listbox" aria-label="Saved searches">
+        ${searches.map((search, i2) => `
+          <div class="saved-search-item" role="option" data-search="${this.escapeHtml(search)}">
+            <span class="saved-search-text">${this.escapeHtml(search)}</span>
+            <button class="saved-search-delete" data-index="${i2}" aria-label="Delete saved search" title="Delete">\xD7</button>
+          </div>
+        `).join("")}
+      </div>
+    `);
+      dropdown.find(".saved-search-item").on("click", (e2) => {
+        if (!$(e2.target).hasClass("saved-search-delete")) {
+          const search = $(e2.currentTarget).data("search");
+          $("#bsky-navigator-search").val(search);
+          this.setFilter(search);
+          this.loadItems();
+          dropdown.remove();
+          announceToScreenReader(`Applied saved search: ${search}`);
+        }
+      });
+      dropdown.find(".saved-search-delete").on("click", (e2) => {
+        e2.stopPropagation();
+        const index = parseInt($(e2.currentTarget).data("index"), 10);
+        const searches2 = this.getSavedSearches();
+        const removed = searches2.splice(index, 1);
+        this.saveSavedSearches(searches2);
+        $(e2.currentTarget).parent().remove();
+        announceToScreenReader(`Deleted saved search: ${removed[0]}`);
+        if (searches2.length === 0) {
+          dropdown.remove();
+        }
+      });
+      this.searchWrapper.append(dropdown);
+      $(document).one("click", (e2) => {
+        if (!$(e2.target).closest(".search-wrapper").length) {
+          dropdown.remove();
+        }
+      });
     }
     /**
      * Determines if an item should be shown based on read status and filter rules.
@@ -61912,8 +62721,38 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const content2 = $(item).find('div[data-testid="postText"]').text();
       return content2.match(pattern);
     }
+    highlightFilterMatches(item) {
+      $(item).find(".filter-highlight").contents().unwrap();
+      if (!this.state.filter) return;
+      const terms = this.state.filter.split(/\s+/).filter((term) => {
+        return term && !term.startsWith("@") && !term.startsWith("$") && !term.startsWith("!");
+      }).map((term) => {
+        return term.startsWith("%") ? term.substring(1) : term;
+      });
+      if (terms.length === 0) return;
+      const postText = $(item).find('div[data-testid="postText"]');
+      if (!postText.length) return;
+      const pattern = new RegExp(`(${terms.map((t) => this.escapeRegex(t)).join("|")})`, "gi");
+      postText.contents().each(function() {
+        if (this.nodeType === Node.TEXT_NODE) {
+          const text = this.textContent;
+          if (pattern.test(text)) {
+            const highlighted = text.replace(pattern, '<mark class="filter-highlight">$1</mark>');
+            $(this).replaceWith(highlighted);
+          }
+        }
+      });
+    }
+    escapeRegex(string2) {
+      return string2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+    clearAllHighlights() {
+      $(".filter-highlight").contents().unwrap();
+    }
     filterThread(thread) {
-      return $(thread).find(".item").length != $(thread).find(".filtered").length;
+      const items = $(thread).find("> div > .item");
+      const filteredItems = items.filter(".filtered");
+      return items.length !== filteredItems.length;
     }
     filterItems() {
       const hideRead = this.state.feedHideRead;
@@ -61922,12 +62761,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         "title",
         `show all or unread (currently ${hideRead ? "unread" : "all"})`
       );
+      this.clearAllHighlights();
       const parent = $(this.selector).first().closest(".thread").parent();
       const unseenThreads = parent.find(".thread");
       $(unseenThreads).map((i2, thread) => {
         $(thread).find(".item").each((i3, item) => {
           if (this.filterItem(item, thread)) {
             $(item).removeClass("filtered");
+            this.highlightFilterMatches(item);
           } else {
             $(item).addClass("filtered");
           }
@@ -61976,6 +62817,69 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return itemIndexA - itemIndexB;
       });
       reversed ^ this.loadingNew ? parent.prepend(newItems) : parent.children(".thread").last().next().after(newItems);
+    }
+    updateInfoIndicator() {
+      super.updateInfoIndicator();
+      this.updateScrollPosition();
+      this.updateBreadcrumb();
+    }
+    updateBreadcrumb() {
+      let breadcrumb = $("#bsky-navigator-breadcrumb");
+      if (!breadcrumb.length) {
+        breadcrumb = $(`<nav id="bsky-navigator-breadcrumb" class="breadcrumb" aria-label="Current location"></nav>`);
+        $("#bsky-navigator-toolbar").append(breadcrumb);
+      }
+      if (!this.selectedItem || !this.items.length) {
+        breadcrumb.empty();
+        return;
+      }
+      const parts = [];
+      const activeTab = $('div[role="tablist"] [aria-selected="true"]').text().trim();
+      if (activeTab) {
+        parts.push({ label: activeTab, type: "feed" });
+      } else {
+        parts.push({ label: "Feed", type: "feed" });
+      }
+      const handle2 = this.handleFromItem(this.selectedItem);
+      const displayName = this.displayNameFromItem(this.selectedItem);
+      if (handle2) {
+        parts.push({ label: displayName || `@${handle2}`, type: "author", handle: handle2 });
+      }
+      if (this.threadIndex != null && this.unrolledReplies.length > 0) {
+        parts.push({ label: `Post ${this.threadIndex + 1}/${this.unrolledReplies.length + 1}`, type: "position" });
+      } else if (this.replyIndex != null) {
+        const replyCount = $(this.selectedItem).parent().find(".sidecar-post").length;
+        parts.push({ label: `Reply ${this.replyIndex + 1}/${replyCount}`, type: "reply" });
+      }
+      const html = parts.map((part, i2) => {
+        const isLast = i2 === parts.length - 1;
+        let content2 = "";
+        if (part.type === "author" && part.handle) {
+          content2 = `<a href="/profile/${part.handle}" class="breadcrumb-link">${this.escapeHtml(part.label)}</a>`;
+        } else {
+          content2 = `<span class="breadcrumb-text">${this.escapeHtml(part.label)}</span>`;
+        }
+        if (!isLast) {
+          content2 += '<span class="breadcrumb-separator" aria-hidden="true">\u203A</span>';
+        }
+        return `<span class="breadcrumb-item">${content2}</span>`;
+      }).join("");
+      breadcrumb.html(html);
+    }
+    escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    updateScrollPosition() {
+      const indicator = $("#scroll-position-indicator");
+      if (!indicator.length || !this.items.length) return;
+      const position2 = this.index + 1;
+      const total = this.itemStats.shownCount || this.items.length;
+      const percentage = total > 0 ? Math.round(position2 / total * 100) : 0;
+      indicator.find(".scroll-position-fill").css("width", `${percentage}%`);
+      indicator.attr("aria-valuenow", percentage);
+      indicator.attr("title", `${position2} of ${total} items (${percentage}%)`);
     }
     handleInput(event) {
       const item = this.selectedItem;
@@ -62215,6 +63119,52 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         });
         window.console = unsafeWindow.console;
       }
+      function applyAccessibilityStyles() {
+        const reducedMotion = config.get("reducedMotion");
+        const highContrast = config.get("highContrastMode");
+        const focusRingColor = config.get("focusRingColor") || "#0066cc";
+        const focusRingWidth = config.get("focusRingWidth") || 2;
+        let accessibilityStyles = `:root {
+        --focus-ring-color: ${focusRingColor};
+        --focus-ring-width: ${focusRingWidth}px;
+      }`;
+        if (reducedMotion === "Always") {
+          accessibilityStyles += `
+          :root {
+            --transition-duration: 0ms;
+            --animation-duration: 0ms;
+          }
+          *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+          }
+        `;
+        } else if (reducedMotion === "Never") {
+          accessibilityStyles += `
+          :root {
+            --transition-duration: 200ms;
+            --animation-duration: 300ms;
+          }
+        `;
+        }
+        if (highContrast) {
+          accessibilityStyles += `
+          :root {
+            --focus-ring-color: #000000;
+            --focus-ring-width: 3px;
+          }
+        `;
+        }
+        let accessibilityStyleEl = document.getElementById("bsky-nav-accessibility-styles");
+        if (!accessibilityStyleEl) {
+          accessibilityStyleEl = document.createElement("style");
+          accessibilityStyleEl.id = "bsky-nav-accessibility-styles";
+          document.head.appendChild(accessibilityStyleEl);
+        }
+        accessibilityStyleEl.textContent = accessibilityStyles;
+      }
+      applyAccessibilityStyles();
       const stylesheet = `
 
         /* Feed itmes may be sorted, so we hide them visually and show them later */

@@ -7,8 +7,10 @@ import Handlebars from 'handlebars';
 import html2canvas from 'html2canvas';
 import { Handler } from './Handler.js';
 import { formatPost, urlForPost } from './postFormatting.js';
+import { GestureHandler } from '../components/GestureHandler.js';
+import { BottomSheet } from '../components/BottomSheet.js';
 
-const { waitForElement } = utils;
+const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
 
 /**
  * Extract post ID from a URL path segment.
@@ -66,6 +68,12 @@ export class ItemHandler extends Handler {
     this.scrollTick = false;
     this.scrollTop = 0;
     this.scrollDirection = 0;
+
+    // Initialize gesture handler and bottom sheet for mobile
+    if (this.state.mobileView && this.config.get('enableSwipeGestures')) {
+      this.gestureHandler = new GestureHandler(this.config, this);
+      this.bottomSheet = new BottomSheet(this.config, this);
+    }
 
     // Bind methods
     this.onPopupAdd = this.onPopupAdd.bind(this);
@@ -317,6 +325,33 @@ export class ItemHandler extends Handler {
       this.externalTemplate = Handlebars.compile($('#sidecar-embed-external-template').html());
       Handlebars.registerPartial('externalTemplate', this.externalTemplate);
     });
+    waitForElement('#sidecar-skeleton-template', () => {
+      this.skeletonTemplate = Handlebars.compile($('#sidecar-skeleton-template').html());
+    });
+  }
+
+  getSkeletonContent() {
+    if (this.skeletonTemplate) {
+      return this.skeletonTemplate({});
+    }
+    // Fallback if template not loaded yet
+    return `<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">
+      <div class="skeleton-post">
+        <div class="skeleton-header">
+          <div class="skeleton-avatar skeleton-shimmer"></div>
+          <div class="skeleton-author">
+            <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>
+            <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+          </div>
+        </div>
+        <div class="skeleton-body">
+          <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+          <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+          <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+        </div>
+      </div>
+      <span class="sr-only">Loading replies...</span>
+    </div>`;
   }
 
   shouldUnroll(_item) {
@@ -450,13 +485,18 @@ export class ItemHandler extends Handler {
 
   async showSidecar(item, thread, action = null) {
     const container = $(item).parent();
-    const emptyContent = await this.getSidecarContent();
-    const sidecar = $(container).find('.sidecar-replies')[0];
+    const existingSidecar = $(container).find('.sidecar-replies')[0];
 
-    if (!sidecar) {
-      $(container).append(emptyContent);
+    // Show skeleton while loading
+    if (!existingSidecar) {
+      const skeletonContent = this.getSkeletonContent();
+      $(container).append(skeletonContent);
+    } else if (!thread) {
+      // Replace with skeleton if no thread data yet
+      $(existingSidecar).replaceWith($(this.getSkeletonContent()));
     }
 
+    // Load actual content
     const sidecarContent = await this.getSidecarContent(item, thread);
     console.log(sidecarContent);
     container.find('.sidecar-replies').replaceWith($(sidecarContent));
@@ -464,6 +504,27 @@ export class ItemHandler extends Handler {
       $(post).on('mouseover', this.onSidecarItemMouseOver);
     });
 
+    // Initialize collapsible sections
+    container.find('.sidecar-section-toggle').each((i, toggle) => {
+      $(toggle).on('click', (e) => {
+        e.preventDefault();
+        const btn = $(e.currentTarget);
+        const contentId = btn.attr('aria-controls');
+        const content = $(`#${contentId}`);
+        const isExpanded = btn.attr('aria-expanded') === 'true';
+
+        btn.attr('aria-expanded', !isExpanded);
+        btn.find('.sidecar-section-icon').text(isExpanded ? '▶' : '▼');
+
+        if (isExpanded) {
+          content.slideUp(getAnimationDuration(200, this.config));
+        } else {
+          content.slideDown(getAnimationDuration(200, this.config));
+        }
+      });
+    });
+
+    const sidecar = container.find('.sidecar-replies')[0];
     const display =
       action == null
         ? sidecar && $(sidecar).is(':visible')
@@ -830,9 +891,23 @@ export class ItemHandler extends Handler {
   updateLikeUI(post, currentLikeCount, wasLiked) {
     const newCount = wasLiked ? currentLikeCount - 1 : currentLikeCount + 1;
     const svgIndex = wasLiked ? 0 : 1;
+    const likeButton = $(post).find('.sidecar-like-button');
 
-    $(post).find('.sidecar-like-button').html(constants.SIDECAR_SVG_LIKE[svgIndex]);
+    likeButton.html(constants.SIDECAR_SVG_LIKE[svgIndex]);
     $(post).find('.sidecar-count-label-likes').html(Math.max(0, newCount));
+
+    // Visual feedback animation
+    const animDuration = getAnimationDuration(300, this.config);
+    if (animDuration > 0) {
+      likeButton.addClass(wasLiked ? 'like-animation-unlike' : 'like-animation-like');
+      setTimeout(() => {
+        likeButton.removeClass('like-animation-like like-animation-unlike');
+      }, animDuration);
+    }
+
+    // Screen reader announcement
+    const action = wasLiked ? 'unliked' : 'liked';
+    announceToScreenReader(`Post ${action}. ${newCount} ${newCount === 1 ? 'like' : 'likes'}.`);
   }
 
   async captureScreenshot(item) {
@@ -982,7 +1057,39 @@ export class ItemHandler extends Handler {
         },
         true
       );
+
+      // Show floating "New posts" pill
+      this.showNewPostsPill();
     });
+  }
+
+  showNewPostsPill() {
+    // Remove existing pill if any
+    $('#bsky-navigator-new-posts-pill').remove();
+
+    const pill = $(`
+      <button id="bsky-navigator-new-posts-pill" class="new-posts-pill" aria-label="Load new posts">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 4l-8 8h6v8h4v-8h6z"/>
+        </svg>
+        <span>New posts</span>
+      </button>
+    `);
+
+    pill.on('click', (e) => {
+      e.preventDefault();
+      this.hideNewPostsPill();
+      this.loadNewerItems();
+    });
+
+    $('body').append(pill);
+    announceToScreenReader('New posts available. Press u to load.');
+  }
+
+  hideNewPostsPill() {
+    const pill = $('#bsky-navigator-new-posts-pill');
+    pill.addClass('new-posts-pill-hiding');
+    setTimeout(() => pill.remove(), 200);
   }
 
   setupFloatingButtons() {
@@ -1051,6 +1158,14 @@ export class ItemHandler extends Handler {
     this.applyItemStyle(element);
     clearTimeout(this.debounceTimeout);
     this.debounceTimeout = setTimeout(() => this.loadItems(), 500);
+
+    // Initialize swipe gestures and long press on mobile
+    if (this.gestureHandler) {
+      this.gestureHandler.init(element);
+    }
+    if (this.bottomSheet) {
+      this.bottomSheet.init(element);
+    }
   }
 
   onItemRemoved(element) {
@@ -1460,6 +1575,10 @@ export class ItemHandler extends Handler {
     const classes = ['thread-first', 'thread-middle', 'thread-last'];
     const set = [];
 
+    // Clean up unrolled replies and sidecar containers from previous load
+    $('.unrolled-replies').remove();
+    $('.sidecar-replies').remove();
+
     $(this.items).css('opacity', '0%');
     let itemIndex = 0;
     let threadIndex = 0;
@@ -1486,7 +1605,11 @@ export class ItemHandler extends Handler {
     this.sortItems();
     this.filterItems();
 
-    this.items = $(this.selector).filter(':visible');
+    // Filter out embedded posts (posts that are inside another post)
+    this.items = $(this.selector).filter(':visible').filter((i, item) => {
+      // Check if this item is inside another item matching the selector
+      return $(item).parents(this.selector).length === 0;
+    });
 
     this.itemStats.oldest = this.itemStats.newest = null;
     $(this.selector)
@@ -1500,16 +1623,16 @@ export class ItemHandler extends Handler {
           this.itemStats.newest = timestamp;
         }
 
+        // Add empty sidecar container placeholder (actual content loads on selection)
         if (
           this.config.get('showReplySidecar') &&
           $(this.selectedItem).closest('.thread').outerWidth() >=
             this.config.get('showReplySidecarMinimumWidth')
         ) {
-          this.getSidecarContent().then((content) => {
-            if (!$(item).parent().find('.sidecar-replies').length) {
-              $(item).parent().append(content);
-            }
-          });
+          if (!$(item).parent().find('.sidecar-replies').length) {
+            // Add empty placeholder - content loads lazily on selection
+            $(item).parent().append('<div class="sidecar-replies sidecar-replies-empty"></div>');
+          }
         }
       });
 
@@ -1630,6 +1753,7 @@ ${
       return;
     }
     this.loadingNew = true;
+    this.hideNewPostsPill();
     this.applyItemStyle(this.selectedItem, false);
     const oldPostId = this.postIdForItem(this.selectedItem);
     $(this.loadNewerButton).click();

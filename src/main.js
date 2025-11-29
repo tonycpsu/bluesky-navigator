@@ -24,7 +24,103 @@ GM_addStyle(style);
 
 let config;
 let handlers;
-const enableLoadMoreItems = false;
+
+// Proxy IntersectionObserver immediately to intercept before Bluesky creates its observers
+// This must run as early as possible, before the app's code executes
+(function proxyIntersectionObserverEarly() {
+  const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
+
+  // Store reference so we can check config later
+  let disableLoadMore = false;
+
+  // Store the load-more callback so we can trigger it manually via the U key
+  let loadMoreCallback = null;
+
+  // Function to update the setting (called after config is loaded)
+  unsafeWindow.__bskyNavSetDisableLoadMore = (value) => {
+    disableLoadMore = value;
+  };
+
+  // Function to get the stored callback for manual triggering
+  unsafeWindow.__bskyNavGetLoadMoreCallback = () => loadMoreCallback;
+
+  class ProxyIntersectionObserver {
+    constructor(callback, options) {
+      this.callback = callback;
+      this.options = options;
+
+      // Store the first callback as the likely load-more trigger
+      // This is a heuristic - Bluesky's infinite scroll observer is typically created early
+      if (!loadMoreCallback) {
+        loadMoreCallback = callback;
+      }
+
+      // Create the real observer with filtered callback
+      this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
+        if (!disableLoadMore) {
+          // If not disabled, pass through all entries
+          callback(entries, observer);
+          return;
+        }
+
+        // Filter out entries that appear to be infinite scroll triggers
+        const filteredEntries = entries.filter((entry) => {
+          const target = entry.target;
+
+          // Always pass through our own observers (items with .thread or .item class)
+          if (target.classList && (
+            target.classList.contains('thread') ||
+            target.classList.contains('item')
+          )) {
+            return true;
+          }
+
+          // Skip if it's a loading/sentinel element for infinite scroll
+          // These are typically empty divs or divs with specific styles at the end of lists
+          if (target.matches && (
+            // Common infinite scroll sentinel patterns
+            target.matches('[data-testid="feedLoadMore"]') ||
+            target.matches('[data-testid*="loader"]') ||
+            target.matches('[data-testid*="Loader"]') ||
+            // Empty divs used as sentinels often have minimal height
+            (target.tagName === 'DIV' && target.children.length === 0 && target.offsetHeight < 50)
+          )) {
+            // Check if this is intersecting (would trigger load)
+            if (entry.isIntersecting) {
+              console.log('[bsky-navigator] Blocked infinite scroll trigger:', target);
+              return false;
+            }
+          }
+          return true;
+        });
+
+        // Only call callback if there are remaining entries
+        if (filteredEntries.length > 0) {
+          callback(filteredEntries, observer);
+        }
+      }, options);
+    }
+
+    observe(target) {
+      this.realObserver.observe(target);
+    }
+
+    unobserve(target) {
+      this.realObserver.unobserve(target);
+    }
+
+    disconnect() {
+      this.realObserver.disconnect();
+    }
+
+    takeRecords() {
+      return this.realObserver.takeRecords();
+    }
+  }
+
+  // Replace global IntersectionObserver
+  unsafeWindow.IntersectionObserver = ProxyIntersectionObserver;
+})();
 
 const screenPredicateMap = {
   search: (element) => $(element).find('div[data-testid="searchScreen"]').length,
@@ -103,6 +199,11 @@ function getScreenFromElement(element) {
       stateSaveTimeout: config.get('stateSaveTimeout'),
       maxEntries: config.get('historyMax'),
     };
+
+    // Update the IntersectionObserver proxy with the config value
+    if (unsafeWindow.__bskyNavSetDisableLoadMore) {
+      unsafeWindow.__bskyNavSetDisableLoadMore(config.get('disableLoadMoreOnScroll'));
+    }
 
     state.init(constants.STATE_KEY, stateManagerConfig, onStateInit);
   }
@@ -616,83 +717,6 @@ function getScreenFromElement(element) {
     });
 
     waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
-
-    function proxyIntersectionObserver() {
-      const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
-
-      // Create a proxy class
-      class ProxyIntersectionObserver {
-        constructor(callback, options) {
-          // Store the callback and options
-          this.callback = callback;
-          this.options = options;
-          this.enabled = true;
-          handlers['feed'].loadOlderItemsCallback = this.callback;
-          // Create the "real" IntersectionObserver instance
-          this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
-            // filter thread divs out
-            const filteredEntries = entries.filter(
-              (entry) =>
-                !(
-                  $(entry.target).hasClass('thread') ||
-                  $(entry.target).hasClass('item') ||
-                  $(entry.target).find('div[data-testid^="feedItem"]').length ||
-                  $(entry.target).next()?.attr('style') == 'height: 32px;'
-                )
-            );
-
-            // if(filteredEntries.length) {
-            //     debugger;
-            // }
-
-            callback(filteredEntries, observer);
-          }, options);
-        }
-
-        enable() {
-          this.enabled = true;
-        }
-
-        disable() {
-          this.enabled = false;
-        }
-
-        // Custom logic to decide when to override
-        shouldOverride(entries, observer) {
-          return !enableLoadMoreItems;
-        }
-
-        // Custom override behavior
-        overrideBehavior(entries, observer) {
-          // Example: Do nothing or log the entries
-          // console.log("Overridden entries:", entries);
-        }
-
-        // Proxy all methods to the real IntersectionObserver
-        observe(target) {
-          // console.log("Observing:", target);
-          this.realObserver.observe(target);
-        }
-
-        unobserve(target) {
-          // console.log("Unobserving:", target);
-          this.realObserver.unobserve(target);
-        }
-
-        disconnect() {
-          // console.log("Disconnecting observer");
-          this.realObserver.disconnect();
-        }
-
-        takeRecords() {
-          return this.realObserver.takeRecords();
-        }
-      }
-
-      // Replace the global IntersectionObserver with the proxy
-      unsafeWindow.IntersectionObserver = ProxyIntersectionObserver;
-    }
-    proxyIntersectionObserver();
   }
 
   const configTitleDiv = `

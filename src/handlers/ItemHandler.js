@@ -1768,6 +1768,14 @@ ${
 
   loadOlderItems() {
     if (this.loading) return;
+
+    // Get the stored callback from the IntersectionObserver proxy
+    const loadMoreCallback = unsafeWindow.__bskyNavGetLoadMoreCallback?.();
+    if (!loadMoreCallback) {
+      console.log('[bsky-navigator] No load-more callback available');
+      return;
+    }
+
     console.log('loading more');
     $('img#loadOlderIndicatorImage').removeClass('image-highlight');
     $('img#loadOlderIndicatorImage').addClass('toolbar-icon-pending');
@@ -1785,7 +1793,7 @@ ${
       .addClass(
         this.state.feedSortReverse ? 'loading-indicator-forward' : 'loading-indicator-reverse'
       );
-    this.loadOlderItemsCallback([
+    loadMoreCallback([
       {
         time: performance.now(),
         target: loadElement,

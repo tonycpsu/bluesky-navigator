@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+366.cc4e8210
+// @version     1.0.31+367.7b487d5b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -62156,6 +62156,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     loadOlderItems() {
       if (this.loading) return;
+      const loadMoreCallback = unsafeWindow.__bskyNavGetLoadMoreCallback?.();
+      if (!loadMoreCallback) {
+        console.log("[bsky-navigator] No load-more callback available");
+        return;
+      }
       console.log("loading more");
       $("img#loadOlderIndicatorImage").removeClass("image-highlight");
       $("img#loadOlderIndicatorImage").addClass("toolbar-icon-pending");
@@ -62169,7 +62174,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       $(indicatorElement).closest("div.thread").addClass(
         this.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse"
       );
-      this.loadOlderItemsCallback([
+      loadMoreCallback([
         {
           time: performance.now(),
           target: loadElement,
@@ -63006,6 +63011,61 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
   GM_addStyle(style);
   let config;
   let handlers;
+  (function proxyIntersectionObserverEarly() {
+    const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
+    let disableLoadMore = false;
+    let loadMoreCallback = null;
+    unsafeWindow.__bskyNavSetDisableLoadMore = (value) => {
+      disableLoadMore = value;
+    };
+    unsafeWindow.__bskyNavGetLoadMoreCallback = () => loadMoreCallback;
+    class ProxyIntersectionObserver {
+      constructor(callback, options) {
+        this.callback = callback;
+        this.options = options;
+        if (!loadMoreCallback) {
+          loadMoreCallback = callback;
+        }
+        this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
+          if (!disableLoadMore) {
+            callback(entries, observer);
+            return;
+          }
+          const filteredEntries = entries.filter((entry) => {
+            const target2 = entry.target;
+            if (target2.classList && (target2.classList.contains("thread") || target2.classList.contains("item"))) {
+              return true;
+            }
+            if (target2.matches && // Common infinite scroll sentinel patterns
+            (target2.matches('[data-testid="feedLoadMore"]') || target2.matches('[data-testid*="loader"]') || target2.matches('[data-testid*="Loader"]') || // Empty divs used as sentinels often have minimal height
+            target2.tagName === "DIV" && target2.children.length === 0 && target2.offsetHeight < 50)) {
+              if (entry.isIntersecting) {
+                console.log("[bsky-navigator] Blocked infinite scroll trigger:", target2);
+                return false;
+              }
+            }
+            return true;
+          });
+          if (filteredEntries.length > 0) {
+            callback(filteredEntries, observer);
+          }
+        }, options);
+      }
+      observe(target2) {
+        this.realObserver.observe(target2);
+      }
+      unobserve(target2) {
+        this.realObserver.unobserve(target2);
+      }
+      disconnect() {
+        this.realObserver.disconnect();
+      }
+      takeRecords() {
+        return this.realObserver.takeRecords();
+      }
+    }
+    unsafeWindow.IntersectionObserver = ProxyIntersectionObserver;
+  })();
   const screenPredicateMap = {
     search: (element) => $(element).find('div[data-testid="searchScreen"]').length,
     notifications: (element) => $(element).find('div[data-testid="notificationsScreen"]').length,
@@ -63062,6 +63122,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         stateSaveTimeout: config.get("stateSaveTimeout"),
         maxEntries: config.get("historyMax")
       };
+      if (unsafeWindow.__bskyNavSetDisableLoadMore) {
+        unsafeWindow.__bskyNavSetDisableLoadMore(config.get("disableLoadMoreOnScroll"));
+      }
       state.init(constants.STATE_KEY, stateManagerConfig, onStateInit);
     }
     function onConfigSave() {
@@ -63488,51 +63551,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         resizeTimer = setTimeout(onWindowResize, 500);
       });
       waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
-      function proxyIntersectionObserver() {
-        const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
-        class ProxyIntersectionObserver {
-          constructor(callback, options) {
-            this.callback = callback;
-            this.options = options;
-            this.enabled = true;
-            handlers["feed"].loadOlderItemsCallback = this.callback;
-            this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
-              const filteredEntries = entries.filter(
-                (entry) => !($(entry.target).hasClass("thread") || $(entry.target).hasClass("item") || $(entry.target).find('div[data-testid^="feedItem"]').length || $(entry.target).next()?.attr("style") == "height: 32px;")
-              );
-              callback(filteredEntries, observer);
-            }, options);
-          }
-          enable() {
-            this.enabled = true;
-          }
-          disable() {
-            this.enabled = false;
-          }
-          // Custom logic to decide when to override
-          shouldOverride(entries, observer) {
-            return true;
-          }
-          // Custom override behavior
-          overrideBehavior(entries, observer) {
-          }
-          // Proxy all methods to the real IntersectionObserver
-          observe(target2) {
-            this.realObserver.observe(target2);
-          }
-          unobserve(target2) {
-            this.realObserver.unobserve(target2);
-          }
-          disconnect() {
-            this.realObserver.disconnect();
-          }
-          takeRecords() {
-            return this.realObserver.takeRecords();
-          }
-        }
-        unsafeWindow.IntersectionObserver = ProxyIntersectionObserver;
-      }
-      proxyIntersectionObserver();
     }
     const configTitleDiv = `
     <div class="config-title">

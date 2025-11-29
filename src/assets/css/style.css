@@ -102,19 +102,38 @@ button#clearLogs {
 
 div#bsky-navigator-toolbar {
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     position: sticky;
     top: 0;
+    width: 100%;
+    background-color: inherit;
+    border-bottom: 1px solid rgb(192, 192, 192);
+    z-index: 100;
+}
+
+.toolbar-row {
+    display: flex;
+    flex-direction: row;
     align-items: center;
     width: 100%;
     height: 32px;
-    background-color: inherit;
-    border-bottom: 1px solid rgb(192, 192, 192);
+}
+
+.toolbar-row-1 {
+    border-bottom: 1px solid rgba(192, 192, 192, 0.5);
+}
+
+.toolbar-row-2 {
+    gap: 8px;
+    padding: 0 8px;
 }
 
 @media (prefers-color-scheme: dark) {
     div#bsky-navigator-toolbar {
         background-color: #29333d
+    }
+    .toolbar-row-1 {
+        border-bottom-color: rgba(100, 100, 100, 0.5);
     }
 }
 
@@ -1235,15 +1254,14 @@ div:has(>div.item) {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  flex-shrink: 0;
+  flex-shrink: 1;
   gap: 0;
   margin-left: auto;
-  padding: 4px 8px;
+  padding: 4px 0;
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 300px;
 }
 
 .breadcrumb-item {
@@ -1326,9 +1344,9 @@ div:has(>div.item) {
   align-items: center;
   position: relative;
   gap: 4px;
-  flex: 1;
-  min-width: 0;
-  max-width: 250px;
+  flex: 0 0 auto;
+  min-width: 150px;
+  max-width: 300px;
 }
 
 .saved-searches-btn,

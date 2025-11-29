@@ -117,15 +117,19 @@ export class FeedItemHandler extends ItemHandler {
     this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
     $(beforeDiv).before(this.toolbarDiv);
 
+    // First row: icons
+    this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1"/>`);
+    $(this.toolbarDiv).append(this.toolbarRow1);
+
     this.topLoadIndicator = $(`
 <div id="topLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
 </div>`);
-    $(this.toolbarDiv).append(this.topLoadIndicator);
+    $(this.toolbarRow1).append(this.topLoadIndicator);
 
     this.sortIndicator = $(
       `<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[+this.state.feedSortReverse]}"/></div>`
     );
-    $(this.toolbarDiv).append(this.sortIndicator);
+    $(this.toolbarRow1).append(this.sortIndicator);
     $('.indicator-image path').attr('fill', 'currentColor');
     $('#sortIndicator').on('click', (event) => {
       event.preventDefault();
@@ -135,15 +139,19 @@ export class FeedItemHandler extends ItemHandler {
     this.filterIndicator = $(
       `<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[+this.state.feedHideRead]}"/></div>`
     );
-    $(this.toolbarDiv).append(this.filterIndicator);
+    $(this.toolbarRow1).append(this.filterIndicator);
     $('#filterIndicator').on('click', (event) => {
       event.preventDefault();
       this.toggleHideRead();
     });
 
+    // Second row: search, filter pill, breadcrumbs
+    this.toolbarRow2 = $(`<div class="toolbar-row toolbar-row-2"/>`);
+    $(this.toolbarDiv).append(this.toolbarRow2);
+
     // Search wrapper with saved searches
     this.searchWrapper = $(`<div class="search-wrapper"></div>`);
-    $(this.toolbarDiv).append(this.searchWrapper);
+    $(this.toolbarRow2).append(this.searchWrapper);
 
     // Saved searches dropdown
     this.savedSearchesBtn = $(`
@@ -448,7 +456,7 @@ export class FeedItemHandler extends ItemHandler {
         e.stopPropagation();
         this.clearFilter();
       });
-      $('#bsky-navigator-toolbar').append(pill);
+      $('.toolbar-row-2').append(pill);
     }
 
     $('#bsky-navigator-filter-pill .filter-pill-text').text(this.state.filter);
@@ -804,7 +812,7 @@ export class FeedItemHandler extends ItemHandler {
     let breadcrumb = $('#bsky-navigator-breadcrumb');
     if (!breadcrumb.length) {
       breadcrumb = $(`<nav id="bsky-navigator-breadcrumb" class="breadcrumb" aria-label="Current location"></nav>`);
-      $('#bsky-navigator-toolbar').append(breadcrumb);
+      $('.toolbar-row-2').append(breadcrumb);
     }
 
     if (!this.selectedItem || !this.items.length) {

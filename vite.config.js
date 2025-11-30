@@ -29,7 +29,8 @@ export default defineConfig((config) => {
             updateURL: "https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/dist/bluesky-navigator.user.js",
             connect: [
                 "clearsky.services",
-                "surreal.cloud"
+                "surreal.cloud",
+                "cdn.bsky.app"
             ],
             grant: [
                 "GM_info",

@@ -923,45 +923,165 @@ export class ItemHandler extends Handler {
 
   async captureScreenshot(item) {
     try {
+      // Helper to fetch image as data URL using GM_xmlhttpRequest (bypasses CORS)
+      const fetchImageAsDataUrl = (url) => {
+        return new Promise((resolve) => {
+          GM_xmlhttpRequest({
+            method: 'GET',
+            url: url,
+            responseType: 'blob',
+            onload: (response) => {
+              console.log('[bsky-nav] GM_xmlhttpRequest loaded:', url, 'status:', response.status, 'size:', response.response?.size);
+              if (response.status !== 200 || !response.response) {
+                console.error('[bsky-nav] Bad response for:', url);
+                resolve({ url, dataUrl: null });
+                return;
+              }
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                console.log('[bsky-nav] Converted to dataUrl:', url.substring(0, 50), 'length:', reader.result?.length);
+                resolve({ url, dataUrl: reader.result });
+              };
+              reader.onerror = (err) => {
+                console.error('[bsky-nav] FileReader error for:', url, err);
+                resolve({ url, dataUrl: null });
+              };
+              reader.readAsDataURL(response.response);
+            },
+            onerror: (err) => {
+              console.error('[bsky-nav] GM_xmlhttpRequest error for:', url, err);
+              resolve({ url, dataUrl: null });
+            }
+          });
+        });
+      };
+
+      // Collect all image URLs from the item
+      const imageUrls = new Map(); // url -> dataUrl
+      const urlsToFetch = new Set();
+
+      // Find all img elements
+      const images = item.querySelectorAll('img');
+      images.forEach(img => {
+        if (img.src && img.src.startsWith('http')) {
+          urlsToFetch.add(img.src);
+        }
+        // Also check srcset
+        if (img.srcset) {
+          const srcsetUrls = img.srcset.split(',').map(s => s.trim().split(' ')[0]);
+          srcsetUrls.forEach(url => {
+            if (url.startsWith('http')) urlsToFetch.add(url);
+          });
+        }
+      });
+
+      // Find all elements with background-image (inline style)
+      const bgDivs = item.querySelectorAll('[style*="background-image"]');
+      bgDivs.forEach(div => {
+        const style = div.getAttribute('style') || '';
+        const match = style.match(/background-image:\s*url\(["']?([^"')]+)["']?\)/);
+        if (match && match[1] && match[1].startsWith('http')) {
+          urlsToFetch.add(match[1]);
+        }
+      });
+
+      // Find elements with computed background-image (CSS classes)
+      const allElements = item.querySelectorAll('*');
+      allElements.forEach(el => {
+        const computed = window.getComputedStyle(el);
+        const bgImage = computed.backgroundImage;
+        if (bgImage && bgImage !== 'none') {
+          const match = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
+          if (match && match[1] && match[1].startsWith('http')) {
+            urlsToFetch.add(match[1]);
+          }
+        }
+      });
+
+      console.log('[bsky-nav] Screenshot: found', urlsToFetch.size, 'images to fetch:', Array.from(urlsToFetch));
+
+      // Fetch all images as data URLs (with timeout)
+      const fetchPromises = Array.from(urlsToFetch).map(url => fetchImageAsDataUrl(url));
+      const results = await Promise.race([
+        Promise.all(fetchPromises),
+        new Promise(resolve => setTimeout(() => resolve([]), 5000))
+      ]);
+
+      // Build URL -> dataUrl map
+      results.forEach(({ url, dataUrl }) => {
+        if (dataUrl) {
+          imageUrls.set(url, dataUrl);
+        }
+      });
+      console.log('[bsky-nav] Screenshot: fetched', imageUrls.size, 'of', urlsToFetch.size, 'images');
+
+      // Helper to find data URL for any URL variant
+      const findDataUrl = (url) => {
+        if (!url) return null;
+        if (imageUrls.has(url)) return imageUrls.get(url);
+        const baseUrl = url.split('?')[0];
+        for (const [key, val] of imageUrls) {
+          if (key.split('?')[0] === baseUrl) return val;
+          if (key.includes(baseUrl) || baseUrl.includes(key.split('?')[0])) return val;
+        }
+        return null;
+      };
+
+      // Store original values and modify the actual DOM
+      const originalValues = [];
+
+      // Replace img src with data URLs on original DOM
+      const itemImages = item.querySelectorAll('img');
+      itemImages.forEach(img => {
+        const dataUrl = findDataUrl(img.src);
+        if (dataUrl) {
+          originalValues.push({ el: img, attr: 'src', value: img.src });
+          img.src = dataUrl;
+        }
+      });
+
+      // Replace background-image on original DOM
+      const bgElements = item.querySelectorAll('*');
+      bgElements.forEach(el => {
+        const inlineStyle = el.getAttribute('style') || '';
+        let match = inlineStyle.match(/background-image:\s*url\(["']?([^"')]+)["']?\)/);
+        if (match && match[1]) {
+          const dataUrl = findDataUrl(match[1]);
+          if (dataUrl) {
+            originalValues.push({ el, attr: 'style-bg', value: el.style.backgroundImage });
+            el.style.backgroundImage = `url("${dataUrl}")`;
+          }
+        }
+      });
+
+      console.log('[bsky-nav] Modified', originalValues.length, 'elements in original DOM');
+
+      // Log the first data URL to verify it's valid
+      if (imageUrls.size > 0) {
+        const firstDataUrl = Array.from(imageUrls.values())[0];
+        console.log('[bsky-nav] Sample dataUrl prefix:', firstDataUrl?.substring(0, 50));
+      }
+
+      // Wait for browser to process DOM changes
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       const canvas = await html2canvas(item, {
         backgroundColor: '#ffffff',
         scale: 2,
         logging: false,
         useCORS: true,
         allowTaint: true,
-        onclone: (clonedDoc, element) => {
-          // Convert background-image divs to actual img elements for better capture
-          // Bluesky uses background-image for embedded images
-          const bgImageDivs = element.querySelectorAll('div[style*="background-image"]');
-          bgImageDivs.forEach(div => {
-            const style = div.getAttribute('style') || '';
-            const match = style.match(/background-image:\s*url\(["']?([^"')]+)["']?\)/);
-            if (match && match[1]) {
-              // Create an img element with the same dimensions
-              const img = clonedDoc.createElement('img');
-              img.src = match[1];
-              img.style.cssText = `
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-              `;
-              div.style.position = 'relative';
-              div.appendChild(img);
-            }
-          });
+      });
 
-          // Also handle img elements that might be lazy-loaded (ensure src is set)
-          const images = element.querySelectorAll('img');
-          images.forEach(img => {
-            if (img.dataset.src && !img.src) {
-              img.src = img.dataset.src;
-            }
-          });
+      // Restore original values
+      originalValues.forEach(({ el, attr, value }) => {
+        if (attr === 'src') {
+          el.src = value;
+        } else if (attr === 'style-bg') {
+          el.style.backgroundImage = value;
         }
       });
+      console.log('[bsky-nav] Restored original DOM');
 
       canvas.toBlob(async (blob) => {
         try {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+374.3cfae773
+// @version     1.0.31+375.98440a6d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -12,6 +12,7 @@
 // @updateURL   https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/dist/bluesky-navigator.user.js
 // @connect     clearsky.services
 // @connect     surreal.cloud
+// @connect     cdn.bsky.app
 // @grant       GM_setValue
 // @grant       GM_getValue
 // @grant       GM_addStyle
@@ -63950,40 +63951,134 @@ div.item-banner {
     }
     async captureScreenshot(item) {
       try {
+        const fetchImageAsDataUrl = (url) => {
+          return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+              method: "GET",
+              url,
+              responseType: "blob",
+              onload: (response) => {
+                console.log("[bsky-nav] GM_xmlhttpRequest loaded:", url, "status:", response.status, "size:", response.response?.size);
+                if (response.status !== 200 || !response.response) {
+                  console.error("[bsky-nav] Bad response for:", url);
+                  resolve({ url, dataUrl: null });
+                  return;
+                }
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  console.log("[bsky-nav] Converted to dataUrl:", url.substring(0, 50), "length:", reader.result?.length);
+                  resolve({ url, dataUrl: reader.result });
+                };
+                reader.onerror = (err) => {
+                  console.error("[bsky-nav] FileReader error for:", url, err);
+                  resolve({ url, dataUrl: null });
+                };
+                reader.readAsDataURL(response.response);
+              },
+              onerror: (err) => {
+                console.error("[bsky-nav] GM_xmlhttpRequest error for:", url, err);
+                resolve({ url, dataUrl: null });
+              }
+            });
+          });
+        };
+        const imageUrls = /* @__PURE__ */ new Map();
+        const urlsToFetch = /* @__PURE__ */ new Set();
+        const images2 = item.querySelectorAll("img");
+        images2.forEach((img) => {
+          if (img.src && img.src.startsWith("http")) {
+            urlsToFetch.add(img.src);
+          }
+          if (img.srcset) {
+            const srcsetUrls = img.srcset.split(",").map((s) => s.trim().split(" ")[0]);
+            srcsetUrls.forEach((url) => {
+              if (url.startsWith("http")) urlsToFetch.add(url);
+            });
+          }
+        });
+        const bgDivs = item.querySelectorAll('[style*="background-image"]');
+        bgDivs.forEach((div) => {
+          const style2 = div.getAttribute("style") || "";
+          const match2 = style2.match(/background-image:\s*url\(["']?([^"')]+)["']?\)/);
+          if (match2 && match2[1] && match2[1].startsWith("http")) {
+            urlsToFetch.add(match2[1]);
+          }
+        });
+        const allElements = item.querySelectorAll("*");
+        allElements.forEach((el) => {
+          const computed = window.getComputedStyle(el);
+          const bgImage = computed.backgroundImage;
+          if (bgImage && bgImage !== "none") {
+            const match2 = bgImage.match(/url\(["']?([^"')]+)["']?\)/);
+            if (match2 && match2[1] && match2[1].startsWith("http")) {
+              urlsToFetch.add(match2[1]);
+            }
+          }
+        });
+        console.log("[bsky-nav] Screenshot: found", urlsToFetch.size, "images to fetch:", Array.from(urlsToFetch));
+        const fetchPromises = Array.from(urlsToFetch).map((url) => fetchImageAsDataUrl(url));
+        const results = await Promise.race([
+          Promise.all(fetchPromises),
+          new Promise((resolve) => setTimeout(() => resolve([]), 5e3))
+        ]);
+        results.forEach(({ url, dataUrl }) => {
+          if (dataUrl) {
+            imageUrls.set(url, dataUrl);
+          }
+        });
+        console.log("[bsky-nav] Screenshot: fetched", imageUrls.size, "of", urlsToFetch.size, "images");
+        const findDataUrl = (url) => {
+          if (!url) return null;
+          if (imageUrls.has(url)) return imageUrls.get(url);
+          const baseUrl = url.split("?")[0];
+          for (const [key, val] of imageUrls) {
+            if (key.split("?")[0] === baseUrl) return val;
+            if (key.includes(baseUrl) || baseUrl.includes(key.split("?")[0])) return val;
+          }
+          return null;
+        };
+        const originalValues = [];
+        const itemImages = item.querySelectorAll("img");
+        itemImages.forEach((img) => {
+          const dataUrl = findDataUrl(img.src);
+          if (dataUrl) {
+            originalValues.push({ el: img, attr: "src", value: img.src });
+            img.src = dataUrl;
+          }
+        });
+        const bgElements = item.querySelectorAll("*");
+        bgElements.forEach((el) => {
+          const inlineStyle = el.getAttribute("style") || "";
+          let match2 = inlineStyle.match(/background-image:\s*url\(["']?([^"')]+)["']?\)/);
+          if (match2 && match2[1]) {
+            const dataUrl = findDataUrl(match2[1]);
+            if (dataUrl) {
+              originalValues.push({ el, attr: "style-bg", value: el.style.backgroundImage });
+              el.style.backgroundImage = `url("${dataUrl}")`;
+            }
+          }
+        });
+        console.log("[bsky-nav] Modified", originalValues.length, "elements in original DOM");
+        if (imageUrls.size > 0) {
+          const firstDataUrl = Array.from(imageUrls.values())[0];
+          console.log("[bsky-nav] Sample dataUrl prefix:", firstDataUrl?.substring(0, 50));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
         const canvas = await html2canvas(item, {
           backgroundColor: "#ffffff",
           scale: 2,
           logging: false,
           useCORS: true,
-          allowTaint: true,
-          onclone: (clonedDoc, element) => {
-            const bgImageDivs = element.querySelectorAll('div[style*="background-image"]');
-            bgImageDivs.forEach((div) => {
-              const style2 = div.getAttribute("style") || "";
-              const match2 = style2.match(/background-image:\s*url\(["']?([^"')]+)["']?\)/);
-              if (match2 && match2[1]) {
-                const img = clonedDoc.createElement("img");
-                img.src = match2[1];
-                img.style.cssText = `
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-              `;
-                div.style.position = "relative";
-                div.appendChild(img);
-              }
-            });
-            const images2 = element.querySelectorAll("img");
-            images2.forEach((img) => {
-              if (img.dataset.src && !img.src) {
-                img.src = img.dataset.src;
-              }
-            });
+          allowTaint: true
+        });
+        originalValues.forEach(({ el, attr, value }) => {
+          if (attr === "src") {
+            el.src = value;
+          } else if (attr === "style-bg") {
+            el.style.backgroundImage = value;
           }
         });
+        console.log("[bsky-nav] Restored original DOM");
         canvas.toBlob(async (blob2) => {
           try {
             await navigator.clipboard.write([

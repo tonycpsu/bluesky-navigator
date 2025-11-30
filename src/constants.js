@@ -48,6 +48,7 @@ const constants = {
   LEFT_SIDEBAR_SELECTOR: 'nav[role="navigation"]',
   POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
   POST_CONTENT_SELECTOR: 'div[data-testid="contentHider-post"]',
+  MAIN_SELECTOR: 'main[role="main"]',
   WIDTH_SELECTOR: 'div[style*="removed-body-scroll-bar-size"][style*="width: 100%"]',
   PROFILE_SELECTOR: 'a[aria-label="View profile"]',
   LINK_SELECTOR: 'a[target="_blank"]',

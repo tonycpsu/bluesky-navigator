@@ -9,6 +9,7 @@ import { Handler } from './Handler.js';
 import { formatPost, urlForPost } from './postFormatting.js';
 import { GestureHandler } from '../components/GestureHandler.js';
 import { BottomSheet } from '../components/BottomSheet.js';
+import { PostViewModal } from '../components/PostViewModal.js';
 
 const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
 
@@ -644,6 +645,10 @@ export class ItemHandler extends Handler {
         this.captureScreenshot(item[0]);
         break;
 
+      case 'v':
+        this.showPostViewModal(item);
+        break;
+
       default:
         if (!isNaN(parseInt(event.key))) {
           this.switchToTab(parseInt(event.key) - 1);
@@ -950,6 +955,38 @@ export class ItemHandler extends Handler {
       });
     } catch (err) {
       console.error('Failed to capture screenshot:', err);
+    }
+  }
+
+  async showPostViewModal(item) {
+    const postElement = item[0];
+    if (!postElement) {
+      console.warn('showPostViewModal: no post element found');
+      return;
+    }
+
+    // Create modal instance if needed
+    if (!this.postViewModal) {
+      this.postViewModal = new PostViewModal(this.config);
+    }
+
+    // Show modal immediately with loading state
+    this.postViewModal.show(postElement, null);
+
+    // Fetch thread data and update sidecar
+    try {
+      const thread = await this.getThreadForItem(postElement);
+      if (thread) {
+        const sidecarHtml = await this.getSidecarContent(postElement, thread);
+        // Wrap in modal-specific container to isolate from feed sidecar selectors
+        const wrappedHtml = `<div class="post-view-modal-sidecar-content">${sidecarHtml}</div>`;
+        this.postViewModal.updateSidecar(wrappedHtml);
+      } else {
+        this.postViewModal.updateSidecar('<div class="post-view-modal-error">Could not load replies</div>');
+      }
+    } catch (err) {
+      console.error('Failed to load thread for post view modal:', err);
+      this.postViewModal.updateSidecar('<div class="post-view-modal-error">Error loading replies</div>');
     }
   }
 
@@ -1576,8 +1613,9 @@ export class ItemHandler extends Handler {
     const set = [];
 
     // Clean up unrolled replies and sidecar containers from previous load
-    $('.unrolled-replies').remove();
-    $('.sidecar-replies').remove();
+    // Exclude elements inside post-view-modal to avoid affecting the modal's sidecar
+    $('.unrolled-replies').not('.post-view-modal *').remove();
+    $('.sidecar-replies').not('.post-view-modal *').remove();
 
     $(this.items).css('opacity', '0%');
     let itemIndex = 0;

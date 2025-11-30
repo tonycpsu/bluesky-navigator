@@ -1,0 +1,211 @@
+// PostViewModal.js - Full-screen post view modal with sidecar
+
+import { announceToScreenReader, getAnimationDuration } from '../utils.js';
+
+// Singleton instance
+let instance = null;
+
+/**
+ * Creates and manages the full-screen post view modal (singleton)
+ */
+export class PostViewModal {
+  constructor(config) {
+    // Return existing instance if it exists
+    if (instance) {
+      instance.config = config;
+      return instance;
+    }
+
+    this.config = config;
+    this.isVisible = false;
+    this.modalEl = null;
+    this.previousActiveElement = null;
+
+    instance = this;
+  }
+
+  /**
+   * Show the modal with post content and sidecar
+   * @param {HTMLElement} postElement - The post element to display
+   * @param {string} sidecarHtml - HTML content for the sidecar
+   */
+  show(postElement, sidecarHtml) {
+    if (this.isVisible) return;
+
+    this.previousActiveElement = document.activeElement;
+    this.isVisible = true;
+
+    // Create modal
+    this.modalEl = this.createModal(postElement, sidecarHtml);
+    document.body.appendChild(this.modalEl);
+
+    // Focus the close button
+    const closeBtn = this.modalEl.querySelector('.post-view-modal-close');
+    if (closeBtn) {
+      closeBtn.focus();
+    }
+
+    // Announce to screen readers
+    announceToScreenReader('Post view opened. Press Escape to close.');
+
+    // Add escape listener
+    this.escapeHandler = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.hide();
+      }
+    };
+    document.addEventListener('keydown', this.escapeHandler, true);
+
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+  }
+
+  /**
+   * Hide the modal
+   */
+  hide() {
+    if (!this.isVisible || !this.modalEl) return;
+
+    const animDuration = getAnimationDuration(200, this.config);
+    this.modalEl.classList.add('post-view-modal-hiding');
+
+    setTimeout(() => {
+      if (this.modalEl && this.modalEl.parentNode) {
+        this.modalEl.parentNode.removeChild(this.modalEl);
+      }
+      this.modalEl = null;
+      this.isVisible = false;
+
+      // Restore body scroll
+      document.body.style.overflow = '';
+
+      // Restore focus
+      if (this.previousActiveElement) {
+        this.previousActiveElement.focus();
+      }
+    }, animDuration);
+
+    document.removeEventListener('keydown', this.escapeHandler, true);
+    announceToScreenReader('Post view closed.');
+  }
+
+  /**
+   * Create the modal DOM element
+   * @param {HTMLElement} postElement - The post element to clone
+   * @param {string} sidecarHtml - HTML content for the sidecar
+   */
+  createModal(postElement, sidecarHtml) {
+    const modal = document.createElement('div');
+    modal.className = 'post-view-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'post-view-modal-title');
+
+    // Clone the post content
+    const postClone = postElement.cloneNode(true);
+    // Remove any existing selection styling and feed-related attributes from clone
+    // This prevents the cloned element from being matched by feed item selectors
+    postClone.classList.remove('selected', 'item', 'item-selection-active', 'item-selection-inactive', 'item-read', 'item-unread');
+    postClone.classList.add('post-view-modal-cloned-post');
+    postClone.removeAttribute('data-bsky-navigator-item-index');
+    postClone.removeAttribute('data-bsky-navigator-thread-offset');
+    postClone.removeAttribute('data-testid');
+    postClone.removeAttribute('tabindex');
+    postClone.removeAttribute('role');
+    postClone.style.border = 'none';
+    postClone.style.width = '100%';
+    postClone.style.maxWidth = '100%';
+    postClone.style.opacity = '1';
+
+    modal.innerHTML = `
+      <div class="post-view-modal-backdrop"></div>
+      <div class="post-view-modal-content">
+        <div class="post-view-modal-header">
+          <h2 id="post-view-modal-title">Post View</h2>
+          <button class="post-view-modal-close" aria-label="Close">×</button>
+        </div>
+        <div class="post-view-modal-body">
+          <div class="post-view-modal-post"></div>
+          <div class="post-view-modal-sidecar"></div>
+        </div>
+      </div>
+    `;
+
+    // Insert cloned post
+    const postContainer = modal.querySelector('.post-view-modal-post');
+    postContainer.appendChild(postClone);
+
+    // Debug: watch for changes to the post element
+    const postObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        console.log('[PostViewModal] POST MUTATION:', mutation.type, mutation.target.className || mutation.target.tagName);
+        if (mutation.type === 'attributes') {
+          console.log('[PostViewModal] Post attribute changed:', mutation.attributeName, 'on', mutation.target.className || mutation.target.tagName);
+          if (mutation.attributeName === 'style') {
+            console.log('[PostViewModal] New style:', mutation.target.getAttribute('style'));
+          }
+        }
+      });
+    });
+    postObserver.observe(postClone, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+
+    // Insert sidecar content
+    const sidecarContainer = modal.querySelector('.post-view-modal-sidecar');
+    if (sidecarHtml) {
+      sidecarContainer.innerHTML = sidecarHtml;
+    } else {
+      sidecarContainer.innerHTML = '<div class="post-view-modal-loading">Loading replies...</div>';
+    }
+
+    // Event listeners
+    modal.querySelector('.post-view-modal-backdrop').addEventListener('click', () => this.hide());
+    modal.querySelector('.post-view-modal-close').addEventListener('click', () => this.hide());
+
+    return modal;
+  }
+
+  /**
+   * Update the sidecar content (for async loading)
+   * @param {string} sidecarHtml - HTML content for the sidecar
+   */
+  updateSidecar(sidecarHtml) {
+    console.log('[PostViewModal] updateSidecar called, modalEl exists:', !!this.modalEl);
+    if (!this.modalEl) return;
+    const sidecarContainer = this.modalEl.querySelector('.post-view-modal-sidecar');
+    console.log('[PostViewModal] sidecarContainer found:', !!sidecarContainer);
+    if (sidecarContainer) {
+      sidecarContainer.innerHTML = sidecarHtml;
+      console.log('[PostViewModal] sidecar innerHTML set, length:', sidecarHtml?.length);
+
+      // Debug: watch for changes to this element
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          console.log('[PostViewModal] MUTATION detected:', mutation.type, mutation);
+          if (mutation.type === 'childList') {
+            console.log('[PostViewModal] Children changed, removed:', mutation.removedNodes.length, 'added:', mutation.addedNodes.length);
+          }
+          if (mutation.type === 'attributes') {
+            console.log('[PostViewModal] Attribute changed:', mutation.attributeName, 'to', mutation.target.getAttribute(mutation.attributeName));
+          }
+        });
+      });
+      observer.observe(sidecarContainer, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+
+      // Also observe the inner sidecar-replies
+      const sidecarReplies = sidecarContainer.querySelector('.sidecar-replies');
+      if (sidecarReplies) {
+        console.log('[PostViewModal] sidecar-replies found, observing it too');
+        observer.observe(sidecarReplies, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+      }
+    }
+  }
+
+  /**
+   * Check if modal is currently visible
+   */
+  get visible() {
+    return this.isVisible;
+  }
+}

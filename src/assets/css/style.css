@@ -1219,6 +1219,210 @@ div.item-banner {
 }
 
 /* ==========================================================================
+   Post View Modal
+   ========================================================================== */
+
+.post-view-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: overlayFadeIn var(--animation-duration, 200ms) ease-out;
+}
+
+.post-view-modal-hiding {
+  animation: overlayFadeOut var(--animation-duration, 200ms) ease-in forwards;
+}
+
+.post-view-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.post-view-modal-content {
+  position: relative;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  max-width: 1200px;
+  max-height: 90vh;
+  width: 95%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: overlaySlideUp var(--animation-duration, 200ms) ease-out;
+}
+
+.post-view-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.post-view-modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.post-view-modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #6b7280;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-duration, 200ms) ease;
+}
+
+.post-view-modal-close:hover {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+.post-view-modal-close:focus {
+  outline: 2px solid var(--focus-ring-color, #0066cc);
+  outline-offset: 2px;
+}
+
+.post-view-modal-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.post-view-modal-post {
+  flex: 3;
+  overflow-y: auto;
+  padding: 16px;
+  border-right: 1px solid #e5e7eb;
+}
+
+/* Ensure cloned post takes full width and isn't constrained by feed styles */
+.post-view-modal-post > * {
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+}
+
+.post-view-modal-sidecar {
+  flex: 2;
+  overflow-y: auto;
+  padding: 16px;
+  font-size: 0.9em;
+}
+
+/* Ensure sidecar content is always visible in the modal */
+.post-view-modal-sidecar-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.post-view-modal-sidecar-content .sidecar-replies {
+  display: flex !important;
+  flex-direction: column;
+  flex: 1;
+}
+
+.post-view-modal-loading {
+  color: #6b7280;
+  text-align: center;
+  padding: 20px;
+}
+
+/* Mobile: stack vertically */
+@media (max-width: 800px) {
+  .post-view-modal-content {
+    max-width: 100%;
+    max-height: 100%;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  .post-view-modal-body {
+    flex-direction: column;
+  }
+
+  .post-view-modal-post {
+    flex: none;
+    max-height: 50%;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .post-view-modal-sidecar {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .post-view-modal-content {
+    background-color: #1f2937;
+  }
+
+  .post-view-modal-header {
+    border-bottom-color: #374151;
+  }
+
+  .post-view-modal-header h2 {
+    color: #f9fafb;
+  }
+
+  .post-view-modal-close {
+    color: #9ca3af;
+  }
+
+  .post-view-modal-close:hover {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+
+  .post-view-modal-post {
+    border-right-color: #374151;
+  }
+
+  .post-view-modal-sidecar {
+    border-top-color: #374151;
+  }
+
+  .post-view-modal-loading {
+    color: #9ca3af;
+  }
+}
+
+@media (max-width: 800px) and (prefers-color-scheme: dark) {
+  .post-view-modal-post {
+    border-bottom-color: #374151;
+  }
+}
+
+/* High contrast */
+@media (prefers-contrast: more) {
+  .post-view-modal-content {
+    border: 2px solid black;
+  }
+}
+
+/* ==========================================================================
    Scroll Position Indicator
    ========================================================================== */
 

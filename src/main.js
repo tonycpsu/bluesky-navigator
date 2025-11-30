@@ -669,8 +669,8 @@ function getScreenFromElement(element) {
         console.log('reset sidebars');
         $(leftSidebar).css('transform', `translateX(${LEFT_TRANSLATE_X_DEFAULT}px)`);
         $(rightSidebar).css('transform', `translateX(${RIGHT_TRANSLATE_X_DEFAULT}px)`);
-      }
-
+      }   
+      $(constants.MAIN_SELECTOR).css('max-width', `${width}px`, '!important');
       $(constants.WIDTH_SELECTOR).css('max-width', `${width}px`, '!important');
       $('div[role="tablist"]').css('width', `${width}px`);
       $('#statusBar').css('max-width', `${width}px`);

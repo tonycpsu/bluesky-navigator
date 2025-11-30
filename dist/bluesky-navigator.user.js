@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+368.e564bc68
+// @version     1.0.31+369.fd06526b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -54,6 +54,7 @@
     LEFT_SIDEBAR_SELECTOR: 'nav[role="navigation"]',
     POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
     POST_CONTENT_SELECTOR: 'div[data-testid="contentHider-post"]',
+    MAIN_SELECTOR: 'main[role="main"]',
     WIDTH_SELECTOR: 'div[style*="removed-body-scroll-bar-size"][style*="width: 100%"]',
     PROFILE_SELECTOR: 'a[aria-label="View profile"]',
     LINK_SELECTOR: 'a[target="_blank"]',
@@ -45068,7 +45069,2050 @@ if (cid) {
       default: false
     }
   };
-  const style = '/* style.css */\n\n/* ==========================================================================\n   CSS Custom Properties (Accessibility & Theming)\n   ========================================================================== */\n\n:root {\n  --focus-ring-color: #0066cc;\n  --focus-ring-width: 2px;\n  --transition-duration: 200ms;\n  --animation-duration: 300ms;\n}\n\n/* High Contrast Mode */\n@media (prefers-contrast: more) {\n  :root {\n    --focus-ring-color: #000000;\n    --focus-ring-width: 3px;\n  }\n}\n\n/* Reduced Motion Support */\n@media (prefers-reduced-motion: reduce) {\n  :root {\n    --transition-duration: 0ms;\n    --animation-duration: 0ms;\n  }\n\n  *,\n  *::before,\n  *::after {\n    animation-duration: 0.01ms !important;\n    animation-iteration-count: 1 !important;\n    transition-duration: 0.01ms !important;\n  }\n}\n\n/* Screen reader only utility class */\n.sr-only {\n  position: absolute;\n  width: 1px;\n  height: 1px;\n  padding: 0;\n  margin: -1px;\n  overflow: hidden;\n  clip: rect(0, 0, 0, 0);\n  white-space: nowrap;\n  border: 0;\n}\n\n/* ==========================================================================\n   Base Styles\n   ========================================================================== */\n\ndiv[style^="position: fixed; inset: 0px 0px 0px 50%;"] {\n    border: none;\n}\n\ndiv#logContainer {\n    width: 100%;\n    bottom: 0;\n    pointer-events: none;\n    height: 25%;\n    position: fixed;\n    background: rgba(0, 0, 0, 0.2);\n    color: #e0e0e0;\n    font-family: monospace;\n    font-size: 12px;\n    z-index: 10000;\n    padding: 10px;\n    padding-top: 30px;\n}\n\n#logHeader {\n    position: relative;\n    width: 100%;\n    background: #333;\n    color: white;\n    padding: 5px 10px;\n    box-sizing: border-box;\n    pointer-events: auto;\n}\n\nbutton#clearLogs {\n    position: absolute;\n    top: 0;\n    left: 0;\n    width: 100px;\n    background: red;\n    color: white;\n    border: none;\n    padding: 2px 5px;\n    cursor: pointer;\n}\n\n#logContent {\n    overflow-y: auto;\n    max-height: calc(70% - 30px);\n    padding: 10px;\n    box-sizing: border-box;\n}\n\ndiv#bsky-navigator-toolbar {\n    display: flex;\n    flex-direction: column;\n    position: sticky;\n    top: 0;\n    width: 100%;\n    background-color: inherit;\n    border-bottom: 1px solid rgb(192, 192, 192);\n    z-index: 100;\n}\n\n.toolbar-row {\n    display: flex;\n    flex-direction: row;\n    align-items: center;\n    width: 100%;\n    height: 32px;\n}\n\n.toolbar-row-1 {\n    border-bottom: 1px solid rgba(192, 192, 192, 0.5);\n}\n\n.toolbar-row-2 {\n    gap: 8px;\n    padding: 0 8px;\n}\n\n@media (prefers-color-scheme: dark) {\n    div#bsky-navigator-toolbar {\n        background-color: #29333d\n    }\n    .toolbar-row-1 {\n        border-bottom-color: rgba(100, 100, 100, 0.5);\n    }\n}\n\n.toolbar-icon {\n    position: relative;\n    margin: 0px;\n    width: 24px;\n    height: 24px;\n    padding: 0px 8px;\n    flex: 1;\n}\n\n\n.toolbar-icon-pending {\n    animation: fadeInOut 1s infinite;\n    animation-duration: var(--animation-duration, 1s);\n}\n\n.indicator-image {\n    width: 24px;\n    height: 24px;\n}\n\n@media (prefers-color-scheme: dark) {\n    .indicator-image {\n        filter: invert(1) brightness(2);\n    }\n}\n\ndiv#infoIndicator {\n    flex: 3;\n}\n\ndiv#infoIndicatorText {\n    font-size: 0.8em;\n}\n\ndiv#itemTimestampStats {\n    font-size: 0.7em;\n}\n\n#bsky-navigator-search {\n    flex: 1;\n    min-width: 0;\n    margin: 0px 8px;\n    z-index: 10;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n}\n\n.ui-autocomplete {\n    position: absolute !important;\n    background-color: white !important;\n    border: 1px solid #ccc !important;\n    z-index: 1000 !important;\n    max-height: 200px !important;\n    overflow-y: auto !important;\n    list-style-type: none !important;\n    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;\n    padding: 2px !important;\n}\n\n.ui-menu-item {\n    padding: 2px !important;\n    font-size: 14px !important;\n    color: black !important;\n}\n\n/* Highlight hovered item */\n.ui-state-active {\n    background-color: #007bff !important;\n    color: white !important;\n}\n\n@media only screen and not (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 0;\n        font-size: 1em;\n        padding: 1px;\n        border-top: 1px solid rgb(192, 192, 192);\n        overflow: clip;\n    }\n}\n\n@media only screen and (max-width: 800px) {\n    div#statusBar {\n        display: flex;\n        width: 100%;\n        height: 32px;\n        margin-left: auto;\n        margin-right: auto;\n        position: sticky;\n        z-index: 10;\n        align-items: center;\n        background-color: #ffffff;\n        bottom: 58px;\n        font-size: 1em;\n        padding: 1px;\n        overflow: clip;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    div#statusBar {\n        background-color: #29333d;\n    }\n}\n\ndiv#statusBarLeft {\n    display: flex;\n    flex: 1;\n    text-align: left;\n    padding: 1px;\n}\n\ndiv#statusBarCenter {\n    display: flex;\n    flex: 1 1 auto;\n    text-align: center;\n    padding: 1px;\n}\n\ndiv#statusBarRight {\n    display: flex;\n    flex: 1;\n    text-align: right;\n    padding: 1px;\n}\n\n#prevButton {\n    z-index: 1000;\n    position: absolute;\n    top: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#prevButton.mobile {\n    position: fixed;\n    left: 1%;\n    top: 25%;\n}\n\n#nextButton {\n    z-index: 1000;\n    position: absolute;\n    bottom: 30%;\n    right: -10px;\n    opacity: 20%;\n}\n\n#nextButton.mobile {\n    position: fixed;\n    left: 1%;\n    bottom: 20%;\n}\n\nnav.r-1wyvozj {\n    overflow: inherit;\n}\n\n@keyframes oscillateBorderBottom {\n    0% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-bottom-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-bottom-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes oscillateBorderTop {\n    0% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n    50% {\n        border-top-color: rgba(0, 128, 0, 0.3);\n    }\n    100% {\n        border-top-color: rgba(0, 128, 0, 1);\n    }\n}\n\n@keyframes fadeInOut {\n    0% {\n        opacity: 0.2;\n    }\n    50% {\n        opacity: 1;\n    }\n    100% {\n        opacity: 0.2;\n    }\n}\n\ndiv.loading-indicator-reverse {\n    border-bottom: 10px solid;\n    animation: oscillateBorderBottom 0.2s infinite;\n    animation-duration: var(--animation-duration, 0.2s);\n}\n\ndiv.loading-indicator-forward {\n    border-top: 10px solid;\n    animation: oscillateBorderTop 0.2s infinite;\n    animation-duration: var(--animation-duration, 0.2s);\n}\n\n.filtered {\n    display: none !important;\n}\n\n#messageContainer {\n    inset: 5%;\n    padding: 10px;\n}\n\n.messageTitle {\n    font-size: 1.5em;\n    text-align: center;\n}\n\n.messageBody {\n    font-size: 1.2em;\n}\n\n#messageActions a {\n    color: #8040c0;\n}\n\n#messageActions a:hover {\n    text-decoration: underline;\n    cursor: pointer;\n}\n\n.preferences-icon-overlay {\n    background-color: #cccccc;\n    cursor: pointer;\n    justify-content: center;\n    z-index: 1000;\n}\n\n.preferences-icon-overlay-sync-ready {\n    background-color: #d5f5e3;\n}\n\n.preferences-icon-overlay-sync-pending {\n    animation: fadeInOut 1s infinite;\n    animation-duration: var(--animation-duration, 1s);\n    background-color: #f9e79f;\n}\n\n.preferences-icon-overlay-sync-success {\n    background-color: #2ecc71;\n}\n\n.preferences-icon-overlay-sync-failure {\n    background-color: #ec7063 ;\n}\n\n.preferences-icon-overlay span {\n    color: white;\n    font-size: 16px;\n}\n\ndiv.item-banner {\n    position: absolute;\n    top: 0;\n    left: 0;\n    font-family: "Lucida Console", "Courier New", monospace;\n    font-size: 0.7em;\n    z-index: 10;\n    color: black;\n    text-shadow: 1px 1px rgba(255, 255, 255,0.8);\n    background: rgba(128, 192, 192, 0.3);\n    padding: 3px;\n    border-radius: 4px;\n}\n\n.image-highlight {\n    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);\n}\n\n.load-time-icon {\n    position: absolute;\n    left: 8px;\n    bottom: -1px;\n    width: 24px;\n    height: 24px;\n    opacity: 0.8;\n    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)\n        drop-shadow(-0.2px  0px 0px black)\n        drop-shadow( 0px  0.2px 0px black)\n        drop-shadow( 0px -0.2px 0px black);\n}\n\n.image-flip-x {\n    transform: scaleX(-1);\n    -webkit-transform: scaleX(-1);\n}\n\n.popup {\n    display: none;\n    position: fixed;\n    max-height: 80vH;\n    top: 50%;\n    left: 50%;\n    transform: translate(-50%, -50%);\n    /* transform: scale(0.25); /\\* Scale down to 75% *\\/ */\n    background: white;\n    padding: 15px;\n    border-radius: 12px;\n    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n    width: 400px;\n    z-index: 1000;\n}\n\n/* Hide the reply connector line in threaded posts - only on desktop */\n@media only screen and (min-width: 801px) {\n    div:has(>div.item) > nav + div {\n        display: none;\n    }\n}\n\n/* Sidecar layout - desktop only */\n@media only screen and (min-width: 801px) {\n    div:has(>div.item) {\n        display: flex;\n        flex-direction: row;\n        align-items: stretch;\n    }\n\n    .item {\n        display: flex;\n        flex: 2;\n        max-height: 100%;\n    }\n\n    .item > div:first-of-type {\n        flex: 1;\n        align-items: stretch;\n    }\n\n    .item > div:first-of-type > div:last-of-type {\n        flex: 1;\n    }\n}\n\n.unrolled-banner {\n    position: absolute;\n    top: -0.5em;\n    left: 10px;\n    padding: 0px 5px;\n    backdrop-filter: blur(10px);\n    color: #888;\n}\n\n.unrolled-divider {\n    margin-top: 1em;\n    border: 1px solid #eee;\n    color: white;\n}\n\n.unrolled-reply {\n    /* border: 1px transparent; */\n    margin: 1px;\n    border: 1px solid transparent;\n    box-sizing: border-box;\n}\n\n.sidecar-replies {\n    flex: 1 1 0;\n    min-height: 0;\n    overflow-y: auto;\n    font-size: 0.8em;\n    padding-left: 10px;\n    display: flex;\n    flex-direction: column;\n    max-height: 50vH;\n}\n\n/* Hide sidecar on mobile */\n@media only screen and (max-width: 800px) {\n    .sidecar-replies {\n        display: none;\n    }\n}\n\n.sidecar-parent-indicator {\n    position: absolute;\n}\n\n.sidecar-post {\n    display: flex;\n    flex-direction: column;\n    padding: 5px;\n    flex-shrink: 0;\n    font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";\n}\n\n.sidecar-post a {\n    text-decoration: none;\n}\n\n.sidecar-post a:hover {\n    text-decoration: underline;\n}\n\n.sidecar-post-user-info {\n    display: flex;\n    flex-direction: row;\n    font-size: 0.9em;\n}\n\n.sidecar-post-avatar {\n    width: 24px;\n    height: 24px;\n    padding: 2px;\n}\n\n.sidecar-post-username {\n    font-weight: 600;\n    color: rgb(11, 15, 20);\n}\n\n.sidecar-post-handle {\n    color: rgb(66, 87, 108);\n    font-variant: no-contextual;\n}\n\n.sidecar-post-content {\n    padding: 5px 0px;\n}\n\n.sidecar-post-content a {\n    color: rgb(16, 131, 254);\n}\n\n.sidecar-post-footer {\n    color: rgb(66, 87, 108);\n    display: flex;\n    flex-direction: row;\n    font-size: 11px;\n}\n\n.sidecar-post-footer svg, .sidecar-post-footer span {\n    display: inline-flex;\n    vertical-align: middle;\n    /* flex: 1; */\n    color: rgb(111, 134, 159);\n}\n\n.sidecar-post-timestamp {\n    display: inline-flex;\n    vertical-align: middle;\n    flex: 3;\n}\n\n.sidecar-parent .sidecar-post {\n    border: 3px dashed rgb(111, 134, 159);\n    padding: 5px;\n}\n\n.sidecar-post-counts {\n    display: flex;\n    flex: 2;\n}\n\n.sidecar-count {\n    display: flex;\n    flex: 1;\n    justify-content: right;\n    align-items: center;\n}\n\n.sidecar-count-icon > svg {\n  height: 1em;\n}\n\n/* ==========================================================================\n   Like/Repost Animation Feedback\n   ========================================================================== */\n\n@keyframes likeHeartPop {\n  0% {\n    transform: scale(1);\n  }\n  50% {\n    transform: scale(1.3);\n  }\n  100% {\n    transform: scale(1);\n  }\n}\n\n@keyframes unlikeHeartShrink {\n  0% {\n    transform: scale(1);\n  }\n  50% {\n    transform: scale(0.8);\n  }\n  100% {\n    transform: scale(1);\n  }\n}\n\n.like-animation-like {\n  animation: likeHeartPop var(--animation-duration, 300ms) ease-out;\n}\n\n.like-animation-like svg {\n  fill: #ec4899;\n  color: #ec4899;\n}\n\n.like-animation-unlike {\n  animation: unlikeHeartShrink var(--animation-duration, 300ms) ease-out;\n}\n\n@keyframes repostPop {\n  0% {\n    transform: scale(1) rotate(0deg);\n  }\n  50% {\n    transform: scale(1.2) rotate(15deg);\n  }\n  100% {\n    transform: scale(1) rotate(0deg);\n  }\n}\n\n.repost-animation {\n  animation: repostPop var(--animation-duration, 300ms) ease-out;\n}\n\n.repost-animation svg {\n  fill: #22c55e;\n  color: #22c55e;\n}\n\n/* ==========================================================================\n   Filter Indicator Pill\n   ========================================================================== */\n\n.filter-pill {\n  display: flex;\n  align-items: center;\n  gap: 6px;\n  padding: 4px 8px 4px 12px;\n  margin: 0 8px;\n  background-color: #3b82f6;\n  color: white;\n  border-radius: 16px;\n  font-size: 12px;\n  font-weight: 500;\n  max-width: 200px;\n  animation: pillSlideIn var(--animation-duration, 200ms) ease-out;\n}\n\n@keyframes pillSlideIn {\n  from {\n    opacity: 0;\n    transform: translateX(-10px);\n  }\n  to {\n    opacity: 1;\n    transform: translateX(0);\n  }\n}\n\n.filter-pill-text {\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.filter-pill-clear {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 18px;\n  height: 18px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  border-radius: 50%;\n  background-color: rgba(255, 255, 255, 0.3);\n  color: white;\n  font-size: 14px;\n  font-weight: bold;\n  line-height: 1;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.filter-pill-clear:hover {\n  background-color: rgba(255, 255, 255, 0.5);\n}\n\n.filter-pill-clear:focus {\n  outline: 2px solid white;\n  outline-offset: 1px;\n}\n\n@media (prefers-color-scheme: dark) {\n  .filter-pill {\n    background-color: #2563eb;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .filter-pill {\n    background-color: #1d4ed8;\n    border: 2px solid white;\n  }\n}\n\n/* ==========================================================================\n   New Posts Floating Pill\n   ========================================================================== */\n\n.new-posts-pill {\n  position: fixed;\n  top: 80px;\n  left: 50%;\n  transform: translateX(-50%);\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  padding: 10px 20px;\n  background-color: #3b82f6;\n  color: white;\n  border: none;\n  border-radius: 24px;\n  font-size: 14px;\n  font-weight: 600;\n  cursor: pointer;\n  z-index: 9999;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);\n  animation: newPostsPillBounce var(--animation-duration, 500ms) ease-out;\n  transition: transform var(--transition-duration, 200ms) ease,\n              background-color var(--transition-duration, 200ms) ease;\n}\n\n.new-posts-pill:hover {\n  background-color: #2563eb;\n  transform: translateX(-50%) scale(1.05);\n}\n\n.new-posts-pill:focus {\n  outline: 2px solid white;\n  outline-offset: 2px;\n}\n\n.new-posts-pill:active {\n  transform: translateX(-50%) scale(0.98);\n}\n\n.new-posts-pill svg {\n  flex-shrink: 0;\n}\n\n@keyframes newPostsPillBounce {\n  0% {\n    opacity: 0;\n    transform: translateX(-50%) translateY(-20px);\n  }\n  60% {\n    transform: translateX(-50%) translateY(5px);\n  }\n  100% {\n    opacity: 1;\n    transform: translateX(-50%) translateY(0);\n  }\n}\n\n.new-posts-pill-hiding {\n  animation: newPostsPillHide var(--animation-duration, 200ms) ease-in forwards;\n}\n\n@keyframes newPostsPillHide {\n  to {\n    opacity: 0;\n    transform: translateX(-50%) translateY(-20px);\n  }\n}\n\n@media (prefers-color-scheme: dark) {\n  .new-posts-pill {\n    background-color: #2563eb;\n    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);\n  }\n\n  .new-posts-pill:hover {\n    background-color: #3b82f6;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .new-posts-pill {\n    background-color: #1d4ed8;\n    border: 2px solid white;\n  }\n}\n\n/* Mobile positioning */\n@media only screen and (max-width: 800px) {\n  .new-posts-pill {\n    top: auto;\n    bottom: 70px;\n  }\n}\n\n/* ==========================================================================\n   Skeleton Loading States\n   ========================================================================== */\n\n.sidecar-skeleton {\n  padding: 10px;\n}\n\n.skeleton-post {\n  padding: 10px 0;\n  border-bottom: 1px solid #e5e7eb;\n}\n\n.skeleton-post:last-child {\n  border-bottom: none;\n}\n\n.skeleton-header {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  margin-bottom: 12px;\n}\n\n.skeleton-avatar {\n  width: 32px;\n  height: 32px;\n  border-radius: 50%;\n  flex-shrink: 0;\n}\n\n.skeleton-author {\n  flex: 1;\n  display: flex;\n  flex-direction: column;\n  gap: 6px;\n}\n\n.skeleton-body {\n  display: flex;\n  flex-direction: column;\n  gap: 8px;\n}\n\n.skeleton-line {\n  height: 12px;\n  border-radius: 4px;\n}\n\n.skeleton-line-short {\n  width: 30%;\n}\n\n.skeleton-line-medium {\n  width: 60%;\n}\n\n.skeleton-line-full {\n  width: 100%;\n}\n\n.skeleton-shimmer {\n  background: linear-gradient(\n    90deg,\n    #e5e7eb 25%,\n    #f3f4f6 50%,\n    #e5e7eb 75%\n  );\n  background-size: 200% 100%;\n  animation: shimmer 1.5s infinite;\n}\n\n@keyframes shimmer {\n  0% {\n    background-position: 200% 0;\n  }\n  100% {\n    background-position: -200% 0;\n  }\n}\n\n/* Respect reduced motion */\n@media (prefers-reduced-motion: reduce) {\n  .skeleton-shimmer {\n    animation: none;\n    background: #e5e7eb;\n  }\n}\n\n/* Dark mode skeleton */\n@media (prefers-color-scheme: dark) {\n  .skeleton-shimmer {\n    background: linear-gradient(\n      90deg,\n      #374151 25%,\n      #4b5563 50%,\n      #374151 75%\n    );\n    background-size: 200% 100%;\n  }\n\n  @media (prefers-reduced-motion: reduce) {\n    .skeleton-shimmer {\n      background: #374151;\n    }\n  }\n\n  .skeleton-post {\n    border-bottom-color: #374151;\n  }\n}\n\n/* ==========================================================================\n   Keyboard Shortcut Overlay\n   ========================================================================== */\n\n.shortcut-overlay {\n  position: fixed;\n  inset: 0;\n  z-index: 10000;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  animation: overlayFadeIn var(--animation-duration, 200ms) ease-out;\n}\n\n@keyframes overlayFadeIn {\n  from {\n    opacity: 0;\n  }\n  to {\n    opacity: 1;\n  }\n}\n\n.shortcut-overlay-hiding {\n  animation: overlayFadeOut var(--animation-duration, 200ms) ease-in forwards;\n}\n\n@keyframes overlayFadeOut {\n  to {\n    opacity: 0;\n  }\n}\n\n.shortcut-overlay-backdrop {\n  position: absolute;\n  inset: 0;\n  background-color: rgba(0, 0, 0, 0.5);\n}\n\n.shortcut-overlay-content {\n  position: relative;\n  background-color: white;\n  border-radius: 12px;\n  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);\n  max-width: 700px;\n  max-height: 80vh;\n  width: 90%;\n  display: flex;\n  flex-direction: column;\n  animation: overlaySlideUp var(--animation-duration, 200ms) ease-out;\n}\n\n@keyframes overlaySlideUp {\n  from {\n    transform: translateY(20px);\n    opacity: 0;\n  }\n  to {\n    transform: translateY(0);\n    opacity: 1;\n  }\n}\n\n.shortcut-overlay-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 16px 20px;\n  border-bottom: 1px solid #e5e7eb;\n}\n\n.shortcut-overlay-header h2 {\n  margin: 0;\n  font-size: 18px;\n  font-weight: 600;\n  color: #111827;\n}\n\n.shortcut-overlay-close {\n  width: 32px;\n  height: 32px;\n  border: none;\n  border-radius: 6px;\n  background-color: transparent;\n  color: #6b7280;\n  font-size: 24px;\n  line-height: 1;\n  cursor: pointer;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.shortcut-overlay-close:hover {\n  background-color: #f3f4f6;\n  color: #111827;\n}\n\n.shortcut-overlay-close:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n}\n\n.shortcut-overlay-body {\n  padding: 20px;\n  overflow-y: auto;\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));\n  gap: 24px;\n}\n\n.shortcut-category {\n  min-width: 0;\n}\n\n.shortcut-category-title {\n  margin: 0 0 12px 0;\n  font-size: 13px;\n  font-weight: 600;\n  text-transform: uppercase;\n  letter-spacing: 0.05em;\n  color: #6b7280;\n}\n\n.shortcut-list {\n  margin: 0;\n  padding: 0;\n}\n\n.shortcut-item {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 6px 0;\n  gap: 16px;\n}\n\n.shortcut-keys {\n  display: flex;\n  gap: 4px;\n  flex-shrink: 0;\n}\n\n.shortcut-keys kbd {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  min-width: 24px;\n  height: 24px;\n  padding: 0 6px;\n  background-color: #f3f4f6;\n  border: 1px solid #d1d5db;\n  border-radius: 4px;\n  font-family: inherit;\n  font-size: 12px;\n  font-weight: 500;\n  color: #374151;\n  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);\n}\n\n.shortcut-desc {\n  margin: 0;\n  font-size: 14px;\n  color: #374151;\n  text-align: right;\n}\n\n.shortcut-overlay-footer {\n  padding: 12px 20px;\n  border-top: 1px solid #e5e7eb;\n  text-align: center;\n  font-size: 13px;\n  color: #6b7280;\n}\n\n.shortcut-overlay-footer kbd {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  min-width: 20px;\n  height: 20px;\n  padding: 0 4px;\n  background-color: #f3f4f6;\n  border: 1px solid #d1d5db;\n  border-radius: 4px;\n  font-family: inherit;\n  font-size: 11px;\n  font-weight: 500;\n  color: #374151;\n  margin: 0 2px;\n}\n\n/* Dark mode */\n@media (prefers-color-scheme: dark) {\n  .shortcut-overlay-content {\n    background-color: #1f2937;\n  }\n\n  .shortcut-overlay-header {\n    border-bottom-color: #374151;\n  }\n\n  .shortcut-overlay-header h2 {\n    color: #f9fafb;\n  }\n\n  .shortcut-overlay-close {\n    color: #9ca3af;\n  }\n\n  .shortcut-overlay-close:hover {\n    background-color: #374151;\n    color: #f9fafb;\n  }\n\n  .shortcut-category-title {\n    color: #9ca3af;\n  }\n\n  .shortcut-keys kbd,\n  .shortcut-overlay-footer kbd {\n    background-color: #374151;\n    border-color: #4b5563;\n    color: #e5e7eb;\n  }\n\n  .shortcut-desc {\n    color: #d1d5db;\n  }\n\n  .shortcut-overlay-footer {\n    border-top-color: #374151;\n    color: #9ca3af;\n  }\n}\n\n/* High contrast */\n@media (prefers-contrast: more) {\n  .shortcut-overlay-content {\n    border: 2px solid black;\n  }\n\n  .shortcut-keys kbd {\n    border-width: 2px;\n    border-color: black;\n  }\n}\n\n/* ==========================================================================\n   Scroll Position Indicator\n   ========================================================================== */\n\n.scroll-position-indicator {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  height: 3px;\n  background-color: #e5e7eb;\n  overflow: hidden;\n}\n\n.scroll-position-fill {\n  height: 100%;\n  width: 0%;\n  background-color: #3b82f6;\n  transition: width var(--transition-duration, 200ms) ease-out;\n}\n\n@media (prefers-color-scheme: dark) {\n  .scroll-position-indicator {\n    background-color: #374151;\n  }\n\n  .scroll-position-fill {\n    background-color: #60a5fa;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .scroll-position-indicator {\n    height: 4px;\n    background-color: #9ca3af;\n  }\n\n  .scroll-position-fill {\n    background-color: #1d4ed8;\n  }\n}\n\n/* ==========================================================================\n   Breadcrumb Trail\n   ========================================================================== */\n\n.breadcrumb {\n  display: flex;\n  align-items: center;\n  flex-wrap: nowrap;\n  flex-shrink: 1;\n  gap: 0;\n  margin-left: auto;\n  padding: 4px 0;\n  font-size: 12px;\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n\n.breadcrumb-item {\n  display: flex;\n  align-items: center;\n}\n\n.breadcrumb-text {\n  color: #6b7280;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  max-width: 100px;\n}\n\n.breadcrumb-link {\n  color: #3b82f6;\n  text-decoration: none;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  max-width: 100px;\n  transition: color var(--transition-duration, 200ms) ease;\n}\n\n.breadcrumb-link:hover {\n  color: #2563eb;\n  text-decoration: underline;\n}\n\n.breadcrumb-link:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n  border-radius: 2px;\n}\n\n.breadcrumb-separator {\n  margin: 0 6px;\n  color: #9ca3af;\n  flex-shrink: 0;\n}\n\n@media (prefers-color-scheme: dark) {\n  .breadcrumb-text {\n    color: #9ca3af;\n  }\n\n  .breadcrumb-link {\n    color: #60a5fa;\n  }\n\n  .breadcrumb-link:hover {\n    color: #93c5fd;\n  }\n\n  .breadcrumb-separator {\n    color: #6b7280;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .breadcrumb-text {\n    color: #374151;\n  }\n\n  .breadcrumb-link {\n    color: #1d4ed8;\n    text-decoration: underline;\n  }\n\n  .breadcrumb-separator {\n    color: #374151;\n  }\n}\n\n/* ==========================================================================\n   Saved Searches\n   ========================================================================== */\n\n.search-wrapper {\n  display: flex;\n  align-items: center;\n  position: relative;\n  gap: 4px;\n  flex: 0 0 auto;\n  min-width: 150px;\n  max-width: 300px;\n}\n\n.saved-searches-btn,\n.save-search-btn {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 28px;\n  height: 28px;\n  padding: 0;\n  border: none;\n  border-radius: 4px;\n  background-color: transparent;\n  color: #6b7280;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease,\n              color var(--transition-duration, 200ms) ease;\n}\n\n.saved-searches-btn:hover,\n.save-search-btn:hover {\n  background-color: #f3f4f6;\n  color: #374151;\n}\n\n.saved-searches-btn:focus,\n.save-search-btn:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n}\n\n.save-search-btn-saved {\n  color: #22c55e;\n  animation: savedPulse var(--animation-duration, 300ms) ease-out;\n}\n\n@keyframes savedPulse {\n  0%, 100% {\n    transform: scale(1);\n  }\n  50% {\n    transform: scale(1.2);\n  }\n}\n\n.saved-searches-dropdown {\n  position: absolute;\n  top: 100%;\n  left: 0;\n  margin-top: 4px;\n  min-width: 200px;\n  max-width: 300px;\n  max-height: 300px;\n  overflow-y: auto;\n  background-color: white;\n  border: 1px solid #e5e7eb;\n  border-radius: 8px;\n  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);\n  z-index: 1000;\n  animation: dropdownSlide var(--animation-duration, 150ms) ease-out;\n}\n\n@keyframes dropdownSlide {\n  from {\n    opacity: 0;\n    transform: translateY(-8px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n\n.saved-search-item {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  padding: 10px 12px;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.saved-search-item:hover {\n  background-color: #f3f4f6;\n}\n\n.saved-search-item:first-child {\n  border-radius: 8px 8px 0 0;\n}\n\n.saved-search-item:last-child {\n  border-radius: 0 0 8px 8px;\n}\n\n.saved-search-item:only-child {\n  border-radius: 8px;\n}\n\n.saved-search-text {\n  font-size: 13px;\n  color: #374151;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n  flex: 1;\n}\n\n.saved-search-delete {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  width: 20px;\n  height: 20px;\n  margin-left: 8px;\n  padding: 0;\n  border: none;\n  border-radius: 4px;\n  background-color: transparent;\n  color: #9ca3af;\n  font-size: 16px;\n  cursor: pointer;\n  opacity: 0;\n  transition: opacity var(--transition-duration, 200ms) ease,\n              background-color var(--transition-duration, 200ms) ease;\n}\n\n.saved-search-item:hover .saved-search-delete {\n  opacity: 1;\n}\n\n.saved-search-delete:hover {\n  background-color: #fecaca;\n  color: #dc2626;\n}\n\n@media (prefers-color-scheme: dark) {\n  .saved-searches-btn,\n  .save-search-btn {\n    color: #9ca3af;\n  }\n\n  .saved-searches-btn:hover,\n  .save-search-btn:hover {\n    background-color: #374151;\n    color: #e5e7eb;\n  }\n\n  .saved-searches-dropdown {\n    background-color: #1f2937;\n    border-color: #374151;\n  }\n\n  .saved-search-item:hover {\n    background-color: #374151;\n  }\n\n  .saved-search-text {\n    color: #e5e7eb;\n  }\n\n  .saved-search-delete {\n    color: #6b7280;\n  }\n\n  .saved-search-delete:hover {\n    background-color: #7f1d1d;\n    color: #fecaca;\n  }\n}\n\n/* ==========================================================================\n   Filter Highlight\n   ========================================================================== */\n\n.filter-highlight {\n  background-color: #fef08a;\n  color: #000;\n  border-radius: 2px;\n  padding: 0 2px;\n}\n\n@media (prefers-color-scheme: dark) {\n  .filter-highlight {\n    background-color: #ca8a04;\n    color: #fef9c3;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .filter-highlight {\n    background-color: #facc15;\n    outline: 2px solid #000;\n    outline-offset: -1px;\n  }\n}\n\n/* ==========================================================================\n   Collapsible Sidecar Sections\n   ========================================================================== */\n\n.sidecar-section {\n  margin-bottom: 8px;\n}\n\n.sidecar-section-toggle {\n  display: flex;\n  align-items: center;\n  width: 100%;\n  padding: 8px 10px;\n  border: none;\n  border-radius: 6px;\n  background-color: #f3f4f6;\n  color: #374151;\n  font-size: 13px;\n  font-weight: 600;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.sidecar-section-toggle:hover {\n  background-color: #e5e7eb;\n}\n\n.sidecar-section-toggle:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n}\n\n.sidecar-section-icon {\n  margin-right: 8px;\n  font-size: 10px;\n  transition: transform var(--transition-duration, 200ms) ease;\n}\n\n.sidecar-section-toggle[aria-expanded="false"] .sidecar-section-icon {\n  transform: rotate(-90deg);\n}\n\n.sidecar-section-title {\n  flex: 1;\n  text-align: left;\n}\n\n.sidecar-section-content {\n  overflow: hidden;\n}\n\n@media (prefers-color-scheme: dark) {\n  .sidecar-section-toggle {\n    background-color: #374151;\n    color: #e5e7eb;\n  }\n\n  .sidecar-section-toggle:hover {\n    background-color: #4b5563;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .sidecar-section-toggle {\n    border: 2px solid #000;\n  }\n}\n\n/* ==========================================================================\n   Mobile Swipe Gestures\n   ========================================================================== */\n\n.swipe-indicator {\n  position: absolute;\n  top: 50%;\n  transform: translateY(-50%);\n  width: 48px;\n  height: 48px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  border-radius: 50%;\n  opacity: 0;\n  transition: opacity var(--transition-duration, 200ms) ease,\n              transform var(--transition-duration, 200ms) ease;\n  z-index: 10;\n  pointer-events: none;\n}\n\n.swipe-indicator-left {\n  left: 10px;\n  background-color: #22c55e;\n  color: white;\n}\n\n.swipe-indicator-right {\n  right: 10px;\n  background-color: #ec4899;\n  color: white;\n}\n\n.swipe-indicator-active {\n  opacity: 1;\n  transform: translateY(-50%) scale(1.1);\n}\n\n/* Enable on touch devices only */\n@media (hover: none) and (pointer: coarse) {\n  .swipe-indicator {\n    display: flex;\n  }\n}\n\n@media (hover: hover) and (pointer: fine) {\n  .swipe-indicator {\n    display: none;\n  }\n}\n\n/* ==========================================================================\n   Mobile Bottom Sheet\n   ========================================================================== */\n\n.bottom-sheet-backdrop {\n  position: fixed;\n  inset: 0;\n  background-color: rgba(0, 0, 0, 0);\n  z-index: 10000;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.bottom-sheet-backdrop-visible {\n  background-color: rgba(0, 0, 0, 0.5);\n}\n\n.bottom-sheet {\n  position: fixed;\n  bottom: 0;\n  left: 0;\n  right: 0;\n  background-color: white;\n  border-radius: 16px 16px 0 0;\n  z-index: 10001;\n  transform: translateY(100%);\n  transition: transform var(--transition-duration, 200ms) ease;\n  max-height: 80vh;\n  overflow-y: auto;\n}\n\n.bottom-sheet-visible {\n  transform: translateY(0);\n}\n\n.bottom-sheet-handle {\n  width: 36px;\n  height: 4px;\n  margin: 12px auto;\n  background-color: #d1d5db;\n  border-radius: 2px;\n}\n\n.bottom-sheet-content {\n  padding: 8px 16px 16px;\n}\n\n.bottom-sheet-action {\n  display: flex;\n  align-items: center;\n  width: 100%;\n  padding: 14px 12px;\n  margin-bottom: 4px;\n  border: none;\n  border-radius: 12px;\n  background-color: transparent;\n  color: #374151;\n  font-size: 16px;\n  text-align: left;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.bottom-sheet-action:hover,\n.bottom-sheet-action:active {\n  background-color: #f3f4f6;\n}\n\n.bottom-sheet-action:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n}\n\n.bottom-sheet-action-icon {\n  width: 24px;\n  height: 24px;\n  margin-right: 12px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: #6b7280;\n}\n\n.bottom-sheet-action-label {\n  flex: 1;\n}\n\n.bottom-sheet-cancel {\n  display: block;\n  width: calc(100% - 32px);\n  margin: 8px 16px 16px;\n  padding: 14px;\n  border: none;\n  border-radius: 12px;\n  background-color: #f3f4f6;\n  color: #374151;\n  font-size: 16px;\n  font-weight: 600;\n  cursor: pointer;\n  transition: background-color var(--transition-duration, 200ms) ease;\n}\n\n.bottom-sheet-cancel:hover,\n.bottom-sheet-cancel:active {\n  background-color: #e5e7eb;\n}\n\n.bottom-sheet-cancel:focus {\n  outline: 2px solid var(--focus-ring-color, #0066cc);\n  outline-offset: 2px;\n}\n\n/* Safe area for notched devices */\n@supports (padding-bottom: env(safe-area-inset-bottom)) {\n  .bottom-sheet {\n    padding-bottom: env(safe-area-inset-bottom);\n  }\n}\n\n@media (prefers-color-scheme: dark) {\n  .bottom-sheet {\n    background-color: #1f2937;\n  }\n\n  .bottom-sheet-handle {\n    background-color: #4b5563;\n  }\n\n  .bottom-sheet-action {\n    color: #e5e7eb;\n  }\n\n  .bottom-sheet-action:hover,\n  .bottom-sheet-action:active {\n    background-color: #374151;\n  }\n\n  .bottom-sheet-action-icon {\n    color: #9ca3af;\n  }\n\n  .bottom-sheet-cancel {\n    background-color: #374151;\n    color: #e5e7eb;\n  }\n\n  .bottom-sheet-cancel:hover,\n  .bottom-sheet-cancel:active {\n    background-color: #4b5563;\n  }\n}\n\n@media (prefers-contrast: more) {\n  .bottom-sheet {\n    border: 2px solid black;\n    border-bottom: none;\n  }\n\n  .bottom-sheet-action {\n    border: 1px solid #9ca3af;\n  }\n}\n';
+  const style = `/* style.css */
+
+/* ==========================================================================
+   CSS Custom Properties (Accessibility & Theming)
+   ========================================================================== */
+
+:root {
+  --focus-ring-color: #0066cc;
+  --focus-ring-width: 2px;
+  --transition-duration: 200ms;
+  --animation-duration: 300ms;
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: more) {
+  :root {
+    --focus-ring-color: #000000;
+    --focus-ring-width: 3px;
+  }
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-duration: 0ms;
+    --animation-duration: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Screen reader only utility class */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ==========================================================================
+   Base Styles
+   ========================================================================== */
+
+div[style^="position: fixed; inset: 0px 0px 0px 50%;"] {
+    border: none;
+}
+
+div#logContainer {
+    width: 100%;
+    bottom: 0;
+    pointer-events: none;
+    height: 25%;
+    position: fixed;
+    background: rgba(0, 0, 0, 0.2);
+    color: #e0e0e0;
+    font-family: monospace;
+    font-size: 12px;
+    z-index: 10000;
+    padding: 10px;
+    padding-top: 30px;
+}
+
+#logHeader {
+    position: relative;
+    width: 100%;
+    background: #333;
+    color: white;
+    padding: 5px 10px;
+    box-sizing: border-box;
+    pointer-events: auto;
+}
+
+button#clearLogs {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100px;
+    background: red;
+    color: white;
+    border: none;
+    padding: 2px 5px;
+    cursor: pointer;
+}
+
+#logContent {
+    overflow-y: auto;
+    max-height: calc(70% - 30px);
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+div#bsky-navigator-toolbar {
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    width: 100%;
+    background-color: inherit;
+    border-bottom: 1px solid rgb(192, 192, 192);
+    z-index: 100;
+}
+
+.toolbar-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 32px;
+}
+
+.toolbar-row-1 {
+    border-bottom: 1px solid rgba(192, 192, 192, 0.5);
+}
+
+.toolbar-row-2 {
+    gap: 8px;
+    padding: 0 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+    div#bsky-navigator-toolbar {
+        background-color: #29333d
+    }
+    .toolbar-row-1 {
+        border-bottom-color: rgba(100, 100, 100, 0.5);
+    }
+}
+
+.toolbar-icon {
+    position: relative;
+    margin: 0px;
+    width: 24px;
+    height: 24px;
+    padding: 0px 8px;
+    flex: 1;
+}
+
+
+.toolbar-icon-pending {
+    animation: fadeInOut 1s infinite;
+    animation-duration: var(--animation-duration, 1s);
+}
+
+.indicator-image {
+    width: 24px;
+    height: 24px;
+}
+
+@media (prefers-color-scheme: dark) {
+    .indicator-image {
+        filter: invert(1) brightness(2);
+    }
+}
+
+div#infoIndicator {
+    flex: 3;
+}
+
+div#infoIndicatorText {
+    font-size: 0.8em;
+}
+
+div#itemTimestampStats {
+    font-size: 0.7em;
+}
+
+#bsky-navigator-search {
+    flex: 1;
+    min-width: 0;
+    margin: 0px 8px;
+    z-index: 10;
+    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;
+}
+
+.ui-autocomplete {
+    position: absolute !important;
+    background-color: white !important;
+    border: 1px solid #ccc !important;
+    z-index: 1000 !important;
+    max-height: 200px !important;
+    overflow-y: auto !important;
+    list-style-type: none !important;
+    font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;
+    padding: 2px !important;
+}
+
+.ui-menu-item {
+    padding: 2px !important;
+    font-size: 14px !important;
+    color: black !important;
+}
+
+/* Highlight hovered item */
+.ui-state-active {
+    background-color: #007bff !important;
+    color: white !important;
+}
+
+@media only screen and not (max-width: 800px) {
+    div#statusBar {
+        display: flex;
+        width: 100%;
+        height: 32px;
+        margin-left: auto;
+        margin-right: auto;
+        position: sticky;
+        z-index: 10;
+        align-items: center;
+        background-color: #ffffff;
+        bottom: 0;
+        font-size: 1em;
+        padding: 1px;
+        border-top: 1px solid rgb(192, 192, 192);
+        overflow: clip;
+    }
+}
+
+@media only screen and (max-width: 800px) {
+    div#statusBar {
+        display: flex;
+        width: 100%;
+        height: 32px;
+        margin-left: auto;
+        margin-right: auto;
+        position: sticky;
+        z-index: 10;
+        align-items: center;
+        background-color: #ffffff;
+        bottom: 58px;
+        font-size: 1em;
+        padding: 1px;
+        overflow: clip;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    div#statusBar {
+        background-color: #29333d;
+    }
+}
+
+div#statusBarLeft {
+    display: flex;
+    flex: 1;
+    text-align: left;
+    padding: 1px;
+}
+
+div#statusBarCenter {
+    display: flex;
+    flex: 1 1 auto;
+    text-align: center;
+    padding: 1px;
+}
+
+div#statusBarRight {
+    display: flex;
+    flex: 1;
+    text-align: right;
+    padding: 1px;
+}
+
+#prevButton {
+    z-index: 1000;
+    position: absolute;
+    top: 30%;
+    right: -10px;
+    opacity: 20%;
+}
+
+#prevButton.mobile {
+    position: fixed;
+    left: 1%;
+    top: 25%;
+}
+
+#nextButton {
+    z-index: 1000;
+    position: absolute;
+    bottom: 30%;
+    right: -10px;
+    opacity: 20%;
+}
+
+#nextButton.mobile {
+    position: fixed;
+    left: 1%;
+    bottom: 20%;
+}
+
+nav.r-1wyvozj {
+    overflow: inherit;
+}
+
+@keyframes oscillateBorderBottom {
+    0% {
+        border-bottom-color: rgba(0, 128, 0, 1);
+    }
+    50% {
+        border-bottom-color: rgba(0, 128, 0, 0.3);
+    }
+    100% {
+        border-bottom-color: rgba(0, 128, 0, 1);
+    }
+}
+
+@keyframes oscillateBorderTop {
+    0% {
+        border-top-color: rgba(0, 128, 0, 1);
+    }
+    50% {
+        border-top-color: rgba(0, 128, 0, 0.3);
+    }
+    100% {
+        border-top-color: rgba(0, 128, 0, 1);
+    }
+}
+
+@keyframes fadeInOut {
+    0% {
+        opacity: 0.2;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0.2;
+    }
+}
+
+div.loading-indicator-reverse {
+    border-bottom: 10px solid;
+    animation: oscillateBorderBottom 0.2s infinite;
+    animation-duration: var(--animation-duration, 0.2s);
+}
+
+div.loading-indicator-forward {
+    border-top: 10px solid;
+    animation: oscillateBorderTop 0.2s infinite;
+    animation-duration: var(--animation-duration, 0.2s);
+}
+
+.filtered {
+    display: none !important;
+}
+
+#messageContainer {
+    inset: 5%;
+    padding: 10px;
+}
+
+.messageTitle {
+    font-size: 1.5em;
+    text-align: center;
+}
+
+.messageBody {
+    font-size: 1.2em;
+}
+
+#messageActions a {
+    color: #8040c0;
+}
+
+#messageActions a:hover {
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.preferences-icon-overlay {
+    background-color: #cccccc;
+    cursor: pointer;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.preferences-icon-overlay-sync-ready {
+    background-color: #d5f5e3;
+}
+
+.preferences-icon-overlay-sync-pending {
+    animation: fadeInOut 1s infinite;
+    animation-duration: var(--animation-duration, 1s);
+    background-color: #f9e79f;
+}
+
+.preferences-icon-overlay-sync-success {
+    background-color: #2ecc71;
+}
+
+.preferences-icon-overlay-sync-failure {
+    background-color: #ec7063 ;
+}
+
+.preferences-icon-overlay span {
+    color: white;
+    font-size: 16px;
+}
+
+div.item-banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    font-family: "Lucida Console", "Courier New", monospace;
+    font-size: 0.7em;
+    z-index: 10;
+    color: black;
+    text-shadow: 1px 1px rgba(255, 255, 255,0.8);
+    background: rgba(128, 192, 192, 0.3);
+    padding: 3px;
+    border-radius: 4px;
+}
+
+.image-highlight {
+    filter: invert(36%) sepia(28%) saturate(5764%) hue-rotate(194deg) brightness(102%) contrast(105%);
+}
+
+.load-time-icon {
+    position: absolute;
+    left: 8px;
+    bottom: -1px;
+    width: 24px;
+    height: 24px;
+    opacity: 0.8;
+    filter: invert(93%) sepia(49%) saturate(2805%) hue-rotate(328deg) brightness(99%) contrast(96%) drop-shadow( 0.2px  0px 0px black)
+        drop-shadow(-0.2px  0px 0px black)
+        drop-shadow( 0px  0.2px 0px black)
+        drop-shadow( 0px -0.2px 0px black);
+}
+
+.image-flip-x {
+    transform: scaleX(-1);
+    -webkit-transform: scaleX(-1);
+}
+
+.popup {
+    display: none;
+    position: fixed;
+    max-height: 80vH;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    /* transform: scale(0.25); /\\* Scale down to 75% *\\/ */
+    background: white;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 400px;
+    z-index: 1000;
+}
+
+/* Hide the reply connector line in threaded posts - only on desktop */
+@media only screen and (min-width: 801px) {
+    div:has(>div.item) > nav + div {
+        display: none;
+    }
+}
+
+/* Sidecar layout - desktop only */
+@media only screen and (min-width: 801px) {
+    div:has(>div.item) {
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+    }
+
+    .item {
+        display: flex;
+        flex: 2;
+        max-height: 100%;
+    }
+
+    .item > div:first-of-type {
+        flex: 1;
+        align-items: stretch;
+    }
+
+    .item > div:first-of-type > div:last-of-type {
+        flex: 1;
+    }
+}
+
+.unrolled-banner {
+    position: absolute;
+    top: -0.5em;
+    left: 10px;
+    padding: 0px 5px;
+    backdrop-filter: blur(10px);
+    color: #888;
+}
+
+.unrolled-divider {
+    margin-top: 1em;
+    border: 1px solid #eee;
+    color: white;
+}
+
+.unrolled-reply {
+    /* border: 1px transparent; */
+    margin: 1px;
+    border: 1px solid transparent;
+    box-sizing: border-box;
+}
+
+.sidecar-replies {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    font-size: 0.8em;
+    padding-left: 10px;
+    display: flex;
+    flex-direction: column;
+    max-height: 50vH;
+}
+
+/* Hide sidecar on mobile */
+@media only screen and (max-width: 800px) {
+    .sidecar-replies {
+        display: none;
+    }
+}
+
+.sidecar-parent-indicator {
+    position: absolute;
+}
+
+.sidecar-post {
+    display: flex;
+    flex-direction: column;
+    padding: 5px;
+    flex-shrink: 0;
+    font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+.sidecar-post a {
+    text-decoration: none;
+}
+
+.sidecar-post a:hover {
+    text-decoration: underline;
+}
+
+.sidecar-post-user-info {
+    display: flex;
+    flex-direction: row;
+    font-size: 0.9em;
+}
+
+.sidecar-post-avatar {
+    width: 24px;
+    height: 24px;
+    padding: 2px;
+}
+
+.sidecar-post-username {
+    font-weight: 600;
+    color: rgb(11, 15, 20);
+}
+
+.sidecar-post-handle {
+    color: rgb(66, 87, 108);
+    font-variant: no-contextual;
+}
+
+.sidecar-post-content {
+    padding: 5px 0px;
+}
+
+.sidecar-post-content a {
+    color: rgb(16, 131, 254);
+}
+
+.sidecar-post-footer {
+    color: rgb(66, 87, 108);
+    display: flex;
+    flex-direction: row;
+    font-size: 11px;
+}
+
+.sidecar-post-footer svg, .sidecar-post-footer span {
+    display: inline-flex;
+    vertical-align: middle;
+    /* flex: 1; */
+    color: rgb(111, 134, 159);
+}
+
+.sidecar-post-timestamp {
+    display: inline-flex;
+    vertical-align: middle;
+    flex: 3;
+}
+
+.sidecar-parent .sidecar-post {
+    border: 3px dashed rgb(111, 134, 159);
+    padding: 5px;
+}
+
+.sidecar-post-counts {
+    display: flex;
+    flex: 2;
+}
+
+.sidecar-count {
+    display: flex;
+    flex: 1;
+    justify-content: right;
+    align-items: center;
+}
+
+.sidecar-count-icon > svg {
+  height: 1em;
+}
+
+/* ==========================================================================
+   Like/Repost Animation Feedback
+   ========================================================================== */
+
+@keyframes likeHeartPop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes unlikeHeartShrink {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.8);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.like-animation-like {
+  animation: likeHeartPop var(--animation-duration, 300ms) ease-out;
+}
+
+.like-animation-like svg {
+  fill: #ec4899;
+  color: #ec4899;
+}
+
+.like-animation-unlike {
+  animation: unlikeHeartShrink var(--animation-duration, 300ms) ease-out;
+}
+
+@keyframes repostPop {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    transform: scale(1.2) rotate(15deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.repost-animation {
+  animation: repostPop var(--animation-duration, 300ms) ease-out;
+}
+
+.repost-animation svg {
+  fill: #22c55e;
+  color: #22c55e;
+}
+
+/* ==========================================================================
+   Filter Indicator Pill
+   ========================================================================== */
+
+.filter-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 12px;
+  margin: 0 8px;
+  background-color: #3b82f6;
+  color: white;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  max-width: 200px;
+  animation: pillSlideIn var(--animation-duration, 200ms) ease-out;
+}
+
+@keyframes pillSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.filter-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-pill-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.3);
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--transition-duration, 200ms) ease;
+}
+
+.filter-pill-clear:hover {
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.filter-pill-clear:focus {
+  outline: 2px solid white;
+  outline-offset: 1px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .filter-pill {
+    background-color: #2563eb;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .filter-pill {
+    background-color: #1d4ed8;
+    border: 2px solid white;
+  }
+}
+
+/* ==========================================================================
+   New Posts Floating Pill
+   ========================================================================== */
+
+.new-posts-pill {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: newPostsPillBounce var(--animation-duration, 500ms) ease-out;
+  transition: transform var(--transition-duration, 200ms) ease,
+              background-color var(--transition-duration, 200ms) ease;
+}
+
+.new-posts-pill:hover {
+  background-color: #2563eb;
+  transform: translateX(-50%) scale(1.05);
+}
+
+.new-posts-pill:focus {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
+.new-posts-pill:active {
+  transform: translateX(-50%) scale(0.98);
+}
+
+.new-posts-pill svg {
+  flex-shrink: 0;
+}
+
+@keyframes newPostsPillBounce {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  60% {
+    transform: translateX(-50%) translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.new-posts-pill-hiding {
+  animation: newPostsPillHide var(--animation-duration, 200ms) ease-in forwards;
+}
+
+@keyframes newPostsPillHide {
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .new-posts-pill {
+    background-color: #2563eb;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .new-posts-pill:hover {
+    background-color: #3b82f6;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .new-posts-pill {
+    background-color: #1d4ed8;
+    border: 2px solid white;
+  }
+}
+
+/* Mobile positioning */
+@media only screen and (max-width: 800px) {
+  .new-posts-pill {
+    top: auto;
+    bottom: 70px;
+  }
+}
+
+/* ==========================================================================
+   Skeleton Loading States
+   ========================================================================== */
+
+.sidecar-skeleton {
+  padding: 10px;
+}
+
+.skeleton-post {
+  padding: 10px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.skeleton-post:last-child {
+  border-bottom: none;
+}
+
+.skeleton-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.skeleton-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton-author {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skeleton-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+}
+
+.skeleton-line-short {
+  width: 30%;
+}
+
+.skeleton-line-medium {
+  width: 60%;
+}
+
+.skeleton-line-full {
+  width: 100%;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    #e5e7eb 25%,
+    #f3f4f6 50%,
+    #e5e7eb 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none;
+    background: #e5e7eb;
+  }
+}
+
+/* Dark mode skeleton */
+@media (prefers-color-scheme: dark) {
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      #374151 25%,
+      #4b5563 50%,
+      #374151 75%
+    );
+    background-size: 200% 100%;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-shimmer {
+      background: #374151;
+    }
+  }
+
+  .skeleton-post {
+    border-bottom-color: #374151;
+  }
+}
+
+/* ==========================================================================
+   Keyboard Shortcut Overlay
+   ========================================================================== */
+
+.shortcut-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: overlayFadeIn var(--animation-duration, 200ms) ease-out;
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.shortcut-overlay-hiding {
+  animation: overlayFadeOut var(--animation-duration, 200ms) ease-in forwards;
+}
+
+@keyframes overlayFadeOut {
+  to {
+    opacity: 0;
+  }
+}
+
+.shortcut-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.shortcut-overlay-content {
+  position: relative;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  max-width: 700px;
+  max-height: 80vh;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  animation: overlaySlideUp var(--animation-duration, 200ms) ease-out;
+}
+
+@keyframes overlaySlideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.shortcut-overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.shortcut-overlay-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.shortcut-overlay-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #6b7280;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-duration, 200ms) ease;
+}
+
+.shortcut-overlay-close:hover {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+.shortcut-overlay-close:focus {
+  outline: 2px solid var(--focus-ring-color, #0066cc);
+  outline-offset: 2px;
+}
+
+.shortcut-overlay-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.shortcut-category {
+  min-width: 0;
+}
+
+.shortcut-category-title {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+}
+
+.shortcut-list {
+  margin: 0;
+  padding: 0;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  gap: 16px;
+}
+
+.shortcut-keys {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.shortcut-keys kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  background-color: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.shortcut-desc {
+  margin: 0;
+  font-size: 14px;
+  color: #374151;
+  text-align: right;
+}
+
+.shortcut-overlay-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.shortcut-overlay-footer kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  background-color: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+  margin: 0 2px;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .shortcut-overlay-content {
+    background-color: #1f2937;
+  }
+
+  .shortcut-overlay-header {
+    border-bottom-color: #374151;
+  }
+
+  .shortcut-overlay-header h2 {
+    color: #f9fafb;
+  }
+
+  .shortcut-overlay-close {
+    color: #9ca3af;
+  }
+
+  .shortcut-overlay-close:hover {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+
+  .shortcut-category-title {
+    color: #9ca3af;
+  }
+
+  .shortcut-keys kbd,
+  .shortcut-overlay-footer kbd {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .shortcut-desc {
+    color: #d1d5db;
+  }
+
+  .shortcut-overlay-footer {
+    border-top-color: #374151;
+    color: #9ca3af;
+  }
+}
+
+/* High contrast */
+@media (prefers-contrast: more) {
+  .shortcut-overlay-content {
+    border: 2px solid black;
+  }
+
+  .shortcut-keys kbd {
+    border-width: 2px;
+    border-color: black;
+  }
+}
+
+/* ==========================================================================
+   Post View Modal
+   ========================================================================== */
+
+.post-view-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: overlayFadeIn var(--animation-duration, 200ms) ease-out;
+}
+
+.post-view-modal-hiding {
+  animation: overlayFadeOut var(--animation-duration, 200ms) ease-in forwards;
+}
+
+.post-view-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.post-view-modal-content {
+  position: relative;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  max-width: 1200px;
+  max-height: 90vh;
+  width: 95%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: overlaySlideUp var(--animation-duration, 200ms) ease-out;
+}
+
+.post-view-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.post-view-modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.post-view-modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #6b7280;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-duration, 200ms) ease;
+}
+
+.post-view-modal-close:hover {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+.post-view-modal-close:focus {
+  outline: 2px solid var(--focus-ring-color, #0066cc);
+  outline-offset: 2px;
+}
+
+.post-view-modal-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.post-view-modal-post {
+  flex: 3;
+  overflow-y: auto;
+  padding: 16px;
+  border-right: 1px solid #e5e7eb;
+}
+
+/* Ensure cloned post takes full width and isn't constrained by feed styles */
+.post-view-modal-post > * {
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+}
+
+.post-view-modal-sidecar {
+  flex: 2;
+  overflow-y: auto;
+  padding: 16px;
+  font-size: 0.9em;
+}
+
+/* Ensure sidecar content is always visible in the modal */
+.post-view-modal-sidecar-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.post-view-modal-sidecar-content .sidecar-replies {
+  display: flex !important;
+  flex-direction: column;
+  flex: 1;
+}
+
+.post-view-modal-loading {
+  color: #6b7280;
+  text-align: center;
+  padding: 20px;
+}
+
+/* Mobile: stack vertically */
+@media (max-width: 800px) {
+  .post-view-modal-content {
+    max-width: 100%;
+    max-height: 100%;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  .post-view-modal-body {
+    flex-direction: column;
+  }
+
+  .post-view-modal-post {
+    flex: none;
+    max-height: 50%;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .post-view-modal-sidecar {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .post-view-modal-content {
+    background-color: #1f2937;
+  }
+
+  .post-view-modal-header {
+    border-bottom-color: #374151;
+  }
+
+  .post-view-modal-header h2 {
+    color: #f9fafb;
+  }
+
+  .post-view-modal-close {
+    color: #9ca3af;
+  }
+
+  .post-view-modal-close:hover {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+
+  .post-view-modal-post {
+    border-right-color: #374151;
+  }
+
+  .post-view-modal-sidecar {
+    border-top-color: #374151;
+  }
+
+  .post-view-modal-loading {
+    color: #9ca3af;
+  }
+}
+
+@media (max-width: 800px) and (prefers-color-scheme: dark) {
+  .post-view-modal-post {
+    border-bottom-color: #374151;
+  }
+}
+
+/* High contrast */
+@media (prefers-contrast: more) {
+  .post-view-modal-content {
+    border: 2px solid black;
+  }
+}
+
+/* ==========================================================================
+   Scroll Position Indicator
+   ========================================================================== */
+
+.scroll-position-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: #e5e7eb;
+  overflow: hidden;
+}
+
+.scroll-position-fill {
+  height: 100%;
+  width: 0%;
+  background-color: #3b82f6;
+  transition: width var(--transition-duration, 200ms) ease-out;
+}
+
+@media (prefers-color-scheme: dark) {
+  .scroll-position-indicator {
+    background-color: #374151;
+  }
+
+  .scroll-position-fill {
+    background-color: #60a5fa;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .scroll-position-indicator {
+    height: 4px;
+    background-color: #9ca3af;
+  }
+
+  .scroll-position-fill {
+    background-color: #1d4ed8;
+  }
+}
+
+/* ==========================================================================
+   Breadcrumb Trail
+   ========================================================================== */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  flex-shrink: 1;
+  gap: 0;
+  margin-left: auto;
+  padding: 4px 0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.breadcrumb-item {
+  display: flex;
+  align-items: center;
+}
+
+.breadcrumb-text {
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+
+.breadcrumb-link {
+  color: #3b82f6;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+  transition: color var(--transition-duration, 200ms) ease;
+}
+
+.breadcrumb-link:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.breadcrumb-link:focus {
+  outline: 2px solid var(--focus-ring-color, #0066cc);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.breadcrumb-separator {
+  margin: 0 6px;
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .breadcrumb-text {
+    color: #9ca3af;
+  }
+
+  .breadcrumb-link {
+    color: #60a5fa;
+  }
+
+  .breadcrumb-link:hover {
+    color: #93c5fd;
+  }
+
+  .breadcrumb-separator {
+    color: #6b7280;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .breadcrumb-text {
+    color: #374151;
+  }
+
+  .breadcrumb-link {
+    color: #1d4ed8;
+    text-decoration: underline;
+  }
+
+  .breadcrumb-separator {
+    color: #374151;
+  }
+}
+
+/* ==========================================================================
+   Saved Searches
+   ========================================================================== */
+
+.search-wrapper {
+  display: flex;
+  align-items: center;
+  position: relative;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 150px;
+  max-width: 300px;
+}
+
+.saved-searches-btn,
+.save-search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background-color: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background-color var(--transition-duration, 200ms) ease,
+              color var(--transition-duration, 200ms) ease;
+}
+
+.saved-searches-btn:hover,
+.save-search-btn:hover {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.saved-searches-btn:focus,
+.save-search-btn:focus {
+  outline: 2px solid var(--focus-ring-color, #0066cc);
+  outline-offset: 2px;
+}
+
+.save-search-btn-saved {
+  color: #22c55e;
+  animation: savedPulse var(--animation-duration, 300ms) ease-out;
+}
+
+@keyframes savedPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+}
+
+.saved-searches-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 200px;
+  max-width: 300px;
+  max-height: 300px;
+  overflow-y: auto;
+  background-color: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  animation: dropdownSlide var(--animation-duration, 150ms) ease-out;
+}
+
+@keyframes dropdownSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.saved-search-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background-color var(--transition-duration, 200ms) ease;
+}
+
+.saved-search-item:hover {
+  background-color: #f3f4f6;
+}
+
+.saved-search-item:first-child {
+  border-radius: 8px 8px 0 0;
+}
+
+.saved-search-item:last-child {
+  border-radius: 0 0 8px 8px;
+}
+
+.saved-search-item:only-child {
+  border-radius: 8px;
+}
+
+.saved-search-text {
+  font-size: 13px;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.saved-search-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background-color: transparent;
+  color: #9ca3af;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-duration, 200ms) ease,
+              background-color var(--transition-duration, 200ms) ease;
+}
+
+.saved-search-item:hover .saved-search-delete {
+  opacity: 1;
+}
+
+.saved-search-delete:hover {
+  background-color: #fecaca;
+  color: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  .saved-searches-btn,
+  .save-search-btn {
+    color: #9ca3af;
+  }
+
+  .saved-searches-btn:hover,
+  .save-search-btn:hover {
+    background-color: #374151;
+    color: #e5e7eb;
+  }
+
+  .saved-searches-dropdown {
+    background-color: #1f2937;
+    border-color: #374151;
+  }
+
+  .saved-search-item:hover {
+    background-color: #374151;
+  }
+
+  .saved-search-text {
+    color: #e5e7eb;
+  }
+
+  .saved-search-delete {
+    color: #6b7280;
+  }
+
+  .saved-search-delete:hover {
+    background-color: #7f1d1d;
+    color: #fecaca;
+  }
+}
+
+/* ==========================================================================
+   Filter Highlight
+   ========================================================================== */
+
+.filter-highlight {
+  background-color: #fef08a;
+  color: #000;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .filter-highlight {
+    background-color: #ca8a04;
+    color: #fef9c3;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .filter-highlight {
+    background-color: #facc15;
+    outline: 2px solid #000;
+    outline-offset: -1px;
+  }
+}
+
+/* ==========================================================================
+   Collapsible Sidecar Sections
+   ========================================================================== */
+
+.sidecar-section {
+  margin-bottom: 8px;
+}
+
+.sidecar-section-toggle {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background-color: #f3f4f6;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-duration, 200ms) ease;
+}
+
+.sidecar-section-toggle:hover {
+  background-color: #e5e7eb;
+}
+
+.sidecar-section-toggle:focus {
+  outline: 2px solid var(--focus-ring-color, #0066cc);
+  outline-offset: 2px;
+}
+
+.sidecar-section-icon {
+  margin-right: 8px;
+  font-size: 10px;
+  transition: transform var(--transition-duration, 200ms) ease;
+}
+
+.sidecar-section-toggle[aria-expanded="false"] .sidecar-section-icon {
+  transform: rotate(-90deg);
+}
+
+.sidecar-section-title {
+  flex: 1;
+  text-align: left;
+}
+
+.sidecar-section-content {
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sidecar-section-toggle {
+    background-color: #374151;
+    color: #e5e7eb;
+  }
+
+  .sidecar-section-toggle:hover {
+    background-color: #4b5563;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .sidecar-section-toggle {
+    border: 2px solid #000;
+  }
+}
+
+/* ==========================================================================
+   Mobile Swipe Gestures
+   ========================================================================== */
+
+.swipe-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity var(--transition-duration, 200ms) ease,
+              transform var(--transition-duration, 200ms) ease;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.swipe-indicator-left {
+  left: 10px;
+  background-color: #22c55e;
+  color: white;
+}
+
+.swipe-indicator-right {
+  right: 10px;
+  background-color: #ec4899;
+  color: white;
+}
+
+.swipe-indicator-active {
+  opacity: 1;
+  transform: translateY(-50%) scale(1.1);
+}
+
+/* Enable on touch devices only */
+@media (hover: none) and (pointer: coarse) {
+  .swipe-indicator {
+    display: flex;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .swipe-indicator {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   Mobile Bottom Sheet
+   ========================================================================== */
+
+.bottom-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0);
+  z-index: 10000;
+  transition: background-color var(--transition-duration, 200ms) ease;
+}
+
+.bottom-sheet-backdrop-visible {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: white;
+  border-radius: 16px 16px 0 0;
+  z-index: 10001;
+  transform: translateY(100%);
+  transition: transform var(--transition-duration, 200ms) ease;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.bottom-sheet-visible {
+  transform: translateY(0);
+}
+
+.bottom-sheet-handle {
+  width: 36px;
+  height: 4px;
+  margin: 12px auto;
+  background-color: #d1d5db;
+  border-radius: 2px;
+}
+
+.bottom-sheet-content {
+  padding: 8px 16px 16px;
+}
+
+.bottom-sheet-action {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 14px 12px;
+  margin-bottom: 4px;
+  border: none;
+  border-radius: 12px;
+  background-color: transparent;
+  color: #374151;
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-duration, 200ms) ease;
+}
+
+.bottom-sheet-action:hover,
+.bottom-sheet-action:active {
+  background-color: #f3f4f6;
+}
+
+.bottom-sheet-action:focus {
+  outline: 2px solid var(--focus-ring-color, #0066cc);
+  outline-offset: 2px;
+}
+
+.bottom-sheet-action-icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+}
+
+.bottom-sheet-action-label {
+  flex: 1;
+}
+
+.bottom-sheet-cancel {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 8px 16px 16px;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  background-color: #f3f4f6;
+  color: #374151;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-duration, 200ms) ease;
+}
+
+.bottom-sheet-cancel:hover,
+.bottom-sheet-cancel:active {
+  background-color: #e5e7eb;
+}
+
+.bottom-sheet-cancel:focus {
+  outline: 2px solid var(--focus-ring-color, #0066cc);
+  outline-offset: 2px;
+}
+
+/* Safe area for notched devices */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .bottom-sheet {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .bottom-sheet {
+    background-color: #1f2937;
+  }
+
+  .bottom-sheet-handle {
+    background-color: #4b5563;
+  }
+
+  .bottom-sheet-action {
+    color: #e5e7eb;
+  }
+
+  .bottom-sheet-action:hover,
+  .bottom-sheet-action:active {
+    background-color: #374151;
+  }
+
+  .bottom-sheet-action-icon {
+    color: #9ca3af;
+  }
+
+  .bottom-sheet-cancel {
+    background-color: #374151;
+    color: #e5e7eb;
+  }
+
+  .bottom-sheet-cancel:hover,
+  .bottom-sheet-cancel:active {
+    background-color: #4b5563;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .bottom-sheet {
+    border: 2px solid black;
+    border-bottom: none;
+  }
+
+  .bottom-sheet-action {
+    border: 1px solid #9ca3af;
+  }
+}
+`;
   const configCss = "h1 {\n    font-size: 18pt;\n}\n\nh2 {\n    font-size: 14pt;\n}\n.config_var textarea {\n    width: 100%;\n    height: 1.5em;\n}\n\n#GM_config_rulesConfig_var textarea {\n    height: 10em;\n}\n\n#GM_config_stateSyncConfig_var textarea {\n    height: 10em;\n}\n\n\n\n#GM_config_header {\n    position: fixed;\n    background-color: inherit;\n    top: -10px;\n    width: 100%;\n}\n\n@media (prefers-color-scheme: light) {\n    #GM_config_header {\n        background-color: #ffffff;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    #GM_config_header {\n        background-color: #29333d;\n    }\n}\n\n#GM_config_section_0 {\n    padding-top: 100px;\n}\n\n#GM_config_buttons_holder {\n    position: fixed;\n    top: 0;\n    right: 0;\n}\n";
   const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-section sidecar-parent-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Parent</span>\n    </button>\n    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">\n      <div class="sidecar-parent">\n        <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n        {{> postTemplate parent}}\n      </div>\n    </div>\n  </div>\n  {{/if}}\n  {{#if replies.length}}\n  <div class="sidecar-section sidecar-replies-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Replies ({{replies.length}})</span>\n    </button>\n    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">\n      {{#each replies}}\n      {{> postTemplate this}}\n      {{/each}}\n    </div>\n  </div>\n  {{/if}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this}}\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title="{{alt}}"></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">\n  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">\n      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>\n      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{{text}}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images" style="margin-top: 8px;">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a href="{{uri}}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">\n  <div class="sidecar-embed-external" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; margin-top: 8px; overflow: hidden;">\n    {{#if thumb}}\n    <div class="sidecar-external-thumb" style="width: 100%; max-height: 200px; overflow: hidden;">\n      <img src="{{thumb}}" alt="{{title}}" style="width: 100%; object-fit: cover;" loading="lazy">\n    </div>\n    {{/if}}\n    <div class="sidecar-external-info" style="padding: 12px;">\n      <div class="sidecar-external-domain" style="font-size: 12px; color: rgb(112, 127, 140); margin-bottom: 4px;">{{domain}}</div>\n      <div class="sidecar-external-title" style="font-weight: 600; margin-bottom: 4px;">{{title}}</div>\n      {{#if description}}\n      <div class="sidecar-external-description" style="font-size: 14px; color: rgb(66, 87, 108); line-height: 1.3;">{{description}}</div>\n      {{/if}}\n    </div>\n  </div>\n</a>\n<\/script>\n\n<script id="sidecar-skeleton-template" type="text/x-handlebars-template">\n<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <span class="sr-only">Loading replies...</span>\n</div>\n<\/script>\n';
   const SHORTCUTS = {
@@ -45090,7 +47134,8 @@ if (cid) {
       { keys: ["r"], description: "Reply" },
       { keys: ["i"], description: "Open first link" },
       { keys: ["m"], description: "Toggle media/video" },
-      { keys: ["c"], description: "Screenshot to clipboard" }
+      { keys: ["c"], description: "Screenshot to clipboard" },
+      { keys: ["v"], description: "Full-screen post view" }
     ],
     "Feed Controls": [
       { keys: ["/"], description: "Focus search" },
@@ -45115,19 +47160,19 @@ if (cid) {
       { keys: ["Esc"], description: "Close overlay" }
     ]
   };
-  let instance = null;
+  let instance$1 = null;
   class ShortcutOverlay {
     constructor(config2) {
-      if (instance) {
-        instance.config = config2;
-        return instance;
+      if (instance$1) {
+        instance$1.config = config2;
+        return instance$1;
       }
       this.config = config2;
       this.isVisible = false;
       this.overlayEl = null;
       this.previousActiveElement = null;
       this.ignoreNextKeydown = false;
-      instance = this;
+      instance$1 = this;
     }
     /**
      * Toggle overlay visibility
@@ -60718,6 +62763,164 @@ if (cid) {
       }
     }
   }
+  let instance = null;
+  class PostViewModal {
+    constructor(config2) {
+      if (instance) {
+        instance.config = config2;
+        return instance;
+      }
+      this.config = config2;
+      this.isVisible = false;
+      this.modalEl = null;
+      this.previousActiveElement = null;
+      instance = this;
+    }
+    /**
+     * Show the modal with post content and sidecar
+     * @param {HTMLElement} postElement - The post element to display
+     * @param {string} sidecarHtml - HTML content for the sidecar
+     */
+    show(postElement, sidecarHtml) {
+      if (this.isVisible) return;
+      this.previousActiveElement = document.activeElement;
+      this.isVisible = true;
+      this.modalEl = this.createModal(postElement, sidecarHtml);
+      document.body.appendChild(this.modalEl);
+      const closeBtn = this.modalEl.querySelector(".post-view-modal-close");
+      if (closeBtn) {
+        closeBtn.focus();
+      }
+      announceToScreenReader$2("Post view opened. Press Escape to close.");
+      this.escapeHandler = (e2) => {
+        if (e2.key === "Escape") {
+          e2.preventDefault();
+          e2.stopPropagation();
+          this.hide();
+        }
+      };
+      document.addEventListener("keydown", this.escapeHandler, true);
+      document.body.style.overflow = "hidden";
+    }
+    /**
+     * Hide the modal
+     */
+    hide() {
+      if (!this.isVisible || !this.modalEl) return;
+      const animDuration = getAnimationDuration$1(200, this.config);
+      this.modalEl.classList.add("post-view-modal-hiding");
+      setTimeout(() => {
+        if (this.modalEl && this.modalEl.parentNode) {
+          this.modalEl.parentNode.removeChild(this.modalEl);
+        }
+        this.modalEl = null;
+        this.isVisible = false;
+        document.body.style.overflow = "";
+        if (this.previousActiveElement) {
+          this.previousActiveElement.focus();
+        }
+      }, animDuration);
+      document.removeEventListener("keydown", this.escapeHandler, true);
+      announceToScreenReader$2("Post view closed.");
+    }
+    /**
+     * Create the modal DOM element
+     * @param {HTMLElement} postElement - The post element to clone
+     * @param {string} sidecarHtml - HTML content for the sidecar
+     */
+    createModal(postElement, sidecarHtml) {
+      const modal = document.createElement("div");
+      modal.className = "post-view-modal";
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.setAttribute("aria-labelledby", "post-view-modal-title");
+      const postClone = postElement.cloneNode(true);
+      postClone.classList.remove("selected", "item", "item-selection-active", "item-selection-inactive", "item-read", "item-unread");
+      postClone.classList.add("post-view-modal-cloned-post");
+      postClone.removeAttribute("data-bsky-navigator-item-index");
+      postClone.removeAttribute("data-bsky-navigator-thread-offset");
+      postClone.removeAttribute("data-testid");
+      postClone.removeAttribute("tabindex");
+      postClone.removeAttribute("role");
+      postClone.style.border = "none";
+      postClone.style.width = "100%";
+      postClone.style.maxWidth = "100%";
+      postClone.style.opacity = "1";
+      modal.innerHTML = `
+      <div class="post-view-modal-backdrop"></div>
+      <div class="post-view-modal-content">
+        <div class="post-view-modal-header">
+          <h2 id="post-view-modal-title">Post View</h2>
+          <button class="post-view-modal-close" aria-label="Close">\xD7</button>
+        </div>
+        <div class="post-view-modal-body">
+          <div class="post-view-modal-post"></div>
+          <div class="post-view-modal-sidecar"></div>
+        </div>
+      </div>
+    `;
+      const postContainer = modal.querySelector(".post-view-modal-post");
+      postContainer.appendChild(postClone);
+      const postObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          console.log("[PostViewModal] POST MUTATION:", mutation.type, mutation.target.className || mutation.target.tagName);
+          if (mutation.type === "attributes") {
+            console.log("[PostViewModal] Post attribute changed:", mutation.attributeName, "on", mutation.target.className || mutation.target.tagName);
+            if (mutation.attributeName === "style") {
+              console.log("[PostViewModal] New style:", mutation.target.getAttribute("style"));
+            }
+          }
+        });
+      });
+      postObserver.observe(postClone, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+      const sidecarContainer = modal.querySelector(".post-view-modal-sidecar");
+      if (sidecarHtml) {
+        sidecarContainer.innerHTML = sidecarHtml;
+      } else {
+        sidecarContainer.innerHTML = '<div class="post-view-modal-loading">Loading replies...</div>';
+      }
+      modal.querySelector(".post-view-modal-backdrop").addEventListener("click", () => this.hide());
+      modal.querySelector(".post-view-modal-close").addEventListener("click", () => this.hide());
+      return modal;
+    }
+    /**
+     * Update the sidecar content (for async loading)
+     * @param {string} sidecarHtml - HTML content for the sidecar
+     */
+    updateSidecar(sidecarHtml) {
+      console.log("[PostViewModal] updateSidecar called, modalEl exists:", !!this.modalEl);
+      if (!this.modalEl) return;
+      const sidecarContainer = this.modalEl.querySelector(".post-view-modal-sidecar");
+      console.log("[PostViewModal] sidecarContainer found:", !!sidecarContainer);
+      if (sidecarContainer) {
+        sidecarContainer.innerHTML = sidecarHtml;
+        console.log("[PostViewModal] sidecar innerHTML set, length:", sidecarHtml?.length);
+        const observer = new MutationObserver((mutations) => {
+          mutations.forEach((mutation) => {
+            console.log("[PostViewModal] MUTATION detected:", mutation.type, mutation);
+            if (mutation.type === "childList") {
+              console.log("[PostViewModal] Children changed, removed:", mutation.removedNodes.length, "added:", mutation.addedNodes.length);
+            }
+            if (mutation.type === "attributes") {
+              console.log("[PostViewModal] Attribute changed:", mutation.attributeName, "to", mutation.target.getAttribute(mutation.attributeName));
+            }
+          });
+        });
+        observer.observe(sidecarContainer, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+        const sidecarReplies = sidecarContainer.querySelector(".sidecar-replies");
+        if (sidecarReplies) {
+          console.log("[PostViewModal] sidecar-replies found, observing it too");
+          observer.observe(sidecarReplies, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+        }
+      }
+    }
+    /**
+     * Check if modal is currently visible
+     */
+    get visible() {
+      return this.isVisible;
+    }
+  }
   const { waitForElement: waitForElement$2, announceToScreenReader: announceToScreenReader$1, getAnimationDuration } = utils$1;
   function extractPostIdFromUrl(url) {
     const match2 = url.match(/post\/([^/]+)/);
@@ -61223,6 +63426,9 @@ if (cid) {
         case "c":
           this.captureScreenshot(item[0]);
           break;
+        case "v":
+          this.showPostViewModal(item);
+          break;
         default:
           if (!isNaN(parseInt(event.key))) {
             this.switchToTab(parseInt(event.key) - 1);
@@ -61493,6 +63699,30 @@ if (cid) {
         });
       } catch (err) {
         console.error("Failed to capture screenshot:", err);
+      }
+    }
+    async showPostViewModal(item) {
+      const postElement = item[0];
+      if (!postElement) {
+        console.warn("showPostViewModal: no post element found");
+        return;
+      }
+      if (!this.postViewModal) {
+        this.postViewModal = new PostViewModal(this.config);
+      }
+      this.postViewModal.show(postElement, null);
+      try {
+        const thread = await this.getThreadForItem(postElement);
+        if (thread) {
+          const sidecarHtml = await this.getSidecarContent(postElement, thread);
+          const wrappedHtml = `<div class="post-view-modal-sidecar-content">${sidecarHtml}</div>`;
+          this.postViewModal.updateSidecar(wrappedHtml);
+        } else {
+          this.postViewModal.updateSidecar('<div class="post-view-modal-error">Could not load replies</div>');
+        }
+      } catch (err) {
+        console.error("Failed to load thread for post view modal:", err);
+        this.postViewModal.updateSidecar('<div class="post-view-modal-error">Error loading replies</div>');
       }
     }
     markItemRead(index, isRead) {
@@ -62015,8 +64245,8 @@ if (cid) {
     loadItems(focusedPostId) {
       const classes = ["thread-first", "thread-middle", "thread-last"];
       const set = [];
-      $(".unrolled-replies").remove();
-      $(".sidecar-replies").remove();
+      $(".unrolled-replies").not(".post-view-modal *").remove();
+      $(".sidecar-replies").not(".post-view-modal *").remove();
       $(this.items).css("opacity", "0%");
       let itemIndex = 0;
       let threadIndex = 0;
@@ -63512,6 +65742,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           $(leftSidebar).css("transform", `translateX(${LEFT_TRANSLATE_X_DEFAULT}px)`);
           $(rightSidebar).css("transform", `translateX(${RIGHT_TRANSLATE_X_DEFAULT}px)`);
         }
+        $(constants.MAIN_SELECTOR).css("max-width", `${width}px`, "!important");
         $(constants.WIDTH_SELECTOR).css("max-width", `${width}px`, "!important");
         $('div[role="tablist"]').css("width", `${width}px`);
         $("#statusBar").css("max-width", `${width}px`);

@@ -924,10 +924,43 @@ export class ItemHandler extends Handler {
   async captureScreenshot(item) {
     try {
       const canvas = await html2canvas(item, {
-        backgroundColor: null,
+        backgroundColor: '#ffffff',
         scale: 2,
         logging: false,
         useCORS: true,
+        allowTaint: true,
+        onclone: (clonedDoc, element) => {
+          // Convert background-image divs to actual img elements for better capture
+          // Bluesky uses background-image for embedded images
+          const bgImageDivs = element.querySelectorAll('div[style*="background-image"]');
+          bgImageDivs.forEach(div => {
+            const style = div.getAttribute('style') || '';
+            const match = style.match(/background-image:\s*url\(["']?([^"')]+)["']?\)/);
+            if (match && match[1]) {
+              // Create an img element with the same dimensions
+              const img = clonedDoc.createElement('img');
+              img.src = match[1];
+              img.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+              `;
+              div.style.position = 'relative';
+              div.appendChild(img);
+            }
+          });
+
+          // Also handle img elements that might be lazy-loaded (ensure src is set)
+          const images = element.querySelectorAll('img');
+          images.forEach(img => {
+            if (img.dataset.src && !img.src) {
+              img.src = img.dataset.src;
+            }
+          });
+        }
       });
 
       canvas.toBlob(async (blob) => {

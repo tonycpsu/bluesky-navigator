@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+373.a3070823
+// @version     1.0.31+374.3cfae773
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -62805,7 +62805,10 @@ div.item-banner {
       item.removeEventListener("touchcancel", this.handleLongPressEnd);
     }
     handleLongPressStart(e2) {
-      if (e2.touches.length !== 1) return;
+      if (e2.touches.length !== 1) {
+        this.handleLongPressEnd();
+        return;
+      }
       const touch = e2.touches[0];
       this.startX = touch.clientX;
       this.startY = touch.clientY;
@@ -62815,7 +62818,11 @@ div.item-banner {
       }, this.longPressDuration);
     }
     handleLongPressMove(e2) {
-      if (!this.longPressTimer || e2.touches.length !== 1) return;
+      if (e2.touches.length !== 1) {
+        this.handleLongPressEnd();
+        return;
+      }
+      if (!this.longPressTimer) return;
       const touch = e2.touches[0];
       const deltaX = Math.abs(touch.clientX - this.startX);
       const deltaY = Math.abs(touch.clientY - this.startY);
@@ -63944,10 +63951,38 @@ div.item-banner {
     async captureScreenshot(item) {
       try {
         const canvas = await html2canvas(item, {
-          backgroundColor: null,
+          backgroundColor: "#ffffff",
           scale: 2,
           logging: false,
-          useCORS: true
+          useCORS: true,
+          allowTaint: true,
+          onclone: (clonedDoc, element) => {
+            const bgImageDivs = element.querySelectorAll('div[style*="background-image"]');
+            bgImageDivs.forEach((div) => {
+              const style2 = div.getAttribute("style") || "";
+              const match2 = style2.match(/background-image:\s*url\(["']?([^"')]+)["']?\)/);
+              if (match2 && match2[1]) {
+                const img = clonedDoc.createElement("img");
+                img.src = match2[1];
+                img.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+              `;
+                div.style.position = "relative";
+                div.appendChild(img);
+              }
+            });
+            const images2 = element.querySelectorAll("img");
+            images2.forEach((img) => {
+              if (img.dataset.src && !img.src) {
+                img.src = img.dataset.src;
+              }
+            });
+          }
         });
         canvas.toBlob(async (blob2) => {
           try {

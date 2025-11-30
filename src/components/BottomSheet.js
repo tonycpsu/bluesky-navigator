@@ -51,7 +51,11 @@ export class BottomSheet {
   }
 
   handleLongPressStart(e) {
-    if (e.touches.length !== 1) return;
+    // Cancel if multiple touches (pinch-to-zoom)
+    if (e.touches.length !== 1) {
+      this.handleLongPressEnd();
+      return;
+    }
 
     const touch = e.touches[0];
     this.startX = touch.clientX;
@@ -64,7 +68,12 @@ export class BottomSheet {
   }
 
   handleLongPressMove(e) {
-    if (!this.longPressTimer || e.touches.length !== 1) return;
+    // Cancel if multiple touches (pinch-to-zoom started)
+    if (e.touches.length !== 1) {
+      this.handleLongPressEnd();
+      return;
+    }
+    if (!this.longPressTimer) return;
 
     const touch = e.touches[0];
     const deltaX = Math.abs(touch.clientX - this.startX);

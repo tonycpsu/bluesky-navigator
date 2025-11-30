@@ -9,6 +9,7 @@
   --focus-ring-width: 2px;
   --transition-duration: 200ms;
   --animation-duration: 300ms;
+  --bsky-nav-max-width: 600px;
 }
 
 /* High Contrast Mode */
@@ -32,6 +33,22 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   Desktop Full-Width Layout
+   ========================================================================== */
+
+/* Hide element utility */
+.bsky-nav-hidden {
+  display: none !important;
+}
+
+/* Desktop full-width mode - just set max-width on main, let Bluesky handle positioning */
+@media only screen and (min-width: 801px) {
+  main[role="main"] {
+    max-width: var(--bsky-nav-max-width, 600px) !important;
   }
 }
 

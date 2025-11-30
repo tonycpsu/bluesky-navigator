@@ -602,138 +602,95 @@ function getScreenFromElement(element) {
         startMonitor();
         setContextFromUrl();
 
-        // Only set up width management on desktop, after mobileView is determined
-        if (!state.mobileView) {
-          waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
+        // Apply desktop layout class if hideRightSidebar is enabled
+        if (!state.mobileView && config.get('hideRightSidebar')) {
+          applyDesktopFullWidth();
         }
       }
     );
 
-    // const LEFT_SIDEBAR_SELECTOR = "nav.r-pgf20v"
+    /**
+     * Apply full-width layout for desktop mode
+     * Hides right sidebar and adjusts main content position to account for
+     * the left sidebar's dynamic transform positioning
+     */
+    function applyDesktopFullWidth() {
+      const maxWidth = config.get('postWidthDesktop');
+      document.documentElement.style.setProperty('--bsky-nav-max-width', `${maxWidth}px`);
 
-    function adjustTransformX(el, offset) {
-      // debugger;
-      let transform = $(el).css('transform');
-      const translateX = 0;
-      if (!transform || transform == 'none') {
-        $(el).css('transform', 'translateX(0px);');
-        transform = $(el).css('transform');
-      }
-      console.log(`translateX = ${translateX}`);
-      $(el).css('transform', `translateX(${translateX + offset}px)`);
-    }
-
-    function setWidth(leftSidebar, width) {
-      // Skip width adjustments on mobile
-      if (state.mobileView) {
-        console.log('[bsky-navigator] setWidth skipped - mobile view');
-        return;
-      }
-      console.log('[bsky-navigator] setWidth called with width:', width);
-
-      const LEFT_TRANSLATE_X_DEFAULT = -540;
-      const RIGHT_TRANSLATE_X_DEFAULT = 300;
-
-      const rightSidebar = $(leftSidebar).next();
-      if (config.get('hideRightSidebar')) {
-        $(rightSidebar).css('display', 'none');
-      }
-
-      // // FIXME: the rest of this working recently so we return early
-      // return;
-
-      const sidebarDiff = width - 600; // (1 + !config.get("hideRightSidebar"));
-      // debugger;
-      console.log('sidebarDiff', sidebarDiff);
-
-      if (state.leftSidebarMinimized) {
-        console.log('minimized');
-        // $(leftSidebar).css("transform", "");
-        adjustTransformX(
-          leftSidebar,
-          LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2 + constants.WIDTH_OFFSET
-        );
-        adjustTransformX('main', sidebarDiff / 2 - constants.WIDTH_OFFSET);
-      } else if (sidebarDiff) {
-        if (config.get('hideRightSidebar')) {
-          adjustTransformX(
-            leftSidebar,
-            LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2 + constants.WIDTH_OFFSET
-          );
-          adjustTransformX('main', sidebarDiff / 2 - constants.WIDTH_OFFSET);
-        } else {
-          adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2);
-          adjustTransformX(rightSidebar, RIGHT_TRANSLATE_X_DEFAULT + sidebarDiff / 2);
+      // Hide right sidebar - wait for it to appear (contains search input)
+      waitForElement('input[role="search"]', (searchInput) => {
+        // Find the fixed-position container ancestor
+        let rightSidebar = searchInput.parentElement;
+        while (rightSidebar && !rightSidebar.style.cssText.includes('position: fixed')) {
+          rightSidebar = rightSidebar.parentElement;
         }
-      } else {
-        console.log('reset sidebars');
-        $(leftSidebar).css('transform', `translateX(${LEFT_TRANSLATE_X_DEFAULT}px)`);
-        $(rightSidebar).css('transform', `translateX(${RIGHT_TRANSLATE_X_DEFAULT}px)`);
-      }   
-      $(constants.MAIN_SELECTOR).css('max-width', `${width}px`, '!important');
-      $(constants.WIDTH_SELECTOR).css('max-width', `${width}px`, '!important');
-      $('div[role="tablist"]').css('width', `${width}px`);
-      $('#statusBar').css('max-width', `${width}px`);
-      $('div[style^="position: fixed; inset: 0px 0px 0px 50%;"]').css('width', `${width}px`);
-      // adjustTransformX($('main'), constants.WIDTH_OFFSET);
-    }
+        if (rightSidebar) {
+          console.log('[bsky-nav] Hiding right sidebar');
+          rightSidebar.style.display = 'none';
+        }
+      });
 
-    state.leftSidebarMinimized = false;
-    waitForElement(
-      constants.LEFT_SIDEBAR_SELECTOR,
-      (leftSidebar) => {
-        state.leftSidebarMinimized = !$(leftSidebar).hasClass('r-y46g1k');
-        observeChanges(leftSidebar, (attributeName, oldValue, newValue, target) => {
-          if ($(leftSidebar).hasClass('r-y46g1k')) {
-            state.leftSidebarMinimized = false;
-          } else {
-            state.leftSidebarMinimized = true;
-          }
-          console.log(state.leftSidebarMinimized);
+      waitForElement(constants.LEFT_SIDEBAR_SELECTOR, (leftSidebar) => {
+        // Move left sidebar to left edge (remove transform-based centering)
+        $(leftSidebar).css({
+          'left': '0',
+          'transform': 'none'
         });
-      }
-      // (leftSidebar) => {
-      //     console.log("removed");
-      // }
-    );
 
-    let resizeTimer;
+        // Get sidebar width for main positioning
+        const sidebarWidth = leftSidebar.getBoundingClientRect().width;
 
-    function onWindowResize() {
-      if (state.mobileView) {
-        return;
-      }
-      console.log('Resized to: ' + $(window).width() + 'x' + $(window).height());
-      if (state.mobileView) {
-        return;
-      } else {
-        const leftSidebar = $(constants.LEFT_SIDEBAR_SELECTOR);
-        const rightSidebar = $(leftSidebar).next();
+        const mainEl = $('main[role="main"]');
+        if (mainEl.length) {
+          // Position main right after sidebar
+          mainEl.css({
+            'position': 'fixed',
+            'top': '0',
+            'bottom': '0',
+            'left': (sidebarWidth + 16) + 'px',
+            'margin-left': '0',
+            'padding-left': '0',
+            'width': maxWidth + 'px',
+            'max-width': maxWidth + 'px',
+            'overflow-y': 'auto'
+          });
 
-        const leftSidebarWidth = $(leftSidebar).outerWidth();
-        // debugger;
-        const remainingWidth =
-          $(window).width() -
-          leftSidebarWidth -
-          // - (!state.leftSidebarMinimized ? $(rightSidebar).outerWidth() : 0)
-          !config.get('hideRightSidebar') * ($(rightSidebar).outerWidth() || 0) -
-          constants.WIDTH_OFFSET;
-        // debugger;
-        console.log('remainingWidth', remainingWidth, 'leftSidebarWidth', leftSidebarWidth);
-        if (remainingWidth >= config.get('postWidthDesktop')) {
-          setWidth($(constants.LEFT_SIDEBAR_SELECTOR), config.get('postWidthDesktop'));
-        } else {
-          // console.log("too narrow");
-          setWidth($(constants.LEFT_SIDEBAR_SELECTOR), remainingWidth);
+          // Remove transforms, auto margins, and update max-width on inner containers
+          // These have translateX(-105px) which offsets for the right sidebar
+          mainEl.find('div').each(function() {
+            const style = this.getAttribute('style') || '';
+            // Target divs with translateX transforms or auto margins
+            if (style.includes('translateX') || style.includes('margin-left: auto')) {
+              $(this).css({
+                'transform': 'none',
+                'margin-left': '0',
+                'margin-right': '0',
+                'max-width': maxWidth + 'px'
+              });
+            }
+          });
         }
-      }
+
+        // Update on window resize
+        $(window).on('resize.bskyFullWidth', debounce(() => {
+          const newSidebarWidth = leftSidebar.getBoundingClientRect().width;
+          mainEl.css('left', (newSidebarWidth + 16) + 'px');
+        }, 100));
+      });
     }
 
-    $(window).resize(function () {
-      if (state.mobileView) return;
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(onWindowResize, 500); // Adjust delay as needed
-    });
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
   }
 
   const configTitleDiv = `

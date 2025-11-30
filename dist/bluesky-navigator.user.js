@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+370.605ce1e2
+// @version     1.0.31+371.38427686
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -54,7 +54,6 @@
     LEFT_SIDEBAR_SELECTOR: 'nav[role="navigation"]',
     POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
     POST_CONTENT_SELECTOR: 'div[data-testid="contentHider-post"]',
-    MAIN_SELECTOR: 'main[role="main"]',
     WIDTH_SELECTOR: 'div[style*="removed-body-scroll-bar-size"][style*="width: 100%"]',
     PROFILE_SELECTOR: 'a[aria-label="View profile"]',
     LINK_SELECTOR: 'a[target="_blank"]',
@@ -69,8 +68,7 @@
     SIDECAR_SVG_LIKE: [
       `<svg fill="none" width="18" viewBox="0 0 24 24" height="18" style="color: rgb(111, 134, 159); pointer-events: none; flex-shrink: 0; display: block;"><path fill="hsl(211, 20%, 53%)" fill-rule="evenodd" clip-rule="evenodd" d="M16.734 5.091c-1.238-.276-2.708.047-4.022 1.38a1 1 0 0 1-1.424 0C9.974 5.137 8.504 4.814 7.266 5.09c-1.263.282-2.379 1.206-2.92 2.556C3.33 10.18 4.252 14.84 12 19.348c7.747-4.508 8.67-9.168 7.654-11.7-.541-1.351-1.657-2.275-2.92-2.557Zm4.777 1.812c1.604 4-.494 9.69-9.022 14.47a1 1 0 0 1-.978 0C2.983 16.592.885 10.902 2.49 6.902c.779-1.942 2.414-3.334 4.342-3.764 1.697-.378 3.552.003 5.169 1.286 1.617-1.283 3.472-1.664 5.17-1.286 1.927.43 3.562 1.822 4.34 3.764Z"></path></svg>`,
       `<svg fill="none" width="18" viewBox="0 0 24 24" height="18" class="r-84gixx" style="flex-shrink: 0; display: block;"><path fill="#ec4899" fill-rule="evenodd" clip-rule="evenodd" d="M12.489 21.372c8.528-4.78 10.626-10.47 9.022-14.47-.779-1.941-2.414-3.333-4.342-3.763-1.697-.378-3.552.003-5.169 1.287-1.617-1.284-3.472-1.665-5.17-1.287-1.927.43-3.562 1.822-4.34 3.764-1.605 4 .493 9.69 9.021 14.47a1 1 0 0 0 .978 0Z"></path></svg>`
-    ],
-    WIDTH_OFFSET: 32
+    ]
   };
   const DEFAULT_HISTORY_MAX = 5e3;
   class StateManager {
@@ -44680,7 +44678,7 @@ if (cid) {
     observer.observe(document.body, { childList: true, subtree: true, attributes: !!onChange });
     return observer;
   }
-  function observeChanges$1(target2, callback, subtree) {
+  function observeChanges(target2, callback, subtree) {
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (mutation.type === "attributes") {
@@ -44751,7 +44749,7 @@ if (cid) {
     debounce,
     extractLastTerm,
     getAnimationDuration: getAnimationDuration$1,
-    observeChanges: observeChanges$1,
+    observeChanges,
     observeVisibilityChange: observeVisibilityChange$1,
     prefersHighContrast,
     prefersReducedMotion,
@@ -45080,6 +45078,7 @@ if (cid) {
   --focus-ring-width: 2px;
   --transition-duration: 200ms;
   --animation-duration: 300ms;
+  --bsky-nav-max-width: 600px;
 }
 
 /* High Contrast Mode */
@@ -45103,6 +45102,22 @@ if (cid) {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   Desktop Full-Width Layout
+   ========================================================================== */
+
+/* Hide element utility */
+.bsky-nav-hidden {
+  display: none !important;
+}
+
+/* Desktop full-width mode - just set max-width on main, let Bluesky handle positioning */
+@media only screen and (min-width: 801px) {
+  main[role="main"] {
+    max-width: var(--bsky-nav-max-width, 600px) !important;
   }
 }
 
@@ -64743,7 +64758,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.onSearchKeydown = this.onSearchKeydown.bind(this);
       this.setFilter = this.setFilter.bind(this);
       this.feedTabObserver = waitForElement$1(constants.FEED_TAB_SELECTOR, (tab) => {
-        observeChanges$1(
+        observeChanges(
           tab,
           (attributeName, _oldValue, newValue, _target) => {
             if (attributeName == "class" && newValue.includes("r-13awgt0")) {
@@ -65537,7 +65552,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
   }
-  const { waitForElement, observeChanges, observeVisibilityChange } = utils$1;
+  const { waitForElement, observeVisibilityChange } = utils$1;
   GM_addStyle(style);
   let config;
   let handlers;
@@ -65990,109 +66005,72 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           console.log("mobileView:", state.mobileView, "(byElement:", isMobileByElement, ", byWidth:", isMobileByWidth, ")");
           startMonitor();
           setContextFromUrl();
-          if (!state.mobileView) {
-            waitForElement(constants.WIDTH_SELECTOR, onWindowResize);
+          if (!state.mobileView && config.get("hideRightSidebar")) {
+            applyDesktopFullWidth();
           }
         }
       );
-      function adjustTransformX(el, offset) {
-        let transform2 = $(el).css("transform");
-        const translateX = 0;
-        if (!transform2 || transform2 == "none") {
-          $(el).css("transform", "translateX(0px);");
-          transform2 = $(el).css("transform");
-        }
-        console.log(`translateX = ${translateX}`);
-        $(el).css("transform", `translateX(${translateX + offset}px)`);
-      }
-      function setWidth(leftSidebar, width) {
-        if (state.mobileView) {
-          console.log("[bsky-navigator] setWidth skipped - mobile view");
-          return;
-        }
-        console.log("[bsky-navigator] setWidth called with width:", width);
-        const LEFT_TRANSLATE_X_DEFAULT = -540;
-        const RIGHT_TRANSLATE_X_DEFAULT = 300;
-        const rightSidebar = $(leftSidebar).next();
-        if (config.get("hideRightSidebar")) {
-          $(rightSidebar).css("display", "none");
-        }
-        const sidebarDiff = width - 600;
-        console.log("sidebarDiff", sidebarDiff);
-        if (state.leftSidebarMinimized) {
-          console.log("minimized");
-          adjustTransformX(
-            leftSidebar,
-            LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2 + constants.WIDTH_OFFSET
-          );
-          adjustTransformX("main", sidebarDiff / 2 - constants.WIDTH_OFFSET);
-        } else if (sidebarDiff) {
-          if (config.get("hideRightSidebar")) {
-            adjustTransformX(
-              leftSidebar,
-              LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2 + constants.WIDTH_OFFSET
-            );
-            adjustTransformX("main", sidebarDiff / 2 - constants.WIDTH_OFFSET);
-          } else {
-            adjustTransformX(leftSidebar, LEFT_TRANSLATE_X_DEFAULT - sidebarDiff / 2);
-            adjustTransformX(rightSidebar, RIGHT_TRANSLATE_X_DEFAULT + sidebarDiff / 2);
+      function applyDesktopFullWidth() {
+        const maxWidth = config.get("postWidthDesktop");
+        document.documentElement.style.setProperty("--bsky-nav-max-width", `${maxWidth}px`);
+        waitForElement('input[role="search"]', (searchInput) => {
+          let rightSidebar = searchInput.parentElement;
+          while (rightSidebar && !rightSidebar.style.cssText.includes("position: fixed")) {
+            rightSidebar = rightSidebar.parentElement;
           }
-        } else {
-          console.log("reset sidebars");
-          $(leftSidebar).css("transform", `translateX(${LEFT_TRANSLATE_X_DEFAULT}px)`);
-          $(rightSidebar).css("transform", `translateX(${RIGHT_TRANSLATE_X_DEFAULT}px)`);
-        }
-        $(constants.MAIN_SELECTOR).css("max-width", `${width}px`, "!important");
-        $(constants.WIDTH_SELECTOR).css("max-width", `${width}px`, "!important");
-        $('div[role="tablist"]').css("width", `${width}px`);
-        $("#statusBar").css("max-width", `${width}px`);
-        $('div[style^="position: fixed; inset: 0px 0px 0px 50%;"]').css("width", `${width}px`);
-      }
-      state.leftSidebarMinimized = false;
-      waitForElement(
-        constants.LEFT_SIDEBAR_SELECTOR,
-        (leftSidebar) => {
-          state.leftSidebarMinimized = !$(leftSidebar).hasClass("r-y46g1k");
-          observeChanges(leftSidebar, (attributeName, oldValue, newValue, target2) => {
-            if ($(leftSidebar).hasClass("r-y46g1k")) {
-              state.leftSidebarMinimized = false;
-            } else {
-              state.leftSidebarMinimized = true;
-            }
-            console.log(state.leftSidebarMinimized);
+          if (rightSidebar) {
+            console.log("[bsky-nav] Hiding right sidebar");
+            rightSidebar.style.display = "none";
+          }
+        });
+        waitForElement(constants.LEFT_SIDEBAR_SELECTOR, (leftSidebar) => {
+          $(leftSidebar).css({
+            "left": "0",
+            "transform": "none"
           });
-        }
-        // (leftSidebar) => {
-        //     console.log("removed");
-        // }
-      );
-      let resizeTimer;
-      function onWindowResize() {
-        if (state.mobileView) {
-          return;
-        }
-        console.log("Resized to: " + $(window).width() + "x" + $(window).height());
-        if (state.mobileView) {
-          return;
-        } else {
-          const leftSidebar = $(constants.LEFT_SIDEBAR_SELECTOR);
-          const rightSidebar = $(leftSidebar).next();
-          const leftSidebarWidth = $(leftSidebar).outerWidth();
-          const remainingWidth = $(window).width() - leftSidebarWidth - // - (!state.leftSidebarMinimized ? $(rightSidebar).outerWidth() : 0)
-          !config.get("hideRightSidebar") * ($(rightSidebar).outerWidth() || 0) - constants.WIDTH_OFFSET;
-          console.log("remainingWidth", remainingWidth, "leftSidebarWidth", leftSidebarWidth);
-          if (remainingWidth >= config.get("postWidthDesktop")) {
-            setWidth($(constants.LEFT_SIDEBAR_SELECTOR), config.get("postWidthDesktop"));
-          } else {
-            setWidth($(constants.LEFT_SIDEBAR_SELECTOR), remainingWidth);
+          const sidebarWidth = leftSidebar.getBoundingClientRect().width;
+          const mainEl = $('main[role="main"]');
+          if (mainEl.length) {
+            mainEl.css({
+              "position": "fixed",
+              "top": "0",
+              "bottom": "0",
+              "left": sidebarWidth + 16 + "px",
+              "margin-left": "0",
+              "padding-left": "0",
+              "width": maxWidth + "px",
+              "max-width": maxWidth + "px",
+              "overflow-y": "auto"
+            });
+            mainEl.find("div").each(function() {
+              const style2 = this.getAttribute("style") || "";
+              if (style2.includes("translateX") || style2.includes("margin-left: auto")) {
+                $(this).css({
+                  "transform": "none",
+                  "margin-left": "0",
+                  "margin-right": "0",
+                  "max-width": maxWidth + "px"
+                });
+              }
+            });
           }
-        }
+          $(window).on("resize.bskyFullWidth", debounce2(() => {
+            const newSidebarWidth = leftSidebar.getBoundingClientRect().width;
+            mainEl.css("left", newSidebarWidth + 16 + "px");
+          }, 100));
+        });
       }
-      $(window).resize(function() {
-        if (state.mobileView) return;
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(onWindowResize, 500);
-      });
+      function debounce2(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+          const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+          };
+          clearTimeout(timeout);
+          timeout = setTimeout(later, wait);
+        };
+      }
     }
     const configTitleDiv = `
     <div class="config-title">

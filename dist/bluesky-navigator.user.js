@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+372.7e5f2f75
+// @version     1.0.31+373.a3070823
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -62776,7 +62776,11 @@ div.item-banner {
       this.currentItem = null;
       this.longPressTimer = null;
       this.longPressDuration = 500;
+      this.startX = 0;
+      this.startY = 0;
+      this.moveThreshold = 10;
       this.handleLongPressStart = this.handleLongPressStart.bind(this);
+      this.handleLongPressMove = this.handleLongPressMove.bind(this);
       this.handleLongPressEnd = this.handleLongPressEnd.bind(this);
       this.hide = this.hide.bind(this);
     }
@@ -62787,7 +62791,7 @@ div.item-banner {
       if (!item) return;
       item.addEventListener("touchstart", this.handleLongPressStart, { passive: true });
       item.addEventListener("touchend", this.handleLongPressEnd, { passive: true });
-      item.addEventListener("touchmove", this.handleLongPressEnd, { passive: true });
+      item.addEventListener("touchmove", this.handleLongPressMove, { passive: true });
       item.addEventListener("touchcancel", this.handleLongPressEnd, { passive: true });
     }
     /**
@@ -62797,15 +62801,27 @@ div.item-banner {
       if (!item) return;
       item.removeEventListener("touchstart", this.handleLongPressStart);
       item.removeEventListener("touchend", this.handleLongPressEnd);
-      item.removeEventListener("touchmove", this.handleLongPressEnd);
+      item.removeEventListener("touchmove", this.handleLongPressMove);
       item.removeEventListener("touchcancel", this.handleLongPressEnd);
     }
     handleLongPressStart(e2) {
+      if (e2.touches.length !== 1) return;
+      const touch = e2.touches[0];
+      this.startX = touch.clientX;
+      this.startY = touch.clientY;
       this.currentItem = e2.currentTarget;
       this.longPressTimer = setTimeout(() => {
         this.show(this.currentItem);
-        e2.preventDefault();
       }, this.longPressDuration);
+    }
+    handleLongPressMove(e2) {
+      if (!this.longPressTimer || e2.touches.length !== 1) return;
+      const touch = e2.touches[0];
+      const deltaX = Math.abs(touch.clientX - this.startX);
+      const deltaY = Math.abs(touch.clientY - this.startY);
+      if (deltaX > this.moveThreshold || deltaY > this.moveThreshold) {
+        this.handleLongPressEnd();
+      }
     }
     handleLongPressEnd() {
       if (this.longPressTimer) {

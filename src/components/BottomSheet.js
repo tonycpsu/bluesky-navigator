@@ -16,8 +16,12 @@ export class BottomSheet {
     this.currentItem = null;
     this.longPressTimer = null;
     this.longPressDuration = 500; // ms
+    this.startX = 0;
+    this.startY = 0;
+    this.moveThreshold = 10; // pixels of movement to cancel long press
 
     this.handleLongPressStart = this.handleLongPressStart.bind(this);
+    this.handleLongPressMove = this.handleLongPressMove.bind(this);
     this.handleLongPressEnd = this.handleLongPressEnd.bind(this);
     this.hide = this.hide.bind(this);
   }
@@ -30,7 +34,7 @@ export class BottomSheet {
 
     item.addEventListener('touchstart', this.handleLongPressStart, { passive: true });
     item.addEventListener('touchend', this.handleLongPressEnd, { passive: true });
-    item.addEventListener('touchmove', this.handleLongPressEnd, { passive: true });
+    item.addEventListener('touchmove', this.handleLongPressMove, { passive: true });
     item.addEventListener('touchcancel', this.handleLongPressEnd, { passive: true });
   }
 
@@ -42,17 +46,34 @@ export class BottomSheet {
 
     item.removeEventListener('touchstart', this.handleLongPressStart);
     item.removeEventListener('touchend', this.handleLongPressEnd);
-    item.removeEventListener('touchmove', this.handleLongPressEnd);
+    item.removeEventListener('touchmove', this.handleLongPressMove);
     item.removeEventListener('touchcancel', this.handleLongPressEnd);
   }
 
   handleLongPressStart(e) {
+    if (e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    this.startX = touch.clientX;
+    this.startY = touch.clientY;
     this.currentItem = e.currentTarget;
+
     this.longPressTimer = setTimeout(() => {
       this.show(this.currentItem);
-      // Prevent default context menu
-      e.preventDefault();
     }, this.longPressDuration);
+  }
+
+  handleLongPressMove(e) {
+    if (!this.longPressTimer || e.touches.length !== 1) return;
+
+    const touch = e.touches[0];
+    const deltaX = Math.abs(touch.clientX - this.startX);
+    const deltaY = Math.abs(touch.clientY - this.startY);
+
+    // Cancel long press if finger moved beyond threshold
+    if (deltaX > this.moveThreshold || deltaY > this.moveThreshold) {
+      this.handleLongPressEnd();
+    }
   }
 
   handleLongPressEnd() {

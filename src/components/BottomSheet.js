@@ -34,7 +34,6 @@ export class BottomSheet {
 
     item.addEventListener('touchstart', this.handleLongPressStart, { passive: true });
     item.addEventListener('touchend', this.handleLongPressEnd, { passive: true });
-    item.addEventListener('touchmove', this.handleLongPressMove, { passive: true });
     item.addEventListener('touchcancel', this.handleLongPressEnd, { passive: true });
   }
 
@@ -46,7 +45,6 @@ export class BottomSheet {
 
     item.removeEventListener('touchstart', this.handleLongPressStart);
     item.removeEventListener('touchend', this.handleLongPressEnd);
-    item.removeEventListener('touchmove', this.handleLongPressMove);
     item.removeEventListener('touchcancel', this.handleLongPressEnd);
   }
 
@@ -61,6 +59,9 @@ export class BottomSheet {
     this.startX = touch.clientX;
     this.startY = touch.clientY;
     this.currentItem = e.currentTarget;
+
+    // Add document-level move listener to catch scrolling on any element
+    document.addEventListener('touchmove', this.handleLongPressMove, { passive: true });
 
     this.longPressTimer = setTimeout(() => {
       this.show(this.currentItem);
@@ -86,6 +87,9 @@ export class BottomSheet {
   }
 
   handleLongPressEnd() {
+    // Remove document-level move listener
+    document.removeEventListener('touchmove', this.handleLongPressMove);
+
     if (this.longPressTimer) {
       clearTimeout(this.longPressTimer);
       this.longPressTimer = null;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+375.98440a6d
+// @version     1.0.31+376.30831d45
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -62792,7 +62792,6 @@ div.item-banner {
       if (!item) return;
       item.addEventListener("touchstart", this.handleLongPressStart, { passive: true });
       item.addEventListener("touchend", this.handleLongPressEnd, { passive: true });
-      item.addEventListener("touchmove", this.handleLongPressMove, { passive: true });
       item.addEventListener("touchcancel", this.handleLongPressEnd, { passive: true });
     }
     /**
@@ -62802,7 +62801,6 @@ div.item-banner {
       if (!item) return;
       item.removeEventListener("touchstart", this.handleLongPressStart);
       item.removeEventListener("touchend", this.handleLongPressEnd);
-      item.removeEventListener("touchmove", this.handleLongPressMove);
       item.removeEventListener("touchcancel", this.handleLongPressEnd);
     }
     handleLongPressStart(e2) {
@@ -62814,6 +62812,7 @@ div.item-banner {
       this.startX = touch.clientX;
       this.startY = touch.clientY;
       this.currentItem = e2.currentTarget;
+      document.addEventListener("touchmove", this.handleLongPressMove, { passive: true });
       this.longPressTimer = setTimeout(() => {
         this.show(this.currentItem);
       }, this.longPressDuration);
@@ -62832,6 +62831,7 @@ div.item-banner {
       }
     }
     handleLongPressEnd() {
+      document.removeEventListener("touchmove", this.handleLongPressMove);
       if (this.longPressTimer) {
         clearTimeout(this.longPressTimer);
         this.longPressTimer = null;

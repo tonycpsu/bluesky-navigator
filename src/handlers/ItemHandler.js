@@ -414,12 +414,14 @@ export class ItemHandler extends Handler {
         div = $('<div class="unrolled-replies"/>');
         parent.append(div);
       }
+      const totalPosts = unrolledPosts.length;
       unrolledPosts.slice(1).map((p, i) => {
-        const reply = $('<div class="unrolled-reply" style="position: relative"/>');
+        const postNum = i + 2;
+        const reply = $('<div class="unrolled-reply"/>');
         reply.append($('<hr class="unrolled-divider"/>'));
         reply.append(
           $(
-            `<div class="unrolled-banner"><a href="${urlForPost(p)}"/>${i + 2}/${unrolledPosts.length}</a></div>`
+            `<a href="${urlForPost(p)}" class="unrolled-post-number" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
           )
         );
         reply.append($(bodyTemplate(formatPost(p))));
@@ -647,6 +649,10 @@ export class ItemHandler extends Handler {
 
       case 'v':
         this.showPostViewModal(item);
+        break;
+
+      case 'V':
+        this.showReaderModeModal(item);
         break;
 
       default:
@@ -988,6 +994,76 @@ export class ItemHandler extends Handler {
       console.error('Failed to load thread for post view modal:', err);
       this.postViewModal.updateSidecar('<div class="post-view-modal-error">Error loading replies</div>');
     }
+  }
+
+  async showReaderModeModal(item) {
+    const postElement = item[0];
+    if (!postElement) {
+      console.warn('showReaderModeModal: no post element found');
+      return;
+    }
+
+    // Create modal instance if needed
+    if (!this.postViewModal) {
+      this.postViewModal = new PostViewModal(this.config);
+    }
+
+    // Show modal immediately with loading state
+    this.postViewModal.showReaderMode(null, 'Reader View');
+
+    // Fetch thread data and build reader content
+    try {
+      const thread = await this.getThreadForItem(postElement);
+      if (thread) {
+        // Get all posts in the thread by the same author (unrolled)
+        const unrolledPosts = await this.api.unrollThread(thread);
+        const authorName = thread.post.author.displayName || thread.post.author.handle;
+
+        // Build the reader content HTML
+        const readerHtml = this.buildReaderContent(unrolledPosts, authorName);
+        this.postViewModal.updateReaderContent(readerHtml);
+      } else {
+        this.postViewModal.updateReaderContent('<div class="post-view-modal-error">Could not load thread</div>');
+      }
+    } catch (err) {
+      console.error('Failed to load thread for reader mode:', err);
+      this.postViewModal.updateReaderContent('<div class="post-view-modal-error">Error loading thread</div>');
+    }
+  }
+
+  buildReaderContent(posts, authorName) {
+    if (!posts || posts.length === 0) {
+      return '<div class="post-view-modal-error">No posts found</div>';
+    }
+
+    const bodyTemplate = Handlebars.compile($('#sidecar-body-template').html());
+    Handlebars.registerPartial('bodyTemplate', bodyTemplate);
+
+    let html = `<div class="reader-mode-thread">`;
+    const totalPosts = posts.length;
+    html += `<div class="reader-mode-author">Thread by ${this.escapeHtml(authorName)} (${totalPosts} post${totalPosts > 1 ? 's' : ''})</div>`;
+
+    posts.forEach((post, index) => {
+      const postNum = index + 1;
+      const formattedPost = formatPost(post);
+      html += `
+        <article class="reader-mode-post" data-post-index="${index}">
+          <div class="reader-mode-post-number">${postNum}<span class="reader-mode-post-total">/${totalPosts}</span></div>
+          <div class="reader-mode-post-content">
+            ${bodyTemplate(formattedPost)}
+          </div>
+        </article>
+      `;
+    });
+
+    html += `</div>`;
+    return html;
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   markItemRead(index, isRead) {

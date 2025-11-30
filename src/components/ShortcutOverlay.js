@@ -26,6 +26,7 @@ const SHORTCUTS = {
     { keys: ['m'], description: 'Toggle media/video' },
     { keys: ['c'], description: 'Screenshot to clipboard' },
     { keys: ['v'], description: 'Full-screen post view' },
+    { keys: ['V'], description: 'Reader mode (thread)' },
   ],
   'Feed Controls': [
     { keys: ['/'], description: 'Focus search' },

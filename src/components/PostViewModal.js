@@ -203,6 +203,90 @@ export class PostViewModal {
   }
 
   /**
+   * Show the modal in reader mode (full width, no sidecar)
+   * @param {string} contentHtml - HTML content for the reader view
+   * @param {string} title - Title for the modal header
+   */
+  showReaderMode(contentHtml, title = 'Reader View') {
+    if (this.isVisible) return;
+
+    this.previousActiveElement = document.activeElement;
+    this.isVisible = true;
+
+    // Create modal
+    this.modalEl = this.createReaderModal(contentHtml, title);
+    document.body.appendChild(this.modalEl);
+
+    // Focus the close button
+    const closeBtn = this.modalEl.querySelector('.post-view-modal-close');
+    if (closeBtn) {
+      closeBtn.focus();
+    }
+
+    // Announce to screen readers
+    announceToScreenReader('Reader view opened. Press Escape to close.');
+
+    // Add escape listener
+    this.escapeHandler = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.hide();
+      }
+    };
+    document.addEventListener('keydown', this.escapeHandler, true);
+
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+  }
+
+  /**
+   * Create the reader mode modal DOM element
+   * @param {string} contentHtml - HTML content for the reader view
+   * @param {string} title - Title for the modal header
+   */
+  createReaderModal(contentHtml, title) {
+    const modal = document.createElement('div');
+    modal.className = 'post-view-modal post-view-modal-reader';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'post-view-modal-title');
+
+    modal.innerHTML = `
+      <div class="post-view-modal-backdrop"></div>
+      <div class="post-view-modal-content post-view-modal-content-reader">
+        <div class="post-view-modal-header">
+          <h2 id="post-view-modal-title">${title}</h2>
+          <button class="post-view-modal-close" aria-label="Close">×</button>
+        </div>
+        <div class="post-view-modal-body post-view-modal-body-reader">
+          <div class="post-view-modal-reader-content">
+            ${contentHtml || '<div class="post-view-modal-loading">Loading thread...</div>'}
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Event listeners
+    modal.querySelector('.post-view-modal-backdrop').addEventListener('click', () => this.hide());
+    modal.querySelector('.post-view-modal-close').addEventListener('click', () => this.hide());
+
+    return modal;
+  }
+
+  /**
+   * Update the reader mode content (for async loading)
+   * @param {string} contentHtml - HTML content for the reader view
+   */
+  updateReaderContent(contentHtml) {
+    if (!this.modalEl) return;
+    const contentContainer = this.modalEl.querySelector('.post-view-modal-reader-content');
+    if (contentContainer) {
+      contentContainer.innerHTML = contentHtml;
+    }
+  }
+
+  /**
    * Check if modal is currently visible
    */
   get visible() {

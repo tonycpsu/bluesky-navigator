@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+369.fd06526b
+// @version     1.0.31+370.605ce1e2
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45562,26 +45562,65 @@ div.item-banner {
     }
 }
 
-.unrolled-banner {
+.unrolled-reply {
+    position: relative;
+    padding-left: 36px;
+    margin: 1px;
+    border: 1px solid transparent;
+    box-sizing: border-box;
+}
+
+.unrolled-post-number {
     position: absolute;
-    top: -0.5em;
-    left: 10px;
-    padding: 0px 5px;
-    backdrop-filter: blur(10px);
-    color: #888;
+    left: 0;
+    top: 1.5em;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f3f4f6;
+    border-radius: 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    text-decoration: none;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.unrolled-post-total {
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.unrolled-post-number:hover {
+    background-color: #e5e7eb;
+    color: #374151;
+    text-decoration: none;
 }
 
 .unrolled-divider {
     margin-top: 1em;
-    border: 1px solid #eee;
-    color: white;
+    margin-bottom: 0.5em;
+    border: none;
+    border-top: 1px solid #e5e7eb;
 }
 
-.unrolled-reply {
-    /* border: 1px transparent; */
-    margin: 1px;
-    border: 1px solid transparent;
-    box-sizing: border-box;
+@media (prefers-color-scheme: dark) {
+    .unrolled-post-number {
+        background-color: #374151;
+        color: #d1d5db;
+    }
+
+    .unrolled-post-number:hover {
+        background-color: #4b5563;
+        color: #f3f4f6;
+    }
+
+    .unrolled-divider {
+        border-top-color: #374151;
+    }
 }
 
 .sidecar-replies {
@@ -46494,6 +46533,141 @@ div.item-banner {
 }
 
 /* ==========================================================================
+   Reader Mode
+   ========================================================================== */
+
+.post-view-modal-content-reader {
+  max-width: 800px;
+}
+
+.post-view-modal-body-reader {
+  flex-direction: column;
+}
+
+.post-view-modal-reader-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.reader-mode-thread {
+  max-width: 100%;
+}
+
+.reader-mode-author {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.reader-mode-post {
+  position: relative;
+  padding: 16px 0 16px 52px;
+}
+
+.reader-mode-post-number {
+  position: absolute;
+  left: 0;
+  top: 16px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f3f4f6;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.reader-mode-post-total {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.reader-mode-post-content {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #111827;
+}
+
+.reader-mode-post-content a {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.reader-mode-post-content a:hover {
+  text-decoration: underline;
+}
+
+.reader-mode-post-footer {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.reader-mode-divider {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 0;
+}
+
+/* Reader mode dark mode */
+@media (prefers-color-scheme: dark) {
+  .reader-mode-author {
+    color: #9ca3af;
+    border-bottom-color: #374151;
+  }
+
+  .reader-mode-post-number {
+    background-color: #374151;
+    color: #d1d5db;
+  }
+
+  .reader-mode-post-content {
+    color: #f3f4f6;
+  }
+
+  .reader-mode-post-content a {
+    color: #60a5fa;
+  }
+
+  .reader-mode-post-footer {
+    color: #9ca3af;
+  }
+
+  .reader-mode-divider {
+    border-top-color: #374151;
+  }
+}
+
+/* Reader mode mobile */
+@media (max-width: 800px) {
+  .post-view-modal-content-reader {
+    max-width: 100%;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  .reader-mode-post {
+    padding-left: 32px;
+  }
+
+  .reader-mode-post-number {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+  }
+}
+
+/* ==========================================================================
    Scroll Position Indicator
    ========================================================================== */
 
@@ -47135,7 +47309,8 @@ div.item-banner {
       { keys: ["i"], description: "Open first link" },
       { keys: ["m"], description: "Toggle media/video" },
       { keys: ["c"], description: "Screenshot to clipboard" },
-      { keys: ["v"], description: "Full-screen post view" }
+      { keys: ["v"], description: "Full-screen post view" },
+      { keys: ["V"], description: "Reader mode (thread)" }
     ],
     "Feed Controls": [
       { keys: ["/"], description: "Focus search" },
@@ -62915,6 +63090,72 @@ div.item-banner {
       }
     }
     /**
+     * Show the modal in reader mode (full width, no sidecar)
+     * @param {string} contentHtml - HTML content for the reader view
+     * @param {string} title - Title for the modal header
+     */
+    showReaderMode(contentHtml, title = "Reader View") {
+      if (this.isVisible) return;
+      this.previousActiveElement = document.activeElement;
+      this.isVisible = true;
+      this.modalEl = this.createReaderModal(contentHtml, title);
+      document.body.appendChild(this.modalEl);
+      const closeBtn = this.modalEl.querySelector(".post-view-modal-close");
+      if (closeBtn) {
+        closeBtn.focus();
+      }
+      announceToScreenReader$2("Reader view opened. Press Escape to close.");
+      this.escapeHandler = (e2) => {
+        if (e2.key === "Escape") {
+          e2.preventDefault();
+          e2.stopPropagation();
+          this.hide();
+        }
+      };
+      document.addEventListener("keydown", this.escapeHandler, true);
+      document.body.style.overflow = "hidden";
+    }
+    /**
+     * Create the reader mode modal DOM element
+     * @param {string} contentHtml - HTML content for the reader view
+     * @param {string} title - Title for the modal header
+     */
+    createReaderModal(contentHtml, title) {
+      const modal = document.createElement("div");
+      modal.className = "post-view-modal post-view-modal-reader";
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.setAttribute("aria-labelledby", "post-view-modal-title");
+      modal.innerHTML = `
+      <div class="post-view-modal-backdrop"></div>
+      <div class="post-view-modal-content post-view-modal-content-reader">
+        <div class="post-view-modal-header">
+          <h2 id="post-view-modal-title">${title}</h2>
+          <button class="post-view-modal-close" aria-label="Close">\xD7</button>
+        </div>
+        <div class="post-view-modal-body post-view-modal-body-reader">
+          <div class="post-view-modal-reader-content">
+            ${contentHtml || '<div class="post-view-modal-loading">Loading thread...</div>'}
+          </div>
+        </div>
+      </div>
+    `;
+      modal.querySelector(".post-view-modal-backdrop").addEventListener("click", () => this.hide());
+      modal.querySelector(".post-view-modal-close").addEventListener("click", () => this.hide());
+      return modal;
+    }
+    /**
+     * Update the reader mode content (for async loading)
+     * @param {string} contentHtml - HTML content for the reader view
+     */
+    updateReaderContent(contentHtml) {
+      if (!this.modalEl) return;
+      const contentContainer = this.modalEl.querySelector(".post-view-modal-reader-content");
+      if (contentContainer) {
+        contentContainer.innerHTML = contentHtml;
+      }
+    }
+    /**
      * Check if modal is currently visible
      */
     get visible() {
@@ -63252,12 +63493,14 @@ div.item-banner {
           div = $('<div class="unrolled-replies"/>');
           parent.append(div);
         }
+        const totalPosts = unrolledPosts.length;
         unrolledPosts.slice(1).map((p, i2) => {
-          const reply = $('<div class="unrolled-reply" style="position: relative"/>');
+          const postNum = i2 + 2;
+          const reply = $('<div class="unrolled-reply"/>');
           reply.append($('<hr class="unrolled-divider"/>'));
           reply.append(
             $(
-              `<div class="unrolled-banner"><a href="${urlForPost(p)}"/>${i2 + 2}/${unrolledPosts.length}</a></div>`
+              `<a href="${urlForPost(p)}" class="unrolled-post-number" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
             )
           );
           reply.append($(bodyTemplate(formatPost(p))));
@@ -63428,6 +63671,9 @@ div.item-banner {
           break;
         case "v":
           this.showPostViewModal(item);
+          break;
+        case "V":
+          this.showReaderModeModal(item);
           break;
         default:
           if (!isNaN(parseInt(event.key))) {
@@ -63724,6 +63970,60 @@ div.item-banner {
         console.error("Failed to load thread for post view modal:", err);
         this.postViewModal.updateSidecar('<div class="post-view-modal-error">Error loading replies</div>');
       }
+    }
+    async showReaderModeModal(item) {
+      const postElement = item[0];
+      if (!postElement) {
+        console.warn("showReaderModeModal: no post element found");
+        return;
+      }
+      if (!this.postViewModal) {
+        this.postViewModal = new PostViewModal(this.config);
+      }
+      this.postViewModal.showReaderMode(null, "Reader View");
+      try {
+        const thread = await this.getThreadForItem(postElement);
+        if (thread) {
+          const unrolledPosts = await this.api.unrollThread(thread);
+          const authorName = thread.post.author.displayName || thread.post.author.handle;
+          const readerHtml = this.buildReaderContent(unrolledPosts, authorName);
+          this.postViewModal.updateReaderContent(readerHtml);
+        } else {
+          this.postViewModal.updateReaderContent('<div class="post-view-modal-error">Could not load thread</div>');
+        }
+      } catch (err) {
+        console.error("Failed to load thread for reader mode:", err);
+        this.postViewModal.updateReaderContent('<div class="post-view-modal-error">Error loading thread</div>');
+      }
+    }
+    buildReaderContent(posts, authorName) {
+      if (!posts || posts.length === 0) {
+        return '<div class="post-view-modal-error">No posts found</div>';
+      }
+      const bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
+      Handlebars.registerPartial("bodyTemplate", bodyTemplate);
+      let html = `<div class="reader-mode-thread">`;
+      const totalPosts = posts.length;
+      html += `<div class="reader-mode-author">Thread by ${this.escapeHtml(authorName)} (${totalPosts} post${totalPosts > 1 ? "s" : ""})</div>`;
+      posts.forEach((post2, index) => {
+        const postNum = index + 1;
+        const formattedPost = formatPost(post2);
+        html += `
+        <article class="reader-mode-post" data-post-index="${index}">
+          <div class="reader-mode-post-number">${postNum}<span class="reader-mode-post-total">/${totalPosts}</span></div>
+          <div class="reader-mode-post-content">
+            ${bodyTemplate(formattedPost)}
+          </div>
+        </article>
+      `;
+      });
+      html += `</div>`;
+      return html;
+    }
+    escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
     }
     markItemRead(index, isRead) {
       if (this.name == "post" && !this.config.get("savePostState")) {

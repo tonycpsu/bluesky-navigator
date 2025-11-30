@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+376.30831d45
+// @version     1.0.31+377.2c16ffc2
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -62783,6 +62783,7 @@ div.item-banner {
       this.handleLongPressStart = this.handleLongPressStart.bind(this);
       this.handleLongPressMove = this.handleLongPressMove.bind(this);
       this.handleLongPressEnd = this.handleLongPressEnd.bind(this);
+      this.handleScroll = this.handleScroll.bind(this);
       this.hide = this.hide.bind(this);
     }
     /**
@@ -62813,6 +62814,7 @@ div.item-banner {
       this.startY = touch.clientY;
       this.currentItem = e2.currentTarget;
       document.addEventListener("touchmove", this.handleLongPressMove, { passive: true });
+      window.addEventListener("scroll", this.handleScroll, { passive: true, capture: true });
       this.longPressTimer = setTimeout(() => {
         this.show(this.currentItem);
       }, this.longPressDuration);
@@ -62830,8 +62832,12 @@ div.item-banner {
         this.handleLongPressEnd();
       }
     }
+    handleScroll() {
+      this.handleLongPressEnd();
+    }
     handleLongPressEnd() {
       document.removeEventListener("touchmove", this.handleLongPressMove);
+      window.removeEventListener("scroll", this.handleScroll, { capture: true });
       if (this.longPressTimer) {
         clearTimeout(this.longPressTimer);
         this.longPressTimer = null;

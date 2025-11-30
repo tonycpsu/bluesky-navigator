@@ -250,6 +250,10 @@ function getScreenFromElement(element) {
       loadSidecarTemplate('body', sidecarTemplatesHtml);
     }
 
+    // Initialize mobileView early so handlers can use it in their constructors
+    state.mobileView = window.innerWidth <= 800;
+    console.log('Initial mobileView (by width):', state.mobileView, 'width:', window.innerWidth);
+
     // FIXME: ordering of these is important since posts can tbe in profiles
     handlers = {
       feed: new FeedItemHandler('feed', config, state, api, constants.FEED_ITEM_SELECTOR),
@@ -586,10 +590,7 @@ function getScreenFromElement(element) {
     }
 
     // set up observer to detect if mobile interface is active
-    // Use both element detection AND screen width as fallback
-    state.mobileView = window.innerWidth <= 800;
-    console.log('Initial mobileView (by width):', state.mobileView, 'width:', window.innerWidth);
-
+    // mobileView is already initialized above before handler creation
     const viewportChangeObserver = waitForElement(
       `${constants.DRAWER_MENU_SELECTOR}, ${constants.LEFT_SIDEBAR_SELECTOR}`,
       (element) => {

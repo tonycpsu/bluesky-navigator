@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+371.38427686
+// @version     1.0.31+372.7e5f2f75
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -65700,6 +65700,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         loadSidecarTemplate("body", sidecarTemplatesHtml);
       }
+      state.mobileView = window.innerWidth <= 800;
+      console.log("Initial mobileView (by width):", state.mobileView, "width:", window.innerWidth);
       handlers = {
         feed: new FeedItemHandler("feed", config, state, api, constants.FEED_ITEM_SELECTOR),
         post: new PostItemHandler("post", config, state, api, constants.POST_ITEM_SELECTOR),
@@ -65993,8 +65995,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         }, constants.URL_MONITOR_INTERVAL);
       }
-      state.mobileView = window.innerWidth <= 800;
-      console.log("Initial mobileView (by width):", state.mobileView, "width:", window.innerWidth);
       waitForElement(
         `${constants.DRAWER_MENU_SELECTOR}, ${constants.LEFT_SIDEBAR_SELECTOR}`,
         (element) => {

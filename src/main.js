@@ -603,8 +603,8 @@ function getScreenFromElement(element) {
         startMonitor();
         setContextFromUrl();
 
-        // Apply desktop layout class if hideRightSidebar is enabled
-        if (!state.mobileView && config.get('hideRightSidebar')) {
+        // Apply desktop layout on desktop view
+        if (!state.mobileView) {
           applyDesktopFullWidth();
         }
       }
@@ -619,18 +619,20 @@ function getScreenFromElement(element) {
       const maxWidth = config.get('postWidthDesktop');
       document.documentElement.style.setProperty('--bsky-nav-max-width', `${maxWidth}px`);
 
-      // Hide right sidebar - wait for it to appear (contains search input)
-      waitForElement('input[role="search"]', (searchInput) => {
-        // Find the fixed-position container ancestor
-        let rightSidebar = searchInput.parentElement;
-        while (rightSidebar && !rightSidebar.style.cssText.includes('position: fixed')) {
-          rightSidebar = rightSidebar.parentElement;
-        }
-        if (rightSidebar) {
-          console.log('[bsky-nav] Hiding right sidebar');
-          rightSidebar.style.display = 'none';
-        }
-      });
+      // Hide right sidebar if option is enabled
+      if (config.get('hideRightSidebar')) {
+        waitForElement('input[role="search"]', (searchInput) => {
+          // Find the fixed-position container ancestor
+          let rightSidebar = searchInput.parentElement;
+          while (rightSidebar && !rightSidebar.style.cssText.includes('position: fixed')) {
+            rightSidebar = rightSidebar.parentElement;
+          }
+          if (rightSidebar) {
+            console.log('[bsky-nav] Hiding right sidebar');
+            rightSidebar.style.display = 'none';
+          }
+        });
+      }
 
       waitForElement(constants.LEFT_SIDEBAR_SELECTOR, (leftSidebar) => {
         // Move left sidebar to left edge (remove transform-based centering)

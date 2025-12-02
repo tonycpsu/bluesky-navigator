@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+377.2c16ffc2
+// @version     1.0.31+378.98d70f98
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -66157,7 +66157,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           console.log("mobileView:", state.mobileView, "(byElement:", isMobileByElement, ", byWidth:", isMobileByWidth, ")");
           startMonitor();
           setContextFromUrl();
-          if (!state.mobileView && config.get("hideRightSidebar")) {
+          if (!state.mobileView) {
             applyDesktopFullWidth();
           }
         }
@@ -66165,16 +66165,18 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       function applyDesktopFullWidth() {
         const maxWidth = config.get("postWidthDesktop");
         document.documentElement.style.setProperty("--bsky-nav-max-width", `${maxWidth}px`);
-        waitForElement('input[role="search"]', (searchInput) => {
-          let rightSidebar = searchInput.parentElement;
-          while (rightSidebar && !rightSidebar.style.cssText.includes("position: fixed")) {
-            rightSidebar = rightSidebar.parentElement;
-          }
-          if (rightSidebar) {
-            console.log("[bsky-nav] Hiding right sidebar");
-            rightSidebar.style.display = "none";
-          }
-        });
+        if (config.get("hideRightSidebar")) {
+          waitForElement('input[role="search"]', (searchInput) => {
+            let rightSidebar = searchInput.parentElement;
+            while (rightSidebar && !rightSidebar.style.cssText.includes("position: fixed")) {
+              rightSidebar = rightSidebar.parentElement;
+            }
+            if (rightSidebar) {
+              console.log("[bsky-nav] Hiding right sidebar");
+              rightSidebar.style.display = "none";
+            }
+          });
+        }
         waitForElement(constants.LEFT_SIDEBAR_SELECTOR, (leftSidebar) => {
           $(leftSidebar).css({
             "left": "0",

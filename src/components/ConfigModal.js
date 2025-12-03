@@ -350,6 +350,9 @@ export class ConfigModal {
     this.activeTab = 'Display';
     this.pendingChanges = {};
     this.collapsedSections = {};
+    this.rulesSubTab = 'visual'; // 'visual' or 'raw'
+    this.parsedRules = []; // Parsed rule categories for visual editor
+    this.collapsedCategories = {}; // Track collapsed state of rule categories
 
     instance = this;
   }
@@ -480,6 +483,9 @@ export class ConfigModal {
       });
     });
 
+    // Rules panel event listeners (pass modal since this.modalEl not yet assigned)
+    this.attachRulesEventListeners(modal);
+
     return modal;
   }
 
@@ -549,7 +555,7 @@ export class ConfigModal {
         <div class="config-panel ${name === this.activeTab ? 'active' : ''}"
              role="tabpanel"
              data-panel="${name}">
-          ${this.renderFields(schema.fields)}
+          ${name === 'Rules' ? this.renderRulesPanel() : this.renderFields(schema.fields)}
         </div>
       `
       )
@@ -689,6 +695,349 @@ export class ConfigModal {
     }
     // String comparison
     return String(value) !== String(defaultVal);
+  }
+
+  // ==================== Rule Builder Methods ====================
+
+  /**
+   * Parse raw rules text into structured format for visual editor
+   */
+  parseRules(text) {
+    if (!text) return [];
+
+    const lines = text.split('\n');
+    const categories = [];
+    let currentCategory = null;
+
+    for (let line of lines) {
+      line = line.trim();
+      if (!line || line.startsWith(';') || line.startsWith('#')) continue;
+
+      // Match category header [name]
+      const sectionMatch = line.match(/^\[(.+)\]$/);
+      if (sectionMatch) {
+        currentCategory = { name: sectionMatch[1], rules: [] };
+        categories.push(currentCategory);
+        continue;
+      }
+
+      if (!currentCategory) continue;
+
+      // Match explicit allow/deny rules
+      const ruleMatch = line.match(/^(allow|deny)\s+(all|from|content)\s*"?([^"]*)"?$/i);
+      if (ruleMatch) {
+        const [, action, type, value] = ruleMatch;
+        currentCategory.rules.push({
+          action: action.toLowerCase(),
+          type: type.toLowerCase(),
+          value: value || ''
+        });
+        continue;
+      }
+
+      // Shortcut: @handle = allow from @handle
+      if (line.startsWith('@')) {
+        currentCategory.rules.push({ action: 'allow', type: 'from', value: line });
+        continue;
+      }
+
+      // Shortcut: keyword = allow content keyword
+      currentCategory.rules.push({ action: 'allow', type: 'content', value: line });
+    }
+
+    return categories;
+  }
+
+  /**
+   * Serialize structured rules back to text format
+   */
+  serializeRules(categories) {
+    const lines = [];
+
+    for (const category of categories) {
+      if (lines.length > 0) lines.push(''); // Blank line between categories
+      lines.push(`[${category.name}]`);
+
+      for (const rule of category.rules) {
+        if (rule.type === 'all') {
+          lines.push(`${rule.action} all`);
+        } else if (rule.action === 'deny') {
+          // Always use explicit format for deny
+          lines.push(`${rule.action} ${rule.type} ${rule.value}`);
+        } else if (rule.type === 'from' && rule.value.startsWith('@')) {
+          // Shortcut for allow from @handle
+          lines.push(rule.value);
+        } else if (rule.type === 'content') {
+          // Shortcut for allow content
+          lines.push(rule.value);
+        } else {
+          // Explicit format for other cases
+          lines.push(`${rule.action} ${rule.type} ${rule.value}`);
+        }
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Render the Rules panel with sub-tabs
+   */
+  renderRulesPanel() {
+    const rulesConfig = this.config.get('rulesConfig') ?? '';
+    this.parsedRules = this.parseRules(rulesConfig);
+
+    return `
+      <div class="rules-panel">
+        <div class="rules-subtabs">
+          <button class="rules-subtab ${this.rulesSubTab === 'visual' ? 'active' : ''}"
+                  data-subtab="visual">Visual</button>
+          <button class="rules-subtab ${this.rulesSubTab === 'raw' ? 'active' : ''}"
+                  data-subtab="raw">Raw</button>
+        </div>
+        <div class="rules-content">
+          <div class="rules-visual ${this.rulesSubTab === 'visual' ? 'active' : ''}">
+            ${this.renderVisualEditor()}
+          </div>
+          <div class="rules-raw ${this.rulesSubTab === 'raw' ? 'active' : ''}">
+            <textarea id="config-rulesConfig" name="rulesConfig" rows="12"
+                      placeholder="Enter filter rules...">${this.escapeHtml(rulesConfig)}</textarea>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render the visual rule editor
+   */
+  renderVisualEditor() {
+    if (this.parsedRules.length === 0) {
+      return `
+        <div class="rules-empty">
+          No filter rules defined. Click "Add Category" to create one.
+        </div>
+        <button type="button" class="rules-add-category">+ Add Category</button>
+      `;
+    }
+
+    const categoriesHtml = this.parsedRules.map((category, catIndex) => {
+      const isCollapsed = this.collapsedCategories[catIndex];
+      return `
+        <div class="rules-category" data-category="${catIndex}">
+          <div class="rules-category-header">
+            <button type="button" class="rules-category-toggle ${isCollapsed ? 'collapsed' : ''}"
+                    data-category="${catIndex}">
+              <span class="rules-toggle-icon">${isCollapsed ? '▶' : '▼'}</span>
+            </button>
+            <input type="text" class="rules-category-name" value="${this.escapeHtml(category.name)}"
+                   data-category="${catIndex}">
+            <button type="button" class="rules-category-delete" data-category="${catIndex}"
+                    title="Delete category">🗑</button>
+          </div>
+          <div class="rules-category-body ${isCollapsed ? 'collapsed' : ''}">
+            ${this.renderRuleRows(category.rules, catIndex)}
+            <button type="button" class="rules-add-rule" data-category="${catIndex}">+ Add Rule</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      ${categoriesHtml}
+      <button type="button" class="rules-add-category">+ Add Category</button>
+    `;
+  }
+
+  /**
+   * Render rule rows for a category
+   */
+  renderRuleRows(rules, catIndex) {
+    if (rules.length === 0) {
+      return `<div class="rules-empty-category">No rules in this category.</div>`;
+    }
+
+    return rules.map((rule, ruleIndex) => `
+      <div class="rules-row" data-category="${catIndex}" data-rule="${ruleIndex}">
+        <select class="rules-action" data-category="${catIndex}" data-rule="${ruleIndex}">
+          <option value="allow" ${rule.action === 'allow' ? 'selected' : ''}>Allow</option>
+          <option value="deny" ${rule.action === 'deny' ? 'selected' : ''}>Deny</option>
+        </select>
+        <select class="rules-type" data-category="${catIndex}" data-rule="${ruleIndex}">
+          <option value="from" ${rule.type === 'from' ? 'selected' : ''}>From (author)</option>
+          <option value="content" ${rule.type === 'content' ? 'selected' : ''}>Content (text)</option>
+          <option value="all" ${rule.type === 'all' ? 'selected' : ''}>All</option>
+        </select>
+        <input type="text" class="rules-value" value="${this.escapeHtml(rule.value)}"
+               placeholder="${rule.type === 'from' ? '@handle or regex' : rule.type === 'content' ? 'keyword or regex' : ''}"
+               ${rule.type === 'all' ? 'disabled' : ''}
+               data-category="${catIndex}" data-rule="${ruleIndex}">
+        <button type="button" class="rules-delete-rule" data-category="${catIndex}" data-rule="${ruleIndex}"
+                title="Delete rule">🗑</button>
+      </div>
+    `).join('');
+  }
+
+  /**
+   * Update raw textarea from parsed rules
+   */
+  syncVisualToRaw() {
+    const rawText = this.serializeRules(this.parsedRules);
+    const textarea = this.modalEl.querySelector('#config-rulesConfig');
+    if (textarea) {
+      textarea.value = rawText;
+    }
+    this.pendingChanges['rulesConfig'] = rawText;
+  }
+
+  /**
+   * Re-render just the visual editor content
+   */
+  refreshVisualEditor() {
+    const visualContainer = this.modalEl.querySelector('.rules-visual');
+    if (visualContainer) {
+      visualContainer.innerHTML = this.renderVisualEditor();
+      this.attachRulesEventListeners();
+    }
+  }
+
+  /**
+   * Attach event listeners for the rules panel
+   */
+  attachRulesEventListeners(modal = null) {
+    const container = modal || this.modalEl;
+    if (!container) return;
+
+    const panel = container.querySelector('.rules-panel');
+    if (!panel) return;
+
+    // Sub-tab switching
+    panel.querySelectorAll('.rules-subtab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        this.rulesSubTab = e.target.dataset.subtab;
+
+        // If switching to visual, re-parse from raw
+        if (this.rulesSubTab === 'visual') {
+          const textarea = this.modalEl.querySelector('#config-rulesConfig');
+          if (textarea) {
+            this.parsedRules = this.parseRules(textarea.value);
+          }
+        }
+
+        // Update sub-tab UI
+        panel.querySelectorAll('.rules-subtab').forEach(t =>
+          t.classList.toggle('active', t.dataset.subtab === this.rulesSubTab));
+        panel.querySelector('.rules-visual').classList.toggle('active', this.rulesSubTab === 'visual');
+        panel.querySelector('.rules-raw').classList.toggle('active', this.rulesSubTab === 'raw');
+
+        if (this.rulesSubTab === 'visual') {
+          this.refreshVisualEditor();
+        }
+      });
+    });
+
+    // Category toggle (collapse/expand)
+    panel.querySelectorAll('.rules-category-toggle').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const catIndex = parseInt(e.currentTarget.dataset.category);
+        this.collapsedCategories[catIndex] = !this.collapsedCategories[catIndex];
+        this.refreshVisualEditor();
+      });
+    });
+
+    // Category name change
+    panel.querySelectorAll('.rules-category-name').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        this.parsedRules[catIndex].name = e.target.value;
+        this.syncVisualToRaw();
+      });
+    });
+
+    // Category delete
+    panel.querySelectorAll('.rules-category-delete').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        if (confirm(`Delete category "${this.parsedRules[catIndex].name}" and all its rules?`)) {
+          this.parsedRules.splice(catIndex, 1);
+          this.syncVisualToRaw();
+          this.refreshVisualEditor();
+        }
+      });
+    });
+
+    // Add category
+    panel.querySelectorAll('.rules-add-category').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.parsedRules.push({ name: 'new-category', rules: [] });
+        this.syncVisualToRaw();
+        this.refreshVisualEditor();
+      });
+    });
+
+    // Add rule
+    panel.querySelectorAll('.rules-add-rule').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        this.parsedRules[catIndex].rules.push({ action: 'allow', type: 'content', value: '' });
+        this.syncVisualToRaw();
+        this.refreshVisualEditor();
+      });
+    });
+
+    // Rule action change
+    panel.querySelectorAll('.rules-action').forEach(select => {
+      select.addEventListener('change', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        const ruleIndex = parseInt(e.target.dataset.rule);
+        this.parsedRules[catIndex].rules[ruleIndex].action = e.target.value;
+        this.syncVisualToRaw();
+      });
+    });
+
+    // Rule type change
+    panel.querySelectorAll('.rules-type').forEach(select => {
+      select.addEventListener('change', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        const ruleIndex = parseInt(e.target.dataset.rule);
+        const rule = this.parsedRules[catIndex].rules[ruleIndex];
+        rule.type = e.target.value;
+        if (rule.type === 'all') {
+          rule.value = '';
+        }
+        this.syncVisualToRaw();
+        this.refreshVisualEditor(); // Refresh to update input disabled state
+      });
+    });
+
+    // Rule value change
+    panel.querySelectorAll('.rules-value').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        const ruleIndex = parseInt(e.target.dataset.rule);
+        this.parsedRules[catIndex].rules[ruleIndex].value = e.target.value;
+        this.syncVisualToRaw();
+      });
+    });
+
+    // Delete rule
+    panel.querySelectorAll('.rules-delete-rule').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        const ruleIndex = parseInt(e.target.dataset.rule);
+        this.parsedRules[catIndex].rules.splice(ruleIndex, 1);
+        this.syncVisualToRaw();
+        this.refreshVisualEditor();
+      });
+    });
+
+    // Raw textarea change
+    const textarea = panel.querySelector('#config-rulesConfig');
+    if (textarea) {
+      textarea.addEventListener('change', (e) => {
+        this.pendingChanges['rulesConfig'] = e.target.value;
+      });
+    }
   }
 
   switchTab(tabName) {

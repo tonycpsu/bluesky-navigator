@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+381.d3137de0
+// @version     1.0.31+382.b79f31e7
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45097,6 +45097,9 @@ if (cid) {
       this.activeTab = "Display";
       this.pendingChanges = {};
       this.collapsedSections = {};
+      this.rulesSubTab = "visual";
+      this.parsedRules = [];
+      this.collapsedCategories = {};
       instance$2 = this;
     }
     toggle() {
@@ -45201,6 +45204,7 @@ if (cid) {
           this.resetField(btn.dataset.key);
         });
       });
+      this.attachRulesEventListeners(modal);
       return modal;
     }
     getFieldSchema(key) {
@@ -45254,7 +45258,7 @@ if (cid) {
         <div class="config-panel ${name === this.activeTab ? "active" : ""}"
              role="tabpanel"
              data-panel="${name}">
-          ${this.renderFields(schema2.fields)}
+          ${name === "Rules" ? this.renderRulesPanel() : this.renderFields(schema2.fields)}
         </div>
       `
       ).join("");
@@ -45376,6 +45380,288 @@ if (cid) {
         return Number(value) !== Number(defaultVal);
       }
       return String(value) !== String(defaultVal);
+    }
+    // ==================== Rule Builder Methods ====================
+    /**
+     * Parse raw rules text into structured format for visual editor
+     */
+    parseRules(text) {
+      if (!text) return [];
+      const lines = text.split("\n");
+      const categories = [];
+      let currentCategory = null;
+      for (let line of lines) {
+        line = line.trim();
+        if (!line || line.startsWith(";") || line.startsWith("#")) continue;
+        const sectionMatch = line.match(/^\[(.+)\]$/);
+        if (sectionMatch) {
+          currentCategory = { name: sectionMatch[1], rules: [] };
+          categories.push(currentCategory);
+          continue;
+        }
+        if (!currentCategory) continue;
+        const ruleMatch = line.match(/^(allow|deny)\s+(all|from|content)\s*"?([^"]*)"?$/i);
+        if (ruleMatch) {
+          const [, action, type, value] = ruleMatch;
+          currentCategory.rules.push({
+            action: action.toLowerCase(),
+            type: type.toLowerCase(),
+            value: value || ""
+          });
+          continue;
+        }
+        if (line.startsWith("@")) {
+          currentCategory.rules.push({ action: "allow", type: "from", value: line });
+          continue;
+        }
+        currentCategory.rules.push({ action: "allow", type: "content", value: line });
+      }
+      return categories;
+    }
+    /**
+     * Serialize structured rules back to text format
+     */
+    serializeRules(categories) {
+      const lines = [];
+      for (const category of categories) {
+        if (lines.length > 0) lines.push("");
+        lines.push(`[${category.name}]`);
+        for (const rule of category.rules) {
+          if (rule.type === "all") {
+            lines.push(`${rule.action} all`);
+          } else if (rule.action === "deny") {
+            lines.push(`${rule.action} ${rule.type} ${rule.value}`);
+          } else if (rule.type === "from" && rule.value.startsWith("@")) {
+            lines.push(rule.value);
+          } else if (rule.type === "content") {
+            lines.push(rule.value);
+          } else {
+            lines.push(`${rule.action} ${rule.type} ${rule.value}`);
+          }
+        }
+      }
+      return lines.join("\n");
+    }
+    /**
+     * Render the Rules panel with sub-tabs
+     */
+    renderRulesPanel() {
+      const rulesConfig = this.config.get("rulesConfig") ?? "";
+      this.parsedRules = this.parseRules(rulesConfig);
+      return `
+      <div class="rules-panel">
+        <div class="rules-subtabs">
+          <button class="rules-subtab ${this.rulesSubTab === "visual" ? "active" : ""}"
+                  data-subtab="visual">Visual</button>
+          <button class="rules-subtab ${this.rulesSubTab === "raw" ? "active" : ""}"
+                  data-subtab="raw">Raw</button>
+        </div>
+        <div class="rules-content">
+          <div class="rules-visual ${this.rulesSubTab === "visual" ? "active" : ""}">
+            ${this.renderVisualEditor()}
+          </div>
+          <div class="rules-raw ${this.rulesSubTab === "raw" ? "active" : ""}">
+            <textarea id="config-rulesConfig" name="rulesConfig" rows="12"
+                      placeholder="Enter filter rules...">${this.escapeHtml(rulesConfig)}</textarea>
+          </div>
+        </div>
+      </div>
+    `;
+    }
+    /**
+     * Render the visual rule editor
+     */
+    renderVisualEditor() {
+      if (this.parsedRules.length === 0) {
+        return `
+        <div class="rules-empty">
+          No filter rules defined. Click "Add Category" to create one.
+        </div>
+        <button type="button" class="rules-add-category">+ Add Category</button>
+      `;
+      }
+      const categoriesHtml = this.parsedRules.map((category, catIndex) => {
+        const isCollapsed = this.collapsedCategories[catIndex];
+        return `
+        <div class="rules-category" data-category="${catIndex}">
+          <div class="rules-category-header">
+            <button type="button" class="rules-category-toggle ${isCollapsed ? "collapsed" : ""}"
+                    data-category="${catIndex}">
+              <span class="rules-toggle-icon">${isCollapsed ? "\u25B6" : "\u25BC"}</span>
+            </button>
+            <input type="text" class="rules-category-name" value="${this.escapeHtml(category.name)}"
+                   data-category="${catIndex}">
+            <button type="button" class="rules-category-delete" data-category="${catIndex}"
+                    title="Delete category">\u{1F5D1}</button>
+          </div>
+          <div class="rules-category-body ${isCollapsed ? "collapsed" : ""}">
+            ${this.renderRuleRows(category.rules, catIndex)}
+            <button type="button" class="rules-add-rule" data-category="${catIndex}">+ Add Rule</button>
+          </div>
+        </div>
+      `;
+      }).join("");
+      return `
+      ${categoriesHtml}
+      <button type="button" class="rules-add-category">+ Add Category</button>
+    `;
+    }
+    /**
+     * Render rule rows for a category
+     */
+    renderRuleRows(rules, catIndex) {
+      if (rules.length === 0) {
+        return `<div class="rules-empty-category">No rules in this category.</div>`;
+      }
+      return rules.map((rule, ruleIndex) => `
+      <div class="rules-row" data-category="${catIndex}" data-rule="${ruleIndex}">
+        <select class="rules-action" data-category="${catIndex}" data-rule="${ruleIndex}">
+          <option value="allow" ${rule.action === "allow" ? "selected" : ""}>Allow</option>
+          <option value="deny" ${rule.action === "deny" ? "selected" : ""}>Deny</option>
+        </select>
+        <select class="rules-type" data-category="${catIndex}" data-rule="${ruleIndex}">
+          <option value="from" ${rule.type === "from" ? "selected" : ""}>From (author)</option>
+          <option value="content" ${rule.type === "content" ? "selected" : ""}>Content (text)</option>
+          <option value="all" ${rule.type === "all" ? "selected" : ""}>All</option>
+        </select>
+        <input type="text" class="rules-value" value="${this.escapeHtml(rule.value)}"
+               placeholder="${rule.type === "from" ? "@handle or regex" : rule.type === "content" ? "keyword or regex" : ""}"
+               ${rule.type === "all" ? "disabled" : ""}
+               data-category="${catIndex}" data-rule="${ruleIndex}">
+        <button type="button" class="rules-delete-rule" data-category="${catIndex}" data-rule="${ruleIndex}"
+                title="Delete rule">\u{1F5D1}</button>
+      </div>
+    `).join("");
+    }
+    /**
+     * Update raw textarea from parsed rules
+     */
+    syncVisualToRaw() {
+      const rawText = this.serializeRules(this.parsedRules);
+      const textarea = this.modalEl.querySelector("#config-rulesConfig");
+      if (textarea) {
+        textarea.value = rawText;
+      }
+      this.pendingChanges["rulesConfig"] = rawText;
+    }
+    /**
+     * Re-render just the visual editor content
+     */
+    refreshVisualEditor() {
+      const visualContainer = this.modalEl.querySelector(".rules-visual");
+      if (visualContainer) {
+        visualContainer.innerHTML = this.renderVisualEditor();
+        this.attachRulesEventListeners();
+      }
+    }
+    /**
+     * Attach event listeners for the rules panel
+     */
+    attachRulesEventListeners(modal = null) {
+      const container = modal || this.modalEl;
+      if (!container) return;
+      const panel = container.querySelector(".rules-panel");
+      if (!panel) return;
+      panel.querySelectorAll(".rules-subtab").forEach((tab) => {
+        tab.addEventListener("click", (e2) => {
+          this.rulesSubTab = e2.target.dataset.subtab;
+          if (this.rulesSubTab === "visual") {
+            const textarea2 = this.modalEl.querySelector("#config-rulesConfig");
+            if (textarea2) {
+              this.parsedRules = this.parseRules(textarea2.value);
+            }
+          }
+          panel.querySelectorAll(".rules-subtab").forEach((t) => t.classList.toggle("active", t.dataset.subtab === this.rulesSubTab));
+          panel.querySelector(".rules-visual").classList.toggle("active", this.rulesSubTab === "visual");
+          panel.querySelector(".rules-raw").classList.toggle("active", this.rulesSubTab === "raw");
+          if (this.rulesSubTab === "visual") {
+            this.refreshVisualEditor();
+          }
+        });
+      });
+      panel.querySelectorAll(".rules-category-toggle").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const catIndex = parseInt(e2.currentTarget.dataset.category);
+          this.collapsedCategories[catIndex] = !this.collapsedCategories[catIndex];
+          this.refreshVisualEditor();
+        });
+      });
+      panel.querySelectorAll(".rules-category-name").forEach((input) => {
+        input.addEventListener("change", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          this.parsedRules[catIndex].name = e2.target.value;
+          this.syncVisualToRaw();
+        });
+      });
+      panel.querySelectorAll(".rules-category-delete").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          if (confirm(`Delete category "${this.parsedRules[catIndex].name}" and all its rules?`)) {
+            this.parsedRules.splice(catIndex, 1);
+            this.syncVisualToRaw();
+            this.refreshVisualEditor();
+          }
+        });
+      });
+      panel.querySelectorAll(".rules-add-category").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          this.parsedRules.push({ name: "new-category", rules: [] });
+          this.syncVisualToRaw();
+          this.refreshVisualEditor();
+        });
+      });
+      panel.querySelectorAll(".rules-add-rule").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          this.parsedRules[catIndex].rules.push({ action: "allow", type: "content", value: "" });
+          this.syncVisualToRaw();
+          this.refreshVisualEditor();
+        });
+      });
+      panel.querySelectorAll(".rules-action").forEach((select) => {
+        select.addEventListener("change", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          const ruleIndex = parseInt(e2.target.dataset.rule);
+          this.parsedRules[catIndex].rules[ruleIndex].action = e2.target.value;
+          this.syncVisualToRaw();
+        });
+      });
+      panel.querySelectorAll(".rules-type").forEach((select) => {
+        select.addEventListener("change", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          const ruleIndex = parseInt(e2.target.dataset.rule);
+          const rule = this.parsedRules[catIndex].rules[ruleIndex];
+          rule.type = e2.target.value;
+          if (rule.type === "all") {
+            rule.value = "";
+          }
+          this.syncVisualToRaw();
+          this.refreshVisualEditor();
+        });
+      });
+      panel.querySelectorAll(".rules-value").forEach((input) => {
+        input.addEventListener("change", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          const ruleIndex = parseInt(e2.target.dataset.rule);
+          this.parsedRules[catIndex].rules[ruleIndex].value = e2.target.value;
+          this.syncVisualToRaw();
+        });
+      });
+      panel.querySelectorAll(".rules-delete-rule").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          const ruleIndex = parseInt(e2.target.dataset.rule);
+          this.parsedRules[catIndex].rules.splice(ruleIndex, 1);
+          this.syncVisualToRaw();
+          this.refreshVisualEditor();
+        });
+      });
+      const textarea = panel.querySelector("#config-rulesConfig");
+      if (textarea) {
+        textarea.addEventListener("change", (e2) => {
+          this.pendingChanges["rulesConfig"] = e2.target.value;
+        });
+      }
     }
     switchTab(tabName) {
       this.activeTab = tabName;
@@ -48438,6 +48724,352 @@ div.item-banner {
 
   #config-reset:hover {
     background-color: #450a0a;
+  }
+}
+
+/* ==================== Rule Builder Styles ==================== */
+
+.rules-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.rules-subtabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 8px;
+}
+
+.rules-subtab {
+  padding: 6px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px 6px 0 0;
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rules-subtab:hover {
+  background: #f3f4f6;
+}
+
+.rules-subtab.active {
+  background: #ffffff;
+  color: #111827;
+  border-bottom-color: #ffffff;
+  font-weight: 500;
+}
+
+.rules-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.rules-visual,
+.rules-raw {
+  display: none;
+}
+
+.rules-visual.active,
+.rules-raw.active {
+  display: block;
+}
+
+.rules-raw textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 13px;
+  resize: vertical;
+}
+
+/* Category accordion */
+.rules-category {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.rules-category-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rules-category-toggle {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.rules-toggle-icon {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.rules-category-name {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  background: transparent;
+}
+
+.rules-category-name:hover {
+  border-color: #d1d5db;
+}
+
+.rules-category-name:focus {
+  outline: none;
+  border-color: #3b82f6;
+  background: #ffffff;
+}
+
+.rules-category-delete {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 14px;
+  border-radius: 4px;
+}
+
+.rules-category-delete:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.rules-category-body {
+  padding: 12px;
+}
+
+.rules-category-body.collapsed {
+  display: none;
+}
+
+/* Rule rows */
+.rules-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.rules-action,
+.rules-type {
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.rules-action {
+  width: 80px;
+}
+
+.rules-type {
+  width: 130px;
+}
+
+.rules-value {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.rules-value:disabled {
+  background: #f3f4f6;
+  color: #9ca3af;
+}
+
+.rules-delete-rule {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.rules-delete-rule:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Add buttons */
+.rules-add-rule,
+.rules-add-category {
+  padding: 8px 16px;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rules-add-rule {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.rules-add-category {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.rules-add-rule:hover,
+.rules-add-category:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background: #eff6ff;
+}
+
+/* Empty states */
+.rules-empty,
+.rules-empty-category {
+  padding: 24px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.rules-empty-category {
+  padding: 12px;
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* Dark mode for rule builder */
+@media (prefers-color-scheme: dark) {
+  .rules-subtabs {
+    border-bottom-color: #374151;
+  }
+
+  .rules-subtab {
+    background: #374151;
+    border-color: #4b5563;
+    color: #9ca3af;
+  }
+
+  .rules-subtab:hover {
+    background: #4b5563;
+  }
+
+  .rules-subtab.active {
+    background: #1f2937;
+    color: #f9fafb;
+    border-bottom-color: #1f2937;
+  }
+
+  .rules-raw textarea {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .rules-category {
+    border-color: #4b5563;
+  }
+
+  .rules-category-header {
+    background: #374151;
+    border-bottom-color: #4b5563;
+  }
+
+  .rules-category-toggle {
+    color: #9ca3af;
+  }
+
+  .rules-category-name {
+    color: #f9fafb;
+  }
+
+  .rules-category-name:hover {
+    border-color: #4b5563;
+  }
+
+  .rules-category-name:focus {
+    border-color: #3b82f6;
+    background: #1f2937;
+  }
+
+  .rules-category-delete:hover {
+    background: #450a0a;
+  }
+
+  .rules-category-body {
+    background: #1f2937;
+  }
+
+  .rules-row {
+    background: #374151;
+    border-color: #4b5563;
+  }
+
+  .rules-action,
+  .rules-type,
+  .rules-value {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .rules-value:disabled {
+    background: #374151;
+    color: #6b7280;
+  }
+
+  .rules-delete-rule:hover {
+    background: #450a0a;
+  }
+
+  .rules-add-rule,
+  .rules-add-category {
+    border-color: #4b5563;
+    color: #9ca3af;
+  }
+
+  .rules-add-rule:hover,
+  .rules-add-category:hover {
+    border-color: #3b82f6;
+    color: #60a5fa;
+    background: rgba(59, 130, 246, 0.1);
+  }
+
+  .rules-empty,
+  .rules-empty-category {
+    color: #9ca3af;
   }
 }
 `;

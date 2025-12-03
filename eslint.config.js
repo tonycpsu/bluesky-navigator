@@ -28,6 +28,7 @@ export default [
         GM_addStyle: 'readonly',
         GM_getValue: 'readonly',
         GM_setValue: 'readonly',
+        GM_listValues: 'readonly',
         GM_getResourceText: 'readonly',
         GM_xmlhttpRequest: 'readonly',
         GM_config: 'readonly',

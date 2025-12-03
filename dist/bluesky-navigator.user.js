@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+380.42f9019d
+// @version     1.0.31+381.d3137de0
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -15,6 +15,7 @@
 // @connect     cdn.bsky.app
 // @grant       GM_setValue
 // @grant       GM_getValue
+// @grant       GM_listValues
 // @grant       GM_addStyle
 // @grant       GM_xmlhttpRequest
 // @grant       unsafeWindow
@@ -45193,7 +45194,46 @@ if (cid) {
           if (e2.target.type === "range") this.handleInputChange(e2);
         });
       });
+      modal.querySelectorAll(".config-field-reset").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          e2.preventDefault();
+          e2.stopPropagation();
+          this.resetField(btn.dataset.key);
+        });
+      });
       return modal;
+    }
+    getFieldSchema(key) {
+      for (const [, schema2] of Object.entries(CONFIG_SCHEMA)) {
+        if (schema2.fields[key]) {
+          return schema2.fields[key];
+        }
+      }
+      return null;
+    }
+    resetField(key) {
+      const field = this.getFieldSchema(key);
+      if (!field) return;
+      const defaultValue = field.default;
+      const id = `config-${key}`;
+      const input = this.modalEl.querySelector(`#${id}`);
+      if (!input) return;
+      if (field.type === "checkbox") {
+        input.checked = Boolean(defaultValue);
+      } else if (field.type === "color") {
+        input.value = defaultValue;
+        const textInput = this.modalEl.querySelector(`#${id}-text`);
+        if (textInput) textInput.value = defaultValue;
+      } else {
+        input.value = defaultValue;
+      }
+      this.pendingChanges[key] = defaultValue;
+      const wrapper = input.closest(".config-field-wrapper");
+      const resetBtn = wrapper?.querySelector(".config-field-reset");
+      if (resetBtn) {
+        resetBtn.classList.add("hidden");
+      }
+      announceToScreenReader$2(`${field.label} reset to default.`);
     }
     renderTabs() {
       return Object.entries(CONFIG_SCHEMA).map(
@@ -45225,82 +45265,117 @@ if (cid) {
     renderField(key, field) {
       const value = this.config.get(key) ?? field.default ?? "";
       const id = `config-${key}`;
+      const isModified = this.isFieldModified(key, field, value);
+      const resetBtn = `<button type="button" class="config-field-reset ${isModified ? "" : "hidden"}"
+                              data-key="${key}" data-default="${this.escapeHtml(String(field.default))}"
+                              title="Reset to default">\u21BA</button>`;
       let inputHtml = "";
       switch (field.type) {
         case "checkbox":
           inputHtml = `
-          <label class="config-field config-field-checkbox">
-            <input type="checkbox" id="${id}" name="${key}" ${value ? "checked" : ""}>
-            <span class="config-checkbox-label">${field.label}</span>
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
-          </label>
+          <div class="config-field-wrapper config-field-checkbox">
+            <label class="config-field">
+              <input type="checkbox" id="${id}" name="${key}" ${value ? "checked" : ""}>
+              <span class="config-checkbox-label">${field.label}</span>
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+            </label>
+            ${resetBtn}
+          </div>
         `;
           break;
         case "select":
           inputHtml = `
-          <label class="config-field">
-            <span class="config-field-label">${field.label}</span>
-            <select id="${id}" name="${key}">
-              ${field.options.map((opt) => `<option value="${opt}" ${value === opt ? "selected" : ""}>${opt}</option>`).join("")}
-            </select>
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
-          </label>
+          <div class="config-field-wrapper">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <select id="${id}" name="${key}">
+                ${field.options.map((opt) => `<option value="${opt}" ${value === opt ? "selected" : ""}>${opt}</option>`).join("")}
+              </select>
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+            </label>
+            ${resetBtn}
+          </div>
         `;
           break;
         case "number":
           inputHtml = `
-          <label class="config-field">
-            <span class="config-field-label">${field.label}</span>
-            <input type="number" id="${id}" name="${key}" value="${value}"
-                   ${field.min !== void 0 ? `min="${field.min}"` : ""}
-                   ${field.max !== void 0 ? `max="${field.max}"` : ""}>
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
-          </label>
+          <div class="config-field-wrapper">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <input type="number" id="${id}" name="${key}" value="${value}"
+                     ${field.min !== void 0 ? `min="${field.min}"` : ""}
+                     ${field.max !== void 0 ? `max="${field.max}"` : ""}>
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+            </label>
+            ${resetBtn}
+          </div>
         `;
           break;
         case "color":
           inputHtml = `
-          <label class="config-field">
-            <span class="config-field-label">${field.label}</span>
-            <div class="config-color-input">
-              <input type="color" id="${id}" name="${key}" value="${value}">
-              <input type="text" id="${id}-text" value="${value}" class="config-color-text">
-            </div>
-          </label>
+          <div class="config-field-wrapper">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <div class="config-color-input">
+                <input type="color" id="${id}" name="${key}" value="${value}">
+                <input type="text" id="${id}-text" value="${value}" class="config-color-text">
+              </div>
+            </label>
+            ${resetBtn}
+          </div>
         `;
           break;
         case "password":
           inputHtml = `
-          <label class="config-field">
-            <span class="config-field-label">${field.label}</span>
-            <input type="password" id="${id}" name="${key}" value="${value}"
-                   placeholder="${field.placeholder || ""}">
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
-          </label>
+          <div class="config-field-wrapper">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <input type="password" id="${id}" name="${key}" value="${value}"
+                     placeholder="${field.placeholder || ""}">
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+            </label>
+            ${resetBtn}
+          </div>
         `;
           break;
         case "textarea":
         case "css":
           inputHtml = `
-          <label class="config-field config-field-textarea">
-            <span class="config-field-label">${field.label}</span>
-            <textarea id="${id}" name="${key}" rows="${field.rows || 2}"
-                      placeholder="${field.placeholder || ""}">${this.escapeHtml(value)}</textarea>
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
-          </label>
+          <div class="config-field-wrapper config-field-textarea">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <textarea id="${id}" name="${key}" rows="${field.rows || 2}"
+                        placeholder="${field.placeholder || ""}">${this.escapeHtml(value)}</textarea>
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+            </label>
+            ${resetBtn}
+          </div>
         `;
           break;
         default:
           inputHtml = `
-          <label class="config-field">
-            <span class="config-field-label">${field.label}</span>
-            <input type="text" id="${id}" name="${key}" value="${this.escapeHtml(value)}"
-                   placeholder="${field.placeholder || ""}">
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
-          </label>
+          <div class="config-field-wrapper">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <input type="text" id="${id}" name="${key}" value="${this.escapeHtml(value)}"
+                     placeholder="${field.placeholder || ""}">
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+            </label>
+            ${resetBtn}
+          </div>
         `;
       }
       return inputHtml;
+    }
+    isFieldModified(key, field, value) {
+      const defaultVal = field.default;
+      if (field.type === "checkbox") {
+        return Boolean(value) !== Boolean(defaultVal);
+      }
+      if (field.type === "number") {
+        return Number(value) !== Number(defaultVal);
+      }
+      return String(value) !== String(defaultVal);
     }
     switchTab(tabName) {
       this.activeTab = tabName;
@@ -45315,10 +45390,20 @@ if (cid) {
     }
     handleInputChange(e2) {
       const { name, type, value, checked } = e2.target;
-      this.pendingChanges[name] = type === "checkbox" ? checked : value;
+      const newValue = type === "checkbox" ? checked : value;
+      this.pendingChanges[name] = newValue;
       if (e2.target.type === "color") {
         const textInput = this.modalEl.querySelector(`#${e2.target.id}-text`);
         if (textInput) textInput.value = value;
+      }
+      const field = this.getFieldSchema(name);
+      if (field) {
+        const wrapper = e2.target.closest(".config-field-wrapper");
+        const resetBtn = wrapper?.querySelector(".config-field-reset");
+        if (resetBtn) {
+          const isModified = this.isFieldModified(name, field, newValue);
+          resetBtn.classList.toggle("hidden", !isModified);
+        }
       }
     }
     save() {
@@ -45356,6 +45441,7 @@ if (cid) {
     }
   }
   const STORAGE_KEY = "bluesky_navigator_config";
+  const OLD_GM_CONFIG_KEY = "GM_config";
   class ConfigWrapper {
     constructor(options = {}) {
       this.id = options.id || "config";
@@ -45365,6 +45451,7 @@ if (cid) {
       this.defaults = {};
       this.modal = null;
       this.buildDefaults();
+      this.migrateFromGMConfig();
       this.load();
       this.modal = null;
       setTimeout(() => {
@@ -45390,6 +45477,52 @@ if (cid) {
       Object.entries(HIDDEN_FIELDS).forEach(([key, field]) => {
         this.defaults[key] = field.default;
       });
+    }
+    /**
+     * Migrate settings from old GM_config storage format
+     * GM_config stored all values under the config ID key as JSON
+     * Migration only runs once - tracked via _migrationComplete flag
+     */
+    migrateFromGMConfig() {
+      try {
+        const existingNew = GM_getValue(STORAGE_KEY, null);
+        let newValues = {};
+        if (existingNew !== null) {
+          newValues = typeof existingNew === "string" ? JSON.parse(existingNew) : existingNew;
+          if (newValues._migrationComplete) {
+            return;
+          }
+        }
+        const oldData = GM_getValue(OLD_GM_CONFIG_KEY, null);
+        if (oldData === null) {
+          newValues._migrationComplete = true;
+          GM_setValue(STORAGE_KEY, JSON.stringify(newValues));
+          return;
+        }
+        let oldValues;
+        if (typeof oldData === "string") {
+          oldValues = JSON.parse(oldData);
+        } else if (typeof oldData === "object") {
+          oldValues = oldData;
+        } else {
+          console.warn("[ConfigWrapper] Old config data is in unexpected format:", typeof oldData);
+          newValues._migrationComplete = true;
+          GM_setValue(STORAGE_KEY, JSON.stringify(newValues));
+          return;
+        }
+        if (!oldValues || Object.keys(oldValues).length === 0) {
+          newValues._migrationComplete = true;
+          GM_setValue(STORAGE_KEY, JSON.stringify(newValues));
+          return;
+        }
+        console.log("[ConfigWrapper] Migrating settings from old GM_config...");
+        console.log("[ConfigWrapper] Old settings:", Object.keys(oldValues));
+        const merged = { ...newValues, ...oldValues, _migrationComplete: true };
+        GM_setValue(STORAGE_KEY, JSON.stringify(merged));
+        console.log("[ConfigWrapper] Migration complete! Your settings have been preserved.");
+      } catch (e2) {
+        console.error("[ConfigWrapper] Failed to migrate old config:", e2);
+      }
     }
     /**
      * Load config from GM_getValue
@@ -45462,6 +45595,78 @@ if (cid) {
     reset() {
       this.values = { ...this.defaults };
       this.save();
+    }
+    /**
+     * Clear new config storage for testing migration (call from console)
+     * Usage: config.clearNewConfig() then refresh
+     */
+    clearNewConfig() {
+      GM_setValue(STORAGE_KEY, null);
+      console.log("[ConfigWrapper] Cleared new config storage. Refresh to test migration.");
+    }
+    /**
+     * Debug: show what's in both old and new storage
+     * Usage: config.debugStorage()
+     */
+    debugStorage() {
+      const oldData = GM_getValue(OLD_GM_CONFIG_KEY, null);
+      const newData = GM_getValue(STORAGE_KEY, null);
+      console.log("[ConfigWrapper] Old GM_config key:", OLD_GM_CONFIG_KEY);
+      console.log("[ConfigWrapper] Old GM_config data:", oldData);
+      console.log("[ConfigWrapper] New config key:", STORAGE_KEY);
+      console.log("[ConfigWrapper] New config data:", newData);
+      if (typeof GM_listValues === "function") {
+        const allKeys = GM_listValues();
+        console.log("[ConfigWrapper] All storage keys:", allKeys);
+        allKeys.forEach((key) => {
+          console.log(`[ConfigWrapper] Key "${key}":`, GM_getValue(key, null));
+        });
+      }
+      return { old: oldData, new: newData };
+    }
+    /**
+     * Force migration from old GM_config (can be called manually from console)
+     * Usage: config.forceMigrateFromGMConfig()
+     */
+    forceMigrateFromGMConfig() {
+      try {
+        const oldData = GM_getValue(OLD_GM_CONFIG_KEY, null);
+        if (oldData === null) {
+          console.log("[ConfigWrapper] No old GM_config data found to migrate.");
+          return false;
+        }
+        let oldValues;
+        if (typeof oldData === "string") {
+          oldValues = JSON.parse(oldData);
+        } else if (typeof oldData === "object") {
+          oldValues = oldData;
+        } else {
+          console.warn("[ConfigWrapper] Old config data is in unexpected format:", typeof oldData);
+          return false;
+        }
+        if (!oldValues || Object.keys(oldValues).length === 0) {
+          console.log("[ConfigWrapper] Old GM_config data is empty.");
+          return false;
+        }
+        console.log("[ConfigWrapper] Force migrating old GM_config settings...");
+        console.log("[ConfigWrapper] Old settings:", oldValues);
+        this.values = { ...this.values, ...oldValues, _migrationComplete: true };
+        this.save();
+        console.log("[ConfigWrapper] Force migration complete! Refresh the page to see changes.");
+        return true;
+      } catch (e2) {
+        console.error("[ConfigWrapper] Failed to force migrate:", e2);
+        return false;
+      }
+    }
+    /**
+     * Reset migration flag to allow re-migration (call from console)
+     * Usage: config.resetMigrationFlag() then refresh
+     */
+    resetMigrationFlag() {
+      delete this.values._migrationComplete;
+      this.save();
+      console.log("[ConfigWrapper] Migration flag reset. Refresh to trigger migration again.");
     }
   }
   const style = `/* style.css */
@@ -47895,6 +48100,65 @@ div.item-banner {
   margin-top: 2px;
 }
 
+/* Field wrapper for reset button positioning */
+.config-field-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.config-field-wrapper .config-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.config-field-wrapper.config-field-textarea {
+  align-items: stretch;
+}
+
+/* Reset button for individual fields */
+.config-field-reset {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  margin-top: 22px; /* Align with input fields that have labels */
+}
+
+.config-field-wrapper.config-field-checkbox .config-field-reset {
+  margin-top: 0; /* Checkboxes don't have separate labels */
+  align-self: center;
+}
+
+.config-field-wrapper.config-field-textarea .config-field-reset {
+  margin-top: 22px;
+  align-self: flex-start;
+}
+
+.config-field-reset:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+.config-field-reset:active {
+  background: #d1d5db;
+}
+
+.config-field-reset.hidden {
+  visibility: hidden;
+}
+
 .config-field input[type="text"],
 .config-field input[type="number"],
 .config-field input[type="password"],
@@ -48124,6 +48388,22 @@ div.item-banner {
 
   .config-field-help {
     color: #9ca3af;
+  }
+
+  .config-field-reset {
+    background: #374151;
+    border-color: #4b5563;
+    color: #9ca3af;
+  }
+
+  .config-field-reset:hover {
+    background: #4b5563;
+    border-color: #6b7280;
+    color: #e5e7eb;
+  }
+
+  .config-field-reset:active {
+    background: #6b7280;
   }
 
   .config-field input[type="text"],
@@ -67118,6 +67398,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       onInit: onConfigInit,
       onSave: onConfigSave
     });
+    unsafeWindow.config = config;
     $(document).ready(function(e2) {
       const originalPlay = HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play = function() {

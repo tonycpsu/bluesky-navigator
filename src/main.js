@@ -683,6 +683,9 @@ function getScreenFromElement(element) {
     onSave: onConfigSave,
   });
 
+  // Expose config to window for debugging (e.g., config.clearNewConfig())
+  unsafeWindow.config = config;
+
   $(document).ready(function (e) {
     // Store the original play method
     const originalPlay = HTMLMediaElement.prototype.play;

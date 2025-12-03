@@ -2429,6 +2429,65 @@ div.item-banner {
   margin-top: 2px;
 }
 
+/* Field wrapper for reset button positioning */
+.config-field-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.config-field-wrapper .config-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.config-field-wrapper.config-field-textarea {
+  align-items: stretch;
+}
+
+/* Reset button for individual fields */
+.config-field-reset {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
+  color: #6b7280;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  margin-top: 22px; /* Align with input fields that have labels */
+}
+
+.config-field-wrapper.config-field-checkbox .config-field-reset {
+  margin-top: 0; /* Checkboxes don't have separate labels */
+  align-self: center;
+}
+
+.config-field-wrapper.config-field-textarea .config-field-reset {
+  margin-top: 22px;
+  align-self: flex-start;
+}
+
+.config-field-reset:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+.config-field-reset:active {
+  background: #d1d5db;
+}
+
+.config-field-reset.hidden {
+  visibility: hidden;
+}
+
 .config-field input[type="text"],
 .config-field input[type="number"],
 .config-field input[type="password"],
@@ -2658,6 +2717,22 @@ div.item-banner {
 
   .config-field-help {
     color: #9ca3af;
+  }
+
+  .config-field-reset {
+    background: #374151;
+    border-color: #4b5563;
+    color: #9ca3af;
+  }
+
+  .config-field-reset:hover {
+    background: #4b5563;
+    border-color: #6b7280;
+    color: #e5e7eb;
+  }
+
+  .config-field-reset:active {
+    background: #6b7280;
   }
 
   .config-field input[type="text"],

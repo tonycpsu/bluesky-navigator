@@ -471,7 +471,59 @@ export class ConfigModal {
       });
     });
 
+    // Reset button handlers
+    modal.querySelectorAll('.config-field-reset').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.resetField(btn.dataset.key);
+      });
+    });
+
     return modal;
+  }
+
+  getFieldSchema(key) {
+    for (const [, schema] of Object.entries(CONFIG_SCHEMA)) {
+      if (schema.fields[key]) {
+        return schema.fields[key];
+      }
+    }
+    return null;
+  }
+
+  resetField(key) {
+    const field = this.getFieldSchema(key);
+    if (!field) return;
+
+    const defaultValue = field.default;
+    const id = `config-${key}`;
+    const input = this.modalEl.querySelector(`#${id}`);
+
+    if (!input) return;
+
+    // Update the input value
+    if (field.type === 'checkbox') {
+      input.checked = Boolean(defaultValue);
+    } else if (field.type === 'color') {
+      input.value = defaultValue;
+      const textInput = this.modalEl.querySelector(`#${id}-text`);
+      if (textInput) textInput.value = defaultValue;
+    } else {
+      input.value = defaultValue;
+    }
+
+    // Track as pending change
+    this.pendingChanges[key] = defaultValue;
+
+    // Hide the reset button
+    const wrapper = input.closest('.config-field-wrapper');
+    const resetBtn = wrapper?.querySelector('.config-field-reset');
+    if (resetBtn) {
+      resetBtn.classList.add('hidden');
+    }
+
+    announceToScreenReader(`${field.label} reset to default.`);
   }
 
   renderTabs() {
@@ -513,91 +565,130 @@ export class ConfigModal {
   renderField(key, field) {
     const value = this.config.get(key) ?? field.default ?? '';
     const id = `config-${key}`;
+    const isModified = this.isFieldModified(key, field, value);
+    const resetBtn = `<button type="button" class="config-field-reset ${isModified ? '' : 'hidden'}"
+                              data-key="${key}" data-default="${this.escapeHtml(String(field.default))}"
+                              title="Reset to default">↺</button>`;
 
     let inputHtml = '';
 
     switch (field.type) {
       case 'checkbox':
         inputHtml = `
-          <label class="config-field config-field-checkbox">
-            <input type="checkbox" id="${id}" name="${key}" ${value ? 'checked' : ''}>
-            <span class="config-checkbox-label">${field.label}</span>
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
-          </label>
+          <div class="config-field-wrapper config-field-checkbox">
+            <label class="config-field">
+              <input type="checkbox" id="${id}" name="${key}" ${value ? 'checked' : ''}>
+              <span class="config-checkbox-label">${field.label}</span>
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
+            </label>
+            ${resetBtn}
+          </div>
         `;
         break;
 
       case 'select':
         inputHtml = `
-          <label class="config-field">
-            <span class="config-field-label">${field.label}</span>
-            <select id="${id}" name="${key}">
-              ${field.options.map((opt) => `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`).join('')}
-            </select>
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
-          </label>
+          <div class="config-field-wrapper">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <select id="${id}" name="${key}">
+                ${field.options.map((opt) => `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+              </select>
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
+            </label>
+            ${resetBtn}
+          </div>
         `;
         break;
 
       case 'number':
         inputHtml = `
-          <label class="config-field">
-            <span class="config-field-label">${field.label}</span>
-            <input type="number" id="${id}" name="${key}" value="${value}"
-                   ${field.min !== undefined ? `min="${field.min}"` : ''}
-                   ${field.max !== undefined ? `max="${field.max}"` : ''}>
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
-          </label>
+          <div class="config-field-wrapper">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <input type="number" id="${id}" name="${key}" value="${value}"
+                     ${field.min !== undefined ? `min="${field.min}"` : ''}
+                     ${field.max !== undefined ? `max="${field.max}"` : ''}>
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
+            </label>
+            ${resetBtn}
+          </div>
         `;
         break;
 
       case 'color':
         inputHtml = `
-          <label class="config-field">
-            <span class="config-field-label">${field.label}</span>
-            <div class="config-color-input">
-              <input type="color" id="${id}" name="${key}" value="${value}">
-              <input type="text" id="${id}-text" value="${value}" class="config-color-text">
-            </div>
-          </label>
+          <div class="config-field-wrapper">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <div class="config-color-input">
+                <input type="color" id="${id}" name="${key}" value="${value}">
+                <input type="text" id="${id}-text" value="${value}" class="config-color-text">
+              </div>
+            </label>
+            ${resetBtn}
+          </div>
         `;
         break;
 
       case 'password':
         inputHtml = `
-          <label class="config-field">
-            <span class="config-field-label">${field.label}</span>
-            <input type="password" id="${id}" name="${key}" value="${value}"
-                   placeholder="${field.placeholder || ''}">
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
-          </label>
+          <div class="config-field-wrapper">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <input type="password" id="${id}" name="${key}" value="${value}"
+                     placeholder="${field.placeholder || ''}">
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
+            </label>
+            ${resetBtn}
+          </div>
         `;
         break;
 
       case 'textarea':
       case 'css':
         inputHtml = `
-          <label class="config-field config-field-textarea">
-            <span class="config-field-label">${field.label}</span>
-            <textarea id="${id}" name="${key}" rows="${field.rows || 2}"
-                      placeholder="${field.placeholder || ''}">${this.escapeHtml(value)}</textarea>
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
-          </label>
+          <div class="config-field-wrapper config-field-textarea">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <textarea id="${id}" name="${key}" rows="${field.rows || 2}"
+                        placeholder="${field.placeholder || ''}">${this.escapeHtml(value)}</textarea>
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
+            </label>
+            ${resetBtn}
+          </div>
         `;
         break;
 
       default: // text
         inputHtml = `
-          <label class="config-field">
-            <span class="config-field-label">${field.label}</span>
-            <input type="text" id="${id}" name="${key}" value="${this.escapeHtml(value)}"
-                   placeholder="${field.placeholder || ''}">
-            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
-          </label>
+          <div class="config-field-wrapper">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <input type="text" id="${id}" name="${key}" value="${this.escapeHtml(value)}"
+                     placeholder="${field.placeholder || ''}">
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
+            </label>
+            ${resetBtn}
+          </div>
         `;
     }
 
     return inputHtml;
+  }
+
+  isFieldModified(key, field, value) {
+    const defaultVal = field.default;
+    // Handle checkbox boolean comparison
+    if (field.type === 'checkbox') {
+      return Boolean(value) !== Boolean(defaultVal);
+    }
+    // Handle number comparison
+    if (field.type === 'number') {
+      return Number(value) !== Number(defaultVal);
+    }
+    // String comparison
+    return String(value) !== String(defaultVal);
   }
 
   switchTab(tabName) {
@@ -616,12 +707,24 @@ export class ConfigModal {
 
   handleInputChange(e) {
     const { name, type, value, checked } = e.target;
-    this.pendingChanges[name] = type === 'checkbox' ? checked : value;
+    const newValue = type === 'checkbox' ? checked : value;
+    this.pendingChanges[name] = newValue;
 
     // Sync color inputs
     if (e.target.type === 'color') {
       const textInput = this.modalEl.querySelector(`#${e.target.id}-text`);
       if (textInput) textInput.value = value;
+    }
+
+    // Show/hide reset button based on whether value differs from default
+    const field = this.getFieldSchema(name);
+    if (field) {
+      const wrapper = e.target.closest('.config-field-wrapper');
+      const resetBtn = wrapper?.querySelector('.config-field-reset');
+      if (resetBtn) {
+        const isModified = this.isFieldModified(name, field, newValue);
+        resetBtn.classList.toggle('hidden', !isModified);
+      }
     }
   }
 

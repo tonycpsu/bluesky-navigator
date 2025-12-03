@@ -36,6 +36,7 @@ export default defineConfig((config) => {
                 "GM_info",
                 "GM_setValue",
                 "GM_getValue",
+                "GM_listValues",
                 "GM.getValue",
                 "GM.setValue",
                 "GM_xmlhttpRequest",

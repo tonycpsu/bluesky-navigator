@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+378.98d70f98
+// @version     1.0.31+379.128d3e0d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45115,12 +45115,8 @@ if (cid) {
   display: none !important;
 }
 
-/* Desktop full-width mode - just set max-width on main, let Bluesky handle positioning */
-@media only screen and (min-width: 801px) {
-  main[role="main"] {
-    max-width: var(--bsky-nav-max-width, 600px) !important;
-  }
-}
+/* Desktop post width - applied via JS to specific feed containers */
+
 
 /* Screen reader only utility class */
 .sr-only {
@@ -45237,6 +45233,45 @@ div#bsky-navigator-toolbar {
 .toolbar-icon-pending {
     animation: fadeInOut 1s infinite;
     animation-duration: var(--animation-duration, 1s);
+}
+
+/* Width controls in toolbar */
+.width-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    padding: 0 4px;
+    order: 999;
+}
+
+.width-btn {
+    width: 20px;
+    height: 20px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+    color: inherit;
+}
+
+.width-btn:hover {
+    background: rgba(128, 128, 128, 0.2);
+}
+
+.width-display {
+    font-size: 12px;
+    min-width: 35px;
+    text-align: center;
+}
+
+@media (prefers-color-scheme: dark) {
+    .width-btn {
+        border-color: #666;
+    }
 }
 
 .indicator-image {
@@ -65098,6 +65133,24 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
       $(this.searchField).on("autocompleteselect", this.onSearchUpdate);
+      if (this.config.get("hideRightSidebar")) {
+        this.widthControls = $(`
+        <div id="widthControls" class="width-controls">
+          <button id="narrowWidth" title="Narrow content" class="width-btn">\u2212</button>
+          <span id="widthDisplay" class="width-display">${this.config.get("postWidthDesktop") || 600}</span>
+          <button id="widenWidth" title="Widen content" class="width-btn">+</button>
+        </div>
+      `);
+        $(this.toolbarRow2).append(this.widthControls);
+        $("#narrowWidth").on("click", (event) => {
+          event.preventDefault();
+          this.adjustContentWidth(-50);
+        });
+        $("#widenWidth").on("click", (event) => {
+          event.preventDefault();
+          this.adjustContentWidth(50);
+        });
+      }
       waitForElement$1("#bsky-navigator-toolbar", null, (_div) => {
         this.addToolbar(beforeDiv);
       });
@@ -65230,6 +65283,36 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.state.stateManager.updateState({ feedHideRead: !this.state.feedHideRead });
       $(this.selector).closest("div.thread").removeClass("bsky-navigator-seen");
       this.loadItems();
+    }
+    adjustContentWidth(delta) {
+      const currentWidth = this.config.get("postWidthDesktop") || 600;
+      const newWidth = Math.max(400, Math.min(1200, currentWidth + delta));
+      this.config.set("postWidthDesktop", newWidth);
+      this.config.save();
+      $("#widthDisplay").text(newWidth);
+      this.updateContentWidthCSS(newWidth);
+    }
+    updateContentWidthCSS(contentWidth) {
+      const styleId = "bsky-nav-width-style";
+      let styleEl = document.getElementById(styleId);
+      if (contentWidth !== 600) {
+        if (!styleEl) {
+          styleEl = document.createElement("style");
+          styleEl.id = styleId;
+          document.head.appendChild(styleEl);
+        }
+        const extraWidth = contentWidth - 600;
+        const shiftRight = Math.floor(extraWidth / 2);
+        styleEl.textContent = `
+        main[role="main"] [style*="max-width: 600px"],
+        main[role="main"] [style*="max-width:600px"] {
+          max-width: ${contentWidth}px !important;
+          transform: translateX(${shiftRight}px) !important;
+        }
+      `;
+      } else if (styleEl) {
+        styleEl.textContent = "";
+      }
     }
     setFilter(text) {
       this.state.stateManager.saveStateImmediately(true, true);
@@ -65827,7 +65910,34 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     function onConfigSave() {
       state.rulesConfig = config.get("rulesConfig");
       state.stateManager.saveStateImmediately(true, true);
+      updateContentWidth();
       config.close();
+    }
+    function updateContentWidth() {
+      const hideRightSidebar = config.get("hideRightSidebar");
+      const maxWidth = config.get("postWidthDesktop");
+      const contentWidth = maxWidth || 600;
+      const styleId = "bsky-nav-width-style";
+      let styleEl = document.getElementById(styleId);
+      if (hideRightSidebar && contentWidth !== 600) {
+        if (!styleEl) {
+          styleEl = document.createElement("style");
+          styleEl.id = styleId;
+          document.head.appendChild(styleEl);
+        }
+        const extraWidth = contentWidth - 600;
+        const shiftRight = Math.floor(extraWidth / 2);
+        styleEl.textContent = `
+        main[role="main"] [style*="max-width: 600px"],
+        main[role="main"] [style*="max-width:600px"] {
+          max-width: ${contentWidth}px !important;
+          transform: translateX(${shiftRight}px) !important;
+        }
+      `;
+        console.log("[bsky-nav] Updated width:", contentWidth, "translateX:", shiftRight);
+      } else if (styleEl) {
+        styleEl.textContent = "";
+      }
     }
     function onStateInit() {
       let widthWatcher;
@@ -66163,9 +66273,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       );
       function applyDesktopFullWidth() {
-        const maxWidth = config.get("postWidthDesktop");
-        document.documentElement.style.setProperty("--bsky-nav-max-width", `${maxWidth}px`);
-        if (config.get("hideRightSidebar")) {
+        const hideRightSidebar = config.get("hideRightSidebar");
+        if (hideRightSidebar) {
+          document.body.classList.add("bsky-nav-hide-right-sidebar");
           waitForElement('input[role="search"]', (searchInput) => {
             let rightSidebar = searchInput.parentElement;
             while (rightSidebar && !rightSidebar.style.cssText.includes("position: fixed")) {
@@ -66176,54 +66286,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               rightSidebar.style.display = "none";
             }
           });
+          updateContentWidth();
         }
-        waitForElement(constants.LEFT_SIDEBAR_SELECTOR, (leftSidebar) => {
-          $(leftSidebar).css({
-            "left": "0",
-            "transform": "none"
-          });
-          const sidebarWidth = leftSidebar.getBoundingClientRect().width;
-          const mainEl = $('main[role="main"]');
-          if (mainEl.length) {
-            mainEl.css({
-              "position": "fixed",
-              "top": "0",
-              "bottom": "0",
-              "left": sidebarWidth + 16 + "px",
-              "margin-left": "0",
-              "padding-left": "0",
-              "width": maxWidth + "px",
-              "max-width": maxWidth + "px",
-              "overflow-y": "auto"
-            });
-            mainEl.find("div").each(function() {
-              const style2 = this.getAttribute("style") || "";
-              if (style2.includes("translateX") || style2.includes("margin-left: auto")) {
-                $(this).css({
-                  "transform": "none",
-                  "margin-left": "0",
-                  "margin-right": "0",
-                  "max-width": maxWidth + "px"
-                });
-              }
-            });
-          }
-          $(window).on("resize.bskyFullWidth", debounce2(() => {
-            const newSidebarWidth = leftSidebar.getBoundingClientRect().width;
-            mainEl.css("left", newSidebarWidth + 16 + "px");
-          }, 100));
-        });
-      }
-      function debounce2(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-          const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-          };
-          clearTimeout(timeout);
-          timeout = setTimeout(later, wait);
-        };
       }
     }
     const configTitleDiv = `

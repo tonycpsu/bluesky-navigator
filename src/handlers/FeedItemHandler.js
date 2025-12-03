@@ -262,6 +262,28 @@ export class FeedItemHandler extends ItemHandler {
 
     $(this.searchField).on('autocompleteselect', this.onSearchUpdate);
 
+    // Width controls (only show when hideRightSidebar is enabled)
+    if (this.config.get('hideRightSidebar')) {
+      this.widthControls = $(`
+        <div id="widthControls" class="width-controls">
+          <button id="narrowWidth" title="Narrow content" class="width-btn">−</button>
+          <span id="widthDisplay" class="width-display">${this.config.get('postWidthDesktop') || 600}</span>
+          <button id="widenWidth" title="Widen content" class="width-btn">+</button>
+        </div>
+      `);
+      $(this.toolbarRow2).append(this.widthControls);
+
+      $('#narrowWidth').on('click', (event) => {
+        event.preventDefault();
+        this.adjustContentWidth(-50);
+      });
+
+      $('#widenWidth').on('click', (event) => {
+        event.preventDefault();
+        this.adjustContentWidth(50);
+      });
+    }
+
     waitForElement('#bsky-navigator-toolbar', null, (_div) => {
       this.addToolbar(beforeDiv);
     });
@@ -428,6 +450,45 @@ export class FeedItemHandler extends ItemHandler {
     this.state.stateManager.updateState({ feedHideRead: !this.state.feedHideRead });
     $(this.selector).closest('div.thread').removeClass('bsky-navigator-seen');
     this.loadItems();
+  }
+
+  adjustContentWidth(delta) {
+    const currentWidth = this.config.get('postWidthDesktop') || 600;
+    const newWidth = Math.max(400, Math.min(1200, currentWidth + delta));
+
+    // Update config
+    this.config.set('postWidthDesktop', newWidth);
+    this.config.save();
+
+    // Update display
+    $('#widthDisplay').text(newWidth);
+
+    // Update CSS
+    this.updateContentWidthCSS(newWidth);
+  }
+
+  updateContentWidthCSS(contentWidth) {
+    const styleId = 'bsky-nav-width-style';
+    let styleEl = document.getElementById(styleId);
+
+    if (contentWidth !== 600) {
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
+      }
+      const extraWidth = contentWidth - 600;
+      const shiftRight = Math.floor(extraWidth / 2);
+      styleEl.textContent = `
+        main[role="main"] [style*="max-width: 600px"],
+        main[role="main"] [style*="max-width:600px"] {
+          max-width: ${contentWidth}px !important;
+          transform: translateX(${shiftRight}px) !important;
+        }
+      `;
+    } else if (styleEl) {
+      styleEl.textContent = '';
+    }
   }
 
   setFilter(text) {

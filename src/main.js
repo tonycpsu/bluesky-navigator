@@ -211,7 +211,40 @@ function getScreenFromElement(element) {
   function onConfigSave() {
     state.rulesConfig = config.get('rulesConfig');
     state.stateManager.saveStateImmediately(true, true);
+    // Update content width dynamically
+    updateContentWidth();
     config.close();
+  }
+
+  // Update content width CSS - can be called on config save
+  function updateContentWidth() {
+    const hideRightSidebar = config.get('hideRightSidebar');
+    const maxWidth = config.get('postWidthDesktop');
+    const contentWidth = maxWidth || 600;
+
+    const styleId = 'bsky-nav-width-style';
+    let styleEl = document.getElementById(styleId);
+
+    if (hideRightSidebar && contentWidth !== 600) {
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
+      }
+      const extraWidth = contentWidth - 600;
+      const shiftRight = Math.floor(extraWidth / 2);
+      styleEl.textContent = `
+        main[role="main"] [style*="max-width: 600px"],
+        main[role="main"] [style*="max-width:600px"] {
+          max-width: ${contentWidth}px !important;
+          transform: translateX(${shiftRight}px) !important;
+        }
+      `;
+      console.log('[bsky-nav] Updated width:', contentWidth, 'translateX:', shiftRight);
+    } else if (styleEl) {
+      // Remove width styles if sidebar not hidden or width is default
+      styleEl.textContent = '';
+    }
   }
 
   function onStateInit() {
@@ -611,16 +644,16 @@ function getScreenFromElement(element) {
     );
 
     /**
-     * Apply full-width layout for desktop mode
-     * Hides right sidebar and adjusts main content position to account for
-     * the left sidebar's dynamic transform positioning
+     * Apply layout adjustments for desktop mode
+     * Hides right sidebar and adjusts content width
      */
     function applyDesktopFullWidth() {
-      const maxWidth = config.get('postWidthDesktop');
-      document.documentElement.style.setProperty('--bsky-nav-max-width', `${maxWidth}px`);
-
       // Hide right sidebar if option is enabled
-      if (config.get('hideRightSidebar')) {
+      const hideRightSidebar = config.get('hideRightSidebar');
+
+      if (hideRightSidebar) {
+        document.body.classList.add('bsky-nav-hide-right-sidebar');
+
         waitForElement('input[role="search"]', (searchInput) => {
           // Find the fixed-position container ancestor
           let rightSidebar = searchInput.parentElement;
@@ -632,67 +665,10 @@ function getScreenFromElement(element) {
             rightSidebar.style.display = 'none';
           }
         });
+
+        // Apply custom width
+        updateContentWidth();
       }
-
-      waitForElement(constants.LEFT_SIDEBAR_SELECTOR, (leftSidebar) => {
-        // Move left sidebar to left edge (remove transform-based centering)
-        $(leftSidebar).css({
-          'left': '0',
-          'transform': 'none'
-        });
-
-        // Get sidebar width for main positioning
-        const sidebarWidth = leftSidebar.getBoundingClientRect().width;
-
-        const mainEl = $('main[role="main"]');
-        if (mainEl.length) {
-          // Position main right after sidebar
-          mainEl.css({
-            'position': 'fixed',
-            'top': '0',
-            'bottom': '0',
-            'left': (sidebarWidth + 16) + 'px',
-            'margin-left': '0',
-            'padding-left': '0',
-            'width': maxWidth + 'px',
-            'max-width': maxWidth + 'px',
-            'overflow-y': 'auto'
-          });
-
-          // Remove transforms, auto margins, and update max-width on inner containers
-          // These have translateX(-105px) which offsets for the right sidebar
-          mainEl.find('div').each(function() {
-            const style = this.getAttribute('style') || '';
-            // Target divs with translateX transforms or auto margins
-            if (style.includes('translateX') || style.includes('margin-left: auto')) {
-              $(this).css({
-                'transform': 'none',
-                'margin-left': '0',
-                'margin-right': '0',
-                'max-width': maxWidth + 'px'
-              });
-            }
-          });
-        }
-
-        // Update on window resize
-        $(window).on('resize.bskyFullWidth', debounce(() => {
-          const newSidebarWidth = leftSidebar.getBoundingClientRect().width;
-          mainEl.css('left', (newSidebarWidth + 16) + 'px');
-        }, 100));
-      });
-    }
-
-    function debounce(func, wait) {
-      let timeout;
-      return function executedFunction(...args) {
-        const later = () => {
-          clearTimeout(timeout);
-          func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-      };
     }
   }
 

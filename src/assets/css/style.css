@@ -45,12 +45,8 @@
   display: none !important;
 }
 
-/* Desktop full-width mode - just set max-width on main, let Bluesky handle positioning */
-@media only screen and (min-width: 801px) {
-  main[role="main"] {
-    max-width: var(--bsky-nav-max-width, 600px) !important;
-  }
-}
+/* Desktop post width - applied via JS to specific feed containers */
+
 
 /* Screen reader only utility class */
 .sr-only {
@@ -167,6 +163,45 @@ div#bsky-navigator-toolbar {
 .toolbar-icon-pending {
     animation: fadeInOut 1s infinite;
     animation-duration: var(--animation-duration, 1s);
+}
+
+/* Width controls in toolbar */
+.width-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    padding: 0 4px;
+    order: 999;
+}
+
+.width-btn {
+    width: 20px;
+    height: 20px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+    color: inherit;
+}
+
+.width-btn:hover {
+    background: rgba(128, 128, 128, 0.2);
+}
+
+.width-display {
+    font-size: 12px;
+    min-width: 35px;
+    text-align: center;
+}
+
+@media (prefers-color-scheme: dark) {
+    .width-btn {
+        border-color: #666;
+    }
 }
 
 .indicator-image {

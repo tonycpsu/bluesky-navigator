@@ -21,6 +21,7 @@ Features
     - keyboard shortcuts for post actions, e.g. like, reply, repost
     - keyboard shortcuts to switch between feeds
     - keyboard shortcuts to switch between home, search, notifications, chat, etc.
+    - press `?` to view all keyboard shortcuts
 - Display features:
     - visual indicator for post read/unread status
     - configurable override of main content width
@@ -29,11 +30,14 @@ Features
     - optionally show only unread posts
     - optionally move position of like/reply/repost buttons
     - configurable formatting of post timestamps
+    - optionally hide right sidebar
 - Additional functionality (`(*)` = requires AT protocol agent, see below):
     - automatic "unrolling" of threads (*)
-    - show replies in a "sidecar" next to each post (*)   
+    - show replies in a "sidecar" next to each post (*)
+    - full-screen post view with sidecar (`v`) and reader mode (`V`)
+    - capture post screenshots to clipboard (`c`)
     - dynamically filter posts by authors, keywords, etc. using configurable
-      rules
+      rules (with visual rule builder UI)
     - optionally disable embedded video previews
     - sync read/unread state between multiple browsers via cloud service(s)
     - optionally disable built-in behavior of loading more items when scrolling
@@ -43,44 +47,83 @@ Features
 Keyboard Shortcuts
 ------------------
 
+Press `?` to show the keyboard shortcuts overlay at any time.
+
+### Navigation
+
  | key          | function                                           |
  | -------------|----------------------------------------------------|
- | j / ↑        | move to next item                                  |
- | k / ↓        | move to previous item                              |
+ | j / ↓        | move to next item                                  |
+ | k / ↑        | move to previous item                              |
  | J            | move to next unread item, or last item if all read |
  | gg           | move to first item                                 |
  | G            | move to last item                                  |
- | h            | go back to previous page                           | 
+ | h            | go back to previous page                           |
+ | ← / →        | toggle focus between post and replies sidecar      |
+
+### Post Actions
+
+ | key          | function                                           |
+ | -------------|----------------------------------------------------|
  | o / Enter    | open post (feed view) or embedded post (post view) |
  | O            | open embedded post (feed view)                     |
  | i            | open link in post                                  |
  | m            | view/play/pause media in post                      |
  | a            | open post author's profile                         |
  | r            | reply to post                                      |
- | l            | like post                                          |
+ | l            | like/unlike post                                   |
  | p            | open repost menu                                   |
- | P            | repost                                             |
- | u            | load newer posts (feed view)                       |
- | U            | load older posts (feed view)                       |
+ | P            | repost immediately                                 |
+ | c            | capture screenshot to clipboard                    |
+ | v            | open full-screen post view with sidecar            |
+ | V            | open reader mode (full thread)                     |
+
+### Feed Controls
+
+ | key          | function                                           |
+ | -------------|----------------------------------------------------|
+ | /            | focus filter search box                            |
+ | u            | load newer posts                                   |
+ | U            | load older posts                                   |
+ | ,            | refresh items                                      |
+ | :            | toggle between forward/reverse order               |
+ | "            | toggle show all or only unread posts               |
  | .            | mark post read/unread                              |
- | .            | mark all visible posts read/unread                 |
- | :            | toggle between forward/reverse order (feed view)   |
- | "            | toggle show all or only unread posts (feed view)   |
- | /            | filter posts (feed view)                           |
- | Option+1...9 | activate rule N (Option+Shift-1...9 negates)       |
- | f            | follow author (profile view)                       |
- | F            | unfollow author (profile view)                     |
- | L            | add author to list (profile view)                  |
- | 1...9        | switch between feeds on home page                  |
- | Meta/Alt+h   | open home page                                     |
- | Meta/Alt+s   | open search page                                   |
- | Meta/Alt+n   | open notifications page                            |
- | Meta/Alt+m   | open messages page                                 |
- | Meta/Alt+f   | open feeds page                                    |
- | Meta/Alt+h   | open lists page                                    |
- | Meta/Alt+p   | open profile page                                  |
- | Meta/Alt+,   | open settings page                                 |
- | Meta/Alt+.   | open Bluesky Navigator config panel                |
+ | A            | mark all visible posts as read                     |
+ | ;            | expand/collapse replies sidecar                    |
+
+### Quick Filter Rules
+
+ | key          | function                                           |
+ | -------------|----------------------------------------------------|
+ | Alt+1...9    | activate rule N                                    |
+ | Alt+Shift+1-9| negate rule N                                      |
+ | Alt+0        | clear filter                                       |
+
+### Profile View
+
+ | key          | function                                           |
+ | -------------|----------------------------------------------------|
+ | f            | follow author                                      |
+ | F            | unfollow author                                    |
+ | L            | add author to list                                 |
+
+### Global Navigation
+
+ | key          | function                                           |
+ | -------------|----------------------------------------------------|
+ | 1...9        | switch between feeds/tabs                          |
+ | Alt+h        | open home page                                     |
+ | Alt+s        | open search page                                   |
+ | Alt+n        | open notifications page                            |
+ | Alt+m        | open messages page                                 |
+ | Alt+f        | open feeds page                                    |
+ | Alt+l        | open lists page                                    |
+ | Alt+p        | open profile page                                  |
+ | Alt+,        | open settings page                                 |
+ | Alt+.        | open Bluesky Navigator config panel                |
+ | ?            | show keyboard shortcuts help                       |
+ | Esc          | close overlay/modal                                |
 
 Dynamic Post Filtering
 ----------------------
@@ -98,9 +141,11 @@ to the user's handle and display name.
 If a search term is preceded by a `%` character, the matching will be confined
 to the content of the post.
 
-if a search term is preceded by a `$` character, then matching will be performed
+If a search term is preceded by a `$` character, then matching will be performed
 according to rules configured in the `Rules` section of the script configuration
-panel. Here's an example configuration:
+panel. The Rules tab provides both a **Visual Editor** for creating rules with
+dropdowns and a **Raw** text editor for direct editing. Here's an example
+configuration:
 
 ``` ini
 [music]
@@ -111,14 +156,15 @@ allow content "Pearl Jam"
 [news]
 @cnn.com
 weather forecast
-
-
 ```
 
 With this configuration, you can type `$music` to show posts from `@thecure.com`
 or that contain the phrase `Pearl Jam`, or `$news` to match posts from
 `@cnn.com` or that contain the phrase "weather forecast". This matching is not
 case sensitive.
+
+You can also quickly activate rules using `Alt+1` through `Alt+9` to apply rules
+by their order, `Alt+Shift+1-9` to negate them, or `Alt+0` to clear the filter.
 
 These searches can be combined, and any search can be negated by prefixing it
 with `!`.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+379.128d3e0d
+// @version     1.0.31+380.42f9019d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -17,8 +17,8 @@
 // @grant       GM_getValue
 // @grant       GM_addStyle
 // @grant       GM_xmlhttpRequest
-// @grant       GM_info
 // @grant       unsafeWindow
+// @grant       GM_info
 // @grant       GM.getValue
 // @grant       GM.setValue
 // @grant       GM.xmlhttpRequest
@@ -44757,317 +44757,713 @@ if (cid) {
     splitTerms,
     waitForElement: waitForElement$3
   }, Symbol.toStringTag, { value: "Module" }));
-  const CONFIG_FIELDS = {
-    displaySection: {
-      section: [GM_config.create("Display Preferences"), "Customize how items are displayed"],
-      type: "hidden"
+  const CONFIG_SCHEMA = {
+    Display: {
+      icon: "\u{1F5A5}\uFE0F",
+      fields: {
+        postWidthDesktop: {
+          label: "Post width (px)",
+          type: "number",
+          default: 600,
+          min: 400,
+          max: 1200
+        },
+        postActionButtonPosition: {
+          label: "Action buttons",
+          type: "select",
+          options: ["Bottom", "Left"],
+          default: "Bottom"
+        },
+        postTimestampFormat: {
+          label: "Timestamp format",
+          type: "text",
+          default: "'$age' '('yyyy-MM-dd hh:mmaaa')'",
+          placeholder: "date-fns format string"
+        },
+        postTimestampFormatMobile: {
+          label: "Timestamp (mobile)",
+          type: "text",
+          default: "'$age'"
+        },
+        videoPreviewPlayback: {
+          label: "Video playback",
+          type: "select",
+          options: ["Play all", "Play selected", "Pause all"],
+          default: "Play all"
+        },
+        videoDisableLoop: {
+          label: "Disable video loop",
+          type: "checkbox",
+          default: false
+        },
+        hideRightSidebar: {
+          label: "Hide right sidebar",
+          type: "checkbox",
+          default: false
+        },
+        hideLoadNewButton: {
+          label: 'Hide "Load New" button',
+          type: "checkbox",
+          default: false
+        },
+        showPostCounts: {
+          label: "Show post counts",
+          type: "select",
+          options: ["All", "Selection", "None"],
+          default: "All"
+        },
+        enableSmoothScrolling: {
+          label: "Smooth scrolling",
+          type: "checkbox",
+          default: false
+        }
+      }
     },
-    postWidthDesktop: {
-      label: "Maximum width of posts in pixels when in desktop mode",
-      type: "integer",
-      default: "600"
+    "Threads & Sidecar": {
+      icon: "\u{1F4AC}",
+      fields: {
+        showReplyContext: {
+          label: "Show reply context",
+          type: "checkbox",
+          default: false,
+          help: "Show parent post even if previously read"
+        },
+        unrollThreads: {
+          label: "Unroll threads",
+          type: "checkbox",
+          default: false,
+          help: "Expand self-reply threads inline"
+        },
+        unrolledPostSelection: {
+          label: "Unrolled post selection",
+          type: "checkbox",
+          default: false,
+          help: "Enable j/k navigation in unrolled threads"
+        },
+        showReplySidecar: {
+          label: "Show replies sidecar",
+          type: "checkbox",
+          default: false,
+          help: "Show replies panel next to posts"
+        },
+        showReplySidecarMinimumWidth: {
+          label: "Sidecar min width (px)",
+          type: "number",
+          default: 600,
+          min: 400,
+          max: 1200
+        },
+        sidecarReplySortOrder: {
+          label: "Sidecar sort order",
+          type: "select",
+          options: ["Default", "Oldest First", "Newest First", "Most Liked First", "Most Reposted First"],
+          default: "Default"
+        }
+      }
     },
-    postActionButtonPosition: {
-      label: "Post action button position",
-      title: "Where to position reply, repost, like, etc. buttons",
-      type: "select",
-      options: ["Bottom", "Left"],
-      default: "Bottom"
+    Appearance: {
+      icon: "\u{1F3A8}",
+      collapsed: true,
+      fields: {
+        focusRingColor: {
+          label: "Focus ring color",
+          type: "color",
+          default: "#0066cc"
+        },
+        focusRingWidth: {
+          label: "Focus ring width (px)",
+          type: "number",
+          default: 2,
+          min: 1,
+          max: 5
+        },
+        threadIndicatorWidth: {
+          label: "Thread indicator width (px)",
+          type: "number",
+          default: 4,
+          min: 1,
+          max: 10
+        },
+        threadIndicatorColor: {
+          label: "Thread indicator color",
+          type: "text",
+          default: "rgb(212, 219, 226)"
+        },
+        threadMargin: {
+          label: "Thread margin",
+          type: "text",
+          default: "10px"
+        }
+      }
     },
-    postTimestampFormat: {
-      label: "Post timestamp format",
-      title: "A format string specifying how post timestamps are displayed",
-      type: "textarea",
-      default: "'$age' '('yyyy-MM-dd hh:mmaaa')'"
+    "CSS Styles": {
+      icon: "\u2728",
+      collapsed: true,
+      fields: {
+        posts: {
+          label: "All posts",
+          type: "css",
+          default: "padding: 1px;"
+        },
+        unreadPosts: {
+          label: "Unread posts",
+          type: "css",
+          default: "opacity: 100% !important;"
+        },
+        unreadPostsLightMode: {
+          label: "Unread (light)",
+          type: "css",
+          default: "background-color: white;"
+        },
+        unreadPostsDarkMode: {
+          label: "Unread (dark)",
+          type: "css",
+          default: "background-color: #202020;"
+        },
+        readPosts: {
+          label: "Read posts",
+          type: "css",
+          default: "opacity: 75% !important;"
+        },
+        readPostsLightMode: {
+          label: "Read (light)",
+          type: "css",
+          default: "background-color: #f0f0f0;"
+        },
+        readPostsDarkMode: {
+          label: "Read (dark)",
+          type: "css",
+          default: "background-color: black;"
+        },
+        selectionActive: {
+          label: "Selected post",
+          type: "css",
+          default: "outline: var(--focus-ring-width, 2px) var(--focus-ring-color, #0066cc) solid !important;"
+        },
+        selectionChildFocused: {
+          label: "Child focused",
+          type: "css",
+          default: "outline: var(--focus-ring-width, 2px) color-mix(in srgb, var(--focus-ring-color, #0066cc) 40%, transparent) solid !important;"
+        },
+        selectionInactive: {
+          label: "Unselected post",
+          type: "css",
+          default: "outline: var(--focus-ring-width, 2px) solid transparent;"
+        },
+        replySelectionActive: {
+          label: "Selected reply",
+          type: "css",
+          default: "outline: 1px var(--focus-ring-color, #0066cc) solid !important;"
+        },
+        replySelectionInactive: {
+          label: "Unselected reply",
+          type: "css",
+          default: "outline: 1px rgb(212, 219, 226) solid"
+        }
+      }
     },
-    postTimestampFormatMobile: {
-      label: "Post timestamp format (mobile)",
-      title: "A format string specifying how post timestamps are displayed on small screens",
-      type: "textarea",
-      default: "'$age'"
+    "AT Protocol": {
+      icon: "\u{1F511}",
+      fields: {
+        atprotoService: {
+          label: "Service URL",
+          type: "text",
+          default: "https://bsky.social"
+        },
+        atprotoIdentifier: {
+          label: "Handle",
+          type: "text",
+          default: "",
+          placeholder: "your.handle"
+        },
+        atprotoPassword: {
+          label: "App Password",
+          type: "password",
+          default: "",
+          placeholder: "xxxx-xxxx-xxxx-xxxx",
+          help: "Use an App Password, not your main password"
+        }
+      }
     },
-    videoPreviewPlayback: {
-      label: "Video Preview Playback",
-      title: "Control playback of video previews",
-      type: "select",
-      options: ["Play all", "Play selected", "Pause all"]
+    "State Sync": {
+      icon: "\u2601\uFE0F",
+      collapsed: true,
+      fields: {
+        stateSyncEnabled: {
+          label: "Enable cloud sync",
+          type: "checkbox",
+          default: false
+        },
+        stateSyncConfig: {
+          label: "Sync config (JSON)",
+          type: "textarea",
+          default: "",
+          rows: 4
+        },
+        stateSyncTimeout: {
+          label: "Sync timeout (ms)",
+          type: "number",
+          default: 5e3,
+          min: 1e3,
+          max: 6e4
+        }
+      }
     },
-    videoDisableLoop: {
-      label: "Video Disable Looping",
-      title: "Disable looping of videos",
-      type: "checkbox",
-      default: false
+    Rules: {
+      icon: "\u{1F4CB}",
+      fields: {
+        rulesConfig: {
+          label: "Filter rules",
+          type: "textarea",
+          default: "",
+          rows: 6,
+          placeholder: "Enter filter rules..."
+        }
+      }
     },
-    showReplyContext: {
-      label: "Show Reply Context",
-      title: "If checked, the post being replied to will be shown even if it was previously marked as read.",
-      type: "checkbox",
-      default: false
-    },
-    unrollThreads: {
-      label: "Unroll Threads",
-      title: 'If checked, threads with one or more replies from the original author will be "unrolled" into the first post.',
-      type: "checkbox",
-      default: false
-    },
-    unrolledPostSelection: {
-      label: "Unrolled Post Selection",
-      title: "If checked, navigation between/selection of individual unrolled posts will be enabled.",
-      type: "checkbox",
-      default: false
-    },
-    showReplySidecar: {
-      label: "Show Replies Sidecar",
-      title: "If checked, replies to the selected post (and, where applicable, the post being replied to) will be displayed in a sidecar next to each post (requires atproto settings below).",
-      type: "checkbox",
-      default: false
-    },
-    showReplySidecarMinimumWidth: {
-      label: "Show Replies Sidecar Minimum Width",
-      title: "Set a minimum post width in pixels for showing the reply sidecar",
-      type: "int",
-      default: 600
-    },
-    sidecarReplySortOrder: {
-      label: "Reply Sidecar Sort Order",
-      title: "Select an option to determine how replies are sorted in the sidecar",
-      type: "select",
-      options: ["Default", "Oldest First", "Newest First", "Most Liked First", "Most Reposted First"]
-    },
-    hideRightSidebar: {
-      label: "Hide Right Sidebar",
-      title: "If checked, the right sidebar with the search box, following/trending displays, etc. will be hidden (useful when overriding max width above).",
-      type: "checkbox",
-      default: false
-    },
-    hideLoadNewButton: {
-      label: "Hide Load New Button",
-      title: "If checked, the floating button to load new items will be hidden.",
-      type: "checkbox",
-      default: false
-    },
-    showPostCounts: {
-      label: "Show Post Counts",
-      title: "Specify whether post counts are displayed in all, selected, or no posts.",
-      type: "select",
-      options: ["All", "Selection", "None"],
-      default: "All"
-    },
-    enableSmoothScrolling: {
-      label: "Enable Smooth Scrolling",
-      title: "If checked, scrolling using keyboard navigation will be smooth \u{1F6E5}\uFE0F \u{1F3B7}",
-      type: "checkbox",
-      default: false
-    },
-    posts: {
-      label: "CSS Style: All Posts",
-      type: "textarea",
-      default: "padding 1px;"
-    },
-    unreadPosts: {
-      label: "CSS Style: Unread Posts",
-      type: "textarea",
-      default: "opacity: 100% !important;"
-    },
-    unreadPostsLightMode: {
-      label: "CSS Style: Unread Posts (Light Mode)",
-      type: "textarea",
-      default: "background-color: white;"
-    },
-    unreadPostsDarkMode: {
-      label: "CSS Style: Unread Posts (Dark Mode)",
-      type: "textarea",
-      default: "background-color: #202020;"
-    },
-    readPosts: {
-      label: "CSS Style: Read Posts",
-      type: "textarea",
-      default: "opacity: 75% !important;"
-    },
-    readPostsLightMode: {
-      label: "CSS Style: Read Posts (Light Mode)",
-      type: "textarea",
-      default: "background-color: #f0f0f0;"
-    },
-    readPostsDarkMode: {
-      label: "CSS Style: Read Posts (Dark Mode)",
-      type: "textarea",
-      default: "background-color: black;"
-    },
-    selectionActive: {
-      label: "CSS Style: Selected Post",
-      type: "textarea",
-      default: "outline: var(--focus-ring-width, 2px) var(--focus-ring-color, #0066cc) solid !important;"
-    },
-    selectionChildFocused: {
-      label: "CSS Style: Selected Child Post Focused",
-      type: "textarea",
-      default: "outline: var(--focus-ring-width, 2px) color-mix(in srgb, var(--focus-ring-color, #0066cc) 40%, transparent) solid !important;"
-    },
-    selectionInactive: {
-      label: "CSS Style: Unselected Post",
-      type: "textarea",
-      default: "outline: var(--focus-ring-width, 2px) solid transparent;"
-    },
-    replySelectionActive: {
-      label: "CSS Style: Selected Reply",
-      type: "textarea",
-      default: "outline: 1px var(--focus-ring-color, #0066cc) solid !important;"
-    },
-    replySelectionInactive: {
-      label: "CSS Style: Unselected Replies",
-      type: "textarea",
-      default: "outline: 1px rgb(212, 219, 226) solid"
-    },
-    threadIndicatorWidth: {
-      label: "Thread Indicator Width in pixels",
-      type: "integer",
-      default: "4"
-    },
-    threadIndicatorColor: {
-      label: "Thread Indicator Color",
-      type: "textarea",
-      default: "rgb(212, 219, 226)"
-    },
-    threadMargin: {
-      label: "Thread Margin",
-      type: "textarea",
-      default: "10px"
-    },
-    atprotoSection: {
-      section: [GM_config.create("AT Protocol Agent"), "Enables additional functionality"],
-      type: "hidden"
-    },
-    atprotoService: {
-      label: "Service",
-      title: "AT Protocol Service",
-      type: "textarea",
-      default: "https://bsky.social"
-    },
-    atprotoIdentifier: {
-      label: "Identifier (Handle)",
-      title: "AT Protocol Identifier (Handle)",
-      type: "textarea"
-    },
-    atprotoPassword: {
-      label: "Password",
-      title: "AT Protocol Password",
-      type: "textarea"
-    },
-    stateSyncSection: {
-      section: [
-        GM_config.create("State Sync"),
-        'Sync state between different browsers via cloud storage -- see <a href="https://github.com/tonycpsu/bluesky-navigator/blob/main/doc/remote_state.md" target="_blank">here</a> for details.'
-      ],
-      type: "hidden"
-    },
-    stateSyncEnabled: {
-      label: "Enable State Sync",
-      title: "If checked, synchronize state to/from the cloud",
-      type: "checkbox",
-      default: false
-    },
-    stateSyncConfig: {
-      label: "State Sync Configuration (JSON)",
-      title: "JSON object containing state information",
-      type: "textarea"
-    },
-    stateSyncTimeout: {
-      label: "State Sync Timeout",
-      title: "Number of milliseconds of idle time before syncing state",
-      type: "int",
-      default: 5e3
-    },
-    rulesSection: {
-      section: [GM_config.create("Rules"), "Post Rules"],
-      type: "hidden"
-    },
-    rulesConfig: {
-      label: "Filters Configuration",
-      type: "textarea"
-    },
-    accessibilitySection: {
-      section: [GM_config.create("Accessibility"), "Accessibility and display preferences"],
-      type: "hidden"
-    },
-    focusRingColor: {
-      label: "Focus ring color",
-      title: "Color of the focus ring for keyboard navigation (CSS color value)",
-      type: "text",
-      default: "#0066cc"
-    },
-    focusRingWidth: {
-      label: "Focus ring width (px)",
-      title: "Width of the focus ring in pixels",
-      type: "int",
-      default: 2
-    },
-    reducedMotion: {
-      label: "Reduced motion",
-      title: "Control animation behavior: System follows OS preference, Always disables all animations, Never enables all animations",
-      type: "select",
-      options: ["System", "Always", "Never"],
-      default: "System"
-    },
-    highContrastMode: {
-      label: "High contrast mode",
-      title: "Enable high contrast mode for better visibility",
-      type: "checkbox",
-      default: false
-    },
-    savedSearches: {
-      label: "Saved searches (JSON)",
-      title: "Saved search filters stored as JSON array",
-      type: "hidden",
-      default: "[]"
-    },
-    enableSwipeGestures: {
-      label: "Enable swipe gestures (mobile)",
-      title: "Enable swipe gestures on mobile: swipe right to like, swipe left to mark read and dismiss",
-      type: "checkbox",
-      default: true
-    },
-    miscellaneousSection: {
-      section: [GM_config.create("Miscellaneous"), "Other settings"],
-      type: "hidden"
-    },
-    markReadOnScroll: {
-      label: "Mark Read on Scroll",
-      title: "If checked, items will be marked read while scrolling",
-      type: "checkbox",
-      default: false
-    },
-    disableLoadMoreOnScroll: {
-      label: "Disable Load More on Scroll",
-      title: 'If checked, the default behavior of loading more items when scrolling will be disabled. You can still press "U" to load more manually.',
-      type: "checkbox",
-      default: false
-    },
-    savePostState: {
-      label: "Save Post State",
-      title: "If checked, read/unread state is kept for post items in addition to feed items",
-      type: "checkbox",
-      default: false
-    },
-    stateSaveTimeout: {
-      label: "State Save Timeout",
-      title: "Number of milliseconds of idle time before saving state locally",
-      type: "int",
-      default: 1e3
-    },
-    historyMax: {
-      label: "History Max Size",
-      title: "Maximum number of posts to remember for saving read state",
-      type: "int",
-      default: constants.DEFAULT_HISTORY_MAX
-    },
-    showDebuggingInfo: {
-      label: "Enable Debugging",
-      title: "If checked, some debugging info will be shown in posts",
-      type: "checkbox",
-      default: false
+    Advanced: {
+      icon: "\u2699\uFE0F",
+      collapsed: true,
+      fields: {
+        reducedMotion: {
+          label: "Reduced motion",
+          type: "select",
+          options: ["System", "Always", "Never"],
+          default: "System"
+        },
+        highContrastMode: {
+          label: "High contrast",
+          type: "checkbox",
+          default: false
+        },
+        enableSwipeGestures: {
+          label: "Swipe gestures (mobile)",
+          type: "checkbox",
+          default: true
+        },
+        markReadOnScroll: {
+          label: "Mark read on scroll",
+          type: "checkbox",
+          default: false
+        },
+        disableLoadMoreOnScroll: {
+          label: "Disable auto-load on scroll",
+          type: "checkbox",
+          default: false
+        },
+        savePostState: {
+          label: "Save post state",
+          type: "checkbox",
+          default: false
+        },
+        stateSaveTimeout: {
+          label: "State save timeout (ms)",
+          type: "number",
+          default: 1e3,
+          min: 100,
+          max: 1e4
+        },
+        historyMax: {
+          label: "History max size",
+          type: "number",
+          default: constants.DEFAULT_HISTORY_MAX,
+          min: 100,
+          max: 1e5
+        },
+        showDebuggingInfo: {
+          label: "Debug mode",
+          type: "checkbox",
+          default: false
+        }
+      }
     }
   };
+  const HIDDEN_FIELDS = {
+    savedSearches: { default: "[]" }
+  };
+  let instance$2 = null;
+  class ConfigModal {
+    constructor(config2, onSave = null) {
+      if (instance$2) {
+        instance$2.config = config2;
+        instance$2.onSave = onSave;
+        return instance$2;
+      }
+      this.config = config2;
+      this.onSave = onSave;
+      this.isVisible = false;
+      this.modalEl = null;
+      this.activeTab = "Display";
+      this.pendingChanges = {};
+      this.collapsedSections = {};
+      instance$2 = this;
+    }
+    toggle() {
+      if (this.isVisible) {
+        this.hide();
+      } else {
+        this.show();
+      }
+    }
+    show() {
+      if (this.isVisible) return;
+      this.previousActiveElement = document.activeElement;
+      this.isVisible = true;
+      this.pendingChanges = {};
+      Object.entries(CONFIG_SCHEMA).forEach(([tab, schema2]) => {
+        if (schema2.collapsed) {
+          this.collapsedSections[tab] = true;
+        }
+      });
+      this.modalEl = this.createModal();
+      document.body.appendChild(this.modalEl);
+      const firstInput = this.modalEl.querySelector(".config-modal-close");
+      if (firstInput) firstInput.focus();
+      announceToScreenReader$2("Configuration dialog opened. Press Escape to close.");
+      this.escapeHandler = (e2) => {
+        if (e2.key === "Escape") {
+          e2.preventDefault();
+          e2.stopPropagation();
+          this.hide();
+        }
+      };
+      document.addEventListener("keydown", this.escapeHandler, true);
+    }
+    hide() {
+      if (!this.isVisible || !this.modalEl) return;
+      const animDuration = getAnimationDuration$1(200, this.config);
+      this.modalEl.classList.add("config-modal-hiding");
+      setTimeout(() => {
+        if (this.modalEl?.parentNode) {
+          this.modalEl.parentNode.removeChild(this.modalEl);
+        }
+        this.modalEl = null;
+        this.isVisible = false;
+        if (this.previousActiveElement) {
+          this.previousActiveElement.focus();
+        }
+      }, animDuration);
+      document.removeEventListener("keydown", this.escapeHandler, true);
+      announceToScreenReader$2("Configuration dialog closed.");
+    }
+    createModal() {
+      const modal = document.createElement("div");
+      modal.className = "config-modal";
+      modal.setAttribute("role", "dialog");
+      modal.setAttribute("aria-modal", "true");
+      modal.setAttribute("aria-labelledby", "config-modal-title");
+      modal.innerHTML = `
+      <div class="config-modal-backdrop"></div>
+      <div class="config-modal-content">
+        <div class="config-modal-header">
+          <h2 id="config-modal-title">Settings</h2>
+          <button class="config-modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="config-modal-body">
+          <nav class="config-modal-tabs" role="tablist">
+            ${this.renderTabs()}
+          </nav>
+          <div class="config-modal-panels">
+            ${this.renderPanels()}
+          </div>
+        </div>
+        <div class="config-modal-footer">
+          <button class="config-btn config-btn-secondary" id="config-reset">Reset to Defaults</button>
+          <div class="config-footer-right">
+            <button class="config-btn config-btn-secondary" id="config-cancel">Cancel</button>
+            <button class="config-btn config-btn-primary" id="config-save">Save</button>
+          </div>
+        </div>
+      </div>
+    `;
+      modal.querySelector(".config-modal-backdrop").addEventListener("click", () => this.hide());
+      modal.querySelector(".config-modal-close").addEventListener("click", () => this.hide());
+      modal.querySelector("#config-cancel").addEventListener("click", () => this.hide());
+      modal.querySelector("#config-save").addEventListener("click", () => this.save());
+      modal.querySelector("#config-reset").addEventListener("click", () => this.resetToDefaults());
+      modal.querySelectorAll(".config-tab").forEach((tab) => {
+        tab.addEventListener("click", (e2) => {
+          const tabButton = e2.currentTarget;
+          this.switchTab(tabButton.dataset.tab);
+        });
+      });
+      modal.querySelectorAll("input, select, textarea").forEach((input) => {
+        input.addEventListener("change", (e2) => this.handleInputChange(e2));
+        input.addEventListener("input", (e2) => {
+          if (e2.target.type === "range") this.handleInputChange(e2);
+        });
+      });
+      return modal;
+    }
+    renderTabs() {
+      return Object.entries(CONFIG_SCHEMA).map(
+        ([name, schema2]) => `
+        <button class="config-tab ${name === this.activeTab ? "active" : ""}"
+                role="tab"
+                data-tab="${name}"
+                aria-selected="${name === this.activeTab}">
+          <span class="config-tab-icon">${schema2.icon}</span>
+          <span class="config-tab-label">${name}</span>
+        </button>
+      `
+      ).join("");
+    }
+    renderPanels() {
+      return Object.entries(CONFIG_SCHEMA).map(
+        ([name, schema2]) => `
+        <div class="config-panel ${name === this.activeTab ? "active" : ""}"
+             role="tabpanel"
+             data-panel="${name}">
+          ${this.renderFields(schema2.fields)}
+        </div>
+      `
+      ).join("");
+    }
+    renderFields(fields) {
+      return Object.entries(fields).map(([key, field]) => this.renderField(key, field)).join("");
+    }
+    renderField(key, field) {
+      const value = this.config.get(key) ?? field.default ?? "";
+      const id = `config-${key}`;
+      let inputHtml = "";
+      switch (field.type) {
+        case "checkbox":
+          inputHtml = `
+          <label class="config-field config-field-checkbox">
+            <input type="checkbox" id="${id}" name="${key}" ${value ? "checked" : ""}>
+            <span class="config-checkbox-label">${field.label}</span>
+            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+          </label>
+        `;
+          break;
+        case "select":
+          inputHtml = `
+          <label class="config-field">
+            <span class="config-field-label">${field.label}</span>
+            <select id="${id}" name="${key}">
+              ${field.options.map((opt) => `<option value="${opt}" ${value === opt ? "selected" : ""}>${opt}</option>`).join("")}
+            </select>
+            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+          </label>
+        `;
+          break;
+        case "number":
+          inputHtml = `
+          <label class="config-field">
+            <span class="config-field-label">${field.label}</span>
+            <input type="number" id="${id}" name="${key}" value="${value}"
+                   ${field.min !== void 0 ? `min="${field.min}"` : ""}
+                   ${field.max !== void 0 ? `max="${field.max}"` : ""}>
+            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+          </label>
+        `;
+          break;
+        case "color":
+          inputHtml = `
+          <label class="config-field">
+            <span class="config-field-label">${field.label}</span>
+            <div class="config-color-input">
+              <input type="color" id="${id}" name="${key}" value="${value}">
+              <input type="text" id="${id}-text" value="${value}" class="config-color-text">
+            </div>
+          </label>
+        `;
+          break;
+        case "password":
+          inputHtml = `
+          <label class="config-field">
+            <span class="config-field-label">${field.label}</span>
+            <input type="password" id="${id}" name="${key}" value="${value}"
+                   placeholder="${field.placeholder || ""}">
+            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+          </label>
+        `;
+          break;
+        case "textarea":
+        case "css":
+          inputHtml = `
+          <label class="config-field config-field-textarea">
+            <span class="config-field-label">${field.label}</span>
+            <textarea id="${id}" name="${key}" rows="${field.rows || 2}"
+                      placeholder="${field.placeholder || ""}">${this.escapeHtml(value)}</textarea>
+            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+          </label>
+        `;
+          break;
+        default:
+          inputHtml = `
+          <label class="config-field">
+            <span class="config-field-label">${field.label}</span>
+            <input type="text" id="${id}" name="${key}" value="${this.escapeHtml(value)}"
+                   placeholder="${field.placeholder || ""}">
+            ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
+          </label>
+        `;
+      }
+      return inputHtml;
+    }
+    switchTab(tabName) {
+      this.activeTab = tabName;
+      this.modalEl.querySelectorAll(".config-tab").forEach((tab) => {
+        const isActive = tab.dataset.tab === tabName;
+        tab.classList.toggle("active", isActive);
+        tab.setAttribute("aria-selected", isActive);
+      });
+      this.modalEl.querySelectorAll(".config-panel").forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.panel === tabName);
+      });
+    }
+    handleInputChange(e2) {
+      const { name, type, value, checked } = e2.target;
+      this.pendingChanges[name] = type === "checkbox" ? checked : value;
+      if (e2.target.type === "color") {
+        const textInput = this.modalEl.querySelector(`#${e2.target.id}-text`);
+        if (textInput) textInput.value = value;
+      }
+    }
+    save() {
+      Object.entries(this.pendingChanges).forEach(([key, value]) => {
+        this.config.set(key, value);
+      });
+      if (this.onSave) {
+        this.onSave(this.pendingChanges);
+      }
+      this.hide();
+      announceToScreenReader$2("Settings saved.");
+    }
+    resetToDefaults() {
+      if (!confirm("Reset all settings to defaults? This cannot be undone.")) {
+        return;
+      }
+      Object.entries(CONFIG_SCHEMA).forEach(([, schema2]) => {
+        Object.entries(schema2.fields).forEach(([key, field]) => {
+          this.config.set(key, field.default);
+          this.pendingChanges[key] = field.default;
+        });
+      });
+      const panelsContainer = this.modalEl.querySelector(".config-modal-panels");
+      panelsContainer.innerHTML = this.renderPanels();
+      this.modalEl.querySelectorAll("input, select, textarea").forEach((input) => {
+        input.addEventListener("change", (e2) => this.handleInputChange(e2));
+      });
+      announceToScreenReader$2("Settings reset to defaults.");
+    }
+    escapeHtml(text) {
+      if (text === null || text === void 0) return "";
+      const div = document.createElement("div");
+      div.textContent = String(text);
+      return div.innerHTML;
+    }
+  }
+  const STORAGE_KEY = "bluesky_navigator_config";
+  class ConfigWrapper {
+    constructor(options = {}) {
+      this.id = options.id || "config";
+      this.onSave = options.onSave || null;
+      this.onInit = options.onInit || null;
+      this.values = {};
+      this.defaults = {};
+      this.modal = null;
+      this.buildDefaults();
+      this.load();
+      this.modal = null;
+      setTimeout(() => {
+        this.modal = new ConfigModal(this, (changes) => {
+          if (this.onSave) {
+            this.onSave(changes);
+          }
+        });
+        if (this.onInit) {
+          this.onInit();
+        }
+      }, 0);
+    }
+    /**
+     * Build default values from CONFIG_SCHEMA
+     */
+    buildDefaults() {
+      Object.entries(CONFIG_SCHEMA).forEach(([, tab]) => {
+        Object.entries(tab.fields).forEach(([key, field]) => {
+          this.defaults[key] = field.default;
+        });
+      });
+      Object.entries(HIDDEN_FIELDS).forEach(([key, field]) => {
+        this.defaults[key] = field.default;
+      });
+    }
+    /**
+     * Load config from GM_getValue
+     */
+    load() {
+      try {
+        const stored = GM_getValue(STORAGE_KEY, "{}");
+        const parsed = typeof stored === "string" ? JSON.parse(stored) : stored;
+        this.values = { ...this.defaults, ...parsed };
+      } catch (e2) {
+        console.error("Failed to load config:", e2);
+        this.values = { ...this.defaults };
+      }
+    }
+    /**
+     * Save config to GM_setValue
+     */
+    save() {
+      try {
+        GM_setValue(STORAGE_KEY, JSON.stringify(this.values));
+      } catch (e2) {
+        console.error("Failed to save config:", e2);
+      }
+    }
+    /**
+     * Get a config value
+     */
+    get(key) {
+      if (key in this.values) {
+        return this.values[key];
+      }
+      if (key in this.defaults) {
+        return this.defaults[key];
+      }
+      return void 0;
+    }
+    /**
+     * Set a config value
+     */
+    set(key, value) {
+      this.values[key] = value;
+      this.save();
+    }
+    /**
+     * Open the config modal
+     */
+    open() {
+      if (this.modal) {
+        this.modal.show();
+      } else {
+        this.modal = new ConfigModal(this, (changes) => {
+          if (this.onSave) {
+            this.onSave(changes);
+          }
+        });
+        this.modal.show();
+      }
+    }
+    /**
+     * Close the config modal
+     */
+    close() {
+      if (this.modal) {
+        this.modal.hide();
+      }
+    }
+    /**
+     * Reset all values to defaults
+     */
+    reset() {
+      this.values = { ...this.defaults };
+      this.save();
+    }
+  }
   const style = `/* style.css */
 
 /* ==========================================================================
@@ -47337,8 +47733,434 @@ div.item-banner {
     border: 1px solid #9ca3af;
   }
 }
+
+/* ==========================================================================
+   Config Modal
+   ========================================================================== */
+
+.config-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.config-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.config-modal-content {
+  position: relative;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  max-width: 800px;
+  max-height: 85vh;
+  width: 95%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: overlaySlideUp var(--animation-duration, 200ms) ease-out;
+}
+
+.config-modal-hiding .config-modal-content {
+  animation: overlaySlideDown var(--animation-duration, 200ms) ease-in;
+}
+
+.config-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.config-modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.config-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.config-modal-close:hover {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+.config-modal-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Tabs navigation */
+.config-modal-tabs {
+  width: 180px;
+  flex-shrink: 0;
+  background-color: #f9fafb;
+  border-right: 1px solid #e5e7eb;
+  padding: 8px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.config-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: #4b5563;
+  transition: all 150ms ease;
+}
+
+.config-tab:hover {
+  background-color: #e5e7eb;
+}
+
+.config-tab.active {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.config-tab-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.config-tab-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Panels */
+.config-modal-panels {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.config-panel {
+  display: none;
+}
+
+.config-panel.active {
+  display: block;
+}
+
+/* Fields */
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.config-field-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.config-field-help {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.config-field input[type="text"],
+.config-field input[type="number"],
+.config-field input[type="password"],
+.config-field select {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  background-color: #ffffff;
+  color: #111827;
+  max-width: 300px;
+}
+
+.config-field input:focus,
+.config-field select:focus,
+.config-field textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.config-field textarea {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: monospace;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.config-field-textarea {
+  max-width: 100%;
+}
+
+.config-field-textarea textarea {
+  width: 100%;
+}
+
+/* Checkbox styling */
+.config-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.config-field-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.config-checkbox-label {
+  font-size: 13px;
+  color: #374151;
+}
+
+.config-field-checkbox .config-field-help {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Color input */
+.config-color-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.config-color-input input[type="color"] {
+  width: 40px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.config-color-text {
+  width: 100px !important;
+}
+
+/* Footer */
+.config-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
+  background-color: #f9fafb;
+  flex-shrink: 0;
+}
+
+.config-footer-right {
+  display: flex;
+  gap: 8px;
+}
+
+.config-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.config-btn-primary {
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+}
+
+.config-btn-primary:hover {
+  background-color: #2563eb;
+}
+
+.config-btn-secondary {
+  background-color: white;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.config-btn-secondary:hover {
+  background-color: #f3f4f6;
+}
+
+#config-reset {
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+#config-reset:hover {
+  background-color: #fef2f2;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .config-modal-content {
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .config-modal-body {
+    flex-direction: column;
+  }
+
+  .config-modal-tabs {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px;
+    gap: 4px;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .config-tab {
+    flex-direction: column;
+    padding: 8px 12px;
+    min-width: fit-content;
+  }
+
+  .config-tab-label {
+    font-size: 11px;
+  }
+
+  .config-field input[type="text"],
+  .config-field input[type="number"],
+  .config-field input[type="password"],
+  .config-field select {
+    max-width: 100%;
+    width: 100%;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .config-modal-content {
+    background-color: #1f2937;
+  }
+
+  .config-modal-header {
+    border-bottom-color: #374151;
+  }
+
+  .config-modal-header h2 {
+    color: #f9fafb;
+  }
+
+  .config-modal-close {
+    color: #9ca3af;
+  }
+
+  .config-modal-close:hover {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+
+  .config-modal-tabs {
+    background-color: #111827;
+    border-right-color: #374151;
+  }
+
+  .config-tab {
+    color: #d1d5db;
+  }
+
+  .config-tab:hover {
+    background-color: #374151;
+  }
+
+  .config-tab.active {
+    background-color: #1e3a5f;
+    color: #60a5fa;
+  }
+
+  .config-field-label,
+  .config-checkbox-label {
+    color: #e5e7eb;
+  }
+
+  .config-field-help {
+    color: #9ca3af;
+  }
+
+  .config-field input[type="text"],
+  .config-field input[type="number"],
+  .config-field input[type="password"],
+  .config-field select,
+  .config-field textarea {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .config-modal-footer {
+    background-color: #111827;
+    border-top-color: #374151;
+  }
+
+  .config-btn-secondary {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .config-btn-secondary:hover {
+    background-color: #4b5563;
+  }
+
+  #config-reset {
+    color: #f87171;
+    border-color: #7f1d1d;
+  }
+
+  #config-reset:hover {
+    background-color: #450a0a;
+  }
+}
 `;
-  const configCss = "h1 {\n    font-size: 18pt;\n}\n\nh2 {\n    font-size: 14pt;\n}\n.config_var textarea {\n    width: 100%;\n    height: 1.5em;\n}\n\n#GM_config_rulesConfig_var textarea {\n    height: 10em;\n}\n\n#GM_config_stateSyncConfig_var textarea {\n    height: 10em;\n}\n\n\n\n#GM_config_header {\n    position: fixed;\n    background-color: inherit;\n    top: -10px;\n    width: 100%;\n}\n\n@media (prefers-color-scheme: light) {\n    #GM_config_header {\n        background-color: #ffffff;\n    }\n}\n\n@media (prefers-color-scheme: dark) {\n    #GM_config_header {\n        background-color: #29333d;\n    }\n}\n\n#GM_config_section_0 {\n    padding-top: 100px;\n}\n\n#GM_config_buttons_holder {\n    position: fixed;\n    top: 0;\n    right: 0;\n}\n";
   const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-section sidecar-parent-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Parent</span>\n    </button>\n    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">\n      <div class="sidecar-parent">\n        <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n        {{> postTemplate parent}}\n      </div>\n    </div>\n  </div>\n  {{/if}}\n  {{#if replies.length}}\n  <div class="sidecar-section sidecar-replies-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Replies ({{replies.length}})</span>\n    </button>\n    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">\n      {{#each replies}}\n      {{> postTemplate this}}\n      {{/each}}\n    </div>\n  </div>\n  {{/if}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this}}\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title="{{alt}}"></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">\n  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">\n      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>\n      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{{text}}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images" style="margin-top: 8px;">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a href="{{uri}}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">\n  <div class="sidecar-embed-external" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; margin-top: 8px; overflow: hidden;">\n    {{#if thumb}}\n    <div class="sidecar-external-thumb" style="width: 100%; max-height: 200px; overflow: hidden;">\n      <img src="{{thumb}}" alt="{{title}}" style="width: 100%; object-fit: cover;" loading="lazy">\n    </div>\n    {{/if}}\n    <div class="sidecar-external-info" style="padding: 12px;">\n      <div class="sidecar-external-domain" style="font-size: 12px; color: rgb(112, 127, 140); margin-bottom: 4px;">{{domain}}</div>\n      <div class="sidecar-external-title" style="font-weight: 600; margin-bottom: 4px;">{{title}}</div>\n      {{#if description}}\n      <div class="sidecar-external-description" style="font-size: 14px; color: rgb(66, 87, 108); line-height: 1.3;">{{description}}</div>\n      {{/if}}\n    </div>\n  </div>\n</a>\n<\/script>\n\n<script id="sidecar-skeleton-template" type="text/x-handlebars-template">\n<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <span class="sr-only">Loading replies...</span>\n</div>\n<\/script>\n';
   const SHORTCUTS = {
     Navigation: [
@@ -47574,12 +48396,11 @@ div.item-banner {
         } else if (event.code === "Period") {
           event.preventDefault();
           this.config.open();
-        } else if (event.code === "Enter" && $("#GM_config").is(":visible")) {
+        } else if (event.code === "Enter" && $(".config-modal").is(":visible")) {
           event.preventDefault();
-          this.config.save();
         }
       } else if (!event.altKey && !event.metaKey) {
-        if (event.code == "Escape" && $("#GM_config").is(":visible")) {
+        if (event.code == "Escape" && $(".config-modal").is(":visible")) {
           event.preventDefault();
           this.config.close();
         } else if (event.key === "?") {
@@ -66151,6 +66972,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       styleElement.type = "text/css";
       styleElement.textContent = stylesheet;
       document.head.appendChild(styleElement);
+      function onWindowResize(_element) {
+      }
       function updateScreen(screen) {
         if (state.screen == screen) {
           return;
@@ -66290,32 +67113,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
     }
-    const configTitleDiv = `
-    <div class="config-title">
-      <h1><a href="https://github.com/tonycpsu/bluesky-navigator" target="_blank">Bluesky Navigator</a> v${GM_info.script.version}</h1>
-      <h2>Configuration</h2>
-    </div>
-  `;
-    function waitForGMConfig(callback) {
-      if (typeof GM_config !== "undefined") {
-        callback();
-      } else {
-        console.warn("GM_config not available yet. Retrying...");
-        setTimeout(() => waitForGMConfig(callback), 100);
-      }
-    }
-    waitForGMConfig(() => {
-      config = new GM_config({
-        id: "GM_config",
-        title: configTitleDiv,
-        fields: CONFIG_FIELDS,
-        events: {
-          init: onConfigInit,
-          save: onConfigSave,
-          close: () => $("#preferencesIconImage").attr("src", handlers["feed"].INDICATOR_IMAGES.preferences[0])
-        },
-        css: configCss
-      });
+    config = new ConfigWrapper({
+      id: "bluesky_navigator",
+      onInit: onConfigInit,
+      onSave: onConfigSave
     });
     $(document).ready(function(e2) {
       const originalPlay = HTMLMediaElement.prototype.play;

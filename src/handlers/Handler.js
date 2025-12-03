@@ -66,12 +66,12 @@ export class Handler {
       } else if (event.code === 'Period') {
         event.preventDefault();
         this.config.open();
-      } else if (event.code === 'Enter' && $('#GM_config').is(':visible')) {
+      } else if (event.code === 'Enter' && $('.config-modal').is(':visible')) {
         event.preventDefault();
-        this.config.save();
+        // Enter to save is handled by the modal's Save button
       }
     } else if (!event.altKey && !event.metaKey) {
-      if (event.code == 'Escape' && $('#GM_config').is(':visible')) {
+      if (event.code == 'Escape' && $('.config-modal').is(':visible')) {
         event.preventDefault();
         this.config.close();
       } else if (event.key === '?') {

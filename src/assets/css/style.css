@@ -2267,3 +2267,430 @@ div.item-banner {
     border: 1px solid #9ca3af;
   }
 }
+
+/* ==========================================================================
+   Config Modal
+   ========================================================================== */
+
+.config-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.config-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.config-modal-content {
+  position: relative;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  max-width: 800px;
+  max-height: 85vh;
+  width: 95%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: overlaySlideUp var(--animation-duration, 200ms) ease-out;
+}
+
+.config-modal-hiding .config-modal-content {
+  animation: overlaySlideDown var(--animation-duration, 200ms) ease-in;
+}
+
+.config-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.config-modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.config-modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.config-modal-close:hover {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+.config-modal-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Tabs navigation */
+.config-modal-tabs {
+  width: 180px;
+  flex-shrink: 0;
+  background-color: #f9fafb;
+  border-right: 1px solid #e5e7eb;
+  padding: 8px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.config-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: #4b5563;
+  transition: all 150ms ease;
+}
+
+.config-tab:hover {
+  background-color: #e5e7eb;
+}
+
+.config-tab.active {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.config-tab-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.config-tab-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Panels */
+.config-modal-panels {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.config-panel {
+  display: none;
+}
+
+.config-panel.active {
+  display: block;
+}
+
+/* Fields */
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.config-field-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.config-field-help {
+  font-size: 11px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.config-field input[type="text"],
+.config-field input[type="number"],
+.config-field input[type="password"],
+.config-field select {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  background-color: #ffffff;
+  color: #111827;
+  max-width: 300px;
+}
+
+.config-field input:focus,
+.config-field select:focus,
+.config-field textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.config-field textarea {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: monospace;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.config-field-textarea {
+  max-width: 100%;
+}
+
+.config-field-textarea textarea {
+  width: 100%;
+}
+
+/* Checkbox styling */
+.config-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.config-field-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.config-checkbox-label {
+  font-size: 13px;
+  color: #374151;
+}
+
+.config-field-checkbox .config-field-help {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Color input */
+.config-color-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.config-color-input input[type="color"] {
+  width: 40px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.config-color-text {
+  width: 100px !important;
+}
+
+/* Footer */
+.config-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
+  background-color: #f9fafb;
+  flex-shrink: 0;
+}
+
+.config-footer-right {
+  display: flex;
+  gap: 8px;
+}
+
+.config-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.config-btn-primary {
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+}
+
+.config-btn-primary:hover {
+  background-color: #2563eb;
+}
+
+.config-btn-secondary {
+  background-color: white;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.config-btn-secondary:hover {
+  background-color: #f3f4f6;
+}
+
+#config-reset {
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+#config-reset:hover {
+  background-color: #fef2f2;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .config-modal-content {
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .config-modal-body {
+    flex-direction: column;
+  }
+
+  .config-modal-tabs {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px;
+    gap: 4px;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .config-tab {
+    flex-direction: column;
+    padding: 8px 12px;
+    min-width: fit-content;
+  }
+
+  .config-tab-label {
+    font-size: 11px;
+  }
+
+  .config-field input[type="text"],
+  .config-field input[type="number"],
+  .config-field input[type="password"],
+  .config-field select {
+    max-width: 100%;
+    width: 100%;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .config-modal-content {
+    background-color: #1f2937;
+  }
+
+  .config-modal-header {
+    border-bottom-color: #374151;
+  }
+
+  .config-modal-header h2 {
+    color: #f9fafb;
+  }
+
+  .config-modal-close {
+    color: #9ca3af;
+  }
+
+  .config-modal-close:hover {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+
+  .config-modal-tabs {
+    background-color: #111827;
+    border-right-color: #374151;
+  }
+
+  .config-tab {
+    color: #d1d5db;
+  }
+
+  .config-tab:hover {
+    background-color: #374151;
+  }
+
+  .config-tab.active {
+    background-color: #1e3a5f;
+    color: #60a5fa;
+  }
+
+  .config-field-label,
+  .config-checkbox-label {
+    color: #e5e7eb;
+  }
+
+  .config-field-help {
+    color: #9ca3af;
+  }
+
+  .config-field input[type="text"],
+  .config-field input[type="number"],
+  .config-field input[type="password"],
+  .config-field select,
+  .config-field textarea {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .config-modal-footer {
+    background-color: #111827;
+    border-top-color: #374151;
+  }
+
+  .config-btn-secondary {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .config-btn-secondary:hover {
+    background-color: #4b5563;
+  }
+
+  #config-reset {
+    color: #f87171;
+    border-color: #7f1d1d;
+  }
+
+  #config-reset:hover {
+    background-color: #450a0a;
+  }
+}

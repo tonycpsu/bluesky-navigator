@@ -4,10 +4,9 @@ import constants from './constants.js';
 import { state } from './state.js';
 import { BlueskyAPI } from './api.js';
 import * as utils from './utils.js';
-import * as configjs from './config.js';
+import { ConfigWrapper } from './ConfigWrapper.js';
 
 import style from './assets/css/style.css?raw';
-import configCss from './assets/css/config.css?raw';
 import sidecarTemplatesHtml from './sidecar.html?raw';
 
 const { debounce, waitForElement, observeChanges, observeVisibilityChange } = utils;
@@ -504,6 +503,11 @@ function getScreenFromElement(element) {
     styleElement.textContent = stylesheet;
     document.head.appendChild(styleElement);
 
+    // Handle window resize events (placeholder for future use)
+    function onWindowResize(_element) {
+      // Currently unused - can be expanded to handle dynamic width changes
+    }
+
     function updateScreen(screen) {
       if (state.screen == screen) {
         return;
@@ -672,35 +676,11 @@ function getScreenFromElement(element) {
     }
   }
 
-  const configTitleDiv = `
-    <div class="config-title">
-      <h1><a href="https://github.com/tonycpsu/bluesky-navigator" target="_blank">Bluesky Navigator</a> v${GM_info.script.version}</h1>
-      <h2>Configuration</h2>
-    </div>
-  `;
-
-  function waitForGMConfig(callback) {
-    if (typeof GM_config !== 'undefined') {
-      callback();
-    } else {
-      console.warn('GM_config not available yet. Retrying...');
-      setTimeout(() => waitForGMConfig(callback), 100);
-    }
-  }
-
-  waitForGMConfig(() => {
-    config = new GM_config({
-      id: 'GM_config',
-      title: configTitleDiv,
-      fields: configjs.CONFIG_FIELDS,
-      events: {
-        init: onConfigInit,
-        save: onConfigSave,
-        close: () =>
-          $('#preferencesIconImage').attr('src', handlers['feed'].INDICATOR_IMAGES.preferences[0]),
-      },
-      css: configCss,
-    });
+  // Initialize config with our custom ConfigWrapper
+  config = new ConfigWrapper({
+    id: 'bluesky_navigator',
+    onInit: onConfigInit,
+    onSave: onConfigSave,
   });
 
   $(document).ready(function (e) {

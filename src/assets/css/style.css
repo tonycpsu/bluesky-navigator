@@ -277,6 +277,10 @@ div#itemTimestampStats {
         border-top: 1px solid rgb(192, 192, 192);
         overflow: clip;
     }
+
+    div#statusBar.has-scroll-indicator {
+        overflow: visible;
+    }
 }
 
 @media only screen and (max-width: 800px) {
@@ -295,6 +299,10 @@ div#itemTimestampStats {
         font-size: 1em;
         padding: 1px;
         overflow: clip;
+    }
+
+    div#statusBar.has-scroll-indicator {
+        overflow: visible;
     }
 }
 
@@ -1668,12 +1676,17 @@ div.item-banner {
 
 /* Basic style - simple thin indicator */
 .scroll-indicator-basic .scroll-position-indicator {
-  height: 8px;
+  height: calc(8px * var(--indicator-scale, 1));
 }
 
-/* Advanced style - taller for icons and better visibility */
+/* Advanced style - main indicator is compact overview */
 .scroll-indicator-advanced .scroll-position-indicator {
-  height: 18px;
+  height: calc(12px * var(--indicator-scale, 1));
+}
+
+/* Advanced style - zoom indicator is taller for detail */
+.scroll-position-indicator-zoom {
+  height: calc(24px * var(--indicator-scale, 1));
 }
 
 /* Toolbar position: place at bottom of toolbar */
@@ -1756,6 +1769,10 @@ div.item-banner {
   min-width: 20px;
 }
 
+.scroll-segment-zoom .scroll-icon-stack img {
+  height: 50%;
+}
+
 /* Empty segments (no corresponding item) */
 .scroll-segment-empty {
   background-color: transparent !important;
@@ -1789,7 +1806,7 @@ div.item-banner {
 
 .scroll-indicator-connector-path {
   stroke: rgba(80, 80, 80, 0.8);
-  stroke-width: 2;
+  stroke-width: 3;
   fill: none;
 }
 
@@ -1834,9 +1851,9 @@ div.item-banner {
   top: 0;
   width: 6px;
   height: 100%;
-  border-left: 2px solid rgba(0, 0, 0, 0.8);
-  border-top: 2px solid rgba(0, 0, 0, 0.8);
-  border-bottom: 2px solid rgba(0, 0, 0, 0.8);
+  border-left: 1px solid rgba(0, 0, 0, 0.8);
+  border-top: 1px solid rgba(0, 0, 0, 0.8);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.8);
   box-sizing: border-box;
 }
 
@@ -1848,9 +1865,9 @@ div.item-banner {
   top: 0;
   width: 6px;
   height: 100%;
-  border-right: 2px solid rgba(0, 0, 0, 0.8);
-  border-top: 2px solid rgba(0, 0, 0, 0.8);
-  border-bottom: 2px solid rgba(0, 0, 0, 0.8);
+  border-right: 1px solid rgba(0, 0, 0, 0.8);
+  border-top: 1px solid rgba(0, 0, 0, 0.8);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.8);
   box-sizing: border-box;
 }
 
@@ -1910,13 +1927,30 @@ div.item-banner {
   margin: 0 -1px -1px -1px;
 }
 
+/* Toolbar position: place at bottom of toolbar */
 .scroll-indicator-wrapper {
   order: 999;
 }
 
-/* Status bar position: place at top */
-.scroll-indicator-wrapper-statusbar {
-  order: -1;
+/* Status bar position: place at top, full width row */
+.scroll-indicator-wrapper.scroll-indicator-wrapper-statusbar,
+.scroll-indicator-container.scroll-indicator-container-statusbar {
+  width: 100% !important;
+  flex: 0 0 100% !important;
+  background: transparent;
+  order: -1 !important;
+  margin: 0 0 2px 0 !important;
+}
+
+/* Reset the indicator width inside status bar */
+.scroll-indicator-container-statusbar .scroll-position-indicator {
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+/* Allow status bar to expand when scroll indicator is present */
+div#statusBar.has-scroll-indicator {
+  overflow: visible;
 }
 
 /* Reset order for containers inside the wrapper to maintain DOM order */
@@ -1938,12 +1972,20 @@ div.item-banner {
   min-width: 85px;
 }
 
-/* Basic style - hide date labels and zoom highlight */
+/* Basic style - hide date labels, zoom highlight, zoom indicator, and connector */
 .scroll-indicator-basic .scroll-indicator-label {
   display: none;
 }
 
 .scroll-indicator-basic .scroll-position-zoom-highlight {
+  display: none;
+}
+
+.scroll-indicator-basic .scroll-indicator-zoom-container {
+  display: none;
+}
+
+.scroll-indicator-basic .scroll-indicator-connector {
   display: none;
 }
 
@@ -2814,6 +2856,10 @@ div.item-banner {
   visibility: hidden;
 }
 
+.config-field-conditional.hidden {
+  display: none;
+}
+
 .config-field input[type="text"],
 .config-field input[type="number"],
 .config-field input[type="password"],
@@ -2885,6 +2931,24 @@ div.item-banner {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.config-range-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.config-range-input input[type="range"] {
+  flex: 1;
+  height: 6px;
+  cursor: pointer;
+}
+
+.config-range-value {
+  min-width: 40px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .config-color-input input[type="color"] {

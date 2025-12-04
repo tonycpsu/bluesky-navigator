@@ -88,19 +88,33 @@ const CONFIG_SCHEMA = {
         default: true,
         help: 'Use PgUp/PgDn/Home/End for post navigation',
       },
+    },
+  },
+  'Scroll Indicator': {
+    icon: '📊',
+    fields: {
       scrollIndicatorPosition: {
-        label: 'Scroll indicator',
+        label: 'Position',
         type: 'select',
         options: ['Top toolbar', 'Bottom status bar', 'Hidden'],
         default: 'Bottom status bar',
         help: 'Where to show the scroll progress indicator',
       },
       scrollIndicatorStyle: {
-        label: 'Indicator style',
+        label: 'Style',
         type: 'select',
         options: ['Basic', 'Advanced'],
         default: 'Basic',
         help: 'Basic: simple read/unread segments. Advanced: heatmap, icons, and zoom options',
+      },
+      scrollIndicatorScale: {
+        label: 'Scale (%)',
+        type: 'range',
+        default: 100,
+        min: 50,
+        max: 400,
+        step: 25,
+        help: 'Scale the scroll indicator size (50-400%)',
       },
       scrollIndicatorHeatmap: {
         label: 'Heatmap mode',
@@ -732,6 +746,25 @@ export class ConfigModal {
         `;
         break;
 
+      case 'range':
+        inputHtml = `
+          <div class="config-field-wrapper">
+            <label class="config-field">
+              <span class="config-field-label">${field.label}</span>
+              <div class="config-range-input">
+                <input type="range" id="${id}" name="${key}" value="${value}"
+                       ${field.min !== undefined ? `min="${field.min}"` : ''}
+                       ${field.max !== undefined ? `max="${field.max}"` : ''}
+                       ${field.step !== undefined ? `step="${field.step}"` : ''}>
+                <span class="config-range-value">${value}</span>
+              </div>
+              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
+            </label>
+            ${resetBtn}
+          </div>
+        `;
+        break;
+
       case 'color':
         inputHtml = `
           <div class="config-field-wrapper">
@@ -1180,6 +1213,17 @@ export class ConfigModal {
       if (textInput) textInput.value = value;
     }
 
+    // Update range value display
+    if (e.target.type === 'range') {
+      const valueDisplay = e.target.parentElement.querySelector('.config-range-value');
+      if (valueDisplay) valueDisplay.textContent = value;
+    }
+
+    // Dynamic preview for scroll indicator settings
+    if (name.startsWith('scrollIndicator')) {
+      this.updateScrollIndicatorPreview(name, newValue);
+    }
+
     // Show/hide reset button based on whether value differs from default
     const field = this.getFieldSchema(name);
     if (field) {
@@ -1252,6 +1296,62 @@ export class ConfigModal {
     const div = document.createElement('div');
     div.textContent = String(text);
     return div.innerHTML;
+  }
+
+  /**
+   * Update scroll indicator preview dynamically when settings change
+   */
+  updateScrollIndicatorPreview(name, value) {
+    const wrapper = document.querySelector('.scroll-indicator-wrapper');
+    const container = document.querySelector('.scroll-indicator-container');
+    const target = wrapper || container;
+
+    switch (name) {
+      case 'scrollIndicatorScale': {
+        const scaleValue = parseInt(value, 10) / 100;
+        if (target) {
+          // Set CSS variable - heights are calculated in CSS using calc()
+          target.style.setProperty('--indicator-scale', scaleValue);
+        }
+        break;
+      }
+
+      case 'scrollIndicatorStyle': {
+        // Toggle class on wrapper - CSS handles visibility of zoom elements
+        const wrapper = document.querySelector('.scroll-indicator-wrapper');
+        if (wrapper) {
+          wrapper.classList.remove('scroll-indicator-basic', 'scroll-indicator-advanced');
+          wrapper.classList.add(value === 'Advanced' ? 'scroll-indicator-advanced' : 'scroll-indicator-basic');
+        }
+        // Dispatch event for handler to update indicator
+        document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
+          detail: { setting: name, value }
+        }));
+        break;
+      }
+
+      case 'scrollIndicatorHeatmap':
+      case 'scrollIndicatorZoom':
+        // Dispatch event for handler to update indicator
+        document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
+          detail: { setting: name, value }
+        }));
+        break;
+
+      case 'scrollIndicatorIcons':
+        // Dispatch event for handler to update indicator (value is already boolean from checkbox)
+        document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
+          detail: { setting: name, value }
+        }));
+        break;
+
+      case 'scrollIndicatorPosition':
+        // Move indicator to new position dynamically
+        document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
+          detail: { setting: name, value }
+        }));
+        break;
+    }
   }
 }
 

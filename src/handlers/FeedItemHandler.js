@@ -55,6 +55,78 @@ export class FeedItemHandler extends ItemHandler {
         false
       );
     });
+
+    // Listen for dynamic scroll indicator setting changes
+    document.addEventListener('scrollIndicatorSettingChanged', (e) => {
+      this.handleScrollIndicatorSettingChange(e.detail);
+    });
+  }
+
+  /**
+   * Handle dynamic scroll indicator setting changes from config modal
+   */
+  handleScrollIndicatorSettingChange(detail) {
+    const { setting, value } = detail;
+
+    // Update the pending config value immediately for preview
+    this.config.set(setting, value);
+
+    // Handle position changes by moving the indicator
+    if (setting === 'scrollIndicatorPosition') {
+      this.moveScrollIndicator(value);
+      return;
+    }
+
+    // Refresh the scroll indicator display
+    this.updateScrollPosition();
+  }
+
+  /**
+   * Move the scroll indicator to a new position dynamically
+   */
+  moveScrollIndicator(newPosition) {
+    // Get the indicator element (wrapper if exists, otherwise container)
+    const indicator = this.scrollIndicatorWrapper || this.scrollIndicatorContainer;
+    if (!indicator) return;
+
+    // Detach from current location
+    indicator.detach();
+
+    if (newPosition === 'Hidden') {
+      // Just leave it detached
+      return;
+    }
+
+    // Update classes for the new position
+    if (this.scrollIndicatorContainer) {
+      this.scrollIndicatorContainer.removeClass('scroll-indicator-container-toolbar scroll-indicator-container-statusbar');
+      if (newPosition === 'Top toolbar') {
+        this.scrollIndicatorContainer.addClass('scroll-indicator-container-toolbar');
+      } else if (newPosition === 'Bottom status bar') {
+        this.scrollIndicatorContainer.addClass('scroll-indicator-container-statusbar');
+      }
+    }
+
+    // Update wrapper class for status bar positioning
+    if (this.scrollIndicatorWrapper) {
+      this.scrollIndicatorWrapper.removeClass('scroll-indicator-wrapper-statusbar');
+      if (newPosition === 'Bottom status bar') {
+        this.scrollIndicatorWrapper.addClass('scroll-indicator-wrapper-statusbar');
+      }
+    }
+
+    // Append to new location
+    if (newPosition === 'Top toolbar' && this.toolbarDiv) {
+      $(this.toolbarDiv).append(indicator);
+      $(this.statusBar).removeClass('has-scroll-indicator');
+    } else if (newPosition === 'Bottom status bar' && this.statusBar) {
+      // Prepend to status bar so indicator is first in DOM order
+      $(this.statusBar).prepend(indicator);
+      $(this.statusBar).addClass('has-scroll-indicator');
+    }
+
+    // Refresh display
+    this.updateScrollPosition();
   }
 
   applyItemStyle(element, selected) {
@@ -132,9 +204,13 @@ export class FeedItemHandler extends ItemHandler {
     const isAdvancedStyle = indicatorStyle === 'Advanced';
     const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0) : 0;
     const styleClass = isAdvancedStyle ? 'scroll-indicator-advanced' : 'scroll-indicator-basic';
+    const indicatorScale = parseInt(this.config.get('scrollIndicatorScale'), 10) || 100;
+    const scaleValue = indicatorScale / 100;
+    const scaleStyle = `--indicator-scale: ${scaleValue};`;
     // Prepare scroll indicator elements (will be appended after toolbar rows)
     if (indicatorPosition === 'Top toolbar') {
-      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar ${styleClass}"></div>`);
+      // Always use wrapper for dynamic style switching (styleClass goes on wrapper for CSS to hide zoom elements)
+      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar"></div>`);
       this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
       this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
       this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
@@ -142,32 +218,30 @@ export class FeedItemHandler extends ItemHandler {
       this.scrollIndicatorContainer.append(this.scrollIndicator);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
 
-      // Add zoom indicator if configured (Advanced mode only)
-      if (zoomWindowSize > 0) {
-        // Get reference to zoom highlight element
-        this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
-        // Create wrapper for both indicators and connector
-        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper"></div>`);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
+      // Always create wrapper with zoom elements (CSS controls visibility based on style)
+      // Get reference to zoom highlight element
+      this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
+      // Create wrapper for both indicators and connector (styleClass on wrapper so CSS can target children)
+      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper ${styleClass}" style="${scaleStyle}"></div>`);
+      this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
 
-        // Add connector div between main indicator and zoom with SVG inside
-        this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
-          <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
-            <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
-            <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
-          </svg>
-        </div>`);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
+      // Add connector div between main indicator and zoom with SVG inside
+      this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
+        <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
+          <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
+          <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
+        </svg>
+      </div>`);
+      this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
 
-        this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar scroll-indicator-zoom-container"></div>`);
-        this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
-        this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
-      }
+      this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar scroll-indicator-zoom-container"></div>`);
+      this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
+      this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
+      this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
+      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
+      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
+      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
+      this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
     }
 
     // First row: icons
@@ -338,13 +412,9 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     // Append scroll indicators after toolbar rows (so they appear below)
-    if (indicatorPosition === 'Top toolbar') {
-      if (zoomWindowSize > 0 && this.scrollIndicatorWrapper) {
-        $(this.toolbarDiv).append(this.scrollIndicatorWrapper);
-        this.setupScrollIndicatorZoomClick();
-      } else if (this.scrollIndicatorContainer) {
-        $(this.toolbarDiv).append(this.scrollIndicatorContainer);
-      }
+    if (indicatorPosition === 'Top toolbar' && this.scrollIndicatorWrapper) {
+      $(this.toolbarDiv).append(this.scrollIndicatorWrapper);
+      this.setupScrollIndicatorZoomClick();
       this.setupScrollIndicatorClick();
     }
 
@@ -436,8 +506,12 @@ export class FeedItemHandler extends ItemHandler {
     const isAdvancedStyle = indicatorStyle === 'Advanced';
     const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0) : 0;
     const styleClass = isAdvancedStyle ? 'scroll-indicator-advanced' : 'scroll-indicator-basic';
+    const indicatorScale = parseInt(this.config.get('scrollIndicatorScale'), 10) || 100;
+    const scaleValue = indicatorScale / 100;
+    const scaleStyle = `--indicator-scale: ${scaleValue};`;
     if (indicatorPosition === 'Bottom status bar') {
-      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container ${styleClass}"></div>`);
+      // Always use wrapper for dynamic style switching (styleClass goes on wrapper for CSS to hide zoom elements)
+      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container"></div>`);
       this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
       this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
       this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
@@ -445,38 +519,36 @@ export class FeedItemHandler extends ItemHandler {
       this.scrollIndicatorContainer.append(this.scrollIndicator);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
 
-      // Add zoom indicator if configured (Advanced mode only)
-      if (zoomWindowSize > 0) {
-        // Get reference to zoom highlight element
-        this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
-        // Create wrapper for both indicators and connector (status bar position)
-        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar"></div>`);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
+      // Always create wrapper with zoom elements (CSS controls visibility based on style)
+      // Get reference to zoom highlight element
+      this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
+      // Create wrapper for both indicators and connector (styleClass on wrapper so CSS can target children)
+      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar ${styleClass}" style="${scaleStyle}"></div>`);
+      this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
 
-        // Add connector div between main indicator and zoom with SVG inside
-        this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
-          <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
-            <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
-            <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
-          </svg>
-        </div>`);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
+      // Add connector div between main indicator and zoom with SVG inside
+      this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
+        <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
+          <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
+          <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
+        </svg>
+      </div>`);
+      this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
 
-        this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-zoom-container"></div>`);
-        this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
-        this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
+      this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-zoom-container"></div>`);
+      this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
+      this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
+      this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
+      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
+      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
+      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
+      this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
 
-        $(this.statusBar).append(this.scrollIndicatorWrapper);
-        this.setupScrollIndicatorZoomClick();
-      } else {
-        $(this.statusBar).append(this.scrollIndicatorContainer);
-      }
+      $(this.statusBar).append(this.scrollIndicatorWrapper);
+      this.setupScrollIndicatorZoomClick();
       this.setupScrollIndicatorClick();
+      // Add class to status bar for CSS styling
+      $(this.statusBar).addClass('has-scroll-indicator');
     }
 
     $(this.statusBar).append(this.statusBarLeft);
@@ -1102,6 +1174,11 @@ export class FeedItemHandler extends ItemHandler {
     // Create or update segments
     let segments = indicator.find('.scroll-segment');
     if (segments.length !== total) {
+      // Skip rebuild while loading to prevent visual jumping
+      if (this.loading || this.loadingNew) {
+        return;
+      }
+
       // Rebuild segments
       indicator.find('.scroll-segment').remove();
       indicator.find('.scroll-viewport-indicator').remove();
@@ -1121,7 +1198,8 @@ export class FeedItemHandler extends ItemHandler {
     const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
     const isAdvancedStyle = indicatorStyle === 'Advanced';
     const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
-    const showIcons = isAdvancedStyle ? (this.config.get('scrollIndicatorIcons') !== false) : false;
+    const iconsValue = this.config.get('scrollIndicatorIcons');
+    const showIcons = isAdvancedStyle ? (iconsValue === true || iconsValue === 'true' || iconsValue === undefined) : false;
 
     // Calculate engagement data for heatmap and/or icons (Advanced mode only)
     let engagementData = [];
@@ -1481,6 +1559,9 @@ export class FeedItemHandler extends ItemHandler {
   updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore) {
     const zoomIndicator = this.scrollIndicatorZoom;
     if (!zoomIndicator) return;
+
+    // Skip updates while loading to prevent visual jumping
+    if (this.loading || this.loadingNew) return;
 
     const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
     if (zoomWindowSize === 0) return;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+396.c24d3402
+// @version     1.0.31+397.cdc690e2
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44847,30 +44847,34 @@ if (cid) {
           default: "Bottom status bar",
           help: "Where to show the scroll progress indicator"
         },
-        scrollIndicatorThickness: {
-          label: "Indicator thickness",
-          type: "number",
-          default: 6,
-          help: "Height of the scroll indicator in pixels (1-20)"
+        scrollIndicatorStyle: {
+          label: "Indicator style",
+          type: "select",
+          options: ["Basic", "Advanced"],
+          default: "Basic",
+          help: "Basic: simple read/unread segments. Advanced: heatmap, icons, and zoom options"
         },
         scrollIndicatorHeatmap: {
           label: "Heatmap mode",
           type: "select",
           options: ["None", "Engagement Rate", "Raw Engagement", "Weighted Engagement"],
           default: "None",
-          help: "Color intensity based on post engagement metrics"
+          help: "Color intensity based on post engagement metrics",
+          showWhen: { scrollIndicatorStyle: "Advanced" }
         },
         scrollIndicatorIcons: {
           label: "Content icons",
           type: "checkbox",
           default: true,
-          help: "Show icons for media, replies, and reposts in scroll indicator"
+          help: "Show icons for media, replies, and reposts in scroll indicator",
+          showWhen: { scrollIndicatorStyle: "Advanced" }
         },
         scrollIndicatorZoom: {
           label: "Zoom window size",
           type: "number",
           default: 0,
-          help: "Show zoomed view of N posts around selection (0 to disable)"
+          help: "Show zoomed view of N posts around selection (0 to disable)",
+          showWhen: { scrollIndicatorStyle: "Advanced" }
         }
       }
     },
@@ -45369,6 +45373,14 @@ if (cid) {
       const resetBtn = `<button type="button" class="config-field-reset ${isModified ? "" : "hidden"}"
                               data-key="${key}" data-default="${this.escapeHtml(String(field.default))}"
                               title="Reset to default">\u21BA</button>`;
+      let showWhenAttrs = "";
+      let isHidden = false;
+      if (field.showWhen) {
+        const [depKey, depValue] = Object.entries(field.showWhen)[0];
+        const currentDepValue = this.config.get(depKey) ?? CONFIG_SCHEMA[this.activeTab]?.fields[depKey]?.default;
+        isHidden = currentDepValue !== depValue;
+        showWhenAttrs = `data-show-when-key="${depKey}" data-show-when-value="${depValue}"`;
+      }
       let inputHtml = "";
       switch (field.type) {
         case "checkbox":
@@ -45464,6 +45476,9 @@ if (cid) {
             ${resetBtn}
           </div>
         `;
+      }
+      if (showWhenAttrs) {
+        return `<div class="config-field-conditional ${isHidden ? "hidden" : ""}" ${showWhenAttrs}>${inputHtml}</div>`;
       }
       return inputHtml;
     }
@@ -45787,6 +45802,16 @@ if (cid) {
           resetBtn.classList.toggle("hidden", !isModified);
         }
       }
+      this.updateConditionalFields(name, newValue);
+    }
+    updateConditionalFields(changedKey, newValue) {
+      if (!this.modalEl) return;
+      const conditionalFields = this.modalEl.querySelectorAll(`[data-show-when-key="${changedKey}"]`);
+      conditionalFields.forEach((field) => {
+        const requiredValue = field.dataset.showWhenValue;
+        const shouldShow = newValue === requiredValue;
+        field.classList.toggle("hidden", !shouldShow);
+      });
     }
     save() {
       Object.entries(this.pendingChanges).forEach(([key, value]) => {
@@ -47709,7 +47734,7 @@ div.item-banner {
 
 .scroll-position-indicator {
   width: calc(100% + 2px);
-  height: 3px;
+  height: 6px;
   background-color: #e5e7eb;
   overflow: hidden;
   flex-basis: 100%;
@@ -47717,6 +47742,16 @@ div.item-banner {
   margin: -1px -1px 0 -1px;
   display: flex;
   position: relative;
+}
+
+/* Basic style - simple thin indicator */
+.scroll-indicator-basic .scroll-position-indicator {
+  height: 8px;
+}
+
+/* Advanced style - taller for icons and better visibility */
+.scroll-indicator-advanced .scroll-position-indicator {
+  height: 18px;
 }
 
 /* Toolbar position: place at bottom of toolbar */
@@ -47979,6 +48014,15 @@ div.item-banner {
   flex-shrink: 0;
   width: 85px;
   min-width: 85px;
+}
+
+/* Basic style - hide date labels and zoom highlight */
+.scroll-indicator-basic .scroll-indicator-label {
+  display: none;
+}
+
+.scroll-indicator-basic .scroll-position-zoom-highlight {
+  display: none;
 }
 
 .scroll-indicator-label-start {
@@ -67233,13 +67277,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
       $(beforeDiv).before(this.toolbarDiv);
       const indicatorPosition = this.config.get("scrollIndicatorPosition");
-      const indicatorThickness = Math.min(20, Math.max(1, this.config.get("scrollIndicatorThickness") || 6));
-      const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
+      const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
+      const isAdvancedStyle = indicatorStyle === "Advanced";
+      const zoomWindowSize = isAdvancedStyle ? parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0 : 0;
+      const styleClass = isAdvancedStyle ? "scroll-indicator-advanced" : "scroll-indicator-basic";
       if (indicatorPosition === "Top toolbar") {
-        this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar"></div>`);
+        this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar ${styleClass}"></div>`);
         this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
         this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
+        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
         this.scrollIndicatorContainer.append(this.scrollIndicator);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
@@ -67257,7 +67303,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar scroll-indicator-zoom-container"></div>`);
           this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
           this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-          this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom" style="height: ${indicatorThickness}px"></div>`);
+          this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
           this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
           this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
           this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
@@ -67473,13 +67519,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
       this.statusBarRight = $(`<div id="statusBarRight"></div>`);
       const indicatorPosition = this.config.get("scrollIndicatorPosition");
-      const indicatorThickness = Math.min(20, Math.max(1, this.config.get("scrollIndicatorThickness") || 6));
-      const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
+      const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
+      const isAdvancedStyle = indicatorStyle === "Advanced";
+      const zoomWindowSize = isAdvancedStyle ? parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0 : 0;
+      const styleClass = isAdvancedStyle ? "scroll-indicator-advanced" : "scroll-indicator-basic";
       if (indicatorPosition === "Bottom status bar") {
-        this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container"></div>`);
+        this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container ${styleClass}"></div>`);
         this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
         this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
+        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
         this.scrollIndicatorContainer.append(this.scrollIndicator);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
@@ -67497,7 +67545,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-zoom-container"></div>`);
           this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
           this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-          this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom" style="height: ${indicatorThickness}px"></div>`);
+          this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
           this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
           this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
           this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
@@ -67558,11 +67606,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (indicator.length && this.items.length) {
           this.updateViewportIndicator(indicator, this.items.length);
           if (this.scrollIndicatorZoom) {
-            const heatmapMode = this.config.get("scrollIndicatorHeatmap") || "None";
-            const showIcons = this.config.get("scrollIndicatorIcons") !== false;
+            const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
+            const isAdvancedStyle = indicatorStyle === "Advanced";
+            const heatmapMode = isAdvancedStyle ? this.config.get("scrollIndicatorHeatmap") || "None" : "None";
+            const showIcons = isAdvancedStyle ? this.config.get("scrollIndicatorIcons") !== false : false;
             let engagementData = [];
             let maxScore = 0;
-            if (heatmapMode !== "None" || showIcons) {
+            if (isAdvancedStyle && (heatmapMode !== "None" || showIcons)) {
               engagementData = this.items.toArray().map((item) => {
                 const engagement = this.getPostEngagement(item);
                 const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
@@ -68008,22 +68058,19 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         indicator.append('<div class="scroll-viewport-indicator"></div>');
         segments = indicator.find(".scroll-segment");
       }
-      const heatmapMode = this.config.get("scrollIndicatorHeatmap") || "None";
-      const showIcons = this.config.get("scrollIndicatorIcons") !== false;
-      console.log("[bsky-navigator] Heatmap settings:", { heatmapMode, showIcons });
+      const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
+      const isAdvancedStyle = indicatorStyle === "Advanced";
+      const heatmapMode = isAdvancedStyle ? this.config.get("scrollIndicatorHeatmap") || "None" : "None";
+      const showIcons = isAdvancedStyle ? this.config.get("scrollIndicatorIcons") !== false : false;
       let engagementData = [];
       let maxScore = 0;
-      if (heatmapMode !== "None" || showIcons) {
-        engagementData = this.items.toArray().map((item, idx) => {
+      if (isAdvancedStyle && (heatmapMode !== "None" || showIcons)) {
+        engagementData = this.items.toArray().map((item) => {
           const engagement = this.getPostEngagement(item);
           const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
           if (score > maxScore) maxScore = score;
-          if (idx < 3) {
-            console.log("[bsky-navigator] Item", idx, "engagement:", engagement, "score:", score);
-          }
           return { engagement, score };
         });
-        console.log("[bsky-navigator] Max score:", maxScore, "Total items:", engagementData.length);
       }
       segments.each((i2, segment) => {
         const $segment = $(segment);
@@ -68034,17 +68081,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           "scroll-segment-read scroll-segment-current scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
         );
         $segment.find(".scroll-segment-icon").remove();
+        if (isRead) {
+          $segment.addClass("scroll-segment-read");
+        }
         if (isCurrent) {
           $segment.addClass("scroll-segment-current");
         } else if (heatmapMode !== "None" && engagementData[i2]) {
           const heatLevel = this.getHeatLevel(engagementData[i2].score, maxScore);
           if (heatLevel > 0) {
             $segment.addClass(`scroll-segment-heat-${heatLevel}`);
-          } else if (isRead) {
-            $segment.addClass("scroll-segment-read");
           }
-        } else if (isRead) {
-          $segment.addClass("scroll-segment-read");
         }
         if (showIcons && engagementData[i2]?.engagement) {
           const icon = this.getContentIcon(engagementData[i2].engagement);
@@ -68429,17 +68475,32 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (!viewportIndicator.length || total === 0) return;
       const indicatorWidth = indicator.width();
       const segmentWidth = indicatorWidth / total;
-      const viewportTop = window.scrollY;
-      const viewportBottom = viewportTop + window.innerHeight;
+      let topOffset = 0;
+      if (this.toolbarDiv) {
+        const toolbarRect = this.toolbarDiv[0].getBoundingClientRect();
+        topOffset = Math.max(0, toolbarRect.bottom);
+      }
+      const bskyTabBar = document.querySelector('[data-testid="homeScreenFeedTabs"]');
+      if (bskyTabBar) {
+        const tabBarRect = bskyTabBar.getBoundingClientRect();
+        topOffset = Math.max(topOffset, tabBarRect.bottom);
+      }
+      const viewportTop = topOffset;
+      const viewportBottom = window.innerHeight;
       let firstVisible = -1;
       let lastVisible = -1;
       for (let i2 = 0; i2 < this.items.length; i2++) {
         const item = this.items[i2];
         if (!item) continue;
         const rect = item.getBoundingClientRect();
-        const itemTop = rect.top + window.scrollY;
-        const itemBottom = itemTop + rect.height;
-        if (itemBottom > viewportTop && itemTop < viewportBottom) {
+        const itemTop = rect.top;
+        const itemBottom = rect.bottom;
+        const itemHeight = rect.height;
+        const minVisible = Math.min(itemHeight * 0.2, 20);
+        const visibleTop = Math.max(itemTop, viewportTop);
+        const visibleBottom = Math.min(itemBottom, viewportBottom);
+        const visibleHeight = visibleBottom - visibleTop;
+        if (visibleHeight >= minVisible) {
           if (firstVisible === -1) firstVisible = i2;
           lastVisible = i2;
         }

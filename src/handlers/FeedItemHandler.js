@@ -128,19 +128,21 @@ export class FeedItemHandler extends ItemHandler {
 
     // Add scroll position indicator at top of toolbar if configured
     const indicatorPosition = this.config.get('scrollIndicatorPosition');
-    const indicatorThickness = Math.min(20, Math.max(1, this.config.get('scrollIndicatorThickness') || 6));
-    const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
+    const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
+    const isAdvancedStyle = indicatorStyle === 'Advanced';
+    const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0) : 0;
+    const styleClass = isAdvancedStyle ? 'scroll-indicator-advanced' : 'scroll-indicator-basic';
     // Prepare scroll indicator elements (will be appended after toolbar rows)
     if (indicatorPosition === 'Top toolbar') {
-      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar"></div>`);
+      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar ${styleClass}"></div>`);
       this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
       this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
+      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
       this.scrollIndicatorContainer.append(this.scrollIndicator);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
 
-      // Add zoom indicator if configured
+      // Add zoom indicator if configured (Advanced mode only)
       if (zoomWindowSize > 0) {
         // Get reference to zoom highlight element
         this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
@@ -160,7 +162,7 @@ export class FeedItemHandler extends ItemHandler {
         this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar scroll-indicator-zoom-container"></div>`);
         this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
         this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom" style="height: ${indicatorThickness}px"></div>`);
+        this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
         this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
         this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
         this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
@@ -430,18 +432,20 @@ export class FeedItemHandler extends ItemHandler {
 
     // Add scroll position indicator inside status bar if configured
     const indicatorPosition = this.config.get('scrollIndicatorPosition');
-    const indicatorThickness = Math.min(20, Math.max(1, this.config.get('scrollIndicatorThickness') || 6));
-    const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
+    const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
+    const isAdvancedStyle = indicatorStyle === 'Advanced';
+    const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0) : 0;
+    const styleClass = isAdvancedStyle ? 'scroll-indicator-advanced' : 'scroll-indicator-basic';
     if (indicatorPosition === 'Bottom status bar') {
-      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container"></div>`);
+      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container ${styleClass}"></div>`);
       this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
       this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
+      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
       this.scrollIndicatorContainer.append(this.scrollIndicator);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
 
-      // Add zoom indicator if configured
+      // Add zoom indicator if configured (Advanced mode only)
       if (zoomWindowSize > 0) {
         // Get reference to zoom highlight element
         this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
@@ -461,7 +465,7 @@ export class FeedItemHandler extends ItemHandler {
         this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-zoom-container"></div>`);
         this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
         this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom" style="height: ${indicatorThickness}px"></div>`);
+        this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
         this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
         this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
         this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
@@ -535,15 +539,17 @@ export class FeedItemHandler extends ItemHandler {
       if (indicator.length && this.items.length) {
         this.updateViewportIndicator(indicator, this.items.length);
 
-        // Also update zoom indicator if present
+        // Also update zoom indicator if present (Advanced mode only)
         if (this.scrollIndicatorZoom) {
-          const heatmapMode = this.config.get('scrollIndicatorHeatmap') || 'None';
-          const showIcons = this.config.get('scrollIndicatorIcons') !== false;
+          const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
+          const isAdvancedStyle = indicatorStyle === 'Advanced';
+          const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
+          const showIcons = isAdvancedStyle ? (this.config.get('scrollIndicatorIcons') !== false) : false;
 
           // Recalculate engagement data for zoom update
           let engagementData = [];
           let maxScore = 0;
-          if (heatmapMode !== 'None' || showIcons) {
+          if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons)) {
             engagementData = this.items.toArray().map((item) => {
               const engagement = this.getPostEngagement(item);
               const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
@@ -1111,28 +1117,24 @@ export class FeedItemHandler extends ItemHandler {
       segments = indicator.find('.scroll-segment');
     }
 
-    // Get heatmap settings
-    const heatmapMode = this.config.get('scrollIndicatorHeatmap') || 'None';
-    const showIcons = this.config.get('scrollIndicatorIcons') !== false;
+    // Get style and heatmap settings
+    const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
+    const isAdvancedStyle = indicatorStyle === 'Advanced';
+    const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
+    const showIcons = isAdvancedStyle ? (this.config.get('scrollIndicatorIcons') !== false) : false;
 
-    console.log('[bsky-navigator] Heatmap settings:', { heatmapMode, showIcons });
-
-    // Calculate engagement data for heatmap and/or icons
+    // Calculate engagement data for heatmap and/or icons (Advanced mode only)
     let engagementData = [];
     let maxScore = 0;
 
-    if (heatmapMode !== 'None' || showIcons) {
+    if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons)) {
       // Note: this.items is a jQuery object, so we need to use .toArray() for proper iteration
-      engagementData = this.items.toArray().map((item, idx) => {
+      engagementData = this.items.toArray().map((item) => {
         const engagement = this.getPostEngagement(item);
         const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
         if (score > maxScore) maxScore = score;
-        if (idx < 3) {
-          console.log('[bsky-navigator] Item', idx, 'engagement:', engagement, 'score:', score);
-        }
         return { engagement, score };
       });
-      console.log('[bsky-navigator] Max score:', maxScore, 'Total items:', engagementData.length);
     }
 
     // Update segment states
@@ -1152,18 +1154,19 @@ export class FeedItemHandler extends ItemHandler {
       // Clear existing icon
       $segment.find('.scroll-segment-icon').remove();
 
+      // Apply read state first (can be combined with current)
+      if (isRead) {
+        $segment.addClass('scroll-segment-read');
+      }
+
       if (isCurrent) {
         $segment.addClass('scroll-segment-current');
       } else if (heatmapMode !== 'None' && engagementData[i]) {
-        // Apply heatmap coloring
+        // Apply heatmap coloring (overrides read state visually)
         const heatLevel = this.getHeatLevel(engagementData[i].score, maxScore);
         if (heatLevel > 0) {
           $segment.addClass(`scroll-segment-heat-${heatLevel}`);
-        } else if (isRead) {
-          $segment.addClass('scroll-segment-read');
         }
-      } else if (isRead) {
-        $segment.addClass('scroll-segment-read');
       }
 
       // Add content icon if enabled
@@ -1698,9 +1701,25 @@ export class FeedItemHandler extends ItemHandler {
     const indicatorWidth = indicator.width();
     const segmentWidth = indicatorWidth / total;
 
-    // Find which items are visible in the viewport
-    const viewportTop = window.scrollY;
-    const viewportBottom = viewportTop + window.innerHeight;
+    // Find which items are visible in the viewport, accounting for fixed headers
+    // Use the first item's parent container to find where content actually starts
+    let topOffset = 0;
+
+    // First, try to get the bottom of our toolbar
+    if (this.toolbarDiv) {
+      const toolbarRect = this.toolbarDiv[0].getBoundingClientRect();
+      topOffset = Math.max(0, toolbarRect.bottom);
+    }
+
+    // Also check for Bluesky's sticky tab bar (the "Following", "Discover" tabs)
+    const bskyTabBar = document.querySelector('[data-testid="homeScreenFeedTabs"]');
+    if (bskyTabBar) {
+      const tabBarRect = bskyTabBar.getBoundingClientRect();
+      topOffset = Math.max(topOffset, tabBarRect.bottom);
+    }
+
+    const viewportTop = topOffset;
+    const viewportBottom = window.innerHeight;
 
     let firstVisible = -1;
     let lastVisible = -1;
@@ -1710,11 +1729,18 @@ export class FeedItemHandler extends ItemHandler {
       if (!item) continue;
 
       const rect = item.getBoundingClientRect();
-      const itemTop = rect.top + window.scrollY;
-      const itemBottom = itemTop + rect.height;
+      // getBoundingClientRect returns viewport-relative coordinates
+      const itemTop = rect.top;
+      const itemBottom = rect.bottom;
+      const itemHeight = rect.height;
 
-      // Check if item is at least partially visible
-      if (itemBottom > viewportTop && itemTop < viewportBottom) {
+      // Check if item is meaningfully visible (at least 20% or 20px visible, whichever is smaller)
+      const minVisible = Math.min(itemHeight * 0.2, 20);
+      const visibleTop = Math.max(itemTop, viewportTop);
+      const visibleBottom = Math.min(itemBottom, viewportBottom);
+      const visibleHeight = visibleBottom - visibleTop;
+
+      if (visibleHeight >= minVisible) {
         if (firstVisible === -1) firstVisible = i;
         lastVisible = i;
       }

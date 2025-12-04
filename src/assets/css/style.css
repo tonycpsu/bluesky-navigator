@@ -1656,7 +1656,7 @@ div.item-banner {
 
 .scroll-position-indicator {
   width: calc(100% + 2px);
-  height: 3px;
+  height: 6px;
   background-color: #e5e7eb;
   overflow: hidden;
   flex-basis: 100%;
@@ -1664,6 +1664,16 @@ div.item-banner {
   margin: -1px -1px 0 -1px;
   display: flex;
   position: relative;
+}
+
+/* Basic style - simple thin indicator */
+.scroll-indicator-basic .scroll-position-indicator {
+  height: 8px;
+}
+
+/* Advanced style - taller for icons and better visibility */
+.scroll-indicator-advanced .scroll-position-indicator {
+  height: 18px;
 }
 
 /* Toolbar position: place at bottom of toolbar */
@@ -1926,6 +1936,15 @@ div.item-banner {
   flex-shrink: 0;
   width: 85px;
   min-width: 85px;
+}
+
+/* Basic style - hide date labels and zoom highlight */
+.scroll-indicator-basic .scroll-indicator-label {
+  display: none;
+}
+
+.scroll-indicator-basic .scroll-position-zoom-highlight {
+  display: none;
 }
 
 .scroll-indicator-label-start {

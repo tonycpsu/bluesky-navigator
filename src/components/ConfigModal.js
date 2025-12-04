@@ -95,11 +95,12 @@ const CONFIG_SCHEMA = {
         default: 'Bottom status bar',
         help: 'Where to show the scroll progress indicator',
       },
-      scrollIndicatorThickness: {
-        label: 'Indicator thickness',
-        type: 'number',
-        default: 6,
-        help: 'Height of the scroll indicator in pixels (1-20)',
+      scrollIndicatorStyle: {
+        label: 'Indicator style',
+        type: 'select',
+        options: ['Basic', 'Advanced'],
+        default: 'Basic',
+        help: 'Basic: simple read/unread segments. Advanced: heatmap, icons, and zoom options',
       },
       scrollIndicatorHeatmap: {
         label: 'Heatmap mode',
@@ -107,18 +108,21 @@ const CONFIG_SCHEMA = {
         options: ['None', 'Engagement Rate', 'Raw Engagement', 'Weighted Engagement'],
         default: 'None',
         help: 'Color intensity based on post engagement metrics',
+        showWhen: { scrollIndicatorStyle: 'Advanced' },
       },
       scrollIndicatorIcons: {
         label: 'Content icons',
         type: 'checkbox',
         default: true,
         help: 'Show icons for media, replies, and reposts in scroll indicator',
+        showWhen: { scrollIndicatorStyle: 'Advanced' },
       },
       scrollIndicatorZoom: {
         label: 'Zoom window size',
         type: 'number',
         default: 0,
         help: 'Show zoomed view of N posts around selection (0 to disable)',
+        showWhen: { scrollIndicatorStyle: 'Advanced' },
       },
     },
   },
@@ -672,6 +676,16 @@ export class ConfigModal {
                               data-key="${key}" data-default="${this.escapeHtml(String(field.default))}"
                               title="Reset to default">↺</button>`;
 
+    // Check showWhen condition
+    let showWhenAttrs = '';
+    let isHidden = false;
+    if (field.showWhen) {
+      const [depKey, depValue] = Object.entries(field.showWhen)[0];
+      const currentDepValue = this.config.get(depKey) ?? CONFIG_SCHEMA[this.activeTab]?.fields[depKey]?.default;
+      isHidden = currentDepValue !== depValue;
+      showWhenAttrs = `data-show-when-key="${depKey}" data-show-when-value="${depValue}"`;
+    }
+
     let inputHtml = '';
 
     switch (field.type) {
@@ -774,6 +788,11 @@ export class ConfigModal {
             ${resetBtn}
           </div>
         `;
+    }
+
+    // Wrap with showWhen container if needed
+    if (showWhenAttrs) {
+      return `<div class="config-field-conditional ${isHidden ? 'hidden' : ''}" ${showWhenAttrs}>${inputHtml}</div>`;
     }
 
     return inputHtml;
@@ -1171,6 +1190,21 @@ export class ConfigModal {
         resetBtn.classList.toggle('hidden', !isModified);
       }
     }
+
+    // Update conditional field visibility
+    this.updateConditionalFields(name, newValue);
+  }
+
+  updateConditionalFields(changedKey, newValue) {
+    if (!this.modalEl) return;
+
+    // Find all fields that depend on the changed key
+    const conditionalFields = this.modalEl.querySelectorAll(`[data-show-when-key="${changedKey}"]`);
+    conditionalFields.forEach((field) => {
+      const requiredValue = field.dataset.showWhenValue;
+      const shouldShow = newValue === requiredValue;
+      field.classList.toggle('hidden', !shouldShow);
+    });
   }
 
   save() {

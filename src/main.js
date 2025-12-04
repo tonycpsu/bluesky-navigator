@@ -238,6 +238,11 @@ function getScreenFromElement(element) {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }
+        #statusBar,
+        .scroll-position-indicator {
+          max-width: ${contentWidth}px !important;
+          transform: translateX(${shiftRight}px) !important;
+        }
       `;
       console.log('[bsky-nav] Updated width:', contentWidth, 'translateX:', shiftRight);
     } else if (styleEl) {

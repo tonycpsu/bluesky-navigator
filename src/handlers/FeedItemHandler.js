@@ -485,6 +485,11 @@ export class FeedItemHandler extends ItemHandler {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }
+        #statusBar,
+        .scroll-position-indicator {
+          max-width: ${contentWidth}px !important;
+          transform: translateX(${shiftRight}px) !important;
+        }
       `;
     } else if (styleEl) {
       styleEl.textContent = '';

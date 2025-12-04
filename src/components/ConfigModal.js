@@ -63,6 +63,12 @@ const CONFIG_SCHEMA = {
         default: false,
         help: 'Hide the button that appears for new posts',
       },
+      hideSuggestedFollows: {
+        label: 'Hide "Suggested for you"',
+        type: 'checkbox',
+        default: false,
+        help: 'Hide suggested profiles in feed',
+      },
       showPostCounts: {
         label: 'Show post counts',
         type: 'select',

@@ -412,6 +412,17 @@ function getScreenFromElement(element) {
             : ``
         }
 
+        ${
+          config.get('hideSuggestedFollows')
+            ? `
+            /* Hide "Suggested for you" section - uses .bsky-nav-suggested-hidden class applied by JS */
+            .bsky-nav-suggested-hidden {
+                display: none !important;
+            }
+            `
+            : ``
+        }
+
         .item  {
             margin: 3px;
             ${config.get('posts')}
@@ -688,6 +699,42 @@ function getScreenFromElement(element) {
         // Apply custom width
         updateContentWidth();
       }
+
+      // Hide "Suggested for you" sections if option is enabled
+      if (config.get('hideSuggestedFollows')) {
+        hideSuggestedFollows();
+      }
+    }
+
+    /**
+     * Hide "Suggested for you" sections in the feed
+     */
+    function hideSuggestedFollows() {
+      // Find and hide elements containing "Suggested for you" text
+      const observer = new MutationObserver(() => {
+        document.querySelectorAll('div[dir="auto"]').forEach((el) => {
+          if (el.textContent === 'Suggested for you') {
+            // Find the container - go up to find the section with the gray background
+            let container = el.closest('div[style*="background-color: rgb(249, 250, 251)"]');
+            if (container && !container.classList.contains('bsky-nav-suggested-hidden')) {
+              container.classList.add('bsky-nav-suggested-hidden');
+              console.log('[bsky-nav] Hiding "Suggested for you" section');
+            }
+          }
+        });
+      });
+
+      observer.observe(document.body, { childList: true, subtree: true });
+
+      // Run once immediately
+      document.querySelectorAll('div[dir="auto"]').forEach((el) => {
+        if (el.textContent === 'Suggested for you') {
+          let container = el.closest('div[style*="background-color: rgb(249, 250, 251)"]');
+          if (container) {
+            container.classList.add('bsky-nav-suggested-hidden');
+          }
+        }
+      });
     }
   }
 

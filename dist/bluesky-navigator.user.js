@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+386.562201e9
+// @version     1.0.31+387.80944f75
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44815,6 +44815,12 @@ if (cid) {
           default: false,
           help: "Hide the button that appears for new posts"
         },
+        hideSuggestedFollows: {
+          label: 'Hide "Suggested for you"',
+          type: "checkbox",
+          default: false,
+          help: "Hide suggested profiles in feed"
+        },
         showPostCounts: {
           label: "Show post counts",
           type: "select",
@@ -67853,6 +67859,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             }
             ` : ``}
 
+        ${config.get("hideSuggestedFollows") ? `
+            /* Hide "Suggested for you" section - uses .bsky-nav-suggested-hidden class applied by JS */
+            .bsky-nav-suggested-hidden {
+                display: none !important;
+            }
+            ` : ``}
+
         .item  {
             margin: 3px;
             ${config.get("posts")}
@@ -68095,6 +68108,31 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           });
           updateContentWidth();
         }
+        if (config.get("hideSuggestedFollows")) {
+          hideSuggestedFollows();
+        }
+      }
+      function hideSuggestedFollows() {
+        const observer = new MutationObserver(() => {
+          document.querySelectorAll('div[dir="auto"]').forEach((el) => {
+            if (el.textContent === "Suggested for you") {
+              let container = el.closest('div[style*="background-color: rgb(249, 250, 251)"]');
+              if (container && !container.classList.contains("bsky-nav-suggested-hidden")) {
+                container.classList.add("bsky-nav-suggested-hidden");
+                console.log('[bsky-nav] Hiding "Suggested for you" section');
+              }
+            }
+          });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        document.querySelectorAll('div[dir="auto"]').forEach((el) => {
+          if (el.textContent === "Suggested for you") {
+            let container = el.closest('div[style*="background-color: rgb(249, 250, 251)"]');
+            if (container) {
+              container.classList.add("bsky-nav-suggested-hidden");
+            }
+          }
+        });
       }
     }
     config = new ConfigWrapper({

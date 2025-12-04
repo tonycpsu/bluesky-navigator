@@ -114,6 +114,12 @@ const CONFIG_SCHEMA = {
         default: true,
         help: 'Show icons for media, replies, and reposts in scroll indicator',
       },
+      scrollIndicatorZoom: {
+        label: 'Zoom window size',
+        type: 'number',
+        default: 0,
+        help: 'Show zoomed view of N posts around selection (0 to disable)',
+      },
     },
   },
   'Threads & Sidecar': {

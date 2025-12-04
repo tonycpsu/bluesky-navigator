@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+395.3717e56d
+// @version     1.0.31+396.c24d3402
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44865,6 +44865,12 @@ if (cid) {
           type: "checkbox",
           default: true,
           help: "Show icons for media, replies, and reposts in scroll indicator"
+        },
+        scrollIndicatorZoom: {
+          label: "Zoom window size",
+          type: "number",
+          default: 0,
+          help: "Show zoomed view of N posts around selection (0 to disable)"
         }
       }
     },
@@ -47788,10 +47794,129 @@ div.item-banner {
   position: relative;
 }
 
+/* Zoom indicator segments - larger for better visibility */
+.scroll-segment-zoom {
+  min-width: 20px;
+}
+
+/* Empty segments (no corresponding item) */
+.scroll-segment-empty {
+  background-color: transparent !important;
+  opacity: 0.3;
+}
+
+/* Wrapper for indicators with zoom */
+.scroll-indicator-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Zoom indicator connector */
+.scroll-indicator-connector {
+  display: block;
+  width: 100%;
+  height: 16px;
+  position: relative;
+  overflow: visible;
+  margin-top: -4px;
+}
+
+.scroll-indicator-connector-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.scroll-indicator-connector-path {
+  stroke: rgba(80, 80, 80, 0.8);
+  stroke-width: 2;
+  fill: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .scroll-indicator-connector-path {
+    stroke: rgba(200, 200, 200, 0.8);
+  }
+}
+
+/* Zoom indicator container */
+.scroll-indicator-zoom-container {
+  margin-top: 0;
+}
+
+.scroll-position-indicator-zoom {
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+/* When zoom is enabled, allow brackets to overflow */
+.scroll-indicator-wrapper .scroll-position-indicator:first-child,
+.scroll-indicator-wrapper .scroll-indicator-container:first-child .scroll-position-indicator {
+  overflow: visible;
+}
+
+/* Zoom highlight on main indicator showing zoomed region - bracket style */
+.scroll-position-zoom-highlight {
+  position: absolute;
+  top: -4px;
+  height: calc(100% + 8px);
+  background-color: transparent;
+  pointer-events: none;
+  box-sizing: border-box;
+  z-index: 10;
+}
+
+/* Left bracket [ */
+.scroll-position-zoom-highlight::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  border-left: 2px solid rgba(0, 0, 0, 0.8);
+  border-top: 2px solid rgba(0, 0, 0, 0.8);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.8);
+  box-sizing: border-box;
+}
+
+/* Right bracket ] */
+.scroll-position-zoom-highlight::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  border-right: 2px solid rgba(0, 0, 0, 0.8);
+  border-top: 2px solid rgba(0, 0, 0, 0.8);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.8);
+  box-sizing: border-box;
+}
+
 @media (prefers-color-scheme: dark) {
   .scroll-icon-stack img {
     filter: invert(1);
     opacity: 0.8;
+  }
+
+  .scroll-position-indicator-zoom {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .scroll-position-zoom-highlight::before {
+    border-left-color: rgba(255, 255, 255, 0.8);
+    border-top-color: rgba(255, 255, 255, 0.8);
+    border-bottom-color: rgba(255, 255, 255, 0.8);
+  }
+
+  .scroll-position-zoom-highlight::after {
+    border-right-color: rgba(255, 255, 255, 0.8);
+    border-top-color: rgba(255, 255, 255, 0.8);
+    border-bottom-color: rgba(255, 255, 255, 0.8);
   }
 }
 
@@ -47825,8 +47950,25 @@ div.item-banner {
 }
 
 .scroll-indicator-container-toolbar {
-  order: 999;
   margin: 0 -1px -1px -1px;
+}
+
+.scroll-indicator-wrapper {
+  order: 999;
+}
+
+/* Status bar position: place at top */
+.scroll-indicator-wrapper-statusbar {
+  order: -1;
+}
+
+/* Reset order for containers inside the wrapper to maintain DOM order */
+.scroll-indicator-wrapper > .scroll-indicator-container {
+  order: 0;
+}
+
+.scroll-indicator-wrapper > .scroll-indicator-connector {
+  order: 0;
 }
 
 .scroll-indicator-label {
@@ -47835,6 +47977,8 @@ div.item-banner {
   white-space: nowrap;
   padding: 0 6px;
   flex-shrink: 0;
+  width: 85px;
+  min-width: 85px;
 }
 
 .scroll-indicator-label-start {
@@ -67090,16 +67234,35 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       $(beforeDiv).before(this.toolbarDiv);
       const indicatorPosition = this.config.get("scrollIndicatorPosition");
       const indicatorThickness = Math.min(20, Math.max(1, this.config.get("scrollIndicatorThickness") || 6));
+      const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
       if (indicatorPosition === "Top toolbar") {
         this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar"></div>`);
         this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
         this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
         this.scrollIndicatorContainer.append(this.scrollIndicator);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
-        $(this.toolbarDiv).append(this.scrollIndicatorContainer);
-        this.setupScrollIndicatorClick();
+        if (zoomWindowSize > 0) {
+          this.scrollIndicatorZoomHighlight = this.scrollIndicator.find(".scroll-position-zoom-highlight");
+          this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper"></div>`);
+          this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
+          this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
+          <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
+            <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
+            <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
+          </svg>
+        </div>`);
+          this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
+          this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar scroll-indicator-zoom-container"></div>`);
+          this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
+          this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
+          this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom" style="height: ${indicatorThickness}px"></div>`);
+          this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
+          this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
+          this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
+          this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
+        }
       }
       this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1"/>`);
       $(this.toolbarDiv).append(this.toolbarRow1);
@@ -67235,6 +67398,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           this.adjustContentWidth(50);
         });
       }
+      if (indicatorPosition === "Top toolbar") {
+        if (zoomWindowSize > 0 && this.scrollIndicatorWrapper) {
+          $(this.toolbarDiv).append(this.scrollIndicatorWrapper);
+          this.setupScrollIndicatorZoomClick();
+        } else if (this.scrollIndicatorContainer) {
+          $(this.toolbarDiv).append(this.scrollIndicatorContainer);
+        }
+        this.setupScrollIndicatorClick();
+      }
       waitForElement$1("#bsky-navigator-toolbar", null, (_div) => {
         this.addToolbar(beforeDiv);
       });
@@ -67302,15 +67474,39 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.statusBarRight = $(`<div id="statusBarRight"></div>`);
       const indicatorPosition = this.config.get("scrollIndicatorPosition");
       const indicatorThickness = Math.min(20, Math.max(1, this.config.get("scrollIndicatorThickness") || 6));
+      const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
       if (indicatorPosition === "Bottom status bar") {
         this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container"></div>`);
         this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
         this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
         this.scrollIndicatorContainer.append(this.scrollIndicator);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
-        $(this.statusBar).append(this.scrollIndicatorContainer);
+        if (zoomWindowSize > 0) {
+          this.scrollIndicatorZoomHighlight = this.scrollIndicator.find(".scroll-position-zoom-highlight");
+          this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar"></div>`);
+          this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
+          this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
+          <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
+            <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
+            <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
+          </svg>
+        </div>`);
+          this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
+          this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-zoom-container"></div>`);
+          this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
+          this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
+          this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom" style="height: ${indicatorThickness}px"></div>`);
+          this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
+          this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
+          this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
+          this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
+          $(this.statusBar).append(this.scrollIndicatorWrapper);
+          this.setupScrollIndicatorZoomClick();
+        } else {
+          $(this.statusBar).append(this.scrollIndicatorContainer);
+        }
         this.setupScrollIndicatorClick();
       }
       $(this.statusBar).append(this.statusBarLeft);
@@ -67361,6 +67557,21 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const indicator = $("#scroll-position-indicator");
         if (indicator.length && this.items.length) {
           this.updateViewportIndicator(indicator, this.items.length);
+          if (this.scrollIndicatorZoom) {
+            const heatmapMode = this.config.get("scrollIndicatorHeatmap") || "None";
+            const showIcons = this.config.get("scrollIndicatorIcons") !== false;
+            let engagementData = [];
+            let maxScore = 0;
+            if (heatmapMode !== "None" || showIcons) {
+              engagementData = this.items.toArray().map((item) => {
+                const engagement = this.getPostEngagement(item);
+                const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
+                if (score > maxScore) maxScore = score;
+                return { engagement, score };
+              });
+            }
+            this.updateZoomIndicator(this.index, engagementData, heatmapMode, showIcons, maxScore);
+          }
         }
         this._scrollUpdatePending = false;
       });
@@ -67852,6 +68063,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
       this.updateViewportIndicator(indicator, total);
+      if (this.scrollIndicatorZoom) {
+        this.updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore);
+      }
       this.updateScrollIndicatorLabels();
       const position2 = currentIndex + 1;
       const percentage = total > 0 ? Math.round(position2 / total * 100) : 0;
@@ -67863,8 +68077,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (!this.items.length) return;
       const firstItem = this.items[0];
       const lastItem = this.items[this.items.length - 1];
-      const firstTimestamp = this.getTimestampForItem(firstItem);
-      const lastTimestamp = this.getTimestampForItem(lastItem);
+      let firstTimestamp = this.getTimestampForItem(firstItem);
+      let lastTimestamp = this.getTimestampForItem(lastItem);
+      const reversed = this.state.feedSortReverse;
+      if (firstTimestamp && lastTimestamp) {
+        const shouldSwap = reversed ? firstTimestamp > lastTimestamp : firstTimestamp < lastTimestamp;
+        if (shouldSwap) {
+          [firstTimestamp, lastTimestamp] = [lastTimestamp, firstTimestamp];
+        }
+      }
       const formatCompact = (date) => {
         if (!date) return "";
         const now = /* @__PURE__ */ new Date();
@@ -68028,6 +68249,180 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           this.updateBreadcrumb();
         }
       });
+    }
+    /**
+     * Set up click handler for zoom indicator to jump to posts
+     */
+    setupScrollIndicatorZoomClick() {
+      if (!this.scrollIndicatorZoom) return;
+      this.scrollIndicatorZoom.css("cursor", "pointer");
+      this.scrollIndicatorZoom.on("click", (event) => {
+        const zoomIndicator = $(event.currentTarget);
+        const indicatorWidth = zoomIndicator.width();
+        const clickX = event.pageX - zoomIndicator.offset().left;
+        const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
+        if (zoomWindowSize === 0) return;
+        const total = this.items.length;
+        if (total === 0) return;
+        const halfWindow = Math.floor(zoomWindowSize / 2);
+        const windowStart = Math.max(0, this.index - halfWindow);
+        const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
+        const actualWindowSize = windowEnd - windowStart + 1;
+        const segmentWidth = indicatorWidth / actualWindowSize;
+        const clickedOffset = Math.floor(clickX / segmentWidth);
+        const targetIndex = Math.max(0, Math.min(total - 1, windowStart + clickedOffset));
+        if (targetIndex !== this.index) {
+          this.setIndex(targetIndex, false, true);
+          this.updateScrollPosition();
+          this.updateBreadcrumb();
+        }
+      });
+    }
+    /**
+     * Update the zoom indicator showing posts around the current selection
+     */
+    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore) {
+      const zoomIndicator = this.scrollIndicatorZoom;
+      if (!zoomIndicator) return;
+      const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
+      if (zoomWindowSize === 0) return;
+      const total = this.items.length;
+      if (total === 0) return;
+      const halfWindow = Math.floor(zoomWindowSize / 2);
+      let windowStart = Math.max(0, currentIndex - halfWindow);
+      if (windowStart + zoomWindowSize > total) {
+        windowStart = Math.max(0, total - zoomWindowSize);
+      }
+      let segments = zoomIndicator.find(".scroll-segment");
+      if (segments.length !== zoomWindowSize) {
+        zoomIndicator.find(".scroll-segment").remove();
+        for (let i2 = 0; i2 < zoomWindowSize; i2++) {
+          const segment = $('<div class="scroll-segment scroll-segment-zoom"></div>');
+          zoomIndicator.append(segment);
+        }
+        segments = zoomIndicator.find(".scroll-segment");
+      }
+      const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
+      segments.each((i2, segment) => {
+        const $segment = $(segment);
+        const itemIndex = windowStart + i2;
+        const item = this.items[itemIndex];
+        const hasItem = itemIndex >= 0 && itemIndex < total;
+        const isRead = item && $(item).hasClass("item-read");
+        const isCurrent = itemIndex === currentIndex;
+        $segment.attr("data-index", hasItem ? itemIndex : -1);
+        $segment.removeClass(
+          "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+        );
+        $segment.find(".scroll-segment-icon").remove();
+        if (!hasItem) {
+          $segment.addClass("scroll-segment-empty");
+          return;
+        }
+        if (isCurrent) {
+          $segment.addClass("scroll-segment-current");
+        } else if (heatmapMode !== "None" && engagementData[itemIndex]) {
+          const heatLevel = this.getHeatLevel(engagementData[itemIndex].score, maxScore);
+          if (heatLevel > 0) {
+            $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+          } else if (isRead) {
+            $segment.addClass("scroll-segment-read");
+          }
+        } else if (isRead) {
+          $segment.addClass("scroll-segment-read");
+        }
+        if (showIcons && engagementData[itemIndex]?.engagement) {
+          const icon = this.getContentIcon(engagementData[itemIndex].engagement);
+          if (icon) {
+            $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+          }
+        }
+      });
+      zoomIndicator.css("--scroll-icon-display", "flex");
+      this.updateZoomIndicatorLabels(windowStart, windowEnd);
+      this.updateZoomConnector(windowStart, windowEnd, total);
+    }
+    /**
+     * Update the curved connector lines between the main scroll indicator and zoom indicator
+     */
+    updateZoomConnector(windowStart, windowEnd, total) {
+      if (!this.scrollIndicatorConnector || !this.scrollIndicator || !this.scrollIndicatorZoom) {
+        return;
+      }
+      const connectorDiv = this.scrollIndicatorConnector[0];
+      if (!connectorDiv) return;
+      const svg = connectorDiv.querySelector(".scroll-indicator-connector-svg");
+      if (!svg) return;
+      const wrapperWidth = this.scrollIndicatorWrapper ? this.scrollIndicatorWrapper.width() : 1e3;
+      const labelWidth = this.scrollIndicatorLabelStart ? this.scrollIndicatorLabelStart.outerWidth() || 0 : 0;
+      const zoomLabelWidth = this.scrollIndicatorZoomLabelStart ? this.scrollIndicatorZoomLabelStart.outerWidth() || 0 : 0;
+      const mainWidth = this.scrollIndicator.width() || wrapperWidth - labelWidth * 2;
+      const zoomWidth = this.scrollIndicatorZoom.width() || wrapperWidth - zoomLabelWidth * 2;
+      const startPercent = windowStart / total;
+      const endPercent = (windowEnd + 1) / total;
+      const mainStartX = labelWidth + mainWidth * startPercent;
+      const mainEndX = labelWidth + mainWidth * endPercent;
+      const zoomStartX = zoomLabelWidth;
+      const zoomEndX = zoomLabelWidth + zoomWidth;
+      const height = 16;
+      const svgWidth = wrapperWidth;
+      svg.setAttribute("viewBox", `0 0 ${svgWidth} ${height}`);
+      const leftPath = svg.querySelector(".scroll-indicator-connector-left");
+      const rightPath = svg.querySelector(".scroll-indicator-connector-right");
+      const midY = height / 2;
+      if (leftPath) {
+        leftPath.setAttribute(
+          "d",
+          `M ${mainStartX} 0 C ${mainStartX} ${midY}, ${zoomStartX} ${midY}, ${zoomStartX} ${height}`
+        );
+      }
+      if (rightPath) {
+        rightPath.setAttribute(
+          "d",
+          `M ${mainEndX} 0 C ${mainEndX} ${midY}, ${zoomEndX} ${midY}, ${zoomEndX} ${height}`
+        );
+      }
+      if (this.scrollIndicatorZoomHighlight) {
+        const highlightLeft = startPercent * 100;
+        const highlightWidth = (endPercent - startPercent) * 100;
+        this.scrollIndicatorZoomHighlight.css({
+          left: `${highlightLeft}%`,
+          width: `${highlightWidth}%`
+        });
+      }
+    }
+    /**
+     * Update the date/time labels for the zoom indicator
+     */
+    updateZoomIndicatorLabels(windowStart, windowEnd) {
+      if (!this.scrollIndicatorZoomLabelStart || !this.scrollIndicatorZoomLabelEnd) return;
+      if (!this.items.length) return;
+      const firstItem = this.items[windowStart];
+      const lastItem = this.items[windowEnd];
+      let firstTimestamp = this.getTimestampForItem(firstItem);
+      let lastTimestamp = this.getTimestampForItem(lastItem);
+      const reversed = this.state.feedSortReverse;
+      if (firstTimestamp && lastTimestamp) {
+        const shouldSwap = reversed ? firstTimestamp > lastTimestamp : firstTimestamp < lastTimestamp;
+        if (shouldSwap) {
+          [firstTimestamp, lastTimestamp] = [lastTimestamp, firstTimestamp];
+        }
+      }
+      const formatCompact = (date) => {
+        if (!date) return "";
+        const now = /* @__PURE__ */ new Date();
+        const isToday = date.toDateString() === now.toDateString();
+        const isThisYear = date.getFullYear() === now.getFullYear();
+        if (isToday) {
+          return format(date, "h:mma").toLowerCase();
+        } else if (isThisYear) {
+          return format(date, "M/d h:mma").toLowerCase();
+        } else {
+          return format(date, "M/d/yy h:mma").toLowerCase();
+        }
+      };
+      this.scrollIndicatorZoomLabelStart.text(formatCompact(firstTimestamp));
+      this.scrollIndicatorZoomLabelEnd.text(formatCompact(lastTimestamp));
     }
     updateViewportIndicator(indicator, total) {
       const viewportIndicator = indicator.find(".scroll-viewport-indicator");

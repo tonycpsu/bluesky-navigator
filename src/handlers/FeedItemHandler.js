@@ -129,16 +129,43 @@ export class FeedItemHandler extends ItemHandler {
     // Add scroll position indicator at top of toolbar if configured
     const indicatorPosition = this.config.get('scrollIndicatorPosition');
     const indicatorThickness = Math.min(20, Math.max(1, this.config.get('scrollIndicatorThickness') || 6));
+    const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
+    // Prepare scroll indicator elements (will be appended after toolbar rows)
     if (indicatorPosition === 'Top toolbar') {
       this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar"></div>`);
       this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
       this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
       this.scrollIndicatorContainer.append(this.scrollIndicator);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
-      $(this.toolbarDiv).append(this.scrollIndicatorContainer);
-      this.setupScrollIndicatorClick();
+
+      // Add zoom indicator if configured
+      if (zoomWindowSize > 0) {
+        // Get reference to zoom highlight element
+        this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
+        // Create wrapper for both indicators and connector
+        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper"></div>`);
+        this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
+
+        // Add connector div between main indicator and zoom with SVG inside
+        this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
+          <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
+            <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
+            <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
+          </svg>
+        </div>`);
+        this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
+
+        this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar scroll-indicator-zoom-container"></div>`);
+        this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
+        this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
+        this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom" style="height: ${indicatorThickness}px"></div>`);
+        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
+        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
+        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
+        this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
+      }
     }
 
     // First row: icons
@@ -308,6 +335,17 @@ export class FeedItemHandler extends ItemHandler {
       });
     }
 
+    // Append scroll indicators after toolbar rows (so they appear below)
+    if (indicatorPosition === 'Top toolbar') {
+      if (zoomWindowSize > 0 && this.scrollIndicatorWrapper) {
+        $(this.toolbarDiv).append(this.scrollIndicatorWrapper);
+        this.setupScrollIndicatorZoomClick();
+      } else if (this.scrollIndicatorContainer) {
+        $(this.toolbarDiv).append(this.scrollIndicatorContainer);
+      }
+      this.setupScrollIndicatorClick();
+    }
+
     waitForElement('#bsky-navigator-toolbar', null, (_div) => {
       this.addToolbar(beforeDiv);
     });
@@ -393,15 +431,47 @@ export class FeedItemHandler extends ItemHandler {
     // Add scroll position indicator inside status bar if configured
     const indicatorPosition = this.config.get('scrollIndicatorPosition');
     const indicatorThickness = Math.min(20, Math.max(1, this.config.get('scrollIndicatorThickness') || 6));
+    const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
     if (indicatorPosition === 'Bottom status bar') {
       this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container"></div>`);
       this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
       this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
       this.scrollIndicatorContainer.append(this.scrollIndicator);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
-      $(this.statusBar).append(this.scrollIndicatorContainer);
+
+      // Add zoom indicator if configured
+      if (zoomWindowSize > 0) {
+        // Get reference to zoom highlight element
+        this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
+        // Create wrapper for both indicators and connector (status bar position)
+        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar"></div>`);
+        this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
+
+        // Add connector div between main indicator and zoom with SVG inside
+        this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
+          <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
+            <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
+            <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
+          </svg>
+        </div>`);
+        this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
+
+        this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-zoom-container"></div>`);
+        this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
+        this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
+        this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom" style="height: ${indicatorThickness}px"></div>`);
+        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
+        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
+        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
+        this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
+
+        $(this.statusBar).append(this.scrollIndicatorWrapper);
+        this.setupScrollIndicatorZoomClick();
+      } else {
+        $(this.statusBar).append(this.scrollIndicatorContainer);
+      }
       this.setupScrollIndicatorClick();
     }
 
@@ -464,6 +534,26 @@ export class FeedItemHandler extends ItemHandler {
       const indicator = $('#scroll-position-indicator');
       if (indicator.length && this.items.length) {
         this.updateViewportIndicator(indicator, this.items.length);
+
+        // Also update zoom indicator if present
+        if (this.scrollIndicatorZoom) {
+          const heatmapMode = this.config.get('scrollIndicatorHeatmap') || 'None';
+          const showIcons = this.config.get('scrollIndicatorIcons') !== false;
+
+          // Recalculate engagement data for zoom update
+          let engagementData = [];
+          let maxScore = 0;
+          if (heatmapMode !== 'None' || showIcons) {
+            engagementData = this.items.toArray().map((item) => {
+              const engagement = this.getPostEngagement(item);
+              const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
+              if (score > maxScore) maxScore = score;
+              return { engagement, score };
+            });
+          }
+
+          this.updateZoomIndicator(this.index, engagementData, heatmapMode, showIcons, maxScore);
+        }
       }
       this._scrollUpdatePending = false;
     });
@@ -1100,6 +1190,11 @@ export class FeedItemHandler extends ItemHandler {
     // Update viewport indicator position
     this.updateViewportIndicator(indicator, total);
 
+    // Update zoom indicator if present
+    if (this.scrollIndicatorZoom) {
+      this.updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore);
+    }
+
     // Update date labels
     this.updateScrollIndicatorLabels();
 
@@ -1118,8 +1213,19 @@ export class FeedItemHandler extends ItemHandler {
     const firstItem = this.items[0];
     const lastItem = this.items[this.items.length - 1];
 
-    const firstTimestamp = this.getTimestampForItem(firstItem);
-    const lastTimestamp = this.getTimestampForItem(lastItem);
+    let firstTimestamp = this.getTimestampForItem(firstItem);
+    let lastTimestamp = this.getTimestampForItem(lastItem);
+
+    // Swap based on sort order - reverse chronological (default) shows newer first
+    const reversed = this.state.feedSortReverse;
+    if (firstTimestamp && lastTimestamp) {
+      const shouldSwap = reversed
+        ? firstTimestamp > lastTimestamp  // Reverse: older should be first (left)
+        : firstTimestamp < lastTimestamp; // Forward: newer should be first (left)
+      if (shouldSwap) {
+        [firstTimestamp, lastTimestamp] = [lastTimestamp, firstTimestamp];
+      }
+    }
 
     // Format as compact date/time (e.g., "Dec 4 2:30p" or "11/28 9:15a")
     const formatCompact = (date) => {
@@ -1327,6 +1433,262 @@ export class FeedItemHandler extends ItemHandler {
         this.updateBreadcrumb();
       }
     });
+  }
+
+  /**
+   * Set up click handler for zoom indicator to jump to posts
+   */
+  setupScrollIndicatorZoomClick() {
+    if (!this.scrollIndicatorZoom) return;
+
+    this.scrollIndicatorZoom.css('cursor', 'pointer');
+
+    this.scrollIndicatorZoom.on('click', (event) => {
+      const zoomIndicator = $(event.currentTarget);
+      const indicatorWidth = zoomIndicator.width();
+      const clickX = event.pageX - zoomIndicator.offset().left;
+
+      const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
+      if (zoomWindowSize === 0) return;
+
+      const total = this.items.length;
+      if (total === 0) return;
+
+      // Calculate the window of items being shown
+      const halfWindow = Math.floor(zoomWindowSize / 2);
+      const windowStart = Math.max(0, this.index - halfWindow);
+      const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
+      const actualWindowSize = windowEnd - windowStart + 1;
+
+      const segmentWidth = indicatorWidth / actualWindowSize;
+      const clickedOffset = Math.floor(clickX / segmentWidth);
+      const targetIndex = Math.max(0, Math.min(total - 1, windowStart + clickedOffset));
+
+      if (targetIndex !== this.index) {
+        this.setIndex(targetIndex, false, true);
+        this.updateScrollPosition();
+        this.updateBreadcrumb();
+      }
+    });
+  }
+
+  /**
+   * Update the zoom indicator showing posts around the current selection
+   */
+  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore) {
+    const zoomIndicator = this.scrollIndicatorZoom;
+    if (!zoomIndicator) return;
+
+    const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
+    if (zoomWindowSize === 0) return;
+
+    const total = this.items.length;
+    if (total === 0) return;
+
+    // Calculate the window of items to show
+    const halfWindow = Math.floor(zoomWindowSize / 2);
+    let windowStart = Math.max(0, currentIndex - halfWindow);
+
+    // Adjust if we would go past the end
+    if (windowStart + zoomWindowSize > total) {
+      windowStart = Math.max(0, total - zoomWindowSize);
+    }
+
+    // Always create exactly zoomWindowSize segments (fixed size)
+    let segments = zoomIndicator.find('.scroll-segment');
+    if (segments.length !== zoomWindowSize) {
+      zoomIndicator.find('.scroll-segment').remove();
+
+      for (let i = 0; i < zoomWindowSize; i++) {
+        const segment = $('<div class="scroll-segment scroll-segment-zoom"></div>');
+        zoomIndicator.append(segment);
+      }
+      segments = zoomIndicator.find('.scroll-segment');
+    }
+
+    // Update segment states
+    const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
+
+    segments.each((i, segment) => {
+      const $segment = $(segment);
+      const itemIndex = windowStart + i;
+      const item = this.items[itemIndex];
+      const hasItem = itemIndex >= 0 && itemIndex < total;
+      const isRead = item && $(item).hasClass('item-read');
+      const isCurrent = itemIndex === currentIndex;
+
+      // Update data-index in case window shifted
+      $segment.attr('data-index', hasItem ? itemIndex : -1);
+
+      // Remove all state classes
+      $segment.removeClass(
+        'scroll-segment-read scroll-segment-current scroll-segment-empty ' +
+        'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
+        'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
+      );
+
+      // Clear existing icon
+      $segment.find('.scroll-segment-icon').remove();
+
+      // Mark empty segments (no corresponding item)
+      if (!hasItem) {
+        $segment.addClass('scroll-segment-empty');
+        return;
+      }
+
+      if (isCurrent) {
+        $segment.addClass('scroll-segment-current');
+      } else if (heatmapMode !== 'None' && engagementData[itemIndex]) {
+        const heatLevel = this.getHeatLevel(engagementData[itemIndex].score, maxScore);
+        if (heatLevel > 0) {
+          $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+        } else if (isRead) {
+          $segment.addClass('scroll-segment-read');
+        }
+      } else if (isRead) {
+        $segment.addClass('scroll-segment-read');
+      }
+
+      // Add content icon if enabled
+      if (showIcons && engagementData[itemIndex]?.engagement) {
+        const icon = this.getContentIcon(engagementData[itemIndex].engagement);
+        if (icon) {
+          $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+        }
+      }
+    });
+
+    // Always show icons in zoom view (segments are larger)
+    zoomIndicator.css('--scroll-icon-display', 'flex');
+
+    // Update zoom indicator labels (only for actual items)
+    this.updateZoomIndicatorLabels(windowStart, windowEnd);
+
+    // Update connector lines between main indicator and zoom
+    this.updateZoomConnector(windowStart, windowEnd, total);
+  }
+
+  /**
+   * Update the curved connector lines between the main scroll indicator and zoom indicator
+   */
+  updateZoomConnector(windowStart, windowEnd, total) {
+    if (!this.scrollIndicatorConnector || !this.scrollIndicator || !this.scrollIndicatorZoom) {
+      return;
+    }
+
+    const connectorDiv = this.scrollIndicatorConnector[0];
+    if (!connectorDiv) return;
+
+    const svg = connectorDiv.querySelector('.scroll-indicator-connector-svg');
+    if (!svg) return;
+
+    // Get the wrapper width for our coordinate system
+    const wrapperWidth = this.scrollIndicatorWrapper ? this.scrollIndicatorWrapper.width() : 1000;
+
+    // Get label widths
+    const labelWidth = this.scrollIndicatorLabelStart ? this.scrollIndicatorLabelStart.outerWidth() || 0 : 0;
+    const zoomLabelWidth = this.scrollIndicatorZoomLabelStart ? this.scrollIndicatorZoomLabelStart.outerWidth() || 0 : 0;
+
+    // Get indicator widths
+    const mainWidth = this.scrollIndicator.width() || (wrapperWidth - labelWidth * 2);
+    const zoomWidth = this.scrollIndicatorZoom.width() || (wrapperWidth - zoomLabelWidth * 2);
+
+    // Calculate positions as percentages of total items
+    const startPercent = windowStart / total;
+    const endPercent = (windowEnd + 1) / total;
+
+    // X coordinates on the main indicator
+    const mainStartX = labelWidth + (mainWidth * startPercent);
+    const mainEndX = labelWidth + (mainWidth * endPercent);
+
+    // X coordinates on the zoom indicator (full width)
+    const zoomStartX = zoomLabelWidth;
+    const zoomEndX = zoomLabelWidth + zoomWidth;
+
+    // SVG dimensions (must match CSS height)
+    const height = 16;
+    const svgWidth = wrapperWidth;
+
+    // Set viewBox on the SVG element
+    svg.setAttribute('viewBox', `0 0 ${svgWidth} ${height}`);
+
+    const leftPath = svg.querySelector('.scroll-indicator-connector-left');
+    const rightPath = svg.querySelector('.scroll-indicator-connector-right');
+
+    // S-curve control points for zoom effect
+    // The S-curve goes: start at top, curve down and outward, then curve to meet bottom
+    const midY = height / 2;
+
+    if (leftPath) {
+      // Left S-curve: starts at mainStartX top, ends at zoomStartX bottom
+      // First curve goes down, second curve goes to the left edge
+      leftPath.setAttribute('d',
+        `M ${mainStartX} 0 ` +
+        `C ${mainStartX} ${midY}, ${zoomStartX} ${midY}, ${zoomStartX} ${height}`
+      );
+    }
+
+    if (rightPath) {
+      // Right S-curve: starts at mainEndX top, ends at zoomEndX bottom
+      // First curve goes down, second curve goes to the right edge
+      rightPath.setAttribute('d',
+        `M ${mainEndX} 0 ` +
+        `C ${mainEndX} ${midY}, ${zoomEndX} ${midY}, ${zoomEndX} ${height}`
+      );
+    }
+
+    // Update zoom highlight on main indicator
+    if (this.scrollIndicatorZoomHighlight) {
+      const highlightLeft = startPercent * 100;
+      const highlightWidth = (endPercent - startPercent) * 100;
+      this.scrollIndicatorZoomHighlight.css({
+        left: `${highlightLeft}%`,
+        width: `${highlightWidth}%`
+      });
+    }
+  }
+
+  /**
+   * Update the date/time labels for the zoom indicator
+   */
+  updateZoomIndicatorLabels(windowStart, windowEnd) {
+    if (!this.scrollIndicatorZoomLabelStart || !this.scrollIndicatorZoomLabelEnd) return;
+    if (!this.items.length) return;
+
+    const firstItem = this.items[windowStart];
+    const lastItem = this.items[windowEnd];
+
+    let firstTimestamp = this.getTimestampForItem(firstItem);
+    let lastTimestamp = this.getTimestampForItem(lastItem);
+
+    // Swap based on sort order - reverse chronological (default) shows newer first
+    const reversed = this.state.feedSortReverse;
+    if (firstTimestamp && lastTimestamp) {
+      const shouldSwap = reversed
+        ? firstTimestamp > lastTimestamp  // Reverse: older should be first (left)
+        : firstTimestamp < lastTimestamp; // Forward: newer should be first (left)
+      if (shouldSwap) {
+        [firstTimestamp, lastTimestamp] = [lastTimestamp, firstTimestamp];
+      }
+    }
+
+    const formatCompact = (date) => {
+      if (!date) return '';
+      const now = new Date();
+      const isToday = date.toDateString() === now.toDateString();
+      const isThisYear = date.getFullYear() === now.getFullYear();
+
+      if (isToday) {
+        return format(date, 'h:mma').toLowerCase();
+      } else if (isThisYear) {
+        return format(date, 'M/d h:mma').toLowerCase();
+      } else {
+        return format(date, 'M/d/yy h:mma').toLowerCase();
+      }
+    };
+
+    this.scrollIndicatorZoomLabelStart.text(formatCompact(firstTimestamp));
+    this.scrollIndicatorZoomLabelEnd.text(formatCompact(lastTimestamp));
   }
 
   updateViewportIndicator(indicator, total) {

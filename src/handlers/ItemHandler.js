@@ -2131,7 +2131,7 @@ ${
       return;
     }
 
-    console.log('[bsky-navigator] Loading more posts via sentinel');
+    console.log('[bsky-navigator] Loading more posts via sentinel:', loadMoreSentinel);
     $('img#loadOlderIndicatorImage').removeClass('image-highlight');
     $('img#loadOlderIndicatorImage').addClass('toolbar-icon-pending');
     this.loading = true;

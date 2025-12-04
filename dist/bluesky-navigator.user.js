@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+391.e40b4e62
+// @version     1.0.31+392.daedc92e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -66838,7 +66838,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         console.log("[bsky-navigator] No load-more sentinel available");
         return;
       }
-      console.log("[bsky-navigator] Loading more posts via sentinel");
+      console.log("[bsky-navigator] Loading more posts via sentinel:", loadMoreSentinel);
       $("img#loadOlderIndicatorImage").removeClass("image-highlight");
       $("img#loadOlderIndicatorImage").addClass("toolbar-icon-pending");
       this.loading = true;
@@ -67868,10 +67868,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           target2.tagName === "DIV" && target2.children.length === 0;
           if (isFeedSentinel) {
             loadMoreSentinel = target2;
-            if (!loadMoreCallback) {
-              loadMoreCallback = this.callback;
-              console.log("[bsky-navigator] Captured feed load-more callback");
-            }
+            loadMoreCallback = this.callback;
+            console.log("[bsky-navigator] Captured feed load-more callback and sentinel:", target2);
           }
         }
         this.realObserver.observe(target2);

@@ -110,12 +110,10 @@ let handlers;
           (target.tagName === 'DIV' && target.children.length === 0);
 
         if (isFeedSentinel) {
-          // Always update the sentinel (the most recent one is likely the active one)
+          // Always update - the most recent sentinel is likely the active one
           loadMoreSentinel = target;
-          if (!loadMoreCallback) {
-            loadMoreCallback = this.callback;
-            console.log('[bsky-navigator] Captured feed load-more callback');
-          }
+          loadMoreCallback = this.callback;
+          console.log('[bsky-navigator] Captured feed load-more callback and sentinel:', target);
         }
       }
       this.realObserver.observe(target);

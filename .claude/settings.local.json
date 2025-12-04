@@ -13,7 +13,8 @@
       "Bash(node run.js:*)",
       "Bash(mdfind:*)",
       "Bash(unzip:*)",
-      "Skill(superpowers:brainstorming)"
+      "Skill(superpowers:brainstorming)",
+      "Bash(git push)"
     ],
     "deny": [],
     "ask": []

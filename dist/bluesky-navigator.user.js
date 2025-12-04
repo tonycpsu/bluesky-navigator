@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+393.2c7d7219
+// @version     1.0.31+394.2ebf686d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47732,11 +47732,11 @@ div.item-banner {
 /* Viewport indicator overlay */
 .scroll-viewport-indicator {
   position: absolute;
-  top: 0;
-  height: 100%;
-  background-color: rgba(255, 255, 255, 0.4);
-  border-left: 2px solid rgba(255, 255, 255, 0.8);
-  border-right: 2px solid rgba(255, 255, 255, 0.8);
+  top: -1px;
+  height: calc(100% + 2px);
+  background-color: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(0, 0, 0, 0.35);
+  border-radius: 2px;
   pointer-events: none;
   transition: left var(--transition-duration, 100ms) ease-out,
               width var(--transition-duration, 100ms) ease-out;
@@ -47805,9 +47805,8 @@ div.item-banner {
   }
 
   .scroll-viewport-indicator {
-    background-color: rgba(255, 255, 255, 0.2);
-    border-left-color: rgba(255, 255, 255, 0.6);
-    border-right-color: rgba(255, 255, 255, 0.6);
+    background-color: rgba(0, 0, 0, 0.2);
+    border-color: rgba(255, 255, 255, 0.7);
   }
 
   .scroll-indicator-label {

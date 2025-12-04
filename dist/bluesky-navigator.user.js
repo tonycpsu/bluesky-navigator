@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+389.30ff6215
+// @version     1.0.31+390.d362f0ca
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -66768,11 +66768,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     loadOlderItems() {
       if (this.loading) return;
       const loadMoreCallback = unsafeWindow.__bskyNavGetLoadMoreCallback?.();
+      const loadMoreSentinel = unsafeWindow.__bskyNavGetLoadMoreSentinel?.();
       if (!loadMoreCallback) {
         console.log("[bsky-navigator] No load-more callback available");
         return;
       }
-      console.log("loading more");
+      if (!loadMoreSentinel) {
+        console.log("[bsky-navigator] No load-more sentinel available");
+        return;
+      }
+      console.log("[bsky-navigator] Loading more posts via sentinel");
       $("img#loadOlderIndicatorImage").removeClass("image-highlight");
       $("img#loadOlderIndicatorImage").addClass("toolbar-icon-pending");
       this.loading = true;
@@ -66781,18 +66786,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.setIndex(index);
       this.updateItems();
       const indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
-      const loadElement = this.items.length ? this.items[this.items.length - 1] : $(this.selector).first()[0];
       $(indicatorElement).closest("div.thread").addClass(
         this.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse"
       );
       loadMoreCallback([
         {
           time: performance.now(),
-          target: loadElement,
+          target: loadMoreSentinel,
           isIntersecting: true,
           intersectionRatio: 1,
-          boundingClientRect: loadElement.getBoundingClientRect(),
-          intersectionRect: loadElement.getBoundingClientRect(),
+          boundingClientRect: loadMoreSentinel.getBoundingClientRect(),
+          intersectionRect: loadMoreSentinel.getBoundingClientRect(),
           rootBounds: document.documentElement.getBoundingClientRect()
         }
       ]);
@@ -67686,17 +67690,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
     let disableLoadMore = false;
     let loadMoreCallback = null;
+    let loadMoreSentinel = null;
     unsafeWindow.__bskyNavSetDisableLoadMore = (value) => {
       disableLoadMore = value;
     };
     unsafeWindow.__bskyNavGetLoadMoreCallback = () => loadMoreCallback;
+    unsafeWindow.__bskyNavGetLoadMoreSentinel = () => loadMoreSentinel;
     class ProxyIntersectionObserver {
       constructor(callback, options) {
         this.callback = callback;
         this.options = options;
-        if (!loadMoreCallback) {
-          loadMoreCallback = callback;
-        }
         this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
           if (!disableLoadMore) {
             callback(entries, observer);
@@ -67723,6 +67726,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }, options);
       }
       observe(target2) {
+        if (target2 && target2.matches) {
+          const isFeedSentinel = target2.matches('[data-testid="feedLoadMore"]') || target2.matches('[data-testid*="loader"]') || target2.matches('[data-testid*="Loader"]') || // Empty divs near feed content are often sentinels
+          target2.tagName === "DIV" && target2.children.length === 0;
+          if (isFeedSentinel) {
+            loadMoreSentinel = target2;
+            if (!loadMoreCallback) {
+              loadMoreCallback = this.callback;
+              console.log("[bsky-navigator] Captured feed load-more callback");
+            }
+          }
+        }
         this.realObserver.observe(target2);
       }
       unobserve(target2) {

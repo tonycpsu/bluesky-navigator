@@ -32,8 +32,9 @@ let handlers;
   // Store reference so we can check config later
   let disableLoadMore = false;
 
-  // Store the load-more callback so we can trigger it manually via the U key
+  // Store the load-more callback and sentinel element so we can trigger it manually via the U key
   let loadMoreCallback = null;
+  let loadMoreSentinel = null;
 
   // Function to update the setting (called after config is loaded)
   unsafeWindow.__bskyNavSetDisableLoadMore = (value) => {
@@ -43,16 +44,13 @@ let handlers;
   // Function to get the stored callback for manual triggering
   unsafeWindow.__bskyNavGetLoadMoreCallback = () => loadMoreCallback;
 
+  // Function to get the sentinel element
+  unsafeWindow.__bskyNavGetLoadMoreSentinel = () => loadMoreSentinel;
+
   class ProxyIntersectionObserver {
     constructor(callback, options) {
       this.callback = callback;
       this.options = options;
-
-      // Store the first callback as the likely load-more trigger
-      // This is a heuristic - Bluesky's infinite scroll observer is typically created early
-      if (!loadMoreCallback) {
-        loadMoreCallback = callback;
-      }
 
       // Create the real observer with filtered callback
       this.realObserver = new OriginalIntersectionObserver((entries, observer) => {
@@ -101,6 +99,25 @@ let handlers;
     }
 
     observe(target) {
+      // Detect when an observer starts watching feed sentinel elements
+      // This helps us identify the correct load-more callback
+      if (target && target.matches) {
+        const isFeedSentinel =
+          target.matches('[data-testid="feedLoadMore"]') ||
+          target.matches('[data-testid*="loader"]') ||
+          target.matches('[data-testid*="Loader"]') ||
+          // Empty divs near feed content are often sentinels
+          (target.tagName === 'DIV' && target.children.length === 0);
+
+        if (isFeedSentinel) {
+          // Always update the sentinel (the most recent one is likely the active one)
+          loadMoreSentinel = target;
+          if (!loadMoreCallback) {
+            loadMoreCallback = this.callback;
+            console.log('[bsky-navigator] Captured feed load-more callback');
+          }
+        }
+      }
       this.realObserver.observe(target);
     }
 

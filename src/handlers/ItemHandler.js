@@ -2117,14 +2117,21 @@ ${
   loadOlderItems() {
     if (this.loading) return;
 
-    // Get the stored callback from the IntersectionObserver proxy
+    // Get the stored callback and sentinel from the IntersectionObserver proxy
     const loadMoreCallback = unsafeWindow.__bskyNavGetLoadMoreCallback?.();
+    const loadMoreSentinel = unsafeWindow.__bskyNavGetLoadMoreSentinel?.();
+
     if (!loadMoreCallback) {
       console.log('[bsky-navigator] No load-more callback available');
       return;
     }
 
-    console.log('loading more');
+    if (!loadMoreSentinel) {
+      console.log('[bsky-navigator] No load-more sentinel available');
+      return;
+    }
+
+    console.log('[bsky-navigator] Loading more posts via sentinel');
     $('img#loadOlderIndicatorImage').removeClass('image-highlight');
     $('img#loadOlderIndicatorImage').addClass('toolbar-icon-pending');
     this.loading = true;
@@ -2133,22 +2140,21 @@ ${
     this.setIndex(index);
     this.updateItems();
     const indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
-    const loadElement = this.items.length
-      ? this.items[this.items.length - 1]
-      : $(this.selector).first()[0];
     $(indicatorElement)
       .closest('div.thread')
       .addClass(
         this.state.feedSortReverse ? 'loading-indicator-forward' : 'loading-indicator-reverse'
       );
+
+    // Use the actual sentinel element that Bluesky's observer is watching
     loadMoreCallback([
       {
         time: performance.now(),
-        target: loadElement,
+        target: loadMoreSentinel,
         isIntersecting: true,
         intersectionRatio: 1,
-        boundingClientRect: loadElement.getBoundingClientRect(),
-        intersectionRect: loadElement.getBoundingClientRect(),
+        boundingClientRect: loadMoreSentinel.getBoundingClientRect(),
+        intersectionRect: loadMoreSentinel.getBoundingClientRect(),
         rootBounds: document.documentElement.getBoundingClientRect(),
       },
     ]);

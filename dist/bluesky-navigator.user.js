@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+387.80944f75
+// @version     1.0.31+388.01de46ce
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44833,6 +44833,12 @@ if (cid) {
           type: "checkbox",
           default: false,
           help: "Animate scrolling when navigating posts"
+        },
+        enablePageKeys: {
+          label: "Page/Home/End navigation",
+          type: "checkbox",
+          default: true,
+          help: "Use PgUp/PgDn/Home/End for post navigation"
         }
       }
     },
@@ -49136,9 +49142,13 @@ div.item-banner {
     Navigation: [
       { keys: ["j", "\u2193"], description: "Next item" },
       { keys: ["k", "\u2191"], description: "Previous item" },
+      { keys: ["PgDn"], description: "Page down (multiple items)" },
+      { keys: ["PgUp"], description: "Page up (multiple items)" },
+      { keys: ["Home"], description: "Go to first item" },
+      { keys: ["End"], description: "Go to last item" },
       { keys: ["J"], description: "Next unread item" },
-      { keys: ["g", "g"], description: "Go to first item" },
-      { keys: ["G"], description: "Go to last item" },
+      { keys: ["g", "g"], description: "Go to first item (vim)" },
+      { keys: ["G"], description: "Go to last item (vim)" },
       { keys: ["h"], description: "Go back" },
       { keys: ["\u2190", "\u2192"], description: "Toggle focus (post/replies)" }
     ],
@@ -65562,10 +65572,14 @@ div.item-banner {
         return;
       }
       this.ignoreMouseMovement = true;
+      const pageKeysEnabled = this.config.get("enablePageKeys");
+      ["PageDown", "PageUp", "Home", "End"].includes(event.key);
       if (this.keyState.length == 0) {
-        if (["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"].includes(
-          event.key
-        )) {
+        const movementKeys = ["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"];
+        if (pageKeysEnabled) {
+          movementKeys.push("PageDown", "PageUp", "Home", "End");
+        }
+        if (movementKeys.includes(event.key)) {
           if (["j", "ArrowDown"].indexOf(event.key) != -1) {
             event.preventDefault();
             if (this.config.get("showReplySidecar") && this.replyIndex != null) {
@@ -65590,6 +65604,37 @@ div.item-banner {
             } else {
               moved = this.jumpToPrev(event.key == "k");
             }
+          } else if (event.key == "PageDown") {
+            event.preventDefault();
+            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+              moved = this.jumpSidecarByPage(1);
+            } else {
+              moved = this.jumpByPage(1);
+            }
+          } else if (event.key == "PageUp") {
+            event.preventDefault();
+            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+              moved = this.jumpSidecarByPage(-1);
+            } else {
+              moved = this.jumpByPage(-1);
+            }
+          } else if (event.key == "Home") {
+            event.preventDefault();
+            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+              this.replyIndex = 0;
+            } else {
+              this.setIndex(0, false, true);
+            }
+            moved = true;
+          } else if (event.key == "End") {
+            event.preventDefault();
+            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+              const replies = $(this.selectedItem).parent().find("div.sidecar-post");
+              this.replyIndex = replies.length - 1;
+            } else {
+              this.setIndex(this.items.length - 1, false, true);
+            }
+            moved = true;
           } else if (event.key == "h") {
             const back_button = $("button[aria-label^='Back' i]").filter(":visible");
             if (back_button.length) {
@@ -65723,6 +65768,34 @@ div.item-banner {
         }
       }
       return true;
+    }
+    jumpByPage(direction2) {
+      const viewportHeight = window.innerHeight;
+      const currentItem = this.selectedItem;
+      if (!currentItem) return false;
+      const itemHeight = $(currentItem).outerHeight(true) || 200;
+      const itemsPerPage = Math.max(1, Math.floor(viewportHeight / itemHeight) - 1);
+      const newIndex = Math.max(0, Math.min(this.items.length - 1, this.index + direction2 * itemsPerPage));
+      if (newIndex !== this.index) {
+        this.setIndex(newIndex, false, true);
+        return true;
+      }
+      return false;
+    }
+    jumpSidecarByPage(direction2) {
+      const replies = $(this.selectedItem).parent().find("div.sidecar-post");
+      if (!replies.length) return false;
+      const sidecar = $(this.selectedItem).parent().find(".sidecar-replies");
+      const sidecarHeight = sidecar.height() || window.innerHeight;
+      const currentReply = replies.eq(this.replyIndex);
+      const replyHeight = currentReply.outerHeight(true) || 100;
+      const repliesPerPage = Math.max(1, Math.floor(sidecarHeight / replyHeight) - 1);
+      const newIndex = Math.max(0, Math.min(replies.length - 1, this.replyIndex + direction2 * repliesPerPage));
+      if (newIndex !== this.replyIndex) {
+        this.replyIndex = newIndex;
+        return true;
+      }
+      return false;
     }
     jumpToNextUnseenItem(mark) {
       let i2;

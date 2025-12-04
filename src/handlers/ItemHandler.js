@@ -674,12 +674,18 @@ export class ItemHandler extends Handler {
     }
     this.ignoreMouseMovement = true;
 
+    // Check if page/home/end keys should be handled
+    const pageKeysEnabled = this.config.get('enablePageKeys');
+    const isPageKey = ['PageDown', 'PageUp', 'Home', 'End'].includes(event.key);
+
     if (this.keyState.length == 0) {
-      if (
-        ['j', 'k', 'h', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'J', 'G'].includes(
-          event.key
-        )
-      ) {
+      // Build list of movement keys, conditionally including page keys
+      const movementKeys = ['j', 'k', 'h', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'J', 'G'];
+      if (pageKeysEnabled) {
+        movementKeys.push('PageDown', 'PageUp', 'Home', 'End');
+      }
+
+      if (movementKeys.includes(event.key)) {
         if (['j', 'ArrowDown'].indexOf(event.key) != -1) {
           event.preventDefault();
           if (this.config.get('showReplySidecar') && this.replyIndex != null) {
@@ -704,6 +710,37 @@ export class ItemHandler extends Handler {
           } else {
             moved = this.jumpToPrev(event.key == 'k');
           }
+        } else if (event.key == 'PageDown') {
+          event.preventDefault();
+          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
+            moved = this.jumpSidecarByPage(1);
+          } else {
+            moved = this.jumpByPage(1);
+          }
+        } else if (event.key == 'PageUp') {
+          event.preventDefault();
+          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
+            moved = this.jumpSidecarByPage(-1);
+          } else {
+            moved = this.jumpByPage(-1);
+          }
+        } else if (event.key == 'Home') {
+          event.preventDefault();
+          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
+            this.replyIndex = 0;
+          } else {
+            this.setIndex(0, false, true);
+          }
+          moved = true;
+        } else if (event.key == 'End') {
+          event.preventDefault();
+          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
+            const replies = $(this.selectedItem).parent().find('div.sidecar-post');
+            this.replyIndex = replies.length - 1;
+          } else {
+            this.setIndex(this.items.length - 1, false, true);
+          }
+          moved = true;
         } else if (event.key == 'h') {
           const back_button = $("button[aria-label^='Back' i]").filter(':visible');
           if (back_button.length) {
@@ -850,6 +887,48 @@ export class ItemHandler extends Handler {
       }
     }
     return true;
+  }
+
+  jumpByPage(direction) {
+    // Calculate how many items fit in the viewport
+    const viewportHeight = window.innerHeight;
+    const currentItem = this.selectedItem;
+    if (!currentItem) return false;
+
+    const itemHeight = $(currentItem).outerHeight(true) || 200;
+    const itemsPerPage = Math.max(1, Math.floor(viewportHeight / itemHeight) - 1);
+
+    // Calculate new index
+    const newIndex = Math.max(0, Math.min(this.items.length - 1, this.index + direction * itemsPerPage));
+
+    if (newIndex !== this.index) {
+      this.setIndex(newIndex, false, true);
+      return true;
+    }
+    return false;
+  }
+
+  jumpSidecarByPage(direction) {
+    const replies = $(this.selectedItem).parent().find('div.sidecar-post');
+    if (!replies.length) return false;
+
+    // Get the sidecar container height
+    const sidecar = $(this.selectedItem).parent().find('.sidecar-replies');
+    const sidecarHeight = sidecar.height() || window.innerHeight;
+
+    // Get the height of a reply item
+    const currentReply = replies.eq(this.replyIndex);
+    const replyHeight = currentReply.outerHeight(true) || 100;
+    const repliesPerPage = Math.max(1, Math.floor(sidecarHeight / replyHeight) - 1);
+
+    // Calculate new index
+    const newIndex = Math.max(0, Math.min(replies.length - 1, this.replyIndex + direction * repliesPerPage));
+
+    if (newIndex !== this.replyIndex) {
+      this.replyIndex = newIndex;
+      return true;
+    }
+    return false;
   }
 
   jumpToNextUnseenItem(mark) {

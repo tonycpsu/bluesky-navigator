@@ -82,6 +82,12 @@ const CONFIG_SCHEMA = {
         default: false,
         help: 'Animate scrolling when navigating posts',
       },
+      enablePageKeys: {
+        label: 'Page/Home/End navigation',
+        type: 'checkbox',
+        default: true,
+        help: 'Use PgUp/PgDn/Home/End for post navigation',
+      },
     },
   },
   'Threads & Sidecar': {

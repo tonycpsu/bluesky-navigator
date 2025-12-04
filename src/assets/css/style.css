@@ -1692,7 +1692,60 @@ div.item-banner {
 }
 
 .scroll-segment-current {
-  background-color: #3b82f6;
+  outline: 2px solid #3b82f6;
+  outline-offset: -1px;
+  z-index: 1;
+}
+
+/* Heatmap intensity levels (engagement-based) */
+.scroll-segment-heat-1 { background-color: #fef3c7; } /* lightest - low engagement */
+.scroll-segment-heat-2 { background-color: #fde68a; }
+.scroll-segment-heat-3 { background-color: #fcd34d; }
+.scroll-segment-heat-4 { background-color: #fbbf24; }
+.scroll-segment-heat-5 { background-color: #f59e0b; }
+.scroll-segment-heat-6 { background-color: #d97706; }
+.scroll-segment-heat-7 { background-color: #b45309; }
+.scroll-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
+
+/* Content type icons in segments */
+.scroll-segment-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: var(--scroll-icon-display, flex);
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}
+
+.scroll-icon-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  height: 100%;
+}
+
+.scroll-icon-stack img {
+  height: 45%;
+  width: auto;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.scroll-segment {
+  position: relative;
+}
+
+@media (prefers-color-scheme: dark) {
+  .scroll-icon-stack img {
+    filter: invert(1);
+    opacity: 0.8;
+  }
 }
 
 /* Viewport indicator overlay */
@@ -1767,7 +1820,7 @@ div.item-banner {
   }
 
   .scroll-segment-current {
-    background-color: #60a5fa;
+    outline-color: #60a5fa;
   }
 
   .scroll-viewport-indicator {
@@ -1778,6 +1831,16 @@ div.item-banner {
   .scroll-indicator-label {
     color: #9ca3af;
   }
+
+  /* Dark mode heatmap - cooler tones */
+  .scroll-segment-heat-1 { background-color: #1e3a5f; }
+  .scroll-segment-heat-2 { background-color: #1e4976; }
+  .scroll-segment-heat-3 { background-color: #1d5a8d; }
+  .scroll-segment-heat-4 { background-color: #1c6ba4; }
+  .scroll-segment-heat-5 { background-color: #1b7cbb; }
+  .scroll-segment-heat-6 { background-color: #1a8dd2; }
+  .scroll-segment-heat-7 { background-color: #199ee9; }
+  .scroll-segment-heat-8 { background-color: #18afff; }
 }
 
 @media (prefers-contrast: more) {
@@ -1791,7 +1854,8 @@ div.item-banner {
   }
 
   .scroll-segment-current {
-    background-color: #1d4ed8;
+    outline: 3px solid #1d4ed8;
+    outline-offset: -1px;
   }
 }
 

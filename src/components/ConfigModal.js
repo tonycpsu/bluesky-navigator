@@ -101,6 +101,19 @@ const CONFIG_SCHEMA = {
         default: 6,
         help: 'Height of the scroll indicator in pixels (1-20)',
       },
+      scrollIndicatorHeatmap: {
+        label: 'Heatmap mode',
+        type: 'select',
+        options: ['None', 'Engagement Rate', 'Raw Engagement', 'Weighted Engagement'],
+        default: 'None',
+        help: 'Color intensity based on post engagement metrics',
+      },
+      scrollIndicatorIcons: {
+        label: 'Content icons',
+        type: 'checkbox',
+        default: true,
+        help: 'Show icons for media, replies, and reposts in scroll indicator',
+      },
     },
   },
   'Threads & Sidecar': {

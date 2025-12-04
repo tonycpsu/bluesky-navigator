@@ -27,6 +27,14 @@ export class FeedItemHandler extends ItemHandler {
       'https://www.svgrepo.com/show/522235/preferences.svg',
       'https://www.svgrepo.com/show/522236/preferences.svg',
     ],
+    // Scroll indicator content type icons
+    contentVideo: 'https://www.svgrepo.com/show/333765/camera-movie.svg',
+    contentImage: 'https://www.svgrepo.com/show/334014/image-alt.svg',
+    contentEmbed: 'https://www.svgrepo.com/show/334050/link-external.svg',
+    contentText: 'https://www.svgrepo.com/show/333848/comment.svg',
+    contentRepost: 'https://www.svgrepo.com/show/334212/repost.svg',
+    contentReply: 'https://www.svgrepo.com/show/334206/reply.svg',
+    contentPost: 'https://www.svgrepo.com/show/333882/detail.svg',
   };
 
   constructor(name, config, state, api, selector) {
@@ -130,6 +138,7 @@ export class FeedItemHandler extends ItemHandler {
       this.scrollIndicatorContainer.append(this.scrollIndicator);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
       $(this.toolbarDiv).append(this.scrollIndicatorContainer);
+      this.setupScrollIndicatorClick();
     }
 
     // First row: icons
@@ -393,6 +402,7 @@ export class FeedItemHandler extends ItemHandler {
       this.scrollIndicatorContainer.append(this.scrollIndicator);
       this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
       $(this.statusBar).append(this.scrollIndicatorContainer);
+      this.setupScrollIndicatorClick();
     }
 
     $(this.statusBar).append(this.statusBarLeft);
@@ -1011,6 +1021,30 @@ export class FeedItemHandler extends ItemHandler {
       segments = indicator.find('.scroll-segment');
     }
 
+    // Get heatmap settings
+    const heatmapMode = this.config.get('scrollIndicatorHeatmap') || 'None';
+    const showIcons = this.config.get('scrollIndicatorIcons') !== false;
+
+    console.log('[bsky-navigator] Heatmap settings:', { heatmapMode, showIcons });
+
+    // Calculate engagement data for heatmap and/or icons
+    let engagementData = [];
+    let maxScore = 0;
+
+    if (heatmapMode !== 'None' || showIcons) {
+      // Note: this.items is a jQuery object, so we need to use .toArray() for proper iteration
+      engagementData = this.items.toArray().map((item, idx) => {
+        const engagement = this.getPostEngagement(item);
+        const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
+        if (score > maxScore) maxScore = score;
+        if (idx < 3) {
+          console.log('[bsky-navigator] Item', idx, 'engagement:', engagement, 'score:', score);
+        }
+        return { engagement, score };
+      });
+      console.log('[bsky-navigator] Max score:', maxScore, 'Total items:', engagementData.length);
+    }
+
     // Update segment states
     segments.each((i, segment) => {
       const $segment = $(segment);
@@ -1018,13 +1052,50 @@ export class FeedItemHandler extends ItemHandler {
       const isRead = item && $(item).hasClass('item-read');
       const isCurrent = i === currentIndex;
 
-      $segment.removeClass('scroll-segment-read scroll-segment-current');
+      // Remove all state classes
+      $segment.removeClass(
+        'scroll-segment-read scroll-segment-current ' +
+        'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
+        'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
+      );
+
+      // Clear existing icon
+      $segment.find('.scroll-segment-icon').remove();
+
       if (isCurrent) {
         $segment.addClass('scroll-segment-current');
+      } else if (heatmapMode !== 'None' && engagementData[i]) {
+        // Apply heatmap coloring
+        const heatLevel = this.getHeatLevel(engagementData[i].score, maxScore);
+        if (heatLevel > 0) {
+          $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+        } else if (isRead) {
+          $segment.addClass('scroll-segment-read');
+        }
       } else if (isRead) {
         $segment.addClass('scroll-segment-read');
       }
+
+      // Add content icon if enabled
+      if (showIcons && engagementData[i]?.engagement) {
+        const icon = this.getContentIcon(engagementData[i].engagement);
+        if (icon) {
+          $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+        }
+      }
     });
+
+    // Hide icons if segments are too narrow
+    if (showIcons && total > 0) {
+      const indicatorWidth = indicator.width();
+      const segmentWidth = indicatorWidth / total;
+      // Hide icons if segments are too narrow to display them clearly
+      if (segmentWidth < 8) {
+        indicator.css('--scroll-icon-display', 'none');
+      } else {
+        indicator.css('--scroll-icon-display', 'flex');
+      }
+    }
 
     // Update viewport indicator position
     this.updateViewportIndicator(indicator, total);
@@ -1068,6 +1139,194 @@ export class FeedItemHandler extends ItemHandler {
 
     this.scrollIndicatorLabelStart.text(formatCompact(firstTimestamp));
     this.scrollIndicatorLabelEnd.text(formatCompact(lastTimestamp));
+  }
+
+  /**
+   * Extract engagement metrics from a post element
+   */
+  getPostEngagement(item) {
+    if (!item) return null;
+
+    const $item = $(item);
+
+    // Extract counts from button aria-labels or text content
+    const getCount = (selector) => {
+      const btn = $item.find(selector);
+      if (!btn.length) {
+        // Also try looking in parent thread container
+        const threadBtn = $item.closest('.thread').find(selector);
+        if (threadBtn.length) {
+          const label = threadBtn.attr('aria-label') || '';
+          const match = label.match(/(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)/i);
+          if (match) return this.parseCount(match[1]);
+          return this.parseCount(threadBtn.text().trim()) || 0;
+        }
+        return 0;
+      }
+      // Try aria-label first (e.g., "5 likes" or "Like (5 likes)")
+      const label = btn.attr('aria-label') || '';
+      const match = label.match(/(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)/i);
+      if (match) {
+        return this.parseCount(match[1]);
+      }
+      // Try text content
+      const text = btn.text().trim();
+      return this.parseCount(text) || 0;
+    };
+
+    const likes = getCount('button[data-testid="likeBtn"]');
+    const reposts = getCount('button[data-testid="repostBtn"]');
+    const replies = getCount('button[data-testid="replyBtn"]');
+
+    // Debug: log first item structure
+    if (!this._debuggedItem) {
+      this._debuggedItem = true;
+      console.log('[bsky-navigator] Item structure debug:', {
+        itemTag: item.tagName,
+        itemClasses: item.className,
+        likeBtnFound: $item.find('button[data-testid="likeBtn"]').length,
+        likeBtnInThread: $item.closest('.thread').find('button[data-testid="likeBtn"]').length,
+        allButtons: $item.find('button').length,
+        allButtonsInThread: $item.closest('.thread').find('button').length,
+      });
+    }
+
+    // Get post timestamp for time-based calculations
+    const timestamp = this.getTimestampForItem(item);
+    const hoursOld = timestamp ? (Date.now() - timestamp.getTime()) / (1000 * 60 * 60) : 1;
+
+    // Detect content type
+    const hasImage = $item.find('img[src*="feed_thumbnail"], img[src*="feed_fullsize"]').length > 0;
+    const hasVideo = $item.find('video, div[data-testid*="video"]').length > 0;
+    const hasEmbed = $item.find('div[data-testid="contentHider-embed"]').length > 0;
+
+    // Detect post type
+    const isRepost = $item.closest('.thread').find('svg[aria-label*="Reposted"]').length > 0 ||
+                     $item.closest('.thread').find('div[data-testid*="repost"]').length > 0;
+    const isReply = $item.find('div[data-testid*="replyLine"]').length > 0 ||
+                    $item.closest('.thread').find('a[href*="/post/"][aria-label*="Reply"]').length > 0;
+
+    return {
+      likes,
+      reposts,
+      replies,
+      total: likes + reposts + replies,
+      hoursOld: Math.max(0.1, hoursOld), // Minimum 6 minutes to avoid division issues
+      hasImage,
+      hasVideo,
+      hasEmbed,
+      hasMedia: hasImage || hasVideo,
+      isRepost,
+      isReply,
+    };
+  }
+
+  /**
+   * Parse count strings like "1.2K", "5M", etc.
+   */
+  parseCount(str) {
+    if (!str) return 0;
+    str = String(str).trim().replace(/,/g, '');
+    const match = str.match(/^(\d+(?:\.\d+)?)\s*([KMB])?$/i);
+    if (!match) return 0;
+    let num = parseFloat(match[1]);
+    const suffix = (match[2] || '').toUpperCase();
+    if (suffix === 'K') num *= 1000;
+    else if (suffix === 'M') num *= 1000000;
+    else if (suffix === 'B') num *= 1000000000;
+    return Math.round(num);
+  }
+
+  /**
+   * Calculate engagement score based on heatmap mode
+   */
+  calculateEngagementScore(engagement, mode) {
+    if (!engagement) return 0;
+
+    switch (mode) {
+      case 'Engagement Rate':
+        // Engagement per hour - normalized for post age
+        return engagement.total / engagement.hoursOld;
+      case 'Raw Engagement':
+        return engagement.total;
+      case 'Weighted Engagement':
+        // Replies worth more than reposts, reposts worth more than likes
+        return (engagement.likes * 1 + engagement.reposts * 2 + engagement.replies * 3) / engagement.hoursOld;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * Get heat level (1-8) for a score relative to all scores
+   */
+  getHeatLevel(score, maxScore) {
+    if (maxScore === 0 || score === 0) return 0;
+    const normalized = score / maxScore;
+    return Math.min(8, Math.max(1, Math.ceil(normalized * 8)));
+  }
+
+  /**
+   * Get icon/emoji for post content type
+   */
+  getContentIcon(engagement) {
+    if (!engagement) return '';
+
+    // Top icon: post type (reply, repost, or default post)
+    let postTypeIcon;
+    if (engagement.isRepost) {
+      postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentRepost}" alt="repost">`;
+    } else if (engagement.isReply) {
+      postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentReply}" alt="reply">`;
+    } else {
+      postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentPost}" alt="post">`;
+    }
+
+    // Bottom icon: media type (video, image, embed, or text-only)
+    let mediaIcon;
+    if (engagement.hasVideo) {
+      mediaIcon = `<img src="${this.INDICATOR_IMAGES.contentVideo}" alt="video">`;
+    } else if (engagement.hasImage) {
+      mediaIcon = `<img src="${this.INDICATOR_IMAGES.contentImage}" alt="image">`;
+    } else if (engagement.hasEmbed) {
+      mediaIcon = `<img src="${this.INDICATOR_IMAGES.contentEmbed}" alt="embed">`;
+    } else {
+      mediaIcon = `<img src="${this.INDICATOR_IMAGES.contentText}" alt="text">`;
+    }
+
+    return `<span class="scroll-icon-stack">${postTypeIcon}${mediaIcon}</span>`;
+  }
+
+  /**
+   * Set up click handler for scroll indicator to jump to posts
+   */
+  setupScrollIndicatorClick() {
+    if (!this.scrollIndicator) return;
+
+    this.scrollIndicator.css('cursor', 'pointer');
+
+    this.scrollIndicator.on('click', (event) => {
+      const indicator = $(event.currentTarget);
+      const indicatorWidth = indicator.width();
+      const clickX = event.pageX - indicator.offset().left;
+
+      // Calculate which segment was clicked based on position
+      const total = this.items.length;
+      if (total === 0) return;
+
+      const segmentWidth = indicatorWidth / total;
+      const clickedIndex = Math.floor(clickX / segmentWidth);
+
+      // Clamp to valid range
+      const targetIndex = Math.max(0, Math.min(total - 1, clickedIndex));
+
+      // Jump to the post using setIndex which handles selection and scrolling
+      if (targetIndex !== this.index) {
+        this.setIndex(targetIndex, false, true);
+        this.updateScrollPosition();
+        this.updateBreadcrumb();
+      }
+    });
   }
 
   updateViewportIndicator(indicator, total) {

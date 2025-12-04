@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+394.2ebf686d
+// @version     1.0.31+395.3717e56d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44852,6 +44852,19 @@ if (cid) {
           type: "number",
           default: 6,
           help: "Height of the scroll indicator in pixels (1-20)"
+        },
+        scrollIndicatorHeatmap: {
+          label: "Heatmap mode",
+          type: "select",
+          options: ["None", "Engagement Rate", "Raw Engagement", "Weighted Engagement"],
+          default: "None",
+          help: "Color intensity based on post engagement metrics"
+        },
+        scrollIndicatorIcons: {
+          label: "Content icons",
+          type: "checkbox",
+          default: true,
+          help: "Show icons for media, replies, and reposts in scroll indicator"
         }
       }
     },
@@ -47726,7 +47739,60 @@ div.item-banner {
 }
 
 .scroll-segment-current {
-  background-color: #3b82f6;
+  outline: 2px solid #3b82f6;
+  outline-offset: -1px;
+  z-index: 1;
+}
+
+/* Heatmap intensity levels (engagement-based) */
+.scroll-segment-heat-1 { background-color: #fef3c7; } /* lightest - low engagement */
+.scroll-segment-heat-2 { background-color: #fde68a; }
+.scroll-segment-heat-3 { background-color: #fcd34d; }
+.scroll-segment-heat-4 { background-color: #fbbf24; }
+.scroll-segment-heat-5 { background-color: #f59e0b; }
+.scroll-segment-heat-6 { background-color: #d97706; }
+.scroll-segment-heat-7 { background-color: #b45309; }
+.scroll-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
+
+/* Content type icons in segments */
+.scroll-segment-icon {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: var(--scroll-icon-display, flex);
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}
+
+.scroll-icon-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  height: 100%;
+}
+
+.scroll-icon-stack img {
+  height: 45%;
+  width: auto;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.scroll-segment {
+  position: relative;
+}
+
+@media (prefers-color-scheme: dark) {
+  .scroll-icon-stack img {
+    filter: invert(1);
+    opacity: 0.8;
+  }
 }
 
 /* Viewport indicator overlay */
@@ -47801,7 +47867,7 @@ div.item-banner {
   }
 
   .scroll-segment-current {
-    background-color: #60a5fa;
+    outline-color: #60a5fa;
   }
 
   .scroll-viewport-indicator {
@@ -47812,6 +47878,16 @@ div.item-banner {
   .scroll-indicator-label {
     color: #9ca3af;
   }
+
+  /* Dark mode heatmap - cooler tones */
+  .scroll-segment-heat-1 { background-color: #1e3a5f; }
+  .scroll-segment-heat-2 { background-color: #1e4976; }
+  .scroll-segment-heat-3 { background-color: #1d5a8d; }
+  .scroll-segment-heat-4 { background-color: #1c6ba4; }
+  .scroll-segment-heat-5 { background-color: #1b7cbb; }
+  .scroll-segment-heat-6 { background-color: #1a8dd2; }
+  .scroll-segment-heat-7 { background-color: #199ee9; }
+  .scroll-segment-heat-8 { background-color: #18afff; }
 }
 
 @media (prefers-contrast: more) {
@@ -47825,7 +47901,8 @@ div.item-banner {
   }
 
   .scroll-segment-current {
-    background-color: #1d4ed8;
+    outline: 3px solid #1d4ed8;
+    outline-offset: -1px;
   }
 }
 
@@ -66922,7 +66999,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       preferences: [
         "https://www.svgrepo.com/show/522235/preferences.svg",
         "https://www.svgrepo.com/show/522236/preferences.svg"
-      ]
+      ],
+      // Scroll indicator content type icons
+      contentVideo: "https://www.svgrepo.com/show/333765/camera-movie.svg",
+      contentImage: "https://www.svgrepo.com/show/334014/image-alt.svg",
+      contentEmbed: "https://www.svgrepo.com/show/334050/link-external.svg",
+      contentText: "https://www.svgrepo.com/show/333848/comment.svg",
+      contentRepost: "https://www.svgrepo.com/show/334212/repost.svg",
+      contentReply: "https://www.svgrepo.com/show/334206/reply.svg",
+      contentPost: "https://www.svgrepo.com/show/333882/detail.svg"
     };
     constructor(name, config2, state2, api, selector) {
       super(name, config2, state2, api, selector);
@@ -67014,6 +67099,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.scrollIndicatorContainer.append(this.scrollIndicator);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
         $(this.toolbarDiv).append(this.scrollIndicatorContainer);
+        this.setupScrollIndicatorClick();
       }
       this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1"/>`);
       $(this.toolbarDiv).append(this.toolbarRow1);
@@ -67225,6 +67311,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.scrollIndicatorContainer.append(this.scrollIndicator);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
         $(this.statusBar).append(this.scrollIndicatorContainer);
+        this.setupScrollIndicatorClick();
       }
       $(this.statusBar).append(this.statusBarLeft);
       $(this.statusBar).append(this.statusBarCenter);
@@ -67710,18 +67797,60 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         indicator.append('<div class="scroll-viewport-indicator"></div>');
         segments = indicator.find(".scroll-segment");
       }
+      const heatmapMode = this.config.get("scrollIndicatorHeatmap") || "None";
+      const showIcons = this.config.get("scrollIndicatorIcons") !== false;
+      console.log("[bsky-navigator] Heatmap settings:", { heatmapMode, showIcons });
+      let engagementData = [];
+      let maxScore = 0;
+      if (heatmapMode !== "None" || showIcons) {
+        engagementData = this.items.toArray().map((item, idx) => {
+          const engagement = this.getPostEngagement(item);
+          const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
+          if (score > maxScore) maxScore = score;
+          if (idx < 3) {
+            console.log("[bsky-navigator] Item", idx, "engagement:", engagement, "score:", score);
+          }
+          return { engagement, score };
+        });
+        console.log("[bsky-navigator] Max score:", maxScore, "Total items:", engagementData.length);
+      }
       segments.each((i2, segment) => {
         const $segment = $(segment);
         const item = this.items[i2];
         const isRead = item && $(item).hasClass("item-read");
         const isCurrent = i2 === currentIndex;
-        $segment.removeClass("scroll-segment-read scroll-segment-current");
+        $segment.removeClass(
+          "scroll-segment-read scroll-segment-current scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+        );
+        $segment.find(".scroll-segment-icon").remove();
         if (isCurrent) {
           $segment.addClass("scroll-segment-current");
+        } else if (heatmapMode !== "None" && engagementData[i2]) {
+          const heatLevel = this.getHeatLevel(engagementData[i2].score, maxScore);
+          if (heatLevel > 0) {
+            $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+          } else if (isRead) {
+            $segment.addClass("scroll-segment-read");
+          }
         } else if (isRead) {
           $segment.addClass("scroll-segment-read");
         }
+        if (showIcons && engagementData[i2]?.engagement) {
+          const icon = this.getContentIcon(engagementData[i2].engagement);
+          if (icon) {
+            $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+          }
+        }
       });
+      if (showIcons && total > 0) {
+        const indicatorWidth = indicator.width();
+        const segmentWidth = indicatorWidth / total;
+        if (segmentWidth < 8) {
+          indicator.css("--scroll-icon-display", "none");
+        } else {
+          indicator.css("--scroll-icon-display", "flex");
+        }
+      }
       this.updateViewportIndicator(indicator, total);
       this.updateScrollIndicatorLabels();
       const position2 = currentIndex + 1;
@@ -67751,6 +67880,154 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       };
       this.scrollIndicatorLabelStart.text(formatCompact(firstTimestamp));
       this.scrollIndicatorLabelEnd.text(formatCompact(lastTimestamp));
+    }
+    /**
+     * Extract engagement metrics from a post element
+     */
+    getPostEngagement(item) {
+      if (!item) return null;
+      const $item = $(item);
+      const getCount = (selector) => {
+        const btn = $item.find(selector);
+        if (!btn.length) {
+          const threadBtn = $item.closest(".thread").find(selector);
+          if (threadBtn.length) {
+            const label2 = threadBtn.attr("aria-label") || "";
+            const match3 = label2.match(/(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)/i);
+            if (match3) return this.parseCount(match3[1]);
+            return this.parseCount(threadBtn.text().trim()) || 0;
+          }
+          return 0;
+        }
+        const label = btn.attr("aria-label") || "";
+        const match2 = label.match(/(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)/i);
+        if (match2) {
+          return this.parseCount(match2[1]);
+        }
+        const text = btn.text().trim();
+        return this.parseCount(text) || 0;
+      };
+      const likes = getCount('button[data-testid="likeBtn"]');
+      const reposts = getCount('button[data-testid="repostBtn"]');
+      const replies = getCount('button[data-testid="replyBtn"]');
+      if (!this._debuggedItem) {
+        this._debuggedItem = true;
+        console.log("[bsky-navigator] Item structure debug:", {
+          itemTag: item.tagName,
+          itemClasses: item.className,
+          likeBtnFound: $item.find('button[data-testid="likeBtn"]').length,
+          likeBtnInThread: $item.closest(".thread").find('button[data-testid="likeBtn"]').length,
+          allButtons: $item.find("button").length,
+          allButtonsInThread: $item.closest(".thread").find("button").length
+        });
+      }
+      const timestamp = this.getTimestampForItem(item);
+      const hoursOld = timestamp ? (Date.now() - timestamp.getTime()) / (1e3 * 60 * 60) : 1;
+      const hasImage = $item.find('img[src*="feed_thumbnail"], img[src*="feed_fullsize"]').length > 0;
+      const hasVideo = $item.find('video, div[data-testid*="video"]').length > 0;
+      const hasEmbed = $item.find('div[data-testid="contentHider-embed"]').length > 0;
+      const isRepost = $item.closest(".thread").find('svg[aria-label*="Reposted"]').length > 0 || $item.closest(".thread").find('div[data-testid*="repost"]').length > 0;
+      const isReply = $item.find('div[data-testid*="replyLine"]').length > 0 || $item.closest(".thread").find('a[href*="/post/"][aria-label*="Reply"]').length > 0;
+      return {
+        likes,
+        reposts,
+        replies,
+        total: likes + reposts + replies,
+        hoursOld: Math.max(0.1, hoursOld),
+        // Minimum 6 minutes to avoid division issues
+        hasImage,
+        hasVideo,
+        hasEmbed,
+        hasMedia: hasImage || hasVideo,
+        isRepost,
+        isReply
+      };
+    }
+    /**
+     * Parse count strings like "1.2K", "5M", etc.
+     */
+    parseCount(str) {
+      if (!str) return 0;
+      str = String(str).trim().replace(/,/g, "");
+      const match2 = str.match(/^(\d+(?:\.\d+)?)\s*([KMB])?$/i);
+      if (!match2) return 0;
+      let num = parseFloat(match2[1]);
+      const suffix = (match2[2] || "").toUpperCase();
+      if (suffix === "K") num *= 1e3;
+      else if (suffix === "M") num *= 1e6;
+      else if (suffix === "B") num *= 1e9;
+      return Math.round(num);
+    }
+    /**
+     * Calculate engagement score based on heatmap mode
+     */
+    calculateEngagementScore(engagement, mode) {
+      if (!engagement) return 0;
+      switch (mode) {
+        case "Engagement Rate":
+          return engagement.total / engagement.hoursOld;
+        case "Raw Engagement":
+          return engagement.total;
+        case "Weighted Engagement":
+          return (engagement.likes * 1 + engagement.reposts * 2 + engagement.replies * 3) / engagement.hoursOld;
+        default:
+          return 0;
+      }
+    }
+    /**
+     * Get heat level (1-8) for a score relative to all scores
+     */
+    getHeatLevel(score, maxScore) {
+      if (maxScore === 0 || score === 0) return 0;
+      const normalized = score / maxScore;
+      return Math.min(8, Math.max(1, Math.ceil(normalized * 8)));
+    }
+    /**
+     * Get icon/emoji for post content type
+     */
+    getContentIcon(engagement) {
+      if (!engagement) return "";
+      let postTypeIcon;
+      if (engagement.isRepost) {
+        postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentRepost}" alt="repost">`;
+      } else if (engagement.isReply) {
+        postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentReply}" alt="reply">`;
+      } else {
+        postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentPost}" alt="post">`;
+      }
+      let mediaIcon;
+      if (engagement.hasVideo) {
+        mediaIcon = `<img src="${this.INDICATOR_IMAGES.contentVideo}" alt="video">`;
+      } else if (engagement.hasImage) {
+        mediaIcon = `<img src="${this.INDICATOR_IMAGES.contentImage}" alt="image">`;
+      } else if (engagement.hasEmbed) {
+        mediaIcon = `<img src="${this.INDICATOR_IMAGES.contentEmbed}" alt="embed">`;
+      } else {
+        mediaIcon = `<img src="${this.INDICATOR_IMAGES.contentText}" alt="text">`;
+      }
+      return `<span class="scroll-icon-stack">${postTypeIcon}${mediaIcon}</span>`;
+    }
+    /**
+     * Set up click handler for scroll indicator to jump to posts
+     */
+    setupScrollIndicatorClick() {
+      if (!this.scrollIndicator) return;
+      this.scrollIndicator.css("cursor", "pointer");
+      this.scrollIndicator.on("click", (event) => {
+        const indicator = $(event.currentTarget);
+        const indicatorWidth = indicator.width();
+        const clickX = event.pageX - indicator.offset().left;
+        const total = this.items.length;
+        if (total === 0) return;
+        const segmentWidth = indicatorWidth / total;
+        const clickedIndex = Math.floor(clickX / segmentWidth);
+        const targetIndex = Math.max(0, Math.min(total - 1, clickedIndex));
+        if (targetIndex !== this.index) {
+          this.setIndex(targetIndex, false, true);
+          this.updateScrollPosition();
+          this.updateBreadcrumb();
+        }
+      });
     }
     updateViewportIndicator(indicator, total) {
       const viewportIndicator = indicator.find(".scroll-viewport-indicator");

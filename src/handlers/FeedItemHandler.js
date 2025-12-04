@@ -204,6 +204,8 @@ export class FeedItemHandler extends ItemHandler {
     const isAdvancedStyle = indicatorStyle === 'Advanced';
     const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0) : 0;
     const styleClass = isAdvancedStyle ? 'scroll-indicator-advanced' : 'scroll-indicator-basic';
+    const indicatorTheme = this.config.get('scrollIndicatorTheme') || 'Default';
+    const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
     const indicatorScale = parseInt(this.config.get('scrollIndicatorScale'), 10) || 100;
     const scaleValue = indicatorScale / 100;
     const scaleStyle = `--indicator-scale: ${scaleValue};`;
@@ -221,8 +223,8 @@ export class FeedItemHandler extends ItemHandler {
       // Always create wrapper with zoom elements (CSS controls visibility based on style)
       // Get reference to zoom highlight element
       this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
-      // Create wrapper for both indicators and connector (styleClass on wrapper so CSS can target children)
-      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper ${styleClass}" style="${scaleStyle}"></div>`);
+      // Create wrapper for both indicators and connector (styleClass + themeClass on wrapper so CSS can target children)
+      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper ${styleClass} ${themeClass}" style="${scaleStyle}"></div>`);
       this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
 
       // Add connector div between main indicator and zoom with SVG inside
@@ -506,6 +508,8 @@ export class FeedItemHandler extends ItemHandler {
     const isAdvancedStyle = indicatorStyle === 'Advanced';
     const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0) : 0;
     const styleClass = isAdvancedStyle ? 'scroll-indicator-advanced' : 'scroll-indicator-basic';
+    const indicatorTheme = this.config.get('scrollIndicatorTheme') || 'Default';
+    const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
     const indicatorScale = parseInt(this.config.get('scrollIndicatorScale'), 10) || 100;
     const scaleValue = indicatorScale / 100;
     const scaleStyle = `--indicator-scale: ${scaleValue};`;
@@ -522,8 +526,8 @@ export class FeedItemHandler extends ItemHandler {
       // Always create wrapper with zoom elements (CSS controls visibility based on style)
       // Get reference to zoom highlight element
       this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
-      // Create wrapper for both indicators and connector (styleClass on wrapper so CSS can target children)
-      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar ${styleClass}" style="${scaleStyle}"></div>`);
+      // Create wrapper for both indicators and connector (styleClass + themeClass on wrapper so CSS can target children)
+      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar ${styleClass} ${themeClass}" style="${scaleStyle}"></div>`);
       this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
 
       // Add connector div between main indicator and zoom with SVG inside
@@ -1224,7 +1228,7 @@ export class FeedItemHandler extends ItemHandler {
 
       // Remove all state classes
       $segment.removeClass(
-        'scroll-segment-read scroll-segment-current ' +
+        'scroll-segment-read scroll-segment-current scroll-segment-ratioed ' +
         'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
         'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
       );
@@ -1239,6 +1243,9 @@ export class FeedItemHandler extends ItemHandler {
 
       if (isCurrent) {
         $segment.addClass('scroll-segment-current');
+      } else if (engagementData[i]?.engagement?.isRatioed) {
+        // Ratioed posts get distinctive styling (takes precedence over heatmap)
+        $segment.addClass('scroll-segment-ratioed');
       } else if (heatmapMode !== 'None' && engagementData[i]) {
         // Apply heatmap coloring (overrides read state visually)
         const heatLevel = this.getHeatLevel(engagementData[i].score, maxScore);
@@ -1393,6 +1400,9 @@ export class FeedItemHandler extends ItemHandler {
     const isReply = $item.find('div[data-testid*="replyLine"]').length > 0 ||
                     $item.closest('.thread').find('a[href*="/post/"][aria-label*="Reply"]').length > 0;
 
+    // Detect ratioed posts: more replies than likes, with minimum engagement threshold
+    const isRatioed = (replies > likes) && (likes + replies >= 10);
+
     return {
       likes,
       reposts,
@@ -1405,6 +1415,7 @@ export class FeedItemHandler extends ItemHandler {
       hasMedia: hasImage || hasVideo,
       isRepost,
       isReply,
+      isRatioed,
     };
   }
 
@@ -1606,7 +1617,7 @@ export class FeedItemHandler extends ItemHandler {
 
       // Remove all state classes
       $segment.removeClass(
-        'scroll-segment-read scroll-segment-current scroll-segment-empty ' +
+        'scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed ' +
         'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
         'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
       );
@@ -1622,6 +1633,9 @@ export class FeedItemHandler extends ItemHandler {
 
       if (isCurrent) {
         $segment.addClass('scroll-segment-current');
+      } else if (engagementData[itemIndex]?.engagement?.isRatioed) {
+        // Ratioed posts get distinctive styling (takes precedence over heatmap)
+        $segment.addClass('scroll-segment-ratioed');
       } else if (heatmapMode !== 'None' && engagementData[itemIndex]) {
         const heatLevel = this.getHeatLevel(engagementData[itemIndex].score, maxScore);
         if (heatLevel > 0) {

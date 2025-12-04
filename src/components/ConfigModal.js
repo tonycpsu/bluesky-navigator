@@ -90,15 +90,15 @@ const CONFIG_SCHEMA = {
       },
     },
   },
-  'Scroll Indicator': {
-    icon: '📊',
+  'Feed Map': {
+    icon: '🗺️',
     fields: {
       scrollIndicatorPosition: {
         label: 'Position',
         type: 'select',
         options: ['Top toolbar', 'Bottom status bar', 'Hidden'],
         default: 'Bottom status bar',
-        help: 'Where to show the scroll progress indicator',
+        help: 'Where to show the feed map',
       },
       scrollIndicatorStyle: {
         label: 'Style',
@@ -114,7 +114,14 @@ const CONFIG_SCHEMA = {
         min: 50,
         max: 400,
         step: 25,
-        help: 'Scale the scroll indicator size (50-400%)',
+        help: 'Scale the feed map size (50-400%)',
+      },
+      scrollIndicatorTheme: {
+        label: 'Color theme',
+        type: 'select',
+        options: ['Ocean', 'Campfire', 'Forest', 'Monochrome'],
+        default: 'Ocean',
+        help: 'Color scheme for the feed map',
       },
       scrollIndicatorHeatmap: {
         label: 'Heatmap mode',
@@ -128,7 +135,7 @@ const CONFIG_SCHEMA = {
         label: 'Content icons',
         type: 'checkbox',
         default: true,
-        help: 'Show icons for media, replies, and reposts in scroll indicator',
+        help: 'Show icons for media, replies, and reposts in feed map',
         showWhen: { scrollIndicatorStyle: 'Advanced' },
       },
       scrollIndicatorZoom: {
@@ -1322,6 +1329,22 @@ export class ConfigModal {
         if (wrapper) {
           wrapper.classList.remove('scroll-indicator-basic', 'scroll-indicator-advanced');
           wrapper.classList.add(value === 'Advanced' ? 'scroll-indicator-advanced' : 'scroll-indicator-basic');
+        }
+        // Dispatch event for handler to update indicator
+        document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
+          detail: { setting: name, value }
+        }));
+        break;
+      }
+
+      case 'scrollIndicatorTheme': {
+        // Toggle theme class on wrapper
+        const wrapper = document.querySelector('.scroll-indicator-wrapper');
+        if (wrapper) {
+          // Remove all theme classes
+          wrapper.classList.remove('scroll-indicator-theme-ocean', 'scroll-indicator-theme-campfire',
+            'scroll-indicator-theme-forest', 'scroll-indicator-theme-monochrome');
+          wrapper.classList.add(`scroll-indicator-theme-${value.toLowerCase()}`);
         }
         // Dispatch event for handler to update indicator
         document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {

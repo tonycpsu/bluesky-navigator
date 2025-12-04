@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+398.34107b22
+// @version     1.0.31+399.580499dc
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44842,15 +44842,15 @@ if (cid) {
         }
       }
     },
-    "Scroll Indicator": {
-      icon: "\u{1F4CA}",
+    "Feed Map": {
+      icon: "\u{1F5FA}\uFE0F",
       fields: {
         scrollIndicatorPosition: {
           label: "Position",
           type: "select",
           options: ["Top toolbar", "Bottom status bar", "Hidden"],
           default: "Bottom status bar",
-          help: "Where to show the scroll progress indicator"
+          help: "Where to show the feed map"
         },
         scrollIndicatorStyle: {
           label: "Style",
@@ -44866,7 +44866,14 @@ if (cid) {
           min: 50,
           max: 400,
           step: 25,
-          help: "Scale the scroll indicator size (50-400%)"
+          help: "Scale the feed map size (50-400%)"
+        },
+        scrollIndicatorTheme: {
+          label: "Color theme",
+          type: "select",
+          options: ["Ocean", "Campfire", "Forest", "Monochrome"],
+          default: "Ocean",
+          help: "Color scheme for the feed map"
         },
         scrollIndicatorHeatmap: {
           label: "Heatmap mode",
@@ -44880,7 +44887,7 @@ if (cid) {
           label: "Content icons",
           type: "checkbox",
           default: true,
-          help: "Show icons for media, replies, and reposts in scroll indicator",
+          help: "Show icons for media, replies, and reposts in feed map",
           showWhen: { scrollIndicatorStyle: "Advanced" }
         },
         scrollIndicatorZoom: {
@@ -45905,6 +45912,22 @@ if (cid) {
           if (wrapper2) {
             wrapper2.classList.remove("scroll-indicator-basic", "scroll-indicator-advanced");
             wrapper2.classList.add(value === "Advanced" ? "scroll-indicator-advanced" : "scroll-indicator-basic");
+          }
+          document.dispatchEvent(new CustomEvent("scrollIndicatorSettingChanged", {
+            detail: { setting: name, value }
+          }));
+          break;
+        }
+        case "scrollIndicatorTheme": {
+          const wrapper2 = document.querySelector(".scroll-indicator-wrapper");
+          if (wrapper2) {
+            wrapper2.classList.remove(
+              "scroll-indicator-theme-ocean",
+              "scroll-indicator-theme-campfire",
+              "scroll-indicator-theme-forest",
+              "scroll-indicator-theme-monochrome"
+            );
+            wrapper2.classList.add(`scroll-indicator-theme-${value.toLowerCase()}`);
           }
           document.dispatchEvent(new CustomEvent("scrollIndicatorSettingChanged", {
             detail: { setting: name, value }
@@ -47881,7 +47904,23 @@ div.item-banner {
   z-index: 1;
 }
 
-/* Heatmap intensity levels (engagement-based) */
+/* ========================================
+   SCROLL INDICATOR THEMES
+   ======================================== */
+
+/* Ratioed posts - distinctive styling for posts with more replies than likes */
+.scroll-segment-ratioed {
+  background-color: #ef4444 !important; /* Default red */
+}
+
+/* === CAMPFIRE THEME (amber/orange) === */
+/* Unread: light amber, Read: gray, Current: orange outline */
+.scroll-indicator-theme-campfire .scroll-position-indicator { background-color: #fffbeb; }
+.scroll-indicator-theme-campfire .scroll-segment-read { background-color: #9ca3af; }
+.scroll-indicator-theme-campfire .scroll-segment-current { outline-color: #f59e0b !important; }
+.scroll-indicator-theme-campfire .scroll-segment-ratioed { background-color: #ef4444 !important; }
+
+/* Heatmap intensity levels (engagement-based) - Default theme */
 .scroll-segment-heat-1 { background-color: #fef3c7; } /* lightest - low engagement */
 .scroll-segment-heat-2 { background-color: #fde68a; }
 .scroll-segment-heat-3 { background-color: #fcd34d; }
@@ -47890,6 +47929,51 @@ div.item-banner {
 .scroll-segment-heat-6 { background-color: #d97706; }
 .scroll-segment-heat-7 { background-color: #b45309; }
 .scroll-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
+
+/* === OCEAN THEME (blue/teal) === */
+/* Unread: light sky, Read: slate, Current: cyan outline */
+.scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #e0f2fe; }
+.scroll-indicator-theme-ocean .scroll-segment-read { background-color: #64748b; }
+.scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #06b6d4 !important; }
+.scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #f97316 !important; }
+.scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #e0f2fe; }
+.scroll-indicator-theme-ocean .scroll-segment-heat-2 { background-color: #bae6fd; }
+.scroll-indicator-theme-ocean .scroll-segment-heat-3 { background-color: #7dd3fc; }
+.scroll-indicator-theme-ocean .scroll-segment-heat-4 { background-color: #38bdf8; }
+.scroll-indicator-theme-ocean .scroll-segment-heat-5 { background-color: #0ea5e9; }
+.scroll-indicator-theme-ocean .scroll-segment-heat-6 { background-color: #0284c7; }
+.scroll-indicator-theme-ocean .scroll-segment-heat-7 { background-color: #0369a1; }
+.scroll-indicator-theme-ocean .scroll-segment-heat-8 { background-color: #075985; }
+
+/* === FOREST THEME (green) === */
+/* Unread: light green, Read: stone, Current: lime outline */
+.scroll-indicator-theme-forest .scroll-position-indicator { background-color: #dcfce7; }
+.scroll-indicator-theme-forest .scroll-segment-read { background-color: #78716c; }
+.scroll-indicator-theme-forest .scroll-segment-current { outline-color: #84cc16 !important; }
+.scroll-indicator-theme-forest .scroll-segment-ratioed { background-color: #ea580c !important; }
+.scroll-indicator-theme-forest .scroll-segment-heat-1 { background-color: #dcfce7; }
+.scroll-indicator-theme-forest .scroll-segment-heat-2 { background-color: #bbf7d0; }
+.scroll-indicator-theme-forest .scroll-segment-heat-3 { background-color: #86efac; }
+.scroll-indicator-theme-forest .scroll-segment-heat-4 { background-color: #4ade80; }
+.scroll-indicator-theme-forest .scroll-segment-heat-5 { background-color: #22c55e; }
+.scroll-indicator-theme-forest .scroll-segment-heat-6 { background-color: #16a34a; }
+.scroll-indicator-theme-forest .scroll-segment-heat-7 { background-color: #15803d; }
+.scroll-indicator-theme-forest .scroll-segment-heat-8 { background-color: #166534; }
+
+/* === MONOCHROME THEME (grayscale) === */
+/* Unread: light gray, Read: dark gray, Current: white outline */
+.scroll-indicator-theme-monochrome .scroll-position-indicator { background-color: #e5e7eb; }
+.scroll-indicator-theme-monochrome .scroll-segment-read { background-color: #4b5563; }
+.scroll-indicator-theme-monochrome .scroll-segment-current { outline-color: #1f2937 !important; }
+.scroll-indicator-theme-monochrome .scroll-segment-ratioed { background-color: #dc2626 !important; }
+.scroll-indicator-theme-monochrome .scroll-segment-heat-1 { background-color: #f3f4f6; }
+.scroll-indicator-theme-monochrome .scroll-segment-heat-2 { background-color: #e5e7eb; }
+.scroll-indicator-theme-monochrome .scroll-segment-heat-3 { background-color: #d1d5db; }
+.scroll-indicator-theme-monochrome .scroll-segment-heat-4 { background-color: #9ca3af; }
+.scroll-indicator-theme-monochrome .scroll-segment-heat-5 { background-color: #6b7280; }
+.scroll-indicator-theme-monochrome .scroll-segment-heat-6 { background-color: #4b5563; }
+.scroll-indicator-theme-monochrome .scroll-segment-heat-7 { background-color: #374151; }
+.scroll-indicator-theme-monochrome .scroll-segment-heat-8 { background-color: #1f2937; }
 
 /* Content type icons in segments */
 .scroll-segment-icon {
@@ -48192,7 +48276,16 @@ div#statusBar.has-scroll-indicator {
     color: #9ca3af;
   }
 
-  /* Dark mode heatmap - cooler tones */
+  /* Dark mode ratioed - brighter for visibility */
+  .scroll-segment-ratioed {
+    background-color: #f87171 !important; /* red-400 */
+  }
+
+  /* === DARK MODE: CAMPFIRE THEME === */
+  .scroll-indicator-theme-campfire .scroll-position-indicator { background-color: #451a03; }
+  .scroll-indicator-theme-campfire .scroll-segment-read { background-color: #4b5563; }
+  .scroll-indicator-theme-campfire .scroll-segment-current { outline-color: #fbbf24 !important; }
+  .scroll-indicator-theme-campfire .scroll-segment-ratioed { background-color: #f87171 !important; }
   .scroll-segment-heat-1 { background-color: #1e3a5f; }
   .scroll-segment-heat-2 { background-color: #1e4976; }
   .scroll-segment-heat-3 { background-color: #1d5a8d; }
@@ -48201,6 +48294,48 @@ div#statusBar.has-scroll-indicator {
   .scroll-segment-heat-6 { background-color: #1a8dd2; }
   .scroll-segment-heat-7 { background-color: #199ee9; }
   .scroll-segment-heat-8 { background-color: #18afff; }
+
+  /* === DARK MODE: OCEAN THEME === */
+  .scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #164e63; }
+  .scroll-indicator-theme-ocean .scroll-segment-read { background-color: #334155; }
+  .scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #22d3ee !important; }
+  .scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #fb923c !important; }
+  .scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #164e63; }
+  .scroll-indicator-theme-ocean .scroll-segment-heat-2 { background-color: #155e75; }
+  .scroll-indicator-theme-ocean .scroll-segment-heat-3 { background-color: #0e7490; }
+  .scroll-indicator-theme-ocean .scroll-segment-heat-4 { background-color: #0891b2; }
+  .scroll-indicator-theme-ocean .scroll-segment-heat-5 { background-color: #06b6d4; }
+  .scroll-indicator-theme-ocean .scroll-segment-heat-6 { background-color: #22d3ee; }
+  .scroll-indicator-theme-ocean .scroll-segment-heat-7 { background-color: #67e8f9; }
+  .scroll-indicator-theme-ocean .scroll-segment-heat-8 { background-color: #a5f3fc; }
+
+  /* === DARK MODE: FOREST THEME === */
+  .scroll-indicator-theme-forest .scroll-position-indicator { background-color: #14532d; }
+  .scroll-indicator-theme-forest .scroll-segment-read { background-color: #44403c; }
+  .scroll-indicator-theme-forest .scroll-segment-current { outline-color: #a3e635 !important; }
+  .scroll-indicator-theme-forest .scroll-segment-ratioed { background-color: #fb923c !important; }
+  .scroll-indicator-theme-forest .scroll-segment-heat-1 { background-color: #14532d; }
+  .scroll-indicator-theme-forest .scroll-segment-heat-2 { background-color: #166534; }
+  .scroll-indicator-theme-forest .scroll-segment-heat-3 { background-color: #15803d; }
+  .scroll-indicator-theme-forest .scroll-segment-heat-4 { background-color: #16a34a; }
+  .scroll-indicator-theme-forest .scroll-segment-heat-5 { background-color: #22c55e; }
+  .scroll-indicator-theme-forest .scroll-segment-heat-6 { background-color: #4ade80; }
+  .scroll-indicator-theme-forest .scroll-segment-heat-7 { background-color: #86efac; }
+  .scroll-indicator-theme-forest .scroll-segment-heat-8 { background-color: #bbf7d0; }
+
+  /* === DARK MODE: MONOCHROME THEME === */
+  .scroll-indicator-theme-monochrome .scroll-position-indicator { background-color: #374151; }
+  .scroll-indicator-theme-monochrome .scroll-segment-read { background-color: #6b7280; }
+  .scroll-indicator-theme-monochrome .scroll-segment-current { outline-color: #f9fafb !important; }
+  .scroll-indicator-theme-monochrome .scroll-segment-ratioed { background-color: #ef4444 !important; }
+  .scroll-indicator-theme-monochrome .scroll-segment-heat-1 { background-color: #1f2937; }
+  .scroll-indicator-theme-monochrome .scroll-segment-heat-2 { background-color: #374151; }
+  .scroll-indicator-theme-monochrome .scroll-segment-heat-3 { background-color: #4b5563; }
+  .scroll-indicator-theme-monochrome .scroll-segment-heat-4 { background-color: #6b7280; }
+  .scroll-indicator-theme-monochrome .scroll-segment-heat-5 { background-color: #9ca3af; }
+  .scroll-indicator-theme-monochrome .scroll-segment-heat-6 { background-color: #d1d5db; }
+  .scroll-indicator-theme-monochrome .scroll-segment-heat-7 { background-color: #e5e7eb; }
+  .scroll-indicator-theme-monochrome .scroll-segment-heat-8 { background-color: #f3f4f6; }
 }
 
 @media (prefers-contrast: more) {
@@ -67476,6 +67611,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const isAdvancedStyle = indicatorStyle === "Advanced";
       isAdvancedStyle ? parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0 : 0;
       const styleClass = isAdvancedStyle ? "scroll-indicator-advanced" : "scroll-indicator-basic";
+      const indicatorTheme = this.config.get("scrollIndicatorTheme") || "Default";
+      const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
       const indicatorScale = parseInt(this.config.get("scrollIndicatorScale"), 10) || 100;
       const scaleValue = indicatorScale / 100;
       const scaleStyle = `--indicator-scale: ${scaleValue};`;
@@ -67488,7 +67625,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.scrollIndicatorContainer.append(this.scrollIndicator);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
         this.scrollIndicatorZoomHighlight = this.scrollIndicator.find(".scroll-position-zoom-highlight");
-        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper ${styleClass}" style="${scaleStyle}"></div>`);
+        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper ${styleClass} ${themeClass}" style="${scaleStyle}"></div>`);
         this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
         this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
         <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
@@ -67715,6 +67852,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const isAdvancedStyle = indicatorStyle === "Advanced";
       isAdvancedStyle ? parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0 : 0;
       const styleClass = isAdvancedStyle ? "scroll-indicator-advanced" : "scroll-indicator-basic";
+      const indicatorTheme = this.config.get("scrollIndicatorTheme") || "Default";
+      const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
       const indicatorScale = parseInt(this.config.get("scrollIndicatorScale"), 10) || 100;
       const scaleValue = indicatorScale / 100;
       const scaleStyle = `--indicator-scale: ${scaleValue};`;
@@ -67727,7 +67866,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.scrollIndicatorContainer.append(this.scrollIndicator);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
         this.scrollIndicatorZoomHighlight = this.scrollIndicator.find(".scroll-position-zoom-highlight");
-        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar ${styleClass}" style="${scaleStyle}"></div>`);
+        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar ${styleClass} ${themeClass}" style="${scaleStyle}"></div>`);
         this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
         this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
         <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
@@ -68274,7 +68413,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const isRead = item && $(item).hasClass("item-read");
         const isCurrent = i2 === currentIndex;
         $segment.removeClass(
-          "scroll-segment-read scroll-segment-current scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+          "scroll-segment-read scroll-segment-current scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
         );
         $segment.find(".scroll-segment-icon").remove();
         if (isRead) {
@@ -68282,6 +68421,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         if (isCurrent) {
           $segment.addClass("scroll-segment-current");
+        } else if (engagementData[i2]?.engagement?.isRatioed) {
+          $segment.addClass("scroll-segment-ratioed");
         } else if (heatmapMode !== "None" && engagementData[i2]) {
           const heatLevel = this.getHeatLevel(engagementData[i2].score, maxScore);
           if (heatLevel > 0) {
@@ -68391,6 +68532,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const hasEmbed = $item.find('div[data-testid="contentHider-embed"]').length > 0;
       const isRepost = $item.closest(".thread").find('svg[aria-label*="Reposted"]').length > 0 || $item.closest(".thread").find('div[data-testid*="repost"]').length > 0;
       const isReply = $item.find('div[data-testid*="replyLine"]').length > 0 || $item.closest(".thread").find('a[href*="/post/"][aria-label*="Reply"]').length > 0;
+      const isRatioed = replies > likes && likes + replies >= 10;
       return {
         likes,
         reposts,
@@ -68403,7 +68545,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         hasEmbed,
         hasMedia: hasImage || hasVideo,
         isRepost,
-        isReply
+        isReply,
+        isRatioed
       };
     }
     /**
@@ -68555,7 +68698,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const isCurrent = itemIndex === currentIndex;
         $segment.attr("data-index", hasItem ? itemIndex : -1);
         $segment.removeClass(
-          "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+          "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
         );
         $segment.find(".scroll-segment-icon").remove();
         if (!hasItem) {
@@ -68564,6 +68707,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         if (isCurrent) {
           $segment.addClass("scroll-segment-current");
+        } else if (engagementData[itemIndex]?.engagement?.isRatioed) {
+          $segment.addClass("scroll-segment-ratioed");
         } else if (heatmapMode !== "None" && engagementData[itemIndex]) {
           const heatLevel = this.getHeatLevel(engagementData[itemIndex].score, maxScore);
           if (heatLevel > 0) {

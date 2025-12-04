@@ -1662,6 +1662,8 @@ div.item-banner {
   flex-basis: 100%;
   order: -1;
   margin: -1px -1px 0 -1px;
+  display: flex;
+  position: relative;
 }
 
 /* Toolbar position: place at bottom of toolbar */
@@ -1670,11 +1672,46 @@ div.item-banner {
   margin: 0 -1px -1px -1px;
 }
 
-.scroll-position-fill {
+/* Individual post segment */
+.scroll-segment {
   height: 100%;
-  width: 0%;
+  flex: 1;
+  background-color: transparent;
+  border-right: 1px solid rgba(255, 255, 255, 0.3);
+  box-sizing: border-box;
+  transition: background-color var(--transition-duration, 150ms) ease;
+}
+
+.scroll-segment:last-child {
+  border-right: none;
+}
+
+/* Segment states */
+.scroll-segment-read {
+  background-color: #9ca3af;
+}
+
+.scroll-segment-current {
   background-color: #3b82f6;
-  transition: width var(--transition-duration, 200ms) ease-out;
+}
+
+/* Viewport indicator overlay */
+.scroll-viewport-indicator {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.4);
+  border-left: 2px solid rgba(255, 255, 255, 0.8);
+  border-right: 2px solid rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+  transition: left var(--transition-duration, 100ms) ease-out,
+              width var(--transition-duration, 100ms) ease-out;
+  box-sizing: border-box;
+}
+
+/* Legacy fill element (hidden when using segments) */
+.scroll-position-fill {
+  display: none;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1682,8 +1719,22 @@ div.item-banner {
     background-color: #374151;
   }
 
-  .scroll-position-fill {
+  .scroll-segment {
+    border-right-color: rgba(0, 0, 0, 0.3);
+  }
+
+  .scroll-segment-read {
+    background-color: #6b7280;
+  }
+
+  .scroll-segment-current {
     background-color: #60a5fa;
+  }
+
+  .scroll-viewport-indicator {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-left-color: rgba(255, 255, 255, 0.6);
+    border-right-color: rgba(255, 255, 255, 0.6);
   }
 }
 
@@ -1693,7 +1744,11 @@ div.item-banner {
     background-color: #9ca3af;
   }
 
-  .scroll-position-fill {
+  .scroll-segment-read {
+    background-color: #6b7280;
+  }
+
+  .scroll-segment-current {
     background-color: #1d4ed8;
   }
 }

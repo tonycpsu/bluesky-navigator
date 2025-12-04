@@ -119,8 +119,9 @@ export class FeedItemHandler extends ItemHandler {
 
     // Add scroll position indicator at top of toolbar if configured
     const indicatorPosition = this.config.get('scrollIndicatorPosition');
+    const indicatorThickness = Math.min(20, Math.max(1, this.config.get('scrollIndicatorThickness') || 6));
     if (indicatorPosition === 'Top toolbar') {
-      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator scroll-position-indicator-toolbar" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator scroll-position-indicator-toolbar" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
       $(this.toolbarDiv).append(this.scrollIndicator);
     }
 
@@ -375,8 +376,9 @@ export class FeedItemHandler extends ItemHandler {
 
     // Add scroll position indicator inside status bar if configured
     const indicatorPosition = this.config.get('scrollIndicatorPosition');
+    const indicatorThickness = Math.min(20, Math.max(1, this.config.get('scrollIndicatorThickness') || 6));
     if (indicatorPosition === 'Bottom status bar') {
-      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
       $(this.statusBar).append(this.scrollIndicator);
     }
 
@@ -415,10 +417,33 @@ export class FeedItemHandler extends ItemHandler {
     waitForElement('#bsky-navigator-search', (el) => {
       $(el).val(this.state.filter);
     });
+
+    // Add scroll listener for viewport indicator updates
+    this._scrollHandler = this._throttledScrollUpdate.bind(this);
+    window.addEventListener('scroll', this._scrollHandler, { passive: true });
   }
 
   deactivate() {
     super.deactivate();
+
+    // Remove scroll listener
+    if (this._scrollHandler) {
+      window.removeEventListener('scroll', this._scrollHandler);
+      this._scrollHandler = null;
+    }
+  }
+
+  _throttledScrollUpdate() {
+    if (this._scrollUpdatePending) return;
+    this._scrollUpdatePending = true;
+
+    requestAnimationFrame(() => {
+      const indicator = $('#scroll-position-indicator');
+      if (indicator.length && this.items.length) {
+        this.updateViewportIndicator(indicator, this.items.length);
+      }
+      this._scrollUpdatePending = false;
+    });
   }
 
   isActive() {
@@ -952,13 +977,96 @@ export class FeedItemHandler extends ItemHandler {
     const indicator = $('#scroll-position-indicator');
     if (!indicator.length || !this.items.length) return;
 
-    const position = this.index + 1;
-    const total = this.itemStats.shownCount || this.items.length;
-    const percentage = total > 0 ? Math.round((position / total) * 100) : 0;
+    const total = this.items.length;
+    const currentIndex = this.index;
 
-    indicator.find('.scroll-position-fill').css('width', `${percentage}%`);
+    // Create or update segments
+    let segments = indicator.find('.scroll-segment');
+    if (segments.length !== total) {
+      // Rebuild segments
+      indicator.find('.scroll-segment').remove();
+      indicator.find('.scroll-viewport-indicator').remove();
+
+      for (let i = 0; i < total; i++) {
+        const segment = $('<div class="scroll-segment"></div>');
+        segment.attr('data-index', i);
+        indicator.append(segment);
+      }
+
+      // Add viewport indicator
+      indicator.append('<div class="scroll-viewport-indicator"></div>');
+      segments = indicator.find('.scroll-segment');
+    }
+
+    // Update segment states
+    segments.each((i, segment) => {
+      const $segment = $(segment);
+      const item = this.items[i];
+      const isRead = item && $(item).hasClass('item-read');
+      const isCurrent = i === currentIndex;
+
+      $segment.removeClass('scroll-segment-read scroll-segment-current');
+      if (isCurrent) {
+        $segment.addClass('scroll-segment-current');
+      } else if (isRead) {
+        $segment.addClass('scroll-segment-read');
+      }
+    });
+
+    // Update viewport indicator position
+    this.updateViewportIndicator(indicator, total);
+
+    // Update accessibility attributes
+    const position = currentIndex + 1;
+    const percentage = total > 0 ? Math.round((position / total) * 100) : 0;
     indicator.attr('aria-valuenow', percentage);
     indicator.attr('title', `${position} of ${total} items (${percentage}%)`);
+  }
+
+  updateViewportIndicator(indicator, total) {
+    const viewportIndicator = indicator.find('.scroll-viewport-indicator');
+    if (!viewportIndicator.length || total === 0) return;
+
+    const indicatorWidth = indicator.width();
+    const segmentWidth = indicatorWidth / total;
+
+    // Find which items are visible in the viewport
+    const viewportTop = window.scrollY;
+    const viewportBottom = viewportTop + window.innerHeight;
+
+    let firstVisible = -1;
+    let lastVisible = -1;
+
+    for (let i = 0; i < this.items.length; i++) {
+      const item = this.items[i];
+      if (!item) continue;
+
+      const rect = item.getBoundingClientRect();
+      const itemTop = rect.top + window.scrollY;
+      const itemBottom = itemTop + rect.height;
+
+      // Check if item is at least partially visible
+      if (itemBottom > viewportTop && itemTop < viewportBottom) {
+        if (firstVisible === -1) firstVisible = i;
+        lastVisible = i;
+      }
+    }
+
+    if (firstVisible === -1) {
+      // No items visible, hide viewport indicator
+      viewportIndicator.css({ display: 'none' });
+      return;
+    }
+
+    // Calculate position and width
+    const left = firstVisible * segmentWidth;
+    const width = (lastVisible - firstVisible + 1) * segmentWidth;
+
+    viewportIndicator.css({
+      display: 'block',
+      left: `${left}px`,
+      width: `${width}px`,
+    });
   }
 
   handleInput(event) {

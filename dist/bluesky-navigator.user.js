@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+390.d362f0ca
+// @version     1.0.31+391.e40b4e62
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44846,6 +44846,12 @@ if (cid) {
           options: ["Top toolbar", "Bottom status bar", "Hidden"],
           default: "Bottom status bar",
           help: "Where to show the scroll progress indicator"
+        },
+        scrollIndicatorThickness: {
+          label: "Indicator thickness",
+          type: "number",
+          default: 6,
+          help: "Height of the scroll indicator in pixels (1-20)"
         }
       }
     },
@@ -47690,6 +47696,8 @@ div.item-banner {
   flex-basis: 100%;
   order: -1;
   margin: -1px -1px 0 -1px;
+  display: flex;
+  position: relative;
 }
 
 /* Toolbar position: place at bottom of toolbar */
@@ -47698,11 +47706,46 @@ div.item-banner {
   margin: 0 -1px -1px -1px;
 }
 
-.scroll-position-fill {
+/* Individual post segment */
+.scroll-segment {
   height: 100%;
-  width: 0%;
+  flex: 1;
+  background-color: transparent;
+  border-right: 1px solid rgba(255, 255, 255, 0.3);
+  box-sizing: border-box;
+  transition: background-color var(--transition-duration, 150ms) ease;
+}
+
+.scroll-segment:last-child {
+  border-right: none;
+}
+
+/* Segment states */
+.scroll-segment-read {
+  background-color: #9ca3af;
+}
+
+.scroll-segment-current {
   background-color: #3b82f6;
-  transition: width var(--transition-duration, 200ms) ease-out;
+}
+
+/* Viewport indicator overlay */
+.scroll-viewport-indicator {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.4);
+  border-left: 2px solid rgba(255, 255, 255, 0.8);
+  border-right: 2px solid rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+  transition: left var(--transition-duration, 100ms) ease-out,
+              width var(--transition-duration, 100ms) ease-out;
+  box-sizing: border-box;
+}
+
+/* Legacy fill element (hidden when using segments) */
+.scroll-position-fill {
+  display: none;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -47710,8 +47753,22 @@ div.item-banner {
     background-color: #374151;
   }
 
-  .scroll-position-fill {
+  .scroll-segment {
+    border-right-color: rgba(0, 0, 0, 0.3);
+  }
+
+  .scroll-segment-read {
+    background-color: #6b7280;
+  }
+
+  .scroll-segment-current {
     background-color: #60a5fa;
+  }
+
+  .scroll-viewport-indicator {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-left-color: rgba(255, 255, 255, 0.6);
+    border-right-color: rgba(255, 255, 255, 0.6);
   }
 }
 
@@ -47721,7 +47778,11 @@ div.item-banner {
     background-color: #9ca3af;
   }
 
-  .scroll-position-fill {
+  .scroll-segment-read {
+    background-color: #6b7280;
+  }
+
+  .scroll-segment-current {
     background-color: #1d4ed8;
   }
 }
@@ -66901,8 +66962,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
       $(beforeDiv).before(this.toolbarDiv);
       const indicatorPosition = this.config.get("scrollIndicatorPosition");
+      const indicatorThickness = Math.min(20, Math.max(1, this.config.get("scrollIndicatorThickness") || 6));
       if (indicatorPosition === "Top toolbar") {
-        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator scroll-position-indicator-toolbar" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator scroll-position-indicator-toolbar" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
         $(this.toolbarDiv).append(this.scrollIndicator);
       }
       this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1"/>`);
@@ -67105,8 +67167,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
       this.statusBarRight = $(`<div id="statusBarRight"></div>`);
       const indicatorPosition = this.config.get("scrollIndicatorPosition");
+      const indicatorThickness = Math.min(20, Math.max(1, this.config.get("scrollIndicatorThickness") || 6));
       if (indicatorPosition === "Bottom status bar") {
-        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
         $(this.statusBar).append(this.scrollIndicator);
       }
       $(this.statusBar).append(this.statusBarLeft);
@@ -67140,9 +67203,26 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       waitForElement$1("#bsky-navigator-search", (el) => {
         $(el).val(this.state.filter);
       });
+      this._scrollHandler = this._throttledScrollUpdate.bind(this);
+      window.addEventListener("scroll", this._scrollHandler, { passive: true });
     }
     deactivate() {
       super.deactivate();
+      if (this._scrollHandler) {
+        window.removeEventListener("scroll", this._scrollHandler);
+        this._scrollHandler = null;
+      }
+    }
+    _throttledScrollUpdate() {
+      if (this._scrollUpdatePending) return;
+      this._scrollUpdatePending = true;
+      requestAnimationFrame(() => {
+        const indicator = $("#scroll-position-indicator");
+        if (indicator.length && this.items.length) {
+          this.updateViewportIndicator(indicator, this.items.length);
+        }
+        this._scrollUpdatePending = false;
+      });
     }
     isActive() {
       return window.location.pathname == "/";
@@ -67562,12 +67642,69 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     updateScrollPosition() {
       const indicator = $("#scroll-position-indicator");
       if (!indicator.length || !this.items.length) return;
-      const position2 = this.index + 1;
-      const total = this.itemStats.shownCount || this.items.length;
+      const total = this.items.length;
+      const currentIndex = this.index;
+      let segments = indicator.find(".scroll-segment");
+      if (segments.length !== total) {
+        indicator.find(".scroll-segment").remove();
+        indicator.find(".scroll-viewport-indicator").remove();
+        for (let i2 = 0; i2 < total; i2++) {
+          const segment = $('<div class="scroll-segment"></div>');
+          segment.attr("data-index", i2);
+          indicator.append(segment);
+        }
+        indicator.append('<div class="scroll-viewport-indicator"></div>');
+        segments = indicator.find(".scroll-segment");
+      }
+      segments.each((i2, segment) => {
+        const $segment = $(segment);
+        const item = this.items[i2];
+        const isRead = item && $(item).hasClass("item-read");
+        const isCurrent = i2 === currentIndex;
+        $segment.removeClass("scroll-segment-read scroll-segment-current");
+        if (isCurrent) {
+          $segment.addClass("scroll-segment-current");
+        } else if (isRead) {
+          $segment.addClass("scroll-segment-read");
+        }
+      });
+      this.updateViewportIndicator(indicator, total);
+      const position2 = currentIndex + 1;
       const percentage = total > 0 ? Math.round(position2 / total * 100) : 0;
-      indicator.find(".scroll-position-fill").css("width", `${percentage}%`);
       indicator.attr("aria-valuenow", percentage);
       indicator.attr("title", `${position2} of ${total} items (${percentage}%)`);
+    }
+    updateViewportIndicator(indicator, total) {
+      const viewportIndicator = indicator.find(".scroll-viewport-indicator");
+      if (!viewportIndicator.length || total === 0) return;
+      const indicatorWidth = indicator.width();
+      const segmentWidth = indicatorWidth / total;
+      const viewportTop = window.scrollY;
+      const viewportBottom = viewportTop + window.innerHeight;
+      let firstVisible = -1;
+      let lastVisible = -1;
+      for (let i2 = 0; i2 < this.items.length; i2++) {
+        const item = this.items[i2];
+        if (!item) continue;
+        const rect = item.getBoundingClientRect();
+        const itemTop = rect.top + window.scrollY;
+        const itemBottom = itemTop + rect.height;
+        if (itemBottom > viewportTop && itemTop < viewportBottom) {
+          if (firstVisible === -1) firstVisible = i2;
+          lastVisible = i2;
+        }
+      }
+      if (firstVisible === -1) {
+        viewportIndicator.css({ display: "none" });
+        return;
+      }
+      const left = firstVisible * segmentWidth;
+      const width = (lastVisible - firstVisible + 1) * segmentWidth;
+      viewportIndicator.css({
+        display: "block",
+        left: `${left}px`,
+        width: `${width}px`
+      });
     }
     handleInput(event) {
       const item = this.selectedItem;

@@ -95,6 +95,12 @@ const CONFIG_SCHEMA = {
         default: 'Bottom status bar',
         help: 'Where to show the scroll progress indicator',
       },
+      scrollIndicatorThickness: {
+        label: 'Indicator thickness',
+        type: 'number',
+        default: 6,
+        help: 'Height of the scroll indicator in pixels (1-20)',
+      },
     },
   },
   'Threads & Sidecar': {

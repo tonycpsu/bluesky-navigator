@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+392.daedc92e
+// @version     1.0.31+393.2c7d7219
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47748,6 +47748,45 @@ div.item-banner {
   display: none;
 }
 
+/* Date/time labels for scroll indicator */
+.scroll-indicator-container {
+  display: flex;
+  align-items: center;
+  width: calc(100% + 2px);
+  margin: -1px -1px 0 -1px;
+  flex-basis: 100%;
+  order: -1;
+}
+
+.scroll-indicator-container-toolbar {
+  order: 999;
+  margin: 0 -1px -1px -1px;
+}
+
+.scroll-indicator-label {
+  font-size: 11px;
+  color: #6b7280;
+  white-space: nowrap;
+  padding: 0 6px;
+  flex-shrink: 0;
+}
+
+.scroll-indicator-label-start {
+  text-align: left;
+}
+
+.scroll-indicator-label-end {
+  text-align: right;
+}
+
+.scroll-indicator-container .scroll-position-indicator {
+  flex: 1;
+  width: auto;
+  margin: 0;
+  flex-basis: auto;
+  order: 0;
+}
+
 @media (prefers-color-scheme: dark) {
   .scroll-position-indicator {
     background-color: #374151;
@@ -47769,6 +47808,10 @@ div.item-banner {
     background-color: rgba(255, 255, 255, 0.2);
     border-left-color: rgba(255, 255, 255, 0.6);
     border-right-color: rgba(255, 255, 255, 0.6);
+  }
+
+  .scroll-indicator-label {
+    color: #9ca3af;
   }
 }
 
@@ -66964,8 +67007,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const indicatorPosition = this.config.get("scrollIndicatorPosition");
       const indicatorThickness = Math.min(20, Math.max(1, this.config.get("scrollIndicatorThickness") || 6));
       if (indicatorPosition === "Top toolbar") {
-        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator scroll-position-indicator-toolbar" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
-        $(this.toolbarDiv).append(this.scrollIndicator);
+        this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar"></div>`);
+        this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
+        this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
+        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+        this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
+        this.scrollIndicatorContainer.append(this.scrollIndicator);
+        this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
+        $(this.toolbarDiv).append(this.scrollIndicatorContainer);
       }
       this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1"/>`);
       $(this.toolbarDiv).append(this.toolbarRow1);
@@ -67169,8 +67218,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const indicatorPosition = this.config.get("scrollIndicatorPosition");
       const indicatorThickness = Math.min(20, Math.max(1, this.config.get("scrollIndicatorThickness") || 6));
       if (indicatorPosition === "Bottom status bar") {
+        this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container"></div>`);
+        this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
+        this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
         this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
-        $(this.statusBar).append(this.scrollIndicator);
+        this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
+        this.scrollIndicatorContainer.append(this.scrollIndicator);
+        this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
+        $(this.statusBar).append(this.scrollIndicatorContainer);
       }
       $(this.statusBar).append(this.statusBarLeft);
       $(this.statusBar).append(this.statusBarCenter);
@@ -67669,10 +67724,34 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       });
       this.updateViewportIndicator(indicator, total);
+      this.updateScrollIndicatorLabels();
       const position2 = currentIndex + 1;
       const percentage = total > 0 ? Math.round(position2 / total * 100) : 0;
       indicator.attr("aria-valuenow", percentage);
       indicator.attr("title", `${position2} of ${total} items (${percentage}%)`);
+    }
+    updateScrollIndicatorLabels() {
+      if (!this.scrollIndicatorLabelStart || !this.scrollIndicatorLabelEnd) return;
+      if (!this.items.length) return;
+      const firstItem = this.items[0];
+      const lastItem = this.items[this.items.length - 1];
+      const firstTimestamp = this.getTimestampForItem(firstItem);
+      const lastTimestamp = this.getTimestampForItem(lastItem);
+      const formatCompact = (date) => {
+        if (!date) return "";
+        const now = /* @__PURE__ */ new Date();
+        const isToday = date.toDateString() === now.toDateString();
+        const isThisYear = date.getFullYear() === now.getFullYear();
+        if (isToday) {
+          return format(date, "h:mma").toLowerCase();
+        } else if (isThisYear) {
+          return format(date, "M/d h:mma").toLowerCase();
+        } else {
+          return format(date, "M/d/yy h:mma").toLowerCase();
+        }
+      };
+      this.scrollIndicatorLabelStart.text(formatCompact(firstTimestamp));
+      this.scrollIndicatorLabelEnd.text(formatCompact(lastTimestamp));
     }
     updateViewportIndicator(indicator, total) {
       const viewportIndicator = indicator.find(".scroll-viewport-indicator");

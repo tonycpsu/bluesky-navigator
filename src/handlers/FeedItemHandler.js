@@ -3,6 +3,7 @@
 import constants from '../constants.js';
 import * as utils from '../utils.js';
 import { ItemHandler } from './ItemHandler.js';
+import { format } from 'date-fns';
 
 const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
 
@@ -121,8 +122,14 @@ export class FeedItemHandler extends ItemHandler {
     const indicatorPosition = this.config.get('scrollIndicatorPosition');
     const indicatorThickness = Math.min(20, Math.max(1, this.config.get('scrollIndicatorThickness') || 6));
     if (indicatorPosition === 'Top toolbar') {
-      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator scroll-position-indicator-toolbar" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
-      $(this.toolbarDiv).append(this.scrollIndicator);
+      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar"></div>`);
+      this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
+      this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
+      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+      this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
+      this.scrollIndicatorContainer.append(this.scrollIndicator);
+      this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
+      $(this.toolbarDiv).append(this.scrollIndicatorContainer);
     }
 
     // First row: icons
@@ -378,8 +385,14 @@ export class FeedItemHandler extends ItemHandler {
     const indicatorPosition = this.config.get('scrollIndicatorPosition');
     const indicatorThickness = Math.min(20, Math.max(1, this.config.get('scrollIndicatorThickness') || 6));
     if (indicatorPosition === 'Bottom status bar') {
+      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container"></div>`);
+      this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
+      this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
       this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" style="height: ${indicatorThickness}px" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
-      $(this.statusBar).append(this.scrollIndicator);
+      this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
+      this.scrollIndicatorContainer.append(this.scrollIndicator);
+      this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
+      $(this.statusBar).append(this.scrollIndicatorContainer);
     }
 
     $(this.statusBar).append(this.statusBarLeft);
@@ -1016,11 +1029,45 @@ export class FeedItemHandler extends ItemHandler {
     // Update viewport indicator position
     this.updateViewportIndicator(indicator, total);
 
+    // Update date labels
+    this.updateScrollIndicatorLabels();
+
     // Update accessibility attributes
     const position = currentIndex + 1;
     const percentage = total > 0 ? Math.round((position / total) * 100) : 0;
     indicator.attr('aria-valuenow', percentage);
     indicator.attr('title', `${position} of ${total} items (${percentage}%)`);
+  }
+
+  updateScrollIndicatorLabels() {
+    if (!this.scrollIndicatorLabelStart || !this.scrollIndicatorLabelEnd) return;
+    if (!this.items.length) return;
+
+    // Get timestamps from first and last items
+    const firstItem = this.items[0];
+    const lastItem = this.items[this.items.length - 1];
+
+    const firstTimestamp = this.getTimestampForItem(firstItem);
+    const lastTimestamp = this.getTimestampForItem(lastItem);
+
+    // Format as compact date/time (e.g., "Dec 4 2:30p" or "11/28 9:15a")
+    const formatCompact = (date) => {
+      if (!date) return '';
+      const now = new Date();
+      const isToday = date.toDateString() === now.toDateString();
+      const isThisYear = date.getFullYear() === now.getFullYear();
+
+      if (isToday) {
+        return format(date, 'h:mma').toLowerCase();
+      } else if (isThisYear) {
+        return format(date, 'M/d h:mma').toLowerCase();
+      } else {
+        return format(date, 'M/d/yy h:mma').toLowerCase();
+      }
+    };
+
+    this.scrollIndicatorLabelStart.text(formatCompact(firstTimestamp));
+    this.scrollIndicatorLabelEnd.text(formatCompact(lastTimestamp));
   }
 
   updateViewportIndicator(indicator, total) {

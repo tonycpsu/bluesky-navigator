@@ -1714,6 +1714,45 @@ div.item-banner {
   display: none;
 }
 
+/* Date/time labels for scroll indicator */
+.scroll-indicator-container {
+  display: flex;
+  align-items: center;
+  width: calc(100% + 2px);
+  margin: -1px -1px 0 -1px;
+  flex-basis: 100%;
+  order: -1;
+}
+
+.scroll-indicator-container-toolbar {
+  order: 999;
+  margin: 0 -1px -1px -1px;
+}
+
+.scroll-indicator-label {
+  font-size: 11px;
+  color: #6b7280;
+  white-space: nowrap;
+  padding: 0 6px;
+  flex-shrink: 0;
+}
+
+.scroll-indicator-label-start {
+  text-align: left;
+}
+
+.scroll-indicator-label-end {
+  text-align: right;
+}
+
+.scroll-indicator-container .scroll-position-indicator {
+  flex: 1;
+  width: auto;
+  margin: 0;
+  flex-basis: auto;
+  order: 0;
+}
+
 @media (prefers-color-scheme: dark) {
   .scroll-position-indicator {
     background-color: #374151;
@@ -1735,6 +1774,10 @@ div.item-banner {
     background-color: rgba(255, 255, 255, 0.2);
     border-left-color: rgba(255, 255, 255, 0.6);
     border-right-color: rgba(255, 255, 255, 0.6);
+  }
+
+  .scroll-indicator-label {
+    color: #9ca3af;
   }
 }
 

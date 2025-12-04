@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+385.0071b15b
+// @version     1.0.31+386.562201e9
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44767,56 +44767,66 @@ if (cid) {
           type: "number",
           default: 600,
           min: 400,
-          max: 1200
+          max: 1200,
+          help: "Maximum width of posts in the feed"
         },
         postActionButtonPosition: {
           label: "Action buttons",
           type: "select",
           options: ["Bottom", "Left"],
-          default: "Bottom"
+          default: "Bottom",
+          help: "Position of like/repost/reply buttons"
         },
         postTimestampFormat: {
           label: "Timestamp format",
           type: "text",
           default: "'$age' '('yyyy-MM-dd hh:mmaaa')'",
-          placeholder: "date-fns format string"
+          placeholder: "date-fns format string",
+          help: "Uses date-fns format; $age for relative time"
         },
         postTimestampFormatMobile: {
           label: "Timestamp (mobile)",
           type: "text",
-          default: "'$age'"
+          default: "'$age'",
+          help: "Timestamp format on mobile devices"
         },
         videoPreviewPlayback: {
           label: "Video playback",
           type: "select",
           options: ["Play all", "Play selected", "Pause all"],
-          default: "Play all"
+          default: "Play all",
+          help: "Control video autoplay behavior"
         },
         videoDisableLoop: {
           label: "Disable video loop",
           type: "checkbox",
-          default: false
+          default: false,
+          help: "Stop videos from looping automatically"
         },
         hideRightSidebar: {
           label: "Hide right sidebar",
           type: "checkbox",
-          default: false
+          default: false,
+          help: "Hide the trending/who to follow sidebar"
         },
         hideLoadNewButton: {
           label: 'Hide "Load New" button',
           type: "checkbox",
-          default: false
+          default: false,
+          help: "Hide the button that appears for new posts"
         },
         showPostCounts: {
           label: "Show post counts",
           type: "select",
           options: ["All", "Selection", "None"],
-          default: "All"
+          default: "All",
+          help: "When to show read/unread post counts"
         },
         enableSmoothScrolling: {
           label: "Smooth scrolling",
           type: "checkbox",
-          default: false
+          default: false,
+          help: "Animate scrolling when navigating posts"
         }
       }
     },
@@ -44852,13 +44862,23 @@ if (cid) {
           type: "number",
           default: 600,
           min: 400,
-          max: 1200
+          max: 1200,
+          help: "Minimum viewport width to show sidecar"
+        },
+        sidecarWidthPercent: {
+          label: "Sidecar width (%)",
+          type: "number",
+          default: 30,
+          min: 20,
+          max: 50,
+          help: "Sidecar width relative to post"
         },
         sidecarReplySortOrder: {
           label: "Sidecar sort order",
           type: "select",
           options: ["Default", "Oldest First", "Newest First", "Most Liked First", "Most Reposted First"],
-          default: "Default"
+          default: "Default",
+          help: "How to sort replies in the sidecar"
         }
       }
     },
@@ -44869,31 +44889,36 @@ if (cid) {
         focusRingColor: {
           label: "Focus ring color",
           type: "color",
-          default: "#0066cc"
+          default: "#0066cc",
+          help: "Color of selection outline"
         },
         focusRingWidth: {
           label: "Focus ring width (px)",
           type: "number",
           default: 2,
           min: 1,
-          max: 5
+          max: 5,
+          help: "Thickness of selection outline"
         },
         threadIndicatorWidth: {
           label: "Thread indicator width (px)",
           type: "number",
           default: 4,
           min: 1,
-          max: 10
+          max: 10,
+          help: "Width of the vertical thread line"
         },
         threadIndicatorColor: {
           label: "Thread indicator color",
           type: "text",
-          default: "rgb(212, 219, 226)"
+          default: "rgb(212, 219, 226)",
+          help: "Color of the vertical thread line"
         },
         threadMargin: {
           label: "Thread margin",
           type: "text",
-          default: "10px"
+          default: "10px",
+          help: "Spacing between thread groups"
         }
       }
     },
@@ -44904,62 +44929,74 @@ if (cid) {
         posts: {
           label: "All posts",
           type: "css",
-          default: "padding: 1px;"
+          default: "padding: 1px;",
+          help: "CSS applied to all posts"
         },
         unreadPosts: {
           label: "Unread posts",
           type: "css",
-          default: "opacity: 100% !important;"
+          default: "opacity: 100% !important;",
+          help: "CSS for posts not yet seen"
         },
         unreadPostsLightMode: {
           label: "Unread (light)",
           type: "css",
-          default: "background-color: white;"
+          default: "background-color: white;",
+          help: "Unread posts in light mode"
         },
         unreadPostsDarkMode: {
           label: "Unread (dark)",
           type: "css",
-          default: "background-color: #202020;"
+          default: "background-color: #202020;",
+          help: "Unread posts in dark mode"
         },
         readPosts: {
           label: "Read posts",
           type: "css",
-          default: "opacity: 75% !important;"
+          default: "opacity: 75% !important;",
+          help: "CSS for previously seen posts"
         },
         readPostsLightMode: {
           label: "Read (light)",
           type: "css",
-          default: "background-color: #f0f0f0;"
+          default: "background-color: #f0f0f0;",
+          help: "Read posts in light mode"
         },
         readPostsDarkMode: {
           label: "Read (dark)",
           type: "css",
-          default: "background-color: black;"
+          default: "background-color: black;",
+          help: "Read posts in dark mode"
         },
         selectionActive: {
           label: "Selected post",
           type: "css",
-          default: "outline: var(--focus-ring-width, 2px) var(--focus-ring-color, #0066cc) solid !important;"
+          default: "outline: var(--focus-ring-width, 2px) var(--focus-ring-color, #0066cc) solid !important;",
+          help: "CSS for the currently selected post"
         },
         selectionChildFocused: {
           label: "Child focused",
           type: "css",
-          default: "outline: var(--focus-ring-width, 2px) color-mix(in srgb, var(--focus-ring-color, #0066cc) 40%, transparent) solid !important;"
+          default: "outline: var(--focus-ring-width, 2px) color-mix(in srgb, var(--focus-ring-color, #0066cc) 40%, transparent) solid !important;",
+          help: "Post style when reply is focused"
         },
         selectionInactive: {
           label: "Unselected post",
           type: "css",
-          default: "outline: var(--focus-ring-width, 2px) solid transparent;"
+          default: "outline: var(--focus-ring-width, 2px) solid transparent;",
+          help: "CSS for non-selected posts"
         },
         replySelectionActive: {
           label: "Selected reply",
           type: "css",
-          default: "outline: 1px var(--focus-ring-color, #0066cc) solid !important;"
+          default: "outline: 1px var(--focus-ring-color, #0066cc) solid !important;",
+          help: "CSS for selected reply in sidecar"
         },
         replySelectionInactive: {
           label: "Unselected reply",
           type: "css",
-          default: "outline: 1px rgb(212, 219, 226) solid"
+          default: "outline: 1px rgb(212, 219, 226) solid",
+          help: "CSS for non-selected replies"
         }
       }
     },
@@ -44969,13 +45006,15 @@ if (cid) {
         atprotoService: {
           label: "Service URL",
           type: "text",
-          default: "https://bsky.social"
+          default: "https://bsky.social",
+          help: "AT Protocol service endpoint"
         },
         atprotoIdentifier: {
           label: "Handle",
           type: "text",
           default: "",
-          placeholder: "your.handle"
+          placeholder: "your.handle",
+          help: "Your Bluesky handle or DID"
         },
         atprotoPassword: {
           label: "App Password",
@@ -44993,20 +45032,23 @@ if (cid) {
         stateSyncEnabled: {
           label: "Enable cloud sync",
           type: "checkbox",
-          default: false
+          default: false,
+          help: "Sync read state across devices"
         },
         stateSyncConfig: {
           label: "Sync config (JSON)",
           type: "textarea",
           default: "",
-          rows: 4
+          rows: 4,
+          help: "Cloud sync provider configuration"
         },
         stateSyncTimeout: {
           label: "Sync timeout (ms)",
           type: "number",
           default: 5e3,
           min: 1e3,
-          max: 6e4
+          max: 6e4,
+          help: "How long to wait for sync operations"
         }
       }
     },
@@ -45018,7 +45060,8 @@ if (cid) {
           type: "textarea",
           default: "",
           rows: 6,
-          placeholder: "Enter filter rules..."
+          placeholder: "Enter filter rules...",
+          help: "Content filtering rules by category"
         }
       }
     },
@@ -45030,51 +45073,60 @@ if (cid) {
           label: "Reduced motion",
           type: "select",
           options: ["System", "Always", "Never"],
-          default: "System"
+          default: "System",
+          help: "Control animation behavior"
         },
         highContrastMode: {
           label: "High contrast",
           type: "checkbox",
-          default: false
+          default: false,
+          help: "Increase visual contrast for accessibility"
         },
         enableSwipeGestures: {
           label: "Swipe gestures (mobile)",
           type: "checkbox",
-          default: true
+          default: true,
+          help: "Enable swipe actions on touch devices"
         },
         markReadOnScroll: {
           label: "Mark read on scroll",
           type: "checkbox",
-          default: false
+          default: false,
+          help: "Mark posts as read when scrolled past"
         },
         disableLoadMoreOnScroll: {
           label: "Disable auto-load on scroll",
           type: "checkbox",
-          default: false
+          default: false,
+          help: "Prevent loading more posts on scroll"
         },
         savePostState: {
           label: "Save post state",
           type: "checkbox",
-          default: false
+          default: false,
+          help: "Persist read/unread state locally"
         },
         stateSaveTimeout: {
           label: "State save timeout (ms)",
           type: "number",
           default: 1e3,
           min: 100,
-          max: 1e4
+          max: 1e4,
+          help: "Delay before saving state changes"
         },
         historyMax: {
           label: "History max size",
           type: "number",
           default: constants.DEFAULT_HISTORY_MAX,
           min: 100,
-          max: 1e5
+          max: 1e5,
+          help: "Maximum posts to track in history"
         },
         showDebuggingInfo: {
           label: "Debug mode",
           type: "checkbox",
-          default: false
+          default: false,
+          help: "Show developer debugging information"
         }
       }
     }
@@ -67829,6 +67881,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         .sidecar-post {
             margin: 1px;
             ${config.get("replySelectionInactive")}
+        }
+
+        /* Sidecar width configuration */
+        @media only screen and (min-width: 801px) {
+            .item {
+                flex: ${100 - (config.get("sidecarWidthPercent") || 30)} !important;
+            }
+            .sidecar-replies {
+                flex: ${config.get("sidecarWidthPercent") || 30} !important;
+            }
         }
 
         @media (prefers-color-scheme:light){

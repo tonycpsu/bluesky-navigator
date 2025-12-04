@@ -442,6 +442,16 @@ function getScreenFromElement(element) {
             ${config.get('replySelectionInactive')}
         }
 
+        /* Sidecar width configuration */
+        @media only screen and (min-width: 801px) {
+            .item {
+                flex: ${100 - (config.get('sidecarWidthPercent') || 30)} !important;
+            }
+            .sidecar-replies {
+                flex: ${config.get('sidecarWidthPercent') || 30} !important;
+            }
+        }
+
         @media (prefers-color-scheme:light){
             .item-unread {
                 ${config.get('unreadPosts')};

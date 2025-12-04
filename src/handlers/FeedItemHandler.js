@@ -117,6 +117,13 @@ export class FeedItemHandler extends ItemHandler {
     this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
     $(beforeDiv).before(this.toolbarDiv);
 
+    // Add scroll position indicator at top of toolbar if configured
+    const indicatorPosition = this.config.get('scrollIndicatorPosition');
+    if (indicatorPosition === 'Top toolbar') {
+      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator scroll-position-indicator-toolbar" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+      $(this.toolbarDiv).append(this.scrollIndicator);
+    }
+
     // First row: icons
     this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1"/>`);
     $(this.toolbarDiv).append(this.toolbarRow1);
@@ -365,14 +372,18 @@ export class FeedItemHandler extends ItemHandler {
     this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
     this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
     this.statusBarRight = $(`<div id="statusBarRight"></div>`);
+
+    // Add scroll position indicator inside status bar if configured
+    const indicatorPosition = this.config.get('scrollIndicatorPosition');
+    if (indicatorPosition === 'Bottom status bar') {
+      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+      $(this.statusBar).append(this.scrollIndicator);
+    }
+
     $(this.statusBar).append(this.statusBarLeft);
     $(this.statusBar).append(this.statusBarCenter);
     $(this.statusBar).append(this.statusBarRight);
     $(statusBarContainer).append(this.statusBar);
-
-    // Add scroll position indicator
-    this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
-    $(statusBarContainer).append(this.scrollIndicator);
 
     this.bottomLoadIndicator = $(`
 <div id="bottomLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"/>
@@ -485,8 +496,7 @@ export class FeedItemHandler extends ItemHandler {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }
-        #statusBar,
-        .scroll-position-indicator {
+        #statusBar {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }

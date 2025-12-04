@@ -88,6 +88,13 @@ const CONFIG_SCHEMA = {
         default: true,
         help: 'Use PgUp/PgDn/Home/End for post navigation',
       },
+      scrollIndicatorPosition: {
+        label: 'Scroll indicator',
+        type: 'select',
+        options: ['Top toolbar', 'Bottom status bar', 'Hidden'],
+        default: 'Bottom status bar',
+        help: 'Where to show the scroll progress indicator',
+      },
     },
   },
   'Threads & Sidecar': {

@@ -238,8 +238,7 @@ function getScreenFromElement(element) {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }
-        #statusBar,
-        .scroll-position-indicator {
+        #statusBar {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }

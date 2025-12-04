@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+388.01de46ce
+// @version     1.0.31+389.30ff6215
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44839,6 +44839,13 @@ if (cid) {
           type: "checkbox",
           default: true,
           help: "Use PgUp/PgDn/Home/End for post navigation"
+        },
+        scrollIndicatorPosition: {
+          label: "Scroll indicator",
+          type: "select",
+          options: ["Top toolbar", "Bottom status bar", "Hidden"],
+          default: "Bottom status bar",
+          help: "Where to show the scroll progress indicator"
         }
       }
     },
@@ -46283,8 +46290,9 @@ div#itemTimestampStats {
 @media only screen and not (max-width: 800px) {
     div#statusBar {
         display: flex;
+        flex-wrap: wrap;
         width: 100%;
-        height: 32px;
+        min-height: 32px;
         margin-left: auto;
         margin-right: auto;
         position: sticky;
@@ -46302,8 +46310,9 @@ div#itemTimestampStats {
 @media only screen and (max-width: 800px) {
     div#statusBar {
         display: flex;
+        flex-wrap: wrap;
         width: 100%;
-        height: 32px;
+        min-height: 32px;
         margin-left: auto;
         margin-right: auto;
         position: sticky;
@@ -47674,13 +47683,19 @@ div.item-banner {
    ========================================================================== */
 
 .scroll-position-indicator {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  width: calc(100% + 2px);
   height: 3px;
   background-color: #e5e7eb;
   overflow: hidden;
+  flex-basis: 100%;
+  order: -1;
+  margin: -1px -1px 0 -1px;
+}
+
+/* Toolbar position: place at bottom of toolbar */
+.scroll-position-indicator-toolbar {
+  order: 999;
+  margin: 0 -1px -1px -1px;
 }
 
 .scroll-position-fill {
@@ -66881,6 +66896,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     addToolbar(beforeDiv) {
       this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
       $(beforeDiv).before(this.toolbarDiv);
+      const indicatorPosition = this.config.get("scrollIndicatorPosition");
+      if (indicatorPosition === "Top toolbar") {
+        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator scroll-position-indicator-toolbar" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+        $(this.toolbarDiv).append(this.scrollIndicator);
+      }
       this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1"/>`);
       $(this.toolbarDiv).append(this.toolbarRow1);
       this.topLoadIndicator = $(`
@@ -67080,12 +67100,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
       this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
       this.statusBarRight = $(`<div id="statusBarRight"></div>`);
+      const indicatorPosition = this.config.get("scrollIndicatorPosition");
+      if (indicatorPosition === "Bottom status bar") {
+        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
+        $(this.statusBar).append(this.scrollIndicator);
+      }
       $(this.statusBar).append(this.statusBarLeft);
       $(this.statusBar).append(this.statusBarCenter);
       $(this.statusBar).append(this.statusBarRight);
       $(statusBarContainer).append(this.statusBar);
-      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div></div>`);
-      $(statusBarContainer).append(this.scrollIndicator);
       this.bottomLoadIndicator = $(`
 <div id="bottomLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"/>
 `);
@@ -67173,8 +67196,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }
-        #statusBar,
-        .scroll-position-indicator {
+        #statusBar {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }
@@ -67802,8 +67824,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }
-        #statusBar,
-        .scroll-position-indicator {
+        #statusBar {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }

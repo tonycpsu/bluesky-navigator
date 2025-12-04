@@ -262,8 +262,9 @@ div#itemTimestampStats {
 @media only screen and not (max-width: 800px) {
     div#statusBar {
         display: flex;
+        flex-wrap: wrap;
         width: 100%;
-        height: 32px;
+        min-height: 32px;
         margin-left: auto;
         margin-right: auto;
         position: sticky;
@@ -281,8 +282,9 @@ div#itemTimestampStats {
 @media only screen and (max-width: 800px) {
     div#statusBar {
         display: flex;
+        flex-wrap: wrap;
         width: 100%;
-        height: 32px;
+        min-height: 32px;
         margin-left: auto;
         margin-right: auto;
         position: sticky;
@@ -1653,13 +1655,19 @@ div.item-banner {
    ========================================================================== */
 
 .scroll-position-indicator {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  width: calc(100% + 2px);
   height: 3px;
   background-color: #e5e7eb;
   overflow: hidden;
+  flex-basis: 100%;
+  order: -1;
+  margin: -1px -1px 0 -1px;
+}
+
+/* Toolbar position: place at bottom of toolbar */
+.scroll-position-indicator-toolbar {
+  order: 999;
+  margin: 0 -1px -1px -1px;
 }
 
 .scroll-position-fill {

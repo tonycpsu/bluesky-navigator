@@ -42,8 +42,6 @@ export class FeedItemHandler extends ItemHandler {
     super(name, config, state, api, selector);
     this.toggleSortOrder = this.toggleSortOrder.bind(this);
     this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
-    this.onSearchKeydown = this.onSearchKeydown.bind(this);
-    this.setFilter = this.setFilter.bind(this);
     // Cache for media detection (postId -> {hasImage, hasVideo}) to avoid flaky detection
     this.mediaCache = {};
     // Cache for repost timestamps (postUri -> Date) from AT Protocol API
@@ -504,10 +502,11 @@ export class FeedItemHandler extends ItemHandler {
       }
     });
 
-    this.onSearchUpdate = (event) => {
-      const val = $(event.target).val();
-      console.log(val);
+    // Input event: apply filter after delay
+    $(this.searchField).on('input', () => {
+      const val = $(this.searchField).val();
 
+      // Special case: "/" triggers native search
       if (val === '/') {
         $('#bsky-navigator-search').val('');
         $(this.searchField).autocomplete('close');
@@ -515,25 +514,39 @@ export class FeedItemHandler extends ItemHandler {
         return;
       }
 
-      this.debouncedSearchUpdate(event);
-    };
+      this.applyFilterDelayed();
+    });
 
-    this.debouncedSearchUpdate = utils.debounce((event) => {
-      const val = $(event.target).val();
-      this.setFilter(val.trim());
-      this.loadItems();
-    }, 300);
+    // Keydown: Enter commits immediately, Escape clears
+    $(this.searchField).on('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        $(this.searchField).autocomplete('close');
+        this.applyFilterImmediate();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        $(this.searchField).autocomplete('close');
+        this.handleFilterEscape();
+      } else if (event.altKey && !event.key.startsWith('Arrow')) {
+        // Pass alt+key combos to main handler (but not arrows - those are for text navigation)
+        event.preventDefault();
+        event.stopPropagation();
+        this.handleInput(event);
+      }
+      // Let Cmd+Arrow (line jump) and Option+Arrow (word jump) pass through for text navigation
+    });
 
-    this.onSearchUpdate = this.onSearchUpdate.bind(this);
-    $(this.searchField).on('keydown', this.onSearchKeydown);
-
-    $(this.searchField).on('input', this.onSearchUpdate);
     $(this.searchField).on('focus', function () {
       $(this).autocomplete('search', '');
     });
-    $(this.searchField).on('autocompletechange autocompleteclose', this.onSearchUpdate);
 
-    $(this.searchField).on('autocompleteselect', this.onSearchUpdate);
+    // Autocomplete select: commit the selected value
+    $(this.searchField).on('autocompleteselect', (event, ui) => {
+      // Let autocomplete update the field first, then commit
+      setTimeout(() => {
+        this.commitFilter($(this.searchField).val());
+      }, 0);
+    });
 
     // Width controls (only show when hideRightSidebar is enabled)
     if (this.config.get('hideRightSidebar')) {
@@ -569,14 +582,6 @@ export class FeedItemHandler extends ItemHandler {
     waitForElement('#bsky-navigator-toolbar', null, (_div) => {
       this.addToolbar(beforeDiv);
     });
-  }
-
-  onSearchKeydown(event) {
-    if (event.altKey) {
-      event.preventDefault();
-      event.stopPropagation();
-      this.handleInput(event);
-    }
   }
 
   refreshToolbars() {
@@ -742,12 +747,21 @@ export class FeedItemHandler extends ItemHandler {
       $(el).val(this.state.filter);
     });
 
+    // Restore filter pill and apply filter if one was saved
+    if (this.state.filter) {
+      this.updateFilterPill();
+      this.filterItems();
+    }
+
     // Fetch repost timestamps from AT Protocol API (if available)
     this.fetchRepostTimestamps();
 
     // Add scroll listener for viewport indicator updates
     this._scrollHandler = this._throttledScrollUpdate.bind(this);
     window.addEventListener('scroll', this._scrollHandler, { passive: true });
+
+    // Start filter enforcement if a filter is active
+    this.updateFilterEnforcement();
   }
 
   deactivate() {
@@ -757,6 +771,12 @@ export class FeedItemHandler extends ItemHandler {
     if (this._scrollHandler) {
       window.removeEventListener('scroll', this._scrollHandler);
       this._scrollHandler = null;
+    }
+
+    // Stop filter enforcement
+    if (this._filterEnforcementInterval) {
+      clearInterval(this._filterEnforcementInterval);
+      this._filterEnforcementInterval = null;
     }
   }
 
@@ -883,10 +903,134 @@ export class FeedItemHandler extends ItemHandler {
     }
   }
 
-  setFilter(text) {
-    this.state.stateManager.saveStateImmediately(true, true);
-    this.state.filter = text;
+  /**
+   * Commits a filter - updates state, hides non-matching items, shows pill.
+   * Only called on explicit user action (Enter, autocomplete select, saved search).
+   */
+  commitFilter(text) {
+    const filterText = (text || '').trim();
+    this.state.filter = filterText;
+    this.state.stateManager.updateState({ filter: filterText });
+    this.filterItems();
     this.updateFilterPill();
+
+    // Start or stop the filter enforcement interval
+    this.updateFilterEnforcement();
+
+    if (filterText) {
+      announceToScreenReader(`Filter applied: ${filterText}`);
+    }
+  }
+
+  /**
+   * Starts or stops periodic filter enforcement.
+   * React can replace DOM elements, losing our .filtered class.
+   * This ensures filters stay applied.
+   */
+  updateFilterEnforcement() {
+    // Clear any existing interval
+    if (this._filterEnforcementInterval) {
+      clearInterval(this._filterEnforcementInterval);
+      this._filterEnforcementInterval = null;
+    }
+
+    // If filter is active, start periodic enforcement
+    if (this.state.filter) {
+      this._filterEnforcementInterval = setInterval(() => {
+        // Find items without .filtered class that should be filtered
+        const unfiltered = $('.item').not('.filtered');
+        if (unfiltered.length > 0) {
+          unfiltered.each((i, item) => {
+            const thread = $(item).closest('.thread');
+            if (!this.filterItem(item, thread)) {
+              $(item).addClass('filtered');
+              if (thread.length && !this.filterThread(thread[0])) {
+                $(thread).addClass('filtered');
+              }
+            }
+          });
+        }
+      }, 200); // Check every 200ms
+    }
+  }
+
+  /**
+   * Applies filter after a short delay (debounced).
+   * Called on input events while typing.
+   */
+  applyFilterDelayed() {
+    // Clear any pending timeout
+    if (this._filterTimeout) {
+      clearTimeout(this._filterTimeout);
+    }
+
+    // Debounce: wait 500ms before committing filter
+    this._filterTimeout = setTimeout(() => {
+      this.applyFilterImmediate();
+    }, 500);
+  }
+
+  /**
+   * Applies filter immediately (no delay).
+   * Called on Enter key or after delay expires.
+   */
+  applyFilterImmediate() {
+    // Clear any pending timeout
+    if (this._filterTimeout) {
+      clearTimeout(this._filterTimeout);
+      this._filterTimeout = null;
+    }
+
+    const filterText = $(this.searchField).val().trim();
+    this.commitFilter(filterText);
+  }
+
+  /**
+   * Override onItemAdded to apply filter to newly added items.
+   */
+  onItemAdded(element) {
+    // Call parent implementation first
+    super.onItemAdded(element);
+
+    // Apply filter to new item if a filter is active
+    if (this.state.filter) {
+      const thread = $(element).closest('.thread');
+      const passes = this.filterItem(element, thread);
+      if (!passes) {
+        $(element).addClass('filtered');
+        // Also filter the thread if all items are now filtered
+        if (thread.length && !this.filterThread(thread[0])) {
+          $(thread).addClass('filtered');
+        }
+      }
+    }
+  }
+
+  /**
+   * Handles Escape key in filter input.
+   * If input differs from committed filter: revert to committed value.
+   * If input matches committed filter: clear the filter entirely.
+   */
+  handleFilterEscape() {
+    // Clear any pending filter timeout
+    if (this._filterTimeout) {
+      clearTimeout(this._filterTimeout);
+      this._filterTimeout = null;
+    }
+
+    const inputValue = $(this.searchField).val().trim();
+    const committedValue = this.state.filter || '';
+
+    if (inputValue !== committedValue) {
+      // Revert input to committed value and re-apply committed filter
+      $(this.searchField).val(committedValue);
+      this.filterItems();
+      $(this.searchField).blur();
+    } else {
+      // Clear filter entirely
+      this.clearFilter();
+      $(this.searchField).blur();
+    }
   }
 
   updateFilterPill() {
@@ -918,8 +1062,7 @@ export class FeedItemHandler extends ItemHandler {
 
   clearFilter() {
     $('#bsky-navigator-search').val('');
-    this.setFilter('');
-    this.loadItems();
+    this.commitFilter('');
     announceToScreenReader('Filter cleared');
   }
 
@@ -987,10 +1130,8 @@ export class FeedItemHandler extends ItemHandler {
       if (!$(e.target).hasClass('saved-search-delete')) {
         const search = $(e.currentTarget).data('search');
         $('#bsky-navigator-search').val(search);
-        this.setFilter(search);
-        this.loadItems();
+        this.commitFilter(search);
         dropdown.remove();
-        announceToScreenReader(`Applied saved search: ${search}`);
       }
     });
 
@@ -1028,14 +1169,13 @@ export class FeedItemHandler extends ItemHandler {
       return false;
     }
 
-    if (!this.state.filter || !this.state.rules) {
+    if (!this.state.filter) {
       return true;
     }
 
     const activeRules = this.parseFilterRules(this.state.filter);
-    return activeRules
-      .map((rule) => this.evaluateFilterRule(item, rule))
-      .every((result) => result === true);
+    const results = activeRules.map((rule) => this.evaluateFilterRule(item, rule));
+    return results.every((result) => result === true);
   }
 
   /**
@@ -1082,9 +1222,8 @@ export class FeedItemHandler extends ItemHandler {
    * @private
    */
   evaluateNamedRule(item, ruleName) {
-    const rules = this.state.rules[ruleName];
+    const rules = this.state.rules?.[ruleName];
     if (!rules) {
-      console.warn(`Filter rule not found: ${ruleName}`);
       return null;
     }
 
@@ -1093,12 +1232,31 @@ export class FeedItemHandler extends ItemHandler {
       if (rule.type === 'all') {
         allowed = rule.action === 'allow';
       } else if (rule.type === 'from' && this.filterAuthor(item, rule.value.substring(1))) {
-        allowed = allowed || rule.action === 'allow';
+        allowed = rule.action === 'allow';
       } else if (rule.type === 'content' && this.filterContent(item, rule.value)) {
-        allowed = allowed || rule.action === 'allow';
+        allowed = rule.action === 'allow';
       }
     }
     return allowed;
+  }
+
+  /**
+   * Gets handle from item, with fallback to data-testid attribute.
+   */
+  getHandleForFilter(item) {
+    // Try the standard profile selector first
+    let handle = this.handleFromItem(item);
+
+    // Fallback: extract from data-testid (format: feedItem-by-handle)
+    if (!handle) {
+      const testId = $(item).attr('data-testid') || '';
+      const match = testId.match(/^feedItem-by-(.+)$/);
+      if (match) {
+        handle = match[1];
+      }
+    }
+
+    return handle;
   }
 
   /**
@@ -1106,7 +1264,7 @@ export class FeedItemHandler extends ItemHandler {
    */
   filterAuthor(item, author) {
     const pattern = new RegExp(author, 'i');
-    const handle = this.handleFromItem(item);
+    const handle = this.getHandleForFilter(item);
     const displayName = this.displayNameFromItem(item);
     return pattern.test(handle) || pattern.test(displayName);
   }
@@ -1114,7 +1272,7 @@ export class FeedItemHandler extends ItemHandler {
   filterContent(item, query) {
     const pattern = new RegExp(query, 'i');
     const content = $(item).find('div[data-testid="postText"]').text();
-    return content.match(pattern);
+    return pattern.test(content);
   }
 
   highlightFilterMatches(item) {
@@ -1177,20 +1335,22 @@ export class FeedItemHandler extends ItemHandler {
     // Clear all highlights before re-filtering
     this.clearAllHighlights();
 
+    // Filter all items directly (more robust than relying on .thread wrappers)
+    const allItems = $('.item');
+    allItems.each((i, item) => {
+      const thread = $(item).closest('.thread');
+      const passes = this.filterItem(item, thread);
+      if (passes) {
+        $(item).removeClass('filtered');
+        this.highlightFilterMatches(item);
+      } else {
+        $(item).addClass('filtered');
+      }
+    });
+    // Now filter threads based on whether they have any visible items
     const parent = $(this.selector).first().closest('.thread').parent();
     const unseenThreads = parent.find('.thread');
     $(unseenThreads).map((i, thread) => {
-      $(thread)
-        .find('.item')
-        .each((i, item) => {
-          if (this.filterItem(item, thread)) {
-            $(item).removeClass('filtered');
-            // Highlight matching text
-            this.highlightFilterMatches(item);
-          } else {
-            $(item).addClass('filtered');
-          }
-        });
 
       if (this.filterThread(thread)) {
         $(thread).removeClass('filtered');
@@ -1220,8 +1380,8 @@ export class FeedItemHandler extends ItemHandler {
     });
 
     this.refreshItems();
+    this.updateScrollPosition();
     if (hideRead && $(this.selectedItem).hasClass('item-read')) {
-      console.log('jumping');
       this.jumpToNextUnseenItem();
     }
   }
@@ -1329,8 +1489,42 @@ export class FeedItemHandler extends ItemHandler {
     const indicator = $('#scroll-position-indicator');
     if (!indicator.length || !this.items.length) return;
 
-    const total = this.items.length;
+    // Get filtered items display mode
+    const filteredItemsMode = this.config.get('scrollIndicatorFilteredItems') || 'Show (grayed)';
+    const hideFiltered = filteredItemsMode === 'Hide';
+
+    // Get ALL items including filtered ones (this.items excludes filtered due to :visible filter)
+    // Use .item class to match what filterItems() uses when adding .filtered class
+    const allItems = $('.item').filter((i, item) => {
+      // Filter out embedded posts (posts inside other posts) to match this.items logic
+      return $(item).parents('.item').length === 0;
+    }).toArray();
+
+    // Build list of items to display based on mode
+    let displayItems = [];
+    let displayIndices = [];
+
+    if (hideFiltered) {
+      // Only include non-filtered items
+      allItems.forEach((item, i) => {
+        if (!$(item).hasClass('filtered')) {
+          displayItems.push(item);
+          displayIndices.push(i);
+        }
+      });
+    } else {
+      // Include all items
+      displayItems = allItems;
+      displayIndices = displayItems.map((_, i) => i);
+    }
+
+    // Store display items for click handler (actual DOM elements)
+    this._displayItems = displayItems;
+
+    const total = displayItems.length;
     const currentIndex = this.index;
+    // Find current index in display items
+    const currentDisplayIndex = displayIndices.indexOf(currentIndex);
 
     // Create or update segments
     let segments = indicator.find('.scroll-segment');
@@ -1346,7 +1540,8 @@ export class FeedItemHandler extends ItemHandler {
 
       for (let i = 0; i < total; i++) {
         const segment = $('<div class="scroll-segment"></div>');
-        segment.attr('data-index', i);
+        // Store actual item index for navigation
+        segment.attr('data-index', displayIndices[i]);
         indicator.append(segment);
       }
 
@@ -1362,13 +1557,12 @@ export class FeedItemHandler extends ItemHandler {
     const iconsValue = this.config.get('scrollIndicatorIcons');
     const showIcons = isAdvancedStyle ? (iconsValue === true || iconsValue === 'true' || iconsValue === undefined) : false;
 
-    // Calculate engagement data for heatmap and/or icons (Advanced mode only)
+    // Calculate engagement data for ALL items (indexed by actual item index for zoom indicator)
     let engagementData = [];
     let maxScore = 0;
 
     if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons)) {
-      // Note: this.items is a jQuery object, so we need to use .toArray() for proper iteration
-      engagementData = this.items.toArray().map((item) => {
+      engagementData = allItems.map((item) => {
         const engagement = this.getPostEngagement(item);
         const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
         if (score > maxScore) maxScore = score;
@@ -1379,19 +1573,26 @@ export class FeedItemHandler extends ItemHandler {
     // Update segment states
     segments.each((i, segment) => {
       const $segment = $(segment);
-      const item = this.items[i];
+      const item = displayItems[i];
+      const actualIndex = displayIndices[i]; // Map back to actual item index for engagementData
       const isRead = item && $(item).hasClass('item-read');
-      const isCurrent = i === currentIndex;
+      const isFiltered = item && $(item).hasClass('filtered');
+      const isCurrent = i === currentDisplayIndex;
 
       // Remove all state classes
       $segment.removeClass(
-        'scroll-segment-read scroll-segment-current scroll-segment-ratioed ' +
+        'scroll-segment-read scroll-segment-current scroll-segment-ratioed scroll-segment-filtered ' +
         'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
         'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
       );
 
       // Clear existing icon
       $segment.find('.scroll-segment-icon').remove();
+
+      // Apply filtered state (grayed out) - only in "Show (grayed)" mode
+      if (!hideFiltered && isFiltered) {
+        $segment.addClass('scroll-segment-filtered');
+      }
 
       // Apply read state first (can be combined with current)
       if (isRead) {
@@ -1400,20 +1601,20 @@ export class FeedItemHandler extends ItemHandler {
 
       if (isCurrent) {
         $segment.addClass('scroll-segment-current');
-      } else if (engagementData[i]?.engagement?.isRatioed) {
+      } else if (engagementData[actualIndex]?.engagement?.isRatioed) {
         // Ratioed posts get distinctive styling (takes precedence over heatmap)
         $segment.addClass('scroll-segment-ratioed');
-      } else if (heatmapMode !== 'None' && engagementData[i]) {
+      } else if (heatmapMode !== 'None' && engagementData[actualIndex]) {
         // Apply heatmap coloring (overrides read state visually)
-        const heatLevel = this.getHeatLevel(engagementData[i].score, maxScore);
+        const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
         if (heatLevel > 0) {
           $segment.addClass(`scroll-segment-heat-${heatLevel}`);
         }
       }
 
-      // Add content icon if enabled
-      if (showIcons && engagementData[i]?.engagement) {
-        const icon = this.getContentIcon(engagementData[i].engagement);
+      // Add content icon if enabled (skip for filtered items in show mode)
+      if (showIcons && !isFiltered && engagementData[actualIndex]?.engagement) {
+        const icon = this.getContentIcon(engagementData[actualIndex].engagement);
         if (icon) {
           $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
         }
@@ -1435,16 +1636,16 @@ export class FeedItemHandler extends ItemHandler {
     // Update viewport indicator position
     this.updateViewportIndicator(indicator, total);
 
-    // Update zoom indicator if present
+    // Update zoom indicator if present (uses display items count for proper windowing)
     if (this.scrollIndicatorZoom) {
-      this.updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore);
+      this.updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore, total, displayItems);
     }
 
     // Update date labels
     this.updateScrollIndicatorLabels();
 
-    // Update accessibility attributes
-    const position = currentIndex + 1;
+    // Update accessibility attributes (use display position for filtered view)
+    const position = currentDisplayIndex >= 0 ? currentDisplayIndex + 1 : 0;
     const percentage = total > 0 ? Math.round((position / total) * 100) : 0;
     indicator.attr('aria-valuenow', percentage);
     indicator.attr('title', `${position} of ${total} items (${percentage}%)`);
@@ -1742,15 +1943,23 @@ export class FeedItemHandler extends ItemHandler {
       const indicatorWidth = indicator.width();
       const clickX = event.pageX - indicator.offset().left;
 
-      // Calculate which segment was clicked based on position
-      const total = this.items.length;
+      // Use display items (actual DOM elements) for click handling
+      const displayItems = this._displayItems || [];
+      const total = displayItems.length || this.items.length;
       if (total === 0) return;
 
       const segmentWidth = indicatorWidth / total;
-      const clickedIndex = Math.floor(clickX / segmentWidth);
+      const clickedDisplayIndex = Math.floor(clickX / segmentWidth);
 
       // Clamp to valid range
-      const targetIndex = Math.max(0, Math.min(total - 1, clickedIndex));
+      const clampedDisplayIndex = Math.max(0, Math.min(total - 1, clickedDisplayIndex));
+
+      // Get the actual DOM element and find its index in this.items
+      const targetElement = displayItems[clampedDisplayIndex];
+      if (!targetElement) return;
+
+      const targetIndex = this.items.index(targetElement);
+      if (targetIndex === -1) return;
 
       // Jump to the post using setIndex which handles selection and scrolling
       if (targetIndex !== this.index) {
@@ -1777,18 +1986,24 @@ export class FeedItemHandler extends ItemHandler {
       const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
       if (zoomWindowSize === 0) return;
 
-      const total = this.items.length;
+      // Use display items (actual DOM elements) for click handling
+      const displayItems = this._displayItems || [];
+      const total = displayItems.length || this.items.length;
       if (total === 0) return;
 
-      // Calculate the window of items being shown
-      const halfWindow = Math.floor(zoomWindowSize / 2);
-      const windowStart = Math.max(0, this.index - halfWindow);
-      const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
-      const actualWindowSize = windowEnd - windowStart + 1;
+      // Use stored window start from updateZoomIndicator
+      const windowStart = this.zoomWindowStart || 0;
 
-      const segmentWidth = indicatorWidth / actualWindowSize;
+      const segmentWidth = indicatorWidth / zoomWindowSize;
       const clickedOffset = Math.floor(clickX / segmentWidth);
-      const targetIndex = Math.max(0, Math.min(total - 1, windowStart + clickedOffset));
+      const displayIndex = Math.max(0, Math.min(total - 1, windowStart + clickedOffset));
+
+      // Get the actual DOM element and find its index in this.items
+      const targetElement = displayItems[displayIndex];
+      if (!targetElement) return;
+
+      const targetIndex = this.items.index(targetElement);
+      if (targetIndex === -1) return;
 
       if (targetIndex !== this.index) {
         this.setIndex(targetIndex, false, true);
@@ -1801,7 +2016,7 @@ export class FeedItemHandler extends ItemHandler {
   /**
    * Update the zoom indicator showing posts around the current selection
    */
-  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore) {
+  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore, displayTotal, displayItems) {
     const zoomIndicator = this.scrollIndicatorZoom;
     const zoomInner = this.scrollIndicatorZoomInner;
     if (!zoomIndicator || !zoomInner) return;
@@ -1812,7 +2027,30 @@ export class FeedItemHandler extends ItemHandler {
     const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
     if (zoomWindowSize === 0) return;
 
-    const total = this.items.length;
+    // Use displayTotal from caller (accounts for filtered items in Hide mode)
+    const total = displayTotal;
+
+    // Hide zoom indicator when there are fewer items than the window size
+    if (total <= zoomWindowSize) {
+      this.scrollIndicatorZoomContainer.hide();
+      if (this.scrollIndicatorConnector) {
+        this.scrollIndicatorConnector.hide();
+      }
+      if (this.scrollIndicatorZoomHighlight) {
+        this.scrollIndicatorZoomHighlight.hide();
+      }
+      return;
+    }
+
+    // Show zoom indicator and related elements
+    this.scrollIndicatorZoomContainer.show();
+    if (this.scrollIndicatorConnector) {
+      this.scrollIndicatorConnector.show();
+    }
+    if (this.scrollIndicatorZoomHighlight) {
+      this.scrollIndicatorZoomHighlight.show();
+    }
+
     if (total === 0) return;
 
     // Calculate the window of items to show with edge-based scrolling
@@ -1875,12 +2113,18 @@ export class FeedItemHandler extends ItemHandler {
     // Update segment states
     const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
 
+    // Get filtered items display mode for zoom indicator
+    const filteredItemsMode = this.config.get('scrollIndicatorFilteredItems') || 'Show (grayed)';
+    const hideFiltered = filteredItemsMode === 'Hide';
+
     segments.each((i, segment) => {
       const $segment = $(segment);
       const itemIndex = windowStart + i;
-      const item = this.items[itemIndex];
-      const hasItem = itemIndex >= 0 && itemIndex < total;
+      // Use displayItems passed from caller (already filtered if hideFiltered is true)
+      const item = displayItems[itemIndex];
+      const hasItem = itemIndex >= 0 && itemIndex < total && item;
       const isRead = item && $(item).hasClass('item-read');
+      const isFiltered = item && $(item).hasClass('filtered');
       const isCurrent = itemIndex === currentIndex;
 
       // Update data-index in case window shifted
@@ -1888,7 +2132,7 @@ export class FeedItemHandler extends ItemHandler {
 
       // Remove all state classes
       $segment.removeClass(
-        'scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed ' +
+        'scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-filtered ' +
         'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
         'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
       );
@@ -1900,6 +2144,11 @@ export class FeedItemHandler extends ItemHandler {
       if (!hasItem) {
         $segment.addClass('scroll-segment-empty');
         return;
+      }
+
+      // Apply filtered state (grayed out) - only in "Show (grayed)" mode
+      if (!hideFiltered && isFiltered) {
+        $segment.addClass('scroll-segment-filtered');
       }
 
       // Apply read state first (filter dims the segment regardless of color)
@@ -1919,8 +2168,8 @@ export class FeedItemHandler extends ItemHandler {
         }
       }
 
-      // Add content icon if enabled
-      if (showIcons && engagementData[itemIndex]?.engagement) {
+      // Add content icon if enabled (skip for filtered items)
+      if (showIcons && !isFiltered && engagementData[itemIndex]?.engagement) {
         const icon = this.getContentIcon(engagementData[itemIndex].engagement);
         if (icon) {
           $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);

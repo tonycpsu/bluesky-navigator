@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+412.581a4989
+// @version     1.0.31+413.9d7dd3ad
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44943,6 +44943,13 @@ if (cid) {
           step: 50,
           help: "Zoom scroll animation duration (0=instant, 100=normal)",
           showWhen: { scrollIndicatorStyle: "Advanced" }
+        },
+        scrollIndicatorFilteredItems: {
+          label: "Filtered items",
+          type: "select",
+          options: ["Show (grayed)", "Hide"],
+          default: "Show (grayed)",
+          help: "How to display filtered items in the feed map"
         }
       }
     },
@@ -46648,6 +46655,8 @@ div.loading-indicator-forward {
     display: none !important;
 }
 
+/* .filter-preview-hidden removed - now using actual hiding instead of gray preview */
+
 #messageContainer {
     inset: 5%;
     padding: 10px;
@@ -47903,6 +47912,8 @@ div.item-banner {
   margin: -1px -1px 0 -1px;
   display: flex;
   position: relative;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Basic style - simple thin indicator */
@@ -47965,6 +47976,12 @@ div.item-banner {
   outline: 2px solid #3b82f6;
   outline-offset: -1px;
   z-index: 1;
+}
+
+/* Filtered posts - grayed out in feed map */
+.scroll-segment-filtered {
+  opacity: 0.25;
+  filter: grayscale(1);
 }
 
 /* ========================================
@@ -48130,6 +48147,8 @@ div.item-banner {
   display: flex;
   flex-direction: column;
   width: 100%;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Zoom indicator connector */
@@ -67695,12 +67714,14 @@ div#statusBar.has-scroll-indicator {
       $(this.items).css("opacity", "100%");
     }
     updateInfoIndicator() {
-      this.itemStats.unreadCount = this.items.filter(
-        (i2, item) => $(item).hasClass("item-unread")
-      ).length;
-      this.itemStats.filteredCount = this.items.filter(".filtered").length;
-      this.itemStats.shownCount = this.items.length - this.itemStats.filteredCount;
-      const index = this.itemStats.shownCount ? this.index + 1 : 0;
+      const allItems = $(".item").filter((i2, item) => $(item).parents(".item").length === 0);
+      const filteredItems = allItems.filter(".filtered");
+      const visibleItems = allItems.not(".filtered");
+      this.itemStats.unreadCount = visibleItems.filter(".item-unread").length;
+      this.itemStats.filteredCount = filteredItems.length;
+      this.itemStats.shownCount = visibleItems.length;
+      const visibleIndex = visibleItems.index(this.selectedItem);
+      const index = this.itemStats.shownCount ? visibleIndex + 1 : 0;
       $("div#infoIndicatorText").html(`
 <div id="itemCountStats">
 <strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
@@ -67801,8 +67822,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       super(name, config2, state2, api, selector);
       this.toggleSortOrder = this.toggleSortOrder.bind(this);
       this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
-      this.onSearchKeydown = this.onSearchKeydown.bind(this);
-      this.setFilter = this.setFilter.bind(this);
       this.mediaCache = {};
       this.repostTimestampCache = {};
       this.repostTimestampsFetched = false;
@@ -68149,32 +68168,39 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         }
       });
-      this.onSearchUpdate = (event) => {
-        const val = $(event.target).val();
-        console.log(val);
+      $(this.searchField).on("input", () => {
+        const val = $(this.searchField).val();
         if (val === "/") {
           $("#bsky-navigator-search").val("");
           $(this.searchField).autocomplete("close");
           $("a[aria-label='Search']")[0].click();
           return;
         }
-        this.debouncedSearchUpdate(event);
-      };
-      this.debouncedSearchUpdate = debounce(() => {
-        const val = $(this.searchField).val();
-        const newFilter = val.trim();
-        if (newFilter !== this.state.filter) {
-          this.setFilter(newFilter);
-          this.loadItems();
+        this.applyFilterDelayed();
+      });
+      $(this.searchField).on("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          $(this.searchField).autocomplete("close");
+          this.applyFilterImmediate();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          $(this.searchField).autocomplete("close");
+          this.handleFilterEscape();
+        } else if (event.altKey && !event.key.startsWith("Arrow")) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.handleInput(event);
         }
-      }, 300);
-      this.onSearchUpdate = this.onSearchUpdate.bind(this);
-      $(this.searchField).on("keydown", this.onSearchKeydown);
-      $(this.searchField).on("input", this.onSearchUpdate);
+      });
       $(this.searchField).on("focus", function() {
         $(this).autocomplete("search", "");
       });
-      $(this.searchField).on("autocompleteselect", this.onSearchUpdate);
+      $(this.searchField).on("autocompleteselect", (event, ui2) => {
+        setTimeout(() => {
+          this.commitFilter($(this.searchField).val());
+        }, 0);
+      });
       if (this.config.get("hideRightSidebar")) {
         this.widthControls = $(`
         <div id="widthControls" class="width-controls">
@@ -68203,13 +68229,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       waitForElement$1("#bsky-navigator-toolbar", null, (_div) => {
         this.addToolbar(beforeDiv);
       });
-    }
-    onSearchKeydown(event) {
-      if (event.altKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        this.handleInput(event);
-      }
     }
     refreshToolbars() {
       waitForElement$1(constants.TOOLBAR_CONTAINER_SELECTOR, (_indicatorContainer) => {
@@ -68341,15 +68360,24 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       waitForElement$1("#bsky-navigator-search", (el) => {
         $(el).val(this.state.filter);
       });
+      if (this.state.filter) {
+        this.updateFilterPill();
+        this.filterItems();
+      }
       this.fetchRepostTimestamps();
       this._scrollHandler = this._throttledScrollUpdate.bind(this);
       window.addEventListener("scroll", this._scrollHandler, { passive: true });
+      this.updateFilterEnforcement();
     }
     deactivate() {
       super.deactivate();
       if (this._scrollHandler) {
         window.removeEventListener("scroll", this._scrollHandler);
         this._scrollHandler = null;
+      }
+      if (this._filterEnforcementInterval) {
+        clearInterval(this._filterEnforcementInterval);
+        this._filterEnforcementInterval = null;
       }
     }
     _throttledScrollUpdate() {
@@ -68448,11 +68476,108 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         styleEl.textContent = "";
       }
     }
-    setFilter(text) {
-      console.log("[FILTER] setFilter called with:", text, "stack:", new Error().stack.split("\n").slice(1, 3).join(" <- "));
-      this.state.stateManager.saveStateImmediately(true, true);
-      this.state.filter = text;
+    /**
+     * Commits a filter - updates state, hides non-matching items, shows pill.
+     * Only called on explicit user action (Enter, autocomplete select, saved search).
+     */
+    commitFilter(text) {
+      const filterText = (text || "").trim();
+      this.state.filter = filterText;
+      this.state.stateManager.updateState({ filter: filterText });
+      this.filterItems();
       this.updateFilterPill();
+      this.updateFilterEnforcement();
+      if (filterText) {
+        announceToScreenReader(`Filter applied: ${filterText}`);
+      }
+    }
+    /**
+     * Starts or stops periodic filter enforcement.
+     * React can replace DOM elements, losing our .filtered class.
+     * This ensures filters stay applied.
+     */
+    updateFilterEnforcement() {
+      if (this._filterEnforcementInterval) {
+        clearInterval(this._filterEnforcementInterval);
+        this._filterEnforcementInterval = null;
+      }
+      if (this.state.filter) {
+        this._filterEnforcementInterval = setInterval(() => {
+          const unfiltered = $(".item").not(".filtered");
+          if (unfiltered.length > 0) {
+            unfiltered.each((i2, item) => {
+              const thread = $(item).closest(".thread");
+              if (!this.filterItem(item, thread)) {
+                $(item).addClass("filtered");
+                if (thread.length && !this.filterThread(thread[0])) {
+                  $(thread).addClass("filtered");
+                }
+              }
+            });
+          }
+        }, 200);
+      }
+    }
+    /**
+     * Applies filter after a short delay (debounced).
+     * Called on input events while typing.
+     */
+    applyFilterDelayed() {
+      if (this._filterTimeout) {
+        clearTimeout(this._filterTimeout);
+      }
+      this._filterTimeout = setTimeout(() => {
+        this.applyFilterImmediate();
+      }, 500);
+    }
+    /**
+     * Applies filter immediately (no delay).
+     * Called on Enter key or after delay expires.
+     */
+    applyFilterImmediate() {
+      if (this._filterTimeout) {
+        clearTimeout(this._filterTimeout);
+        this._filterTimeout = null;
+      }
+      const filterText = $(this.searchField).val().trim();
+      this.commitFilter(filterText);
+    }
+    /**
+     * Override onItemAdded to apply filter to newly added items.
+     */
+    onItemAdded(element) {
+      super.onItemAdded(element);
+      if (this.state.filter) {
+        const thread = $(element).closest(".thread");
+        const passes = this.filterItem(element, thread);
+        if (!passes) {
+          $(element).addClass("filtered");
+          if (thread.length && !this.filterThread(thread[0])) {
+            $(thread).addClass("filtered");
+          }
+        }
+      }
+    }
+    /**
+     * Handles Escape key in filter input.
+     * If input differs from committed filter: revert to committed value.
+     * If input matches committed filter: clear the filter entirely.
+     */
+    handleFilterEscape() {
+      if (this._filterTimeout) {
+        clearTimeout(this._filterTimeout);
+        this._filterTimeout = null;
+      }
+      const inputValue = $(this.searchField).val().trim();
+      const committedValue = this.state.filter || "";
+      if (inputValue !== committedValue) {
+        $(this.searchField).val(committedValue);
+        this.filterItems();
+        $(this.searchField).blur();
+      } else {
+        this.clearFilter();
+        $(this.searchField).blur();
+      }
     }
     updateFilterPill() {
       const existingPill = $("#bsky-navigator-filter-pill");
@@ -68479,8 +68604,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     clearFilter() {
       $("#bsky-navigator-search").val("");
-      this.setFilter("");
-      this.loadItems();
+      this.commitFilter("");
       announceToScreenReader("Filter cleared");
     }
     getSavedSearches() {
@@ -68537,10 +68661,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (!$(e2.target).hasClass("saved-search-delete")) {
           const search = $(e2.currentTarget).data("search");
           $("#bsky-navigator-search").val(search);
-          this.setFilter(search);
-          this.loadItems();
+          this.commitFilter(search);
           dropdown.remove();
-          announceToScreenReader(`Applied saved search: ${search}`);
         }
       });
       dropdown.find(".saved-search-delete").on("click", (e2) => {
@@ -68572,13 +68694,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.state.feedHideRead && $(item).hasClass("item-read")) {
         return false;
       }
-      if (!this.state.filter || !this.state.rules) {
+      if (!this.state.filter) {
         return true;
       }
       const activeRules = this.parseFilterRules(this.state.filter);
       const results = activeRules.map((rule) => this.evaluateFilterRule(item, rule));
-      const passes = results.every((result) => result === true);
-      return passes;
+      return results.every((result) => result === true);
     }
     /**
      * Parses filter text into structured rule objects.
@@ -68620,9 +68741,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * @private
      */
     evaluateNamedRule(item, ruleName) {
-      const rules = this.state.rules[ruleName];
+      const rules = this.state.rules?.[ruleName];
       if (!rules) {
-        console.warn(`Filter rule not found: ${ruleName}`);
         return null;
       }
       let allowed = null;
@@ -68638,18 +68758,32 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return allowed;
     }
     /**
+     * Gets handle from item, with fallback to data-testid attribute.
+     */
+    getHandleForFilter(item) {
+      let handle2 = this.handleFromItem(item);
+      if (!handle2) {
+        const testId = $(item).attr("data-testid") || "";
+        const match2 = testId.match(/^feedItem-by-(.+)$/);
+        if (match2) {
+          handle2 = match2[1];
+        }
+      }
+      return handle2;
+    }
+    /**
      * Checks if an item's author matches a pattern.
      */
     filterAuthor(item, author) {
       const pattern = new RegExp(author, "i");
-      const handle2 = this.handleFromItem(item);
+      const handle2 = this.getHandleForFilter(item);
       const displayName = this.displayNameFromItem(item);
       return pattern.test(handle2) || pattern.test(displayName);
     }
     filterContent(item, query) {
       const pattern = new RegExp(query, "i");
       const content2 = $(item).find('div[data-testid="postText"]').text();
-      return content2.match(pattern);
+      return pattern.test(content2);
     }
     highlightFilterMatches(item) {
       $(item).find(".filter-highlight").contents().unwrap();
@@ -68685,7 +68819,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return items.length !== filteredItems.length;
     }
     filterItems() {
-      console.log("[FILTER] filterItems called, filter:", this.state.filter, "items count:", $(this.selector).length);
       const hideRead = this.state.feedHideRead;
       $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+hideRead]);
       $("#filterIndicator").attr(
@@ -68693,17 +68826,20 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         `show all or unread (currently ${hideRead ? "unread" : "all"})`
       );
       this.clearAllHighlights();
+      const allItems = $(".item");
+      allItems.each((i2, item) => {
+        const thread = $(item).closest(".thread");
+        const passes = this.filterItem(item, thread);
+        if (passes) {
+          $(item).removeClass("filtered");
+          this.highlightFilterMatches(item);
+        } else {
+          $(item).addClass("filtered");
+        }
+      });
       const parent = $(this.selector).first().closest(".thread").parent();
       const unseenThreads = parent.find(".thread");
       $(unseenThreads).map((i2, thread) => {
-        $(thread).find(".item").each((i3, item) => {
-          if (this.filterItem(item, thread)) {
-            $(item).removeClass("filtered");
-            this.highlightFilterMatches(item);
-          } else {
-            $(item).addClass("filtered");
-          }
-        });
         if (this.filterThread(thread)) {
           $(thread).removeClass("filtered");
         } else {
@@ -68724,13 +68860,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         });
       });
       this.refreshItems();
+      this.updateScrollPosition();
       if (hideRead && $(this.selectedItem).hasClass("item-read")) {
         this.jumpToNextUnseenItem();
       }
-      const allItems = $(this.selector);
-      const filteredCount = allItems.filter(".filtered").length;
-      const visibleCount = allItems.filter(":visible").length;
-      console.log(`[FILTER] After filtering: ${filteredCount} filtered, ${visibleCount} visible out of ${allItems.length} total`);
     }
     sortItems() {
       const reversed = this.state.feedSortReverse;
@@ -68808,8 +68941,28 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     updateScrollPosition() {
       const indicator = $("#scroll-position-indicator");
       if (!indicator.length || !this.items.length) return;
-      const total = this.items.length;
+      const filteredItemsMode = this.config.get("scrollIndicatorFilteredItems") || "Show (grayed)";
+      const hideFiltered = filteredItemsMode === "Hide";
+      const allItems = $(".item").filter((i2, item) => {
+        return $(item).parents(".item").length === 0;
+      }).toArray();
+      let displayItems = [];
+      let displayIndices = [];
+      if (hideFiltered) {
+        allItems.forEach((item, i2) => {
+          if (!$(item).hasClass("filtered")) {
+            displayItems.push(item);
+            displayIndices.push(i2);
+          }
+        });
+      } else {
+        displayItems = allItems;
+        displayIndices = displayItems.map((_, i2) => i2);
+      }
+      this._displayItems = displayItems;
+      const total = displayItems.length;
       const currentIndex = this.index;
+      const currentDisplayIndex = displayIndices.indexOf(currentIndex);
       let segments = indicator.find(".scroll-segment");
       if (segments.length !== total) {
         if (this.loading || this.loadingNew) {
@@ -68819,7 +68972,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         indicator.find(".scroll-viewport-indicator").remove();
         for (let i2 = 0; i2 < total; i2++) {
           const segment = $('<div class="scroll-segment"></div>');
-          segment.attr("data-index", i2);
+          segment.attr("data-index", displayIndices[i2]);
           indicator.append(segment);
         }
         indicator.append('<div class="scroll-viewport-indicator"></div>');
@@ -68833,7 +68986,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       let engagementData = [];
       let maxScore = 0;
       if (isAdvancedStyle && (heatmapMode !== "None" || showIcons)) {
-        engagementData = this.items.toArray().map((item) => {
+        engagementData = allItems.map((item) => {
           const engagement = this.getPostEngagement(item);
           const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
           if (score > maxScore) maxScore = score;
@@ -68842,28 +68995,33 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       segments.each((i2, segment) => {
         const $segment = $(segment);
-        const item = this.items[i2];
+        const item = displayItems[i2];
+        const actualIndex = displayIndices[i2];
         const isRead = item && $(item).hasClass("item-read");
-        const isCurrent = i2 === currentIndex;
+        const isFiltered = item && $(item).hasClass("filtered");
+        const isCurrent = i2 === currentDisplayIndex;
         $segment.removeClass(
-          "scroll-segment-read scroll-segment-current scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+          "scroll-segment-read scroll-segment-current scroll-segment-ratioed scroll-segment-filtered scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
         );
         $segment.find(".scroll-segment-icon").remove();
+        if (!hideFiltered && isFiltered) {
+          $segment.addClass("scroll-segment-filtered");
+        }
         if (isRead) {
           $segment.addClass("scroll-segment-read");
         }
         if (isCurrent) {
           $segment.addClass("scroll-segment-current");
-        } else if (engagementData[i2]?.engagement?.isRatioed) {
+        } else if (engagementData[actualIndex]?.engagement?.isRatioed) {
           $segment.addClass("scroll-segment-ratioed");
-        } else if (heatmapMode !== "None" && engagementData[i2]) {
-          const heatLevel = this.getHeatLevel(engagementData[i2].score, maxScore);
+        } else if (heatmapMode !== "None" && engagementData[actualIndex]) {
+          const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
           if (heatLevel > 0) {
             $segment.addClass(`scroll-segment-heat-${heatLevel}`);
           }
         }
-        if (showIcons && engagementData[i2]?.engagement) {
-          const icon = this.getContentIcon(engagementData[i2].engagement);
+        if (showIcons && !isFiltered && engagementData[actualIndex]?.engagement) {
+          const icon = this.getContentIcon(engagementData[actualIndex].engagement);
           if (icon) {
             $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
           }
@@ -68880,10 +69038,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.updateViewportIndicator(indicator, total);
       if (this.scrollIndicatorZoom) {
-        this.updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore);
+        this.updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore, total, displayItems);
       }
       this.updateScrollIndicatorLabels();
-      const position2 = currentIndex + 1;
+      const position2 = currentDisplayIndex >= 0 ? currentDisplayIndex + 1 : 0;
       const percentage = total > 0 ? Math.round(position2 / total * 100) : 0;
       indicator.attr("aria-valuenow", percentage);
       indicator.attr("title", `${position2} of ${total} items (${percentage}%)`);
@@ -69106,11 +69264,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const indicator = $(event.currentTarget);
         const indicatorWidth = indicator.width();
         const clickX = event.pageX - indicator.offset().left;
-        const total = this.items.length;
+        const displayItems = this._displayItems || [];
+        const total = displayItems.length || this.items.length;
         if (total === 0) return;
         const segmentWidth = indicatorWidth / total;
-        const clickedIndex = Math.floor(clickX / segmentWidth);
-        const targetIndex = Math.max(0, Math.min(total - 1, clickedIndex));
+        const clickedDisplayIndex = Math.floor(clickX / segmentWidth);
+        const clampedDisplayIndex = Math.max(0, Math.min(total - 1, clickedDisplayIndex));
+        const targetElement = displayItems[clampedDisplayIndex];
+        if (!targetElement) return;
+        const targetIndex = this.items.index(targetElement);
+        if (targetIndex === -1) return;
         if (targetIndex !== this.index) {
           this.setIndex(targetIndex, false, true);
           this.updateScrollPosition();
@@ -69130,15 +69293,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const clickX = event.pageX - zoomIndicator.offset().left;
         const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
         if (zoomWindowSize === 0) return;
-        const total = this.items.length;
+        const displayItems = this._displayItems || [];
+        const total = displayItems.length || this.items.length;
         if (total === 0) return;
-        const halfWindow = Math.floor(zoomWindowSize / 2);
-        const windowStart = Math.max(0, this.index - halfWindow);
-        const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
-        const actualWindowSize = windowEnd - windowStart + 1;
-        const segmentWidth = indicatorWidth / actualWindowSize;
+        const windowStart = this.zoomWindowStart || 0;
+        const segmentWidth = indicatorWidth / zoomWindowSize;
         const clickedOffset = Math.floor(clickX / segmentWidth);
-        const targetIndex = Math.max(0, Math.min(total - 1, windowStart + clickedOffset));
+        const displayIndex = Math.max(0, Math.min(total - 1, windowStart + clickedOffset));
+        const targetElement = displayItems[displayIndex];
+        if (!targetElement) return;
+        const targetIndex = this.items.index(targetElement);
+        if (targetIndex === -1) return;
         if (targetIndex !== this.index) {
           this.setIndex(targetIndex, false, true);
           this.updateScrollPosition();
@@ -69149,14 +69314,31 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     /**
      * Update the zoom indicator showing posts around the current selection
      */
-    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore) {
+    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore, displayTotal, displayItems) {
       const zoomIndicator = this.scrollIndicatorZoom;
       const zoomInner = this.scrollIndicatorZoomInner;
       if (!zoomIndicator || !zoomInner) return;
       if (this.loading || this.loadingNew) return;
       const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
       if (zoomWindowSize === 0) return;
-      const total = this.items.length;
+      const total = displayTotal;
+      if (total <= zoomWindowSize) {
+        this.scrollIndicatorZoomContainer.hide();
+        if (this.scrollIndicatorConnector) {
+          this.scrollIndicatorConnector.hide();
+        }
+        if (this.scrollIndicatorZoomHighlight) {
+          this.scrollIndicatorZoomHighlight.hide();
+        }
+        return;
+      }
+      this.scrollIndicatorZoomContainer.show();
+      if (this.scrollIndicatorConnector) {
+        this.scrollIndicatorConnector.show();
+      }
+      if (this.scrollIndicatorZoomHighlight) {
+        this.scrollIndicatorZoomHighlight.show();
+      }
       if (total === 0) return;
       const edgeMargin = Math.max(1, Math.floor(zoomWindowSize * 0.2));
       let windowStart = this.zoomWindowStart;
@@ -69196,21 +69378,27 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.zoomWindowStart = windowStart;
       const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
+      const filteredItemsMode = this.config.get("scrollIndicatorFilteredItems") || "Show (grayed)";
+      const hideFiltered = filteredItemsMode === "Hide";
       segments.each((i2, segment) => {
         const $segment = $(segment);
         const itemIndex = windowStart + i2;
-        const item = this.items[itemIndex];
-        const hasItem = itemIndex >= 0 && itemIndex < total;
+        const item = displayItems[itemIndex];
+        const hasItem = itemIndex >= 0 && itemIndex < total && item;
         const isRead = item && $(item).hasClass("item-read");
+        const isFiltered = item && $(item).hasClass("filtered");
         const isCurrent = itemIndex === currentIndex;
         $segment.attr("data-index", hasItem ? itemIndex : -1);
         $segment.removeClass(
-          "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+          "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-filtered scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
         );
         $segment.find(".scroll-segment-icon").remove();
         if (!hasItem) {
           $segment.addClass("scroll-segment-empty");
           return;
+        }
+        if (!hideFiltered && isFiltered) {
+          $segment.addClass("scroll-segment-filtered");
         }
         if (isRead) {
           $segment.addClass("scroll-segment-read");
@@ -69225,7 +69413,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             $segment.addClass(`scroll-segment-heat-${heatLevel}`);
           }
         }
-        if (showIcons && engagementData[itemIndex]?.engagement) {
+        if (showIcons && !isFiltered && engagementData[itemIndex]?.engagement) {
           const icon = this.getContentIcon(engagementData[itemIndex].engagement);
           if (icon) {
             $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);

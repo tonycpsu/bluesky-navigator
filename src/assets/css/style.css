@@ -417,6 +417,8 @@ div.loading-indicator-forward {
     display: none !important;
 }
 
+/* .filter-preview-hidden removed - now using actual hiding instead of gray preview */
+
 #messageContainer {
     inset: 5%;
     padding: 10px;
@@ -1672,6 +1674,8 @@ div.item-banner {
   margin: -1px -1px 0 -1px;
   display: flex;
   position: relative;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Basic style - simple thin indicator */
@@ -1734,6 +1738,12 @@ div.item-banner {
   outline: 2px solid #3b82f6;
   outline-offset: -1px;
   z-index: 1;
+}
+
+/* Filtered posts - grayed out in feed map */
+.scroll-segment-filtered {
+  opacity: 0.25;
+  filter: grayscale(1);
 }
 
 /* ========================================
@@ -1899,6 +1909,8 @@ div.item-banner {
   display: flex;
   flex-direction: column;
   width: 100%;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Zoom indicator connector */

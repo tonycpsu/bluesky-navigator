@@ -2095,12 +2095,18 @@ export class ItemHandler extends Handler {
   }
 
   updateInfoIndicator() {
-    this.itemStats.unreadCount = this.items.filter((i, item) =>
-      $(item).hasClass('item-unread')
-    ).length;
-    this.itemStats.filteredCount = this.items.filter('.filtered').length;
-    this.itemStats.shownCount = this.items.length - this.itemStats.filteredCount;
-    const index = this.itemStats.shownCount ? this.index + 1 : 0;
+    // Query ALL items including filtered ones (this.items excludes filtered due to :visible)
+    const allItems = $('.item').filter((i, item) => $(item).parents('.item').length === 0);
+    const filteredItems = allItems.filter('.filtered');
+    const visibleItems = allItems.not('.filtered');
+
+    this.itemStats.unreadCount = visibleItems.filter('.item-unread').length;
+    this.itemStats.filteredCount = filteredItems.length;
+    this.itemStats.shownCount = visibleItems.length;
+
+    // Find current index within visible items only
+    const visibleIndex = visibleItems.index(this.selectedItem);
+    const index = this.itemStats.shownCount ? visibleIndex + 1 : 0;
     $('div#infoIndicatorText').html(`
 <div id="itemCountStats">
 <strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)

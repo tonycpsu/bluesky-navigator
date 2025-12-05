@@ -1,7 +1,7 @@
 {
   "name": "bluesky-navigator",
   "private": true,
-  "version": "1.0.31+412.581a4989",
+  "version": "1.0.31+413.9d7dd3ad",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch --mode development",
@@ -15,7 +15,7 @@
     "vite-userscript-plugin": "^1.11.0"
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "^2.0.55",
+    "@anthropic-ai/claude-code": "^2.0.59",
     "@atproto/api": "^0.14.1",
     "date-fns": "^4.1.0",
     "handlebars": "^4.7.8",

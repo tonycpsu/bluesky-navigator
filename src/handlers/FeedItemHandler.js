@@ -418,6 +418,8 @@ export class FeedItemHandler extends ItemHandler {
       $(this.toolbarDiv).append(this.scrollIndicatorWrapper);
       this.setupScrollIndicatorZoomClick();
       this.setupScrollIndicatorClick();
+      this.setupFeedMapTooltipHandlers(this.scrollIndicator);
+      this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
     }
 
     waitForElement('#bsky-navigator-toolbar', null, (_div) => {
@@ -551,6 +553,8 @@ export class FeedItemHandler extends ItemHandler {
       $(this.statusBar).append(this.scrollIndicatorWrapper);
       this.setupScrollIndicatorZoomClick();
       this.setupScrollIndicatorClick();
+      this.setupFeedMapTooltipHandlers(this.scrollIndicator);
+      this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
       // Add class to status bar for CSS styling
       $(this.statusBar).addClass('has-scroll-indicator');
     }
@@ -1855,6 +1859,269 @@ export class FeedItemHandler extends ItemHandler {
       display: 'block',
       left: `${left}px`,
       width: `${width}px`,
+    });
+  }
+
+  /**
+   * Create and return the singleton tooltip element
+   */
+  getFeedMapTooltip() {
+    if (!this._feedMapTooltip) {
+      this._feedMapTooltip = $(`
+        <div class="feed-map-tooltip">
+          <div class="feed-map-tooltip-header">
+            <span class="feed-map-tooltip-handle"></span>
+            <span class="feed-map-tooltip-time"></span>
+          </div>
+          <div class="feed-map-tooltip-author"></div>
+          <div class="feed-map-tooltip-content"></div>
+          <div class="feed-map-tooltip-engagement"></div>
+        </div>
+      `);
+      $('body').append(this._feedMapTooltip);
+    }
+    return this._feedMapTooltip;
+  }
+
+  /**
+   * Show the feed map tooltip for a given item
+   */
+  showFeedMapTooltip(item, segment) {
+    if (!item) return;
+
+    const tooltip = this.getFeedMapTooltip();
+    const $item = $(item);
+
+    // Get data - try item first, then fallbacks
+    let handle = this.handleFromItem(item);
+    let displayName = this.displayNameFromItem(item);
+
+    // Fallback: extract handle from data-testid attribute (format: feedItem-by-handle)
+    if (!handle) {
+      const testId = $item.attr('data-testid') || '';
+      const match = testId.match(/^feedItem-by-(.+)$/);
+      if (match) {
+        handle = match[1];
+      }
+    }
+
+    // Fallback: get display name from profile link text content
+    if (!displayName) {
+      const $thread = $item.closest('.thread');
+      if ($thread.length) {
+        const profileLink = $thread.find('a[aria-label="View profile"]').first();
+        if (profileLink.length) {
+          // The display name is typically the text content of the link
+          displayName = $.trim(profileLink.text().replace(/[\u200E\u200F\u202A-\u202E]/g, ''));
+          // Remove handle if it's included (sometimes format is "Display Name @handle")
+          if (displayName.includes('@')) {
+            displayName = displayName.split('@')[0].trim();
+          }
+        }
+      }
+    }
+
+    const timestamp = this.getTimestampForItem(item);
+    const engagement = this.getPostEngagement(item);
+    const postText = $item.find('div[data-testid="postText"]').text() || '';
+    const isRead = $item.hasClass('item-read');
+
+    // Format relative time
+    const relativeTime = timestamp ? this.formatRelativeTime(timestamp) : '';
+
+    // Truncate post text
+    const truncatedText = postText.length > 150
+      ? postText.substring(0, 150).trim() + '...'
+      : postText;
+
+    // Update tooltip content
+    tooltip.find('.feed-map-tooltip-handle').text(`@${handle}`);
+    tooltip.find('.feed-map-tooltip-time').text(relativeTime ? ` · ${relativeTime}` : '');
+    tooltip.find('.feed-map-tooltip-author').text(displayName || handle);
+    tooltip.find('.feed-map-tooltip-content').text(truncatedText || '(no text)');
+
+    // Build engagement row
+    const engagementHtml = this.buildEngagementHtml(engagement);
+    tooltip.find('.feed-map-tooltip-engagement').html(engagementHtml);
+
+    // Apply state classes
+    tooltip.removeClass('feed-map-tooltip-read feed-map-tooltip-ratioed');
+    if (isRead) tooltip.addClass('feed-map-tooltip-read');
+    if (engagement?.isRatioed) tooltip.addClass('feed-map-tooltip-ratioed');
+
+    // Position the tooltip
+    this.positionFeedMapTooltip(tooltip, segment);
+
+    // Show with fade
+    tooltip.addClass('visible');
+  }
+
+  /**
+   * Hide the feed map tooltip
+   */
+  hideFeedMapTooltip() {
+    if (this._feedMapTooltip) {
+      this._feedMapTooltip.removeClass('visible');
+    }
+  }
+
+  /**
+   * Position the tooltip relative to a segment
+   */
+  positionFeedMapTooltip(tooltip, segment) {
+    const $segment = $(segment);
+    const segmentRect = segment.getBoundingClientRect();
+    const tooltipWidth = 280; // approximate, will adjust after render
+    const tooltipHeight = tooltip.outerHeight() || 120;
+    const padding = 8;
+
+    // Calculate horizontal center
+    let left = segmentRect.left + (segmentRect.width / 2) - (tooltipWidth / 2);
+
+    // Keep within viewport horizontally
+    if (left < padding) left = padding;
+    if (left + tooltipWidth > window.innerWidth - padding) {
+      left = window.innerWidth - tooltipWidth - padding;
+    }
+
+    // Position above by default, flip below if not enough space
+    let top;
+    const spaceAbove = segmentRect.top;
+    const spaceBelow = window.innerHeight - segmentRect.bottom;
+
+    if (spaceAbove >= tooltipHeight + padding) {
+      top = segmentRect.top - tooltipHeight - padding;
+    } else if (spaceBelow >= tooltipHeight + padding) {
+      top = segmentRect.bottom + padding;
+    } else {
+      // Not enough space either way, position above anyway
+      top = Math.max(padding, segmentRect.top - tooltipHeight - padding);
+    }
+
+    tooltip.css({
+      left: `${left}px`,
+      top: `${top}px`,
+      maxWidth: `${tooltipWidth}px`,
+    });
+  }
+
+  /**
+   * Format a timestamp as relative time (e.g., "2h ago", "yesterday")
+   */
+  formatRelativeTime(date) {
+    if (!date) return '';
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'now';
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    if (diffDays === 1) return 'yesterday';
+    if (diffDays < 7) return `${diffDays}d`;
+    return format(date, 'M/d');
+  }
+
+  /**
+   * Build HTML for engagement stats row
+   */
+  buildEngagementHtml(engagement) {
+    if (!engagement) return '';
+
+    const items = [];
+
+    // Likes
+    items.push(`
+      <span class="feed-map-tooltip-stat">
+        <img src="${this.INDICATOR_IMAGES.filter[0]}" alt="likes" class="feed-map-tooltip-icon">
+        <span>${this.formatCount(engagement.likes)}</span>
+      </span>
+    `);
+
+    // Reposts
+    items.push(`
+      <span class="feed-map-tooltip-stat">
+        <img src="${this.INDICATOR_IMAGES.contentRepost}" alt="reposts" class="feed-map-tooltip-icon">
+        <span>${this.formatCount(engagement.reposts)}</span>
+      </span>
+    `);
+
+    // Replies
+    items.push(`
+      <span class="feed-map-tooltip-stat">
+        <img src="${this.INDICATOR_IMAGES.contentReply}" alt="replies" class="feed-map-tooltip-icon">
+        <span>${this.formatCount(engagement.replies)}</span>
+      </span>
+    `);
+
+    // Media indicator
+    if (engagement.hasVideo) {
+      items.push(`<img src="${this.INDICATOR_IMAGES.contentVideo}" alt="video" class="feed-map-tooltip-media-icon">`);
+    } else if (engagement.hasImage) {
+      items.push(`<img src="${this.INDICATOR_IMAGES.contentImage}" alt="image" class="feed-map-tooltip-media-icon">`);
+    }
+
+    return items.join('');
+  }
+
+  /**
+   * Format count for display (e.g., 1200 -> "1.2K")
+   */
+  formatCount(num) {
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return String(num);
+  }
+
+  /**
+   * Set up hover handlers for feed map segments
+   */
+  setupFeedMapTooltipHandlers(indicator) {
+    if (!indicator) return;
+
+    indicator.on('mouseenter', '.scroll-segment', (e) => {
+      const segment = e.currentTarget;
+      const itemIndex = $(segment).data('index');
+
+      // Clear any pending hide
+      clearTimeout(this._tooltipHideTimer);
+
+      // Get delay from config (0 for Instant, 300 for Delayed)
+      const tooltipMode = this.config.get('scrollIndicatorTooltip') || 'Instant';
+      const delay = tooltipMode === 'Delayed' ? 300 : 0;
+
+      // Debounce: if moving between segments quickly, just update
+      if (this._tooltipTimer) {
+        clearTimeout(this._tooltipTimer);
+      }
+
+      if (delay === 0) {
+        // Instant: show immediately
+        const item = this.items[itemIndex];
+        if (item) {
+          this.showFeedMapTooltip(item, segment);
+        }
+      } else {
+        // Delayed: use timeout
+        this._tooltipTimer = setTimeout(() => {
+          const item = this.items[itemIndex];
+          if (item) {
+            this.showFeedMapTooltip(item, segment);
+          }
+        }, delay);
+      }
+    });
+
+    indicator.on('mouseleave', '.scroll-segment', () => {
+      clearTimeout(this._tooltipTimer);
+      this._tooltipTimer = null;
+
+      // Small delay before hiding to allow moving to adjacent segments
+      this._tooltipHideTimer = setTimeout(() => {
+        this.hideFeedMapTooltip();
+      }, 100);
     });
   }
 

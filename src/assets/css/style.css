@@ -2174,6 +2174,154 @@ div#statusBar.has-scroll-indicator {
 }
 
 /* ==========================================================================
+   Feed Map Tooltip
+   ========================================================================== */
+
+.feed-map-tooltip {
+  position: fixed;
+  z-index: 10001;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 10px 12px;
+  max-width: 300px;
+  min-width: 200px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.feed-map-tooltip.visible {
+  opacity: 1;
+}
+
+.feed-map-tooltip-header {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+
+.feed-map-tooltip-handle {
+  color: #9ca3af;
+}
+
+.feed-map-tooltip-time {
+  color: #9ca3af;
+}
+
+.feed-map-tooltip-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.feed-map-tooltip-content {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #374151;
+  margin-bottom: 8px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.feed-map-tooltip-engagement {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: #6b7280;
+  padding-top: 6px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.feed-map-tooltip-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.feed-map-tooltip-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.7;
+}
+
+.feed-map-tooltip-media-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.7;
+  margin-left: auto;
+}
+
+/* Read post styling */
+.feed-map-tooltip.feed-map-tooltip-read {
+  opacity: 0.85;
+}
+
+.feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-author,
+.feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-content {
+  color: #6b7280;
+}
+
+/* Ratioed post styling */
+.feed-map-tooltip.feed-map-tooltip-ratioed .feed-map-tooltip-engagement {
+  background-color: #fef2f2;
+  margin: 0 -12px -10px -12px;
+  padding: 6px 12px 10px 12px;
+  border-radius: 0 0 8px 8px;
+  border-top: 1px solid #fecaca;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .feed-map-tooltip {
+    background: #1f2937;
+    border-color: #374151;
+    color: #f3f4f6;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .feed-map-tooltip-header {
+    color: #9ca3af;
+  }
+
+  .feed-map-tooltip-handle,
+  .feed-map-tooltip-time {
+    color: #6b7280;
+  }
+
+  .feed-map-tooltip-author {
+    color: #f9fafb;
+  }
+
+  .feed-map-tooltip-content {
+    color: #d1d5db;
+  }
+
+  .feed-map-tooltip-engagement {
+    color: #9ca3af;
+    border-top-color: #374151;
+  }
+
+  .feed-map-tooltip-icon,
+  .feed-map-tooltip-media-icon {
+    filter: invert(1);
+  }
+
+  .feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-author,
+  .feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-content {
+    color: #9ca3af;
+  }
+
+  .feed-map-tooltip.feed-map-tooltip-ratioed .feed-map-tooltip-engagement {
+    background-color: #450a0a;
+    border-top-color: #7f1d1d;
+  }
+}
+
+/* ==========================================================================
    Breadcrumb Trail
    ========================================================================== */
 

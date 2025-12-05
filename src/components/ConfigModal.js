@@ -123,6 +123,13 @@ const CONFIG_SCHEMA = {
         default: 'Ocean',
         help: 'Color scheme for the feed map',
       },
+      scrollIndicatorTooltip: {
+        label: 'Tooltip delay',
+        type: 'select',
+        options: ['Instant', 'Delayed'],
+        default: 'Instant',
+        help: 'Show post preview on hover instantly or after a short delay',
+      },
       scrollIndicatorHeatmap: {
         label: 'Heatmap mode',
         type: 'select',

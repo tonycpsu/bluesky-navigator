@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+400.5d6bf960
+// @version     1.0.31+401.b6d5e2de
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44875,6 +44875,13 @@ if (cid) {
           default: "Ocean",
           help: "Color scheme for the feed map"
         },
+        scrollIndicatorTooltip: {
+          label: "Tooltip delay",
+          type: "select",
+          options: ["Instant", "Delayed"],
+          default: "Instant",
+          help: "Show post preview on hover instantly or after a short delay"
+        },
         scrollIndicatorHeatmap: {
           label: "Heatmap mode",
           type: "select",
@@ -48354,6 +48361,154 @@ div#statusBar.has-scroll-indicator {
   .scroll-segment-current {
     outline: 3px solid #1d4ed8;
     outline-offset: -1px;
+  }
+}
+
+/* ==========================================================================
+   Feed Map Tooltip
+   ========================================================================== */
+
+.feed-map-tooltip {
+  position: fixed;
+  z-index: 10001;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 10px 12px;
+  max-width: 300px;
+  min-width: 200px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.feed-map-tooltip.visible {
+  opacity: 1;
+}
+
+.feed-map-tooltip-header {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+
+.feed-map-tooltip-handle {
+  color: #9ca3af;
+}
+
+.feed-map-tooltip-time {
+  color: #9ca3af;
+}
+
+.feed-map-tooltip-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.feed-map-tooltip-content {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #374151;
+  margin-bottom: 8px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.feed-map-tooltip-engagement {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: #6b7280;
+  padding-top: 6px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.feed-map-tooltip-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.feed-map-tooltip-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.7;
+}
+
+.feed-map-tooltip-media-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.7;
+  margin-left: auto;
+}
+
+/* Read post styling */
+.feed-map-tooltip.feed-map-tooltip-read {
+  opacity: 0.85;
+}
+
+.feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-author,
+.feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-content {
+  color: #6b7280;
+}
+
+/* Ratioed post styling */
+.feed-map-tooltip.feed-map-tooltip-ratioed .feed-map-tooltip-engagement {
+  background-color: #fef2f2;
+  margin: 0 -12px -10px -12px;
+  padding: 6px 12px 10px 12px;
+  border-radius: 0 0 8px 8px;
+  border-top: 1px solid #fecaca;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .feed-map-tooltip {
+    background: #1f2937;
+    border-color: #374151;
+    color: #f3f4f6;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .feed-map-tooltip-header {
+    color: #9ca3af;
+  }
+
+  .feed-map-tooltip-handle,
+  .feed-map-tooltip-time {
+    color: #6b7280;
+  }
+
+  .feed-map-tooltip-author {
+    color: #f9fafb;
+  }
+
+  .feed-map-tooltip-content {
+    color: #d1d5db;
+  }
+
+  .feed-map-tooltip-engagement {
+    color: #9ca3af;
+    border-top-color: #374151;
+  }
+
+  .feed-map-tooltip-icon,
+  .feed-map-tooltip-media-icon {
+    filter: invert(1);
+  }
+
+  .feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-author,
+  .feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-content {
+    color: #9ca3af;
+  }
+
+  .feed-map-tooltip.feed-map-tooltip-ratioed .feed-map-tooltip-engagement {
+    background-color: #450a0a;
+    border-top-color: #7f1d1d;
   }
 }
 
@@ -67784,6 +67939,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $(this.toolbarDiv).append(this.scrollIndicatorWrapper);
         this.setupScrollIndicatorZoomClick();
         this.setupScrollIndicatorClick();
+        this.setupFeedMapTooltipHandlers(this.scrollIndicator);
+        this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
       }
       waitForElement$1("#bsky-navigator-toolbar", null, (_div) => {
         this.addToolbar(beforeDiv);
@@ -67889,6 +68046,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $(this.statusBar).append(this.scrollIndicatorWrapper);
         this.setupScrollIndicatorZoomClick();
         this.setupScrollIndicatorClick();
+        this.setupFeedMapTooltipHandlers(this.scrollIndicator);
+        this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
         $(this.statusBar).addClass("has-scroll-indicator");
       }
       $(this.statusBar).append(this.statusBarLeft);
@@ -68860,6 +69019,202 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         display: "block",
         left: `${left}px`,
         width: `${width}px`
+      });
+    }
+    /**
+     * Create and return the singleton tooltip element
+     */
+    getFeedMapTooltip() {
+      if (!this._feedMapTooltip) {
+        this._feedMapTooltip = $(`
+        <div class="feed-map-tooltip">
+          <div class="feed-map-tooltip-header">
+            <span class="feed-map-tooltip-handle"></span>
+            <span class="feed-map-tooltip-time"></span>
+          </div>
+          <div class="feed-map-tooltip-author"></div>
+          <div class="feed-map-tooltip-content"></div>
+          <div class="feed-map-tooltip-engagement"></div>
+        </div>
+      `);
+        $("body").append(this._feedMapTooltip);
+      }
+      return this._feedMapTooltip;
+    }
+    /**
+     * Show the feed map tooltip for a given item
+     */
+    showFeedMapTooltip(item, segment) {
+      if (!item) return;
+      const tooltip = this.getFeedMapTooltip();
+      const $item = $(item);
+      let handle2 = this.handleFromItem(item);
+      let displayName = this.displayNameFromItem(item);
+      if (!handle2) {
+        const testId = $item.attr("data-testid") || "";
+        const match2 = testId.match(/^feedItem-by-(.+)$/);
+        if (match2) {
+          handle2 = match2[1];
+        }
+      }
+      if (!displayName) {
+        const $thread = $item.closest(".thread");
+        if ($thread.length) {
+          const profileLink = $thread.find('a[aria-label="View profile"]').first();
+          if (profileLink.length) {
+            displayName = $.trim(profileLink.text().replace(/[\u200E\u200F\u202A-\u202E]/g, ""));
+            if (displayName.includes("@")) {
+              displayName = displayName.split("@")[0].trim();
+            }
+          }
+        }
+      }
+      const timestamp = this.getTimestampForItem(item);
+      const engagement = this.getPostEngagement(item);
+      const postText = $item.find('div[data-testid="postText"]').text() || "";
+      const isRead = $item.hasClass("item-read");
+      const relativeTime = timestamp ? this.formatRelativeTime(timestamp) : "";
+      const truncatedText = postText.length > 150 ? postText.substring(0, 150).trim() + "..." : postText;
+      tooltip.find(".feed-map-tooltip-handle").text(`@${handle2}`);
+      tooltip.find(".feed-map-tooltip-time").text(relativeTime ? ` \xB7 ${relativeTime}` : "");
+      tooltip.find(".feed-map-tooltip-author").text(displayName || handle2);
+      tooltip.find(".feed-map-tooltip-content").text(truncatedText || "(no text)");
+      const engagementHtml = this.buildEngagementHtml(engagement);
+      tooltip.find(".feed-map-tooltip-engagement").html(engagementHtml);
+      tooltip.removeClass("feed-map-tooltip-read feed-map-tooltip-ratioed");
+      if (isRead) tooltip.addClass("feed-map-tooltip-read");
+      if (engagement?.isRatioed) tooltip.addClass("feed-map-tooltip-ratioed");
+      this.positionFeedMapTooltip(tooltip, segment);
+      tooltip.addClass("visible");
+    }
+    /**
+     * Hide the feed map tooltip
+     */
+    hideFeedMapTooltip() {
+      if (this._feedMapTooltip) {
+        this._feedMapTooltip.removeClass("visible");
+      }
+    }
+    /**
+     * Position the tooltip relative to a segment
+     */
+    positionFeedMapTooltip(tooltip, segment) {
+      $(segment);
+      const segmentRect = segment.getBoundingClientRect();
+      const tooltipWidth = 280;
+      const tooltipHeight = tooltip.outerHeight() || 120;
+      const padding = 8;
+      let left = segmentRect.left + segmentRect.width / 2 - tooltipWidth / 2;
+      if (left < padding) left = padding;
+      if (left + tooltipWidth > window.innerWidth - padding) {
+        left = window.innerWidth - tooltipWidth - padding;
+      }
+      let top;
+      const spaceAbove = segmentRect.top;
+      const spaceBelow = window.innerHeight - segmentRect.bottom;
+      if (spaceAbove >= tooltipHeight + padding) {
+        top = segmentRect.top - tooltipHeight - padding;
+      } else if (spaceBelow >= tooltipHeight + padding) {
+        top = segmentRect.bottom + padding;
+      } else {
+        top = Math.max(padding, segmentRect.top - tooltipHeight - padding);
+      }
+      tooltip.css({
+        left: `${left}px`,
+        top: `${top}px`,
+        maxWidth: `${tooltipWidth}px`
+      });
+    }
+    /**
+     * Format a timestamp as relative time (e.g., "2h ago", "yesterday")
+     */
+    formatRelativeTime(date) {
+      if (!date) return "";
+      const now = /* @__PURE__ */ new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 6e4);
+      const diffHours = Math.floor(diffMs / 36e5);
+      const diffDays = Math.floor(diffMs / 864e5);
+      if (diffMins < 1) return "now";
+      if (diffMins < 60) return `${diffMins}m`;
+      if (diffHours < 24) return `${diffHours}h`;
+      if (diffDays === 1) return "yesterday";
+      if (diffDays < 7) return `${diffDays}d`;
+      return format(date, "M/d");
+    }
+    /**
+     * Build HTML for engagement stats row
+     */
+    buildEngagementHtml(engagement) {
+      if (!engagement) return "";
+      const items = [];
+      items.push(`
+      <span class="feed-map-tooltip-stat">
+        <img src="${this.INDICATOR_IMAGES.filter[0]}" alt="likes" class="feed-map-tooltip-icon">
+        <span>${this.formatCount(engagement.likes)}</span>
+      </span>
+    `);
+      items.push(`
+      <span class="feed-map-tooltip-stat">
+        <img src="${this.INDICATOR_IMAGES.contentRepost}" alt="reposts" class="feed-map-tooltip-icon">
+        <span>${this.formatCount(engagement.reposts)}</span>
+      </span>
+    `);
+      items.push(`
+      <span class="feed-map-tooltip-stat">
+        <img src="${this.INDICATOR_IMAGES.contentReply}" alt="replies" class="feed-map-tooltip-icon">
+        <span>${this.formatCount(engagement.replies)}</span>
+      </span>
+    `);
+      if (engagement.hasVideo) {
+        items.push(`<img src="${this.INDICATOR_IMAGES.contentVideo}" alt="video" class="feed-map-tooltip-media-icon">`);
+      } else if (engagement.hasImage) {
+        items.push(`<img src="${this.INDICATOR_IMAGES.contentImage}" alt="image" class="feed-map-tooltip-media-icon">`);
+      }
+      return items.join("");
+    }
+    /**
+     * Format count for display (e.g., 1200 -> "1.2K")
+     */
+    formatCount(num) {
+      if (num >= 1e6) return (num / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+      if (num >= 1e3) return (num / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+      return String(num);
+    }
+    /**
+     * Set up hover handlers for feed map segments
+     */
+    setupFeedMapTooltipHandlers(indicator) {
+      if (!indicator) return;
+      indicator.on("mouseenter", ".scroll-segment", (e2) => {
+        const segment = e2.currentTarget;
+        const itemIndex = $(segment).data("index");
+        clearTimeout(this._tooltipHideTimer);
+        const tooltipMode = this.config.get("scrollIndicatorTooltip") || "Instant";
+        const delay = tooltipMode === "Delayed" ? 300 : 0;
+        if (this._tooltipTimer) {
+          clearTimeout(this._tooltipTimer);
+        }
+        if (delay === 0) {
+          const item = this.items[itemIndex];
+          if (item) {
+            this.showFeedMapTooltip(item, segment);
+          }
+        } else {
+          this._tooltipTimer = setTimeout(() => {
+            const item = this.items[itemIndex];
+            if (item) {
+              this.showFeedMapTooltip(item, segment);
+            }
+          }, delay);
+        }
+      });
+      indicator.on("mouseleave", ".scroll-segment", () => {
+        clearTimeout(this._tooltipTimer);
+        this._tooltipTimer = null;
+        this._tooltipHideTimer = setTimeout(() => {
+          this.hideFeedMapTooltip();
+        }, 100);
       });
     }
     handleInput(event) {

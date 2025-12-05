@@ -20,13 +20,41 @@ export class BlueskyAPI {
     const _res = await this.agent.getPostThread({ uri: 'at://...' });
   }
 
-  async getTimeline() {
-    const { data } = await this.agent.getTimeline({
-      // cursor: '',
-      limit: 30,
-    });
-    console.log(data);
-    // debugger;
+  async getTimeline(cursor = null, limit = 100) {
+    const params = { limit };
+    if (cursor) {
+      params.cursor = cursor;
+    }
+    const { data } = await this.agent.getTimeline(params);
+    return data;
+  }
+
+  /**
+   * Fetches timeline and extracts repost timestamps.
+   * Returns a map of post ID -> repost timestamp (indexedAt from reason)
+   * Post ID is extracted from the URI (last segment after app.bsky.feed.post/)
+   */
+  async getRepostTimestamps(cursor = null, limit = 100) {
+    const data = await this.getTimeline(cursor, limit);
+    const repostTimestamps = {};
+
+    for (const item of data.feed) {
+      // Check if this is a repost (has reason with $type containing 'repost')
+      if (item.reason && item.reason.$type?.includes('reasonRepost')) {
+        const postUri = item.post.uri;
+        const repostTime = item.reason.indexedAt;
+        if (postUri && repostTime) {
+          // Extract post ID from URI: at://did:plc:xxx/app.bsky.feed.post/POST_ID
+          const postId = postUri.split('/').pop();
+          repostTimestamps[postId] = new Date(repostTime);
+        }
+      }
+    }
+
+    return {
+      timestamps: repostTimestamps,
+      cursor: data.cursor,
+    };
   }
 
   async getAtprotoUri(postUrl) {

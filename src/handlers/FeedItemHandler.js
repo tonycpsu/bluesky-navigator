@@ -3,7 +3,7 @@
 import constants from '../constants.js';
 import * as utils from '../utils.js';
 import { ItemHandler } from './ItemHandler.js';
-import { format } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
 
 const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
 
@@ -46,6 +46,9 @@ export class FeedItemHandler extends ItemHandler {
     this.setFilter = this.setFilter.bind(this);
     // Cache for media detection (postId -> {hasImage, hasVideo}) to avoid flaky detection
     this.mediaCache = {};
+    // Cache for repost timestamps (postUri -> Date) from AT Protocol API
+    this.repostTimestampCache = {};
+    this.repostTimestampsFetched = false;
     this.feedTabObserver = waitForElement(constants.FEED_TAB_SELECTOR, (tab) => {
       utils.observeChanges(
         tab,
@@ -63,6 +66,136 @@ export class FeedItemHandler extends ItemHandler {
     document.addEventListener('scrollIndicatorSettingChanged', (e) => {
       this.handleScrollIndicatorSettingChange(e.detail);
     });
+  }
+
+  /**
+   * Fetch repost timestamps from AT Protocol API and cache them.
+   * Only fetches once per session unless forced.
+   */
+  async fetchRepostTimestamps(force = false) {
+    if (!this.api || (this.repostTimestampsFetched && !force)) {
+      return;
+    }
+
+    try {
+      // Ensure we're logged in before fetching
+      if (!this.api.agent.session) {
+        await this.api.login();
+      }
+
+      const result = await this.api.getRepostTimestamps();
+      Object.assign(this.repostTimestampCache, result.timestamps);
+      this.repostTimestampsFetched = true;
+
+      // Re-apply timestamp formatting now that we have repost timestamps
+      if (Object.keys(result.timestamps).length > 0) {
+        this.refreshItems();
+      }
+    } catch (e) {
+      // API not available or not logged in - silently fail
+    }
+  }
+
+  /**
+   * Override getTimestampForItem to use cached repost timestamps.
+   * For reposts, returns the repost time instead of the original post time.
+   * Falls back to estimated time based on adjacent posts if API hasn't fetched yet.
+   */
+  getTimestampForItem(item) {
+    const $item = $(item);
+
+    // Check if this is a repost
+    const isRepost = $item.closest('.thread').find('svg[aria-label*="Reposted"]').length > 0 ||
+                     $item.closest('.thread').find('a[aria-label*="Reposted by"]').length > 0;
+
+    if (isRepost) {
+      const repostTime = this.getRepostTime(item);
+      if (repostTime) return repostTime.time;
+    }
+
+    // Fall back to original post timestamp from DOM
+    return super.getTimestampForItem(item);
+  }
+
+  /**
+   * Get repost time for an item - from cache or estimated from adjacent posts.
+   * Returns { time: Date, isEstimated: boolean } or null if unavailable.
+   * Uses parent's getTimestampForItem for adjacent posts to avoid recursion.
+   */
+  getRepostTime(item) {
+    const $item = $(item);
+    const postId = this.postIdForItem($item);
+
+    // Check cache first
+    if (postId && this.repostTimestampCache[postId]) {
+      return { time: this.repostTimestampCache[postId], isEstimated: false };
+    }
+
+    // Estimate from adjacent posts
+    const itemIndex = this.items.indexOf($item[0]);
+    if (itemIndex < 0) return null;
+
+    const prevItem = itemIndex > 0 ? this.items[itemIndex - 1] : null;
+    const nextItem = itemIndex < this.items.length - 1 ? this.items[itemIndex + 1] : null;
+
+    // Use parent's method to get DOM timestamps (avoids recursion)
+    const prevTime = prevItem ? super.getTimestampForItem(prevItem) : null;
+    const nextTime = nextItem ? super.getTimestampForItem(nextItem) : null;
+
+    if (prevTime && nextTime) {
+      return { time: new Date((prevTime.getTime() + nextTime.getTime()) / 2), isEstimated: true };
+    } else if (prevTime) {
+      return { time: prevTime, isEstimated: true };
+    } else if (nextTime) {
+      return { time: nextTime, isEstimated: true };
+    }
+
+    return null;
+  }
+
+  /**
+   * Override applyTimestampFormat to add repost timestamp after "Reposted by".
+   * Original post timestamp stays in the post; repost time is shown in parentheses.
+   */
+  applyTimestampFormat(element) {
+    // Call parent to handle the original post timestamp
+    super.applyTimestampFormat(element);
+
+    // Add repost timestamp after "Reposted by" text
+    const $element = $(element);
+    const $thread = $element.closest('.thread');
+    const repostLink = $thread.find('a[aria-label*="Reposted by"]').first();
+
+    if (!repostLink.length) return;
+
+    // Check if we already added the repost timestamp
+    if ($thread.find('.repost-timestamp').length) return;
+
+    const repostTimeResult = this.getRepostTime($element);
+    if (!repostTimeResult) return;
+
+    const { time: repostTime, isEstimated } = repostTimeResult;
+
+    const userFormat = this.config.get(
+      this.state.mobileView ? 'postTimestampFormatMobile' : 'postTimestampFormat'
+    ) || 'h:mmaaa';
+
+    // Calculate relative age for $age token
+    const repostAge = this.formatRelativeTime(repostTime);
+    const formattedRepostTime = format(repostTime, userFormat)
+      .replace('$age', repostAge);
+
+    // Add ~ prefix for estimated timestamps
+    const displayTime = isEstimated ? `~${formattedRepostTime}` : formattedRepostTime;
+
+    // Find the div containing "Reposted by" text and append after the username
+    // Structure: <a><svg/><div>Reposted by <div><div><a>Name</a></div></div></div></a>
+    const repostTextDiv = repostLink.children('div').first();
+    if (repostTextDiv.length) {
+      repostTextDiv.append(
+        `<span class="repost-timestamp" style="margin-left: 4px; opacity: 0.8;">${displayTime}</span>`
+      );
+    }
   }
 
   /**
@@ -608,6 +741,9 @@ export class FeedItemHandler extends ItemHandler {
     waitForElement('#bsky-navigator-search', (el) => {
       $(el).val(this.state.filter);
     });
+
+    // Fetch repost timestamps from AT Protocol API (if available)
+    this.fetchRepostTimestamps();
 
     // Add scroll listener for viewport indicator updates
     this._scrollHandler = this._throttledScrollUpdate.bind(this);

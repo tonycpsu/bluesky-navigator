@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+407.e109df0c
+// @version     1.0.31+408.b6324690
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44574,12 +44574,36 @@ if (cid) {
     async getPost(_uri) {
       await this.agent.getPostThread({ uri: "at://..." });
     }
-    async getTimeline() {
-      const { data } = await this.agent.getTimeline({
-        // cursor: '',
-        limit: 30
-      });
-      console.log(data);
+    async getTimeline(cursor = null, limit = 100) {
+      const params = { limit };
+      if (cursor) {
+        params.cursor = cursor;
+      }
+      const { data } = await this.agent.getTimeline(params);
+      return data;
+    }
+    /**
+     * Fetches timeline and extracts repost timestamps.
+     * Returns a map of post ID -> repost timestamp (indexedAt from reason)
+     * Post ID is extracted from the URI (last segment after app.bsky.feed.post/)
+     */
+    async getRepostTimestamps(cursor = null, limit = 100) {
+      const data = await this.getTimeline(cursor, limit);
+      const repostTimestamps = {};
+      for (const item of data.feed) {
+        if (item.reason && item.reason.$type?.includes("reasonRepost")) {
+          const postUri = item.post.uri;
+          const repostTime = item.reason.indexedAt;
+          if (postUri && repostTime) {
+            const postId = postUri.split("/").pop();
+            repostTimestamps[postId] = new Date(repostTime);
+          }
+        }
+      }
+      return {
+        timestamps: repostTimestamps,
+        cursor: data.cursor
+      };
     }
     async getAtprotoUri(postUrl) {
       const match2 = postUrl.match(/bsky\.app\/profile\/([^/]+)\/post\/([^/]+)/);
@@ -67751,6 +67775,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.onSearchKeydown = this.onSearchKeydown.bind(this);
       this.setFilter = this.setFilter.bind(this);
       this.mediaCache = {};
+      this.repostTimestampCache = {};
+      this.repostTimestampsFetched = false;
       this.feedTabObserver = waitForElement$1(constants.FEED_TAB_SELECTOR, (tab) => {
         observeChanges(
           tab,
@@ -67766,6 +67792,94 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       document.addEventListener("scrollIndicatorSettingChanged", (e2) => {
         this.handleScrollIndicatorSettingChange(e2.detail);
       });
+    }
+    /**
+     * Fetch repost timestamps from AT Protocol API and cache them.
+     * Only fetches once per session unless forced.
+     */
+    async fetchRepostTimestamps(force = false) {
+      if (!this.api || this.repostTimestampsFetched && !force) {
+        return;
+      }
+      try {
+        if (!this.api.agent.session) {
+          await this.api.login();
+        }
+        const result = await this.api.getRepostTimestamps();
+        Object.assign(this.repostTimestampCache, result.timestamps);
+        this.repostTimestampsFetched = true;
+        if (Object.keys(result.timestamps).length > 0) {
+          this.refreshItems();
+        }
+      } catch (e2) {
+      }
+    }
+    /**
+     * Override getTimestampForItem to use cached repost timestamps.
+     * For reposts, returns the repost time instead of the original post time.
+     * Falls back to estimated time based on adjacent posts if API hasn't fetched yet.
+     */
+    getTimestampForItem(item) {
+      const $item = $(item);
+      const isRepost = $item.closest(".thread").find('svg[aria-label*="Reposted"]').length > 0 || $item.closest(".thread").find('a[aria-label*="Reposted by"]').length > 0;
+      if (isRepost) {
+        const repostTime = this.getRepostTime(item);
+        if (repostTime) return repostTime.time;
+      }
+      return super.getTimestampForItem(item);
+    }
+    /**
+     * Get repost time for an item - from cache or estimated from adjacent posts.
+     * Returns { time: Date, isEstimated: boolean } or null if unavailable.
+     * Uses parent's getTimestampForItem for adjacent posts to avoid recursion.
+     */
+    getRepostTime(item) {
+      const $item = $(item);
+      const postId = this.postIdForItem($item);
+      if (postId && this.repostTimestampCache[postId]) {
+        return { time: this.repostTimestampCache[postId], isEstimated: false };
+      }
+      const itemIndex = this.items.indexOf($item[0]);
+      if (itemIndex < 0) return null;
+      const prevItem = itemIndex > 0 ? this.items[itemIndex - 1] : null;
+      const nextItem = itemIndex < this.items.length - 1 ? this.items[itemIndex + 1] : null;
+      const prevTime = prevItem ? super.getTimestampForItem(prevItem) : null;
+      const nextTime = nextItem ? super.getTimestampForItem(nextItem) : null;
+      if (prevTime && nextTime) {
+        return { time: new Date((prevTime.getTime() + nextTime.getTime()) / 2), isEstimated: true };
+      } else if (prevTime) {
+        return { time: prevTime, isEstimated: true };
+      } else if (nextTime) {
+        return { time: nextTime, isEstimated: true };
+      }
+      return null;
+    }
+    /**
+     * Override applyTimestampFormat to add repost timestamp after "Reposted by".
+     * Original post timestamp stays in the post; repost time is shown in parentheses.
+     */
+    applyTimestampFormat(element) {
+      super.applyTimestampFormat(element);
+      const $element = $(element);
+      const $thread = $element.closest(".thread");
+      const repostLink = $thread.find('a[aria-label*="Reposted by"]').first();
+      if (!repostLink.length) return;
+      if ($thread.find(".repost-timestamp").length) return;
+      const repostTimeResult = this.getRepostTime($element);
+      if (!repostTimeResult) return;
+      const { time: repostTime, isEstimated } = repostTimeResult;
+      const userFormat = this.config.get(
+        this.state.mobileView ? "postTimestampFormatMobile" : "postTimestampFormat"
+      ) || "h:mmaaa";
+      const repostAge = this.formatRelativeTime(repostTime);
+      const formattedRepostTime = format(repostTime, userFormat).replace("$age", repostAge);
+      const displayTime = isEstimated ? `~${formattedRepostTime}` : formattedRepostTime;
+      const repostTextDiv = repostLink.children("div").first();
+      if (repostTextDiv.length) {
+        repostTextDiv.append(
+          `<span class="repost-timestamp" style="margin-left: 4px; opacity: 0.8;">${displayTime}</span>`
+        );
+      }
     }
     /**
      * Handle dynamic scroll indicator setting changes from config modal
@@ -68196,6 +68310,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       waitForElement$1("#bsky-navigator-search", (el) => {
         $(el).val(this.state.filter);
       });
+      this.fetchRepostTimestamps();
       this._scrollHandler = this._throttledScrollUpdate.bind(this);
       window.addEventListener("scroll", this._scrollHandler, { passive: true });
     }

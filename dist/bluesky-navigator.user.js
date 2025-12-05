@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+408.b6324690
+// @version     1.0.31+409.25770caa
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47930,6 +47930,22 @@ div.item-banner {
   transition: background-color var(--transition-duration, 150ms) ease;
 }
 
+/* Basic mode needs visible segment colors for read/unread to work.
+   Default uses gray background with brightness filter. Themes override unread color. */
+.scroll-indicator-basic .scroll-segment {
+  background-color: #9ca3af; /* Default unread: medium gray */
+}
+
+.scroll-indicator-basic .scroll-segment-read {
+  filter: brightness(0.6);
+}
+
+/* Basic mode theme colors - unread segments use theme's light color */
+.scroll-indicator-basic.scroll-indicator-theme-ocean .scroll-segment { background-color: #7dd3fc; } /* sky-300 */
+.scroll-indicator-basic.scroll-indicator-theme-campfire .scroll-segment { background-color: #fcd34d; } /* amber-300 */
+.scroll-indicator-basic.scroll-indicator-theme-forest .scroll-segment { background-color: #86efac; } /* green-300 */
+.scroll-indicator-basic.scroll-indicator-theme-monochrome .scroll-segment { background-color: #d1d5db; } /* gray-300 */
+
 .scroll-segment:last-child {
   border-right: none;
 }
@@ -48380,6 +48396,13 @@ div#statusBar.has-scroll-indicator {
   .scroll-segment-read {
     filter: brightness(0.5);
   }
+
+  /* Basic mode dark: theme colors with brightness filter for read */
+  .scroll-indicator-basic .scroll-segment { background-color: #4b5563; }
+  .scroll-indicator-basic.scroll-indicator-theme-ocean .scroll-segment { background-color: #0e7490; } /* cyan-700 */
+  .scroll-indicator-basic.scroll-indicator-theme-campfire .scroll-segment { background-color: #b45309; } /* amber-700 */
+  .scroll-indicator-basic.scroll-indicator-theme-forest .scroll-segment { background-color: #15803d; } /* green-700 */
+  .scroll-indicator-basic.scroll-indicator-theme-monochrome .scroll-segment { background-color: #6b7280; } /* gray-500 */
 
   .scroll-segment-current {
     outline-color: #60a5fa;

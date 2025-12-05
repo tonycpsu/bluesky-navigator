@@ -1817,12 +1817,15 @@ div.item-banner {
 .scroll-icon-stack img {
   height: 45%;
   width: auto;
+  max-width: 90%;
   flex-shrink: 0;
   opacity: 0.7;
+  object-fit: contain;
 }
 
 .scroll-segment {
   position: relative;
+  overflow: hidden;
 }
 
 /* Zoom indicator segments - larger for better visibility */

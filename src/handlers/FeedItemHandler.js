@@ -31,10 +31,10 @@ export class FeedItemHandler extends ItemHandler {
     contentVideo: 'https://www.svgrepo.com/show/333765/camera-movie.svg',
     contentImage: 'https://www.svgrepo.com/show/334014/image-alt.svg',
     contentEmbed: 'https://www.svgrepo.com/show/334050/link-external.svg',
-    contentText: 'https://www.svgrepo.com/show/333848/comment.svg',
+    contentText: 'https://www.svgrepo.com/show/333882/detail.svg',
     contentRepost: 'https://www.svgrepo.com/show/334212/repost.svg',
     contentReply: 'https://www.svgrepo.com/show/334206/reply.svg',
-    contentPost: 'https://www.svgrepo.com/show/333882/detail.svg',
+    contentPost: 'https://www.svgrepo.com/show/333848/comment.svg',
   };
 
   constructor(name, config, state, api, selector) {

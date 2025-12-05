@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+401.b6d5e2de
+// @version     1.0.31+402.915b0057
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47938,10 +47938,10 @@ div.item-banner {
 .scroll-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
 
 /* === OCEAN THEME (blue/teal) === */
-/* Unread: light sky, Read: slate, Current: cyan outline */
+/* Unread: light sky, Read: slate, Current: yellow outline (contrasts with blue) */
 .scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #e0f2fe; }
 .scroll-indicator-theme-ocean .scroll-segment-read { background-color: #64748b; }
-.scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #06b6d4 !important; }
+.scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #eab308 !important; }
 .scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #f97316 !important; }
 .scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #e0f2fe; }
 .scroll-indicator-theme-ocean .scroll-segment-heat-2 { background-color: #bae6fd; }
@@ -48010,8 +48010,33 @@ div.item-banner {
   width: auto;
   max-width: 90%;
   flex-shrink: 0;
-  opacity: 0.7;
+  opacity: 0.9;
   object-fit: contain;
+}
+
+/* Content type icon colors with outline for visibility */
+.scroll-icon-stack img[alt="text"] {
+  /* Blue with white outline */
+  filter: brightness(0) saturate(100%) invert(40%) sepia(98%) saturate(1000%) hue-rotate(200deg) brightness(95%)
+    drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
+}
+
+.scroll-icon-stack img[alt="image"] {
+  /* Green with white outline */
+  filter: brightness(0) saturate(100%) invert(55%) sepia(75%) saturate(500%) hue-rotate(80deg) brightness(95%)
+    drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
+}
+
+.scroll-icon-stack img[alt="video"] {
+  /* Red with white outline */
+  filter: brightness(0) saturate(100%) invert(30%) sepia(100%) saturate(2000%) hue-rotate(350deg) brightness(95%)
+    drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
+}
+
+.scroll-icon-stack img[alt="embed"] {
+  /* Purple with white outline */
+  filter: brightness(0) saturate(100%) invert(35%) sepia(80%) saturate(800%) hue-rotate(250deg) brightness(90%)
+    drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
 }
 
 .scroll-segment {
@@ -48127,8 +48152,32 @@ div.item-banner {
 }
 
 @media (prefers-color-scheme: dark) {
-  .scroll-icon-stack img {
-    filter: invert(1);
+  /* Dark mode: use dark outline instead of white, keep colors but brighten */
+  .scroll-icon-stack img[alt="text"] {
+    filter: brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(800%) hue-rotate(200deg) brightness(110%)
+      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+  }
+
+  .scroll-icon-stack img[alt="image"] {
+    filter: brightness(0) saturate(100%) invert(70%) sepia(60%) saturate(500%) hue-rotate(80deg) brightness(110%)
+      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+  }
+
+  .scroll-icon-stack img[alt="video"] {
+    filter: brightness(0) saturate(100%) invert(50%) sepia(100%) saturate(1500%) hue-rotate(350deg) brightness(110%)
+      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+  }
+
+  .scroll-icon-stack img[alt="embed"] {
+    filter: brightness(0) saturate(100%) invert(55%) sepia(80%) saturate(600%) hue-rotate(250deg) brightness(110%)
+      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+  }
+
+  /* Fallback for other icons (post types) */
+  .scroll-icon-stack img[alt="post"],
+  .scroll-icon-stack img[alt="reply"],
+  .scroll-icon-stack img[alt="repost"] {
+    filter: invert(1) drop-shadow(0 0 1px rgba(0,0,0,0.8));
     opacity: 0.8;
   }
 
@@ -48308,7 +48357,7 @@ div#statusBar.has-scroll-indicator {
   /* === DARK MODE: OCEAN THEME === */
   .scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #164e63; }
   .scroll-indicator-theme-ocean .scroll-segment-read { background-color: #334155; }
-  .scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #22d3ee !important; }
+  .scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #facc15 !important; }
   .scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #fb923c !important; }
   .scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #164e63; }
   .scroll-indicator-theme-ocean .scroll-segment-heat-2 { background-color: #155e75; }
@@ -67632,10 +67681,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       contentVideo: "https://www.svgrepo.com/show/333765/camera-movie.svg",
       contentImage: "https://www.svgrepo.com/show/334014/image-alt.svg",
       contentEmbed: "https://www.svgrepo.com/show/334050/link-external.svg",
-      contentText: "https://www.svgrepo.com/show/333848/comment.svg",
+      contentText: "https://www.svgrepo.com/show/333882/detail.svg",
       contentRepost: "https://www.svgrepo.com/show/334212/repost.svg",
       contentReply: "https://www.svgrepo.com/show/334206/reply.svg",
-      contentPost: "https://www.svgrepo.com/show/333882/detail.svg"
+      contentPost: "https://www.svgrepo.com/show/333848/comment.svg"
     };
     constructor(name, config2, state2, api, selector) {
       super(name, config2, state2, api, selector);

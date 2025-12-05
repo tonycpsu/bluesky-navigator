@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+411.ab8677b5
+// @version     1.0.31+412.581a4989
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -181,7 +181,12 @@
         const savedState = JSON.parse(GM_getValue(this.key, "{}"));
         if (this.config.stateSyncEnabled) {
           const remoteState = await this.loadRemoteState(this.state.lastUpdated);
-          return remoteState ? { ...defaultState, ...remoteState } : { ...defaultState, ...savedState };
+          if (remoteState) {
+            const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
+            return { ...defaultState, ...remoteWithoutFilter, filter: savedState.filter || defaultState.filter || "" };
+          } else {
+            return { ...defaultState, ...savedState };
+          }
         } else {
           return { ...defaultState, ...savedState };
         }
@@ -272,8 +277,9 @@
         }
         console.log("Saving remote state...");
         this.setSyncStatus("pending");
+        const { filter, ...stateToSync } = this.state;
         await this.executeRemoteQuery(
-          `UPSERT state:current MERGE {${JSON.stringify(this.state).slice(1, -1)}, created_at: time::now()}`,
+          `UPSERT state:current MERGE {${JSON.stringify(stateToSync).slice(1, -1)}, created_at: time::now()}`,
           "success"
         );
       } catch (error) {
@@ -68154,10 +68160,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         this.debouncedSearchUpdate(event);
       };
-      this.debouncedSearchUpdate = debounce((event) => {
-        const val = $(event.target).val();
-        this.setFilter(val.trim());
-        this.loadItems();
+      this.debouncedSearchUpdate = debounce(() => {
+        const val = $(this.searchField).val();
+        const newFilter = val.trim();
+        if (newFilter !== this.state.filter) {
+          this.setFilter(newFilter);
+          this.loadItems();
+        }
       }, 300);
       this.onSearchUpdate = this.onSearchUpdate.bind(this);
       $(this.searchField).on("keydown", this.onSearchKeydown);
@@ -68165,7 +68174,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       $(this.searchField).on("focus", function() {
         $(this).autocomplete("search", "");
       });
-      $(this.searchField).on("autocompletechange autocompleteclose", this.onSearchUpdate);
       $(this.searchField).on("autocompleteselect", this.onSearchUpdate);
       if (this.config.get("hideRightSidebar")) {
         this.widthControls = $(`
@@ -68441,6 +68449,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
     setFilter(text) {
+      console.log("[FILTER] setFilter called with:", text, "stack:", new Error().stack.split("\n").slice(1, 3).join(" <- "));
       this.state.stateManager.saveStateImmediately(true, true);
       this.state.filter = text;
       this.updateFilterPill();
@@ -68567,7 +68576,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return true;
       }
       const activeRules = this.parseFilterRules(this.state.filter);
-      return activeRules.map((rule) => this.evaluateFilterRule(item, rule)).every((result) => result === true);
+      const results = activeRules.map((rule) => this.evaluateFilterRule(item, rule));
+      const passes = results.every((result) => result === true);
+      return passes;
     }
     /**
      * Parses filter text into structured rule objects.
@@ -68619,9 +68630,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (rule.type === "all") {
           allowed = rule.action === "allow";
         } else if (rule.type === "from" && this.filterAuthor(item, rule.value.substring(1))) {
-          allowed = allowed || rule.action === "allow";
+          allowed = rule.action === "allow";
         } else if (rule.type === "content" && this.filterContent(item, rule.value)) {
-          allowed = allowed || rule.action === "allow";
+          allowed = rule.action === "allow";
         }
       }
       return allowed;
@@ -68674,6 +68685,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return items.length !== filteredItems.length;
     }
     filterItems() {
+      console.log("[FILTER] filterItems called, filter:", this.state.filter, "items count:", $(this.selector).length);
       const hideRead = this.state.feedHideRead;
       $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+hideRead]);
       $("#filterIndicator").attr(
@@ -68713,9 +68725,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       this.refreshItems();
       if (hideRead && $(this.selectedItem).hasClass("item-read")) {
-        console.log("jumping");
         this.jumpToNextUnseenItem();
       }
+      const allItems = $(this.selector);
+      const filteredCount = allItems.filter(".filtered").length;
+      const visibleCount = allItems.filter(":visible").length;
+      console.log(`[FILTER] After filtering: ${filteredCount} filtered, ${visibleCount} visible out of ${allItems.length} total`);
     }
     sortItems() {
       const reversed = this.state.feedSortReverse;

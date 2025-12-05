@@ -870,6 +870,9 @@ export class FeedItemHandler extends ItemHandler {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }
+        div[data-testid="homeScreenFeedTabs"] {
+          width: 100% !important;
+        }
         #statusBar {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;

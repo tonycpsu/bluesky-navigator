@@ -253,12 +253,14 @@ function getScreenFromElement(element) {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }
+        div[data-testid="homeScreenFeedTabs"] {
+          width: 100% !important;
+        }
         #statusBar {
           max-width: ${contentWidth}px !important;
           transform: translateX(${shiftRight}px) !important;
         }
       `;
-      console.log('[bsky-nav] Updated width:', contentWidth, 'translateX:', shiftRight);
     } else if (styleEl) {
       // Remove width styles if sidebar not hidden or width is default
       styleEl.textContent = '';

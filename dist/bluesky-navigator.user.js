@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+404.bcc2fab8
+// @version     1.0.31+405.aba92238
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44919,12 +44919,6 @@ if (cid) {
     "Threads & Sidecar": {
       icon: "\u{1F4AC}",
       fields: {
-        showReplyContext: {
-          label: "Show reply context",
-          type: "checkbox",
-          default: false,
-          help: "Show parent post even if previously read"
-        },
         unrollThreads: {
           label: "Unroll threads",
           type: "checkbox",
@@ -44965,6 +44959,12 @@ if (cid) {
           options: ["Default", "Oldest First", "Newest First", "Most Liked First", "Most Reposted First"],
           default: "Default",
           help: "How to sort replies in the sidecar"
+        },
+        showReplyContext: {
+          label: "Show reply context",
+          type: "checkbox",
+          default: false,
+          help: "Show parent post even if previously read"
         }
       }
     },
@@ -66193,6 +66193,10 @@ div#statusBar.has-scroll-indicator {
         this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
         Handlebars.registerPartial("postTemplate", this.postTemplate);
       });
+      waitForElement$2("#sidecar-body-template", () => {
+        this.bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
+        Handlebars.registerPartial("bodyTemplate", this.bodyTemplate);
+      });
       waitForElement$2("#sidecar-footer-template", () => {
         this.footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
         Handlebars.registerPartial("footerTemplate", this.footerTemplate);
@@ -66246,10 +66250,10 @@ div#statusBar.has-scroll-indicator {
       return this.config.get("showReplySidecar") && $(item).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth");
     }
     shouldExpand(item) {
-      return this.shouldUnroll(item) || this.shouldShowSidecar(item);
+      return this.shouldShowSidecar(item) || this.shouldUnroll(item);
     }
     async expandItem(item) {
-      if (!this.shouldExpand()) {
+      if (!this.shouldExpand(item)) {
         return;
       }
       const thread = await this.getThreadForItem(item);
@@ -66264,8 +66268,6 @@ div#statusBar.has-scroll-indicator {
       }
     }
     async unrollThread(item, thread) {
-      const bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
-      Handlebars.registerPartial("bodyTemplate", bodyTemplate);
       console.log(
         thread.parent,
         thread.parent?.post,
@@ -66306,7 +66308,7 @@ div#statusBar.has-scroll-indicator {
               `<a href="${urlForPost(p)}" class="unrolled-post-number" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
             )
           );
-          reply.append($(bodyTemplate(formatPost(p))));
+          reply.append($(this.bodyTemplate(formatPost(p))));
           reply.append($(this.footerTemplate(formatPost(p))));
           div.append(reply);
         });

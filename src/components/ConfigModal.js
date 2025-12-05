@@ -167,12 +167,6 @@ const CONFIG_SCHEMA = {
   'Threads & Sidecar': {
     icon: '💬',
     fields: {
-      showReplyContext: {
-        label: 'Show reply context',
-        type: 'checkbox',
-        default: false,
-        help: 'Show parent post even if previously read',
-      },
       unrollThreads: {
         label: 'Unroll threads',
         type: 'checkbox',
@@ -213,6 +207,12 @@ const CONFIG_SCHEMA = {
         options: ['Default', 'Oldest First', 'Newest First', 'Most Liked First', 'Most Reposted First'],
         default: 'Default',
         help: 'How to sort replies in the sidecar',
+      },
+      showReplyContext: {
+        label: 'Show reply context',
+        type: 'checkbox',
+        default: false,
+        help: 'Show parent post even if previously read',
       },
     },
   },

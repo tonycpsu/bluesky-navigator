@@ -321,6 +321,10 @@ export class ItemHandler extends Handler {
       this.postTemplate = Handlebars.compile($('#sidecar-post-template').html());
       Handlebars.registerPartial('postTemplate', this.postTemplate);
     });
+    waitForElement('#sidecar-body-template', () => {
+      this.bodyTemplate = Handlebars.compile($('#sidecar-body-template').html());
+      Handlebars.registerPartial('bodyTemplate', this.bodyTemplate);
+    });
     waitForElement('#sidecar-footer-template', () => {
       this.footerTemplate = Handlebars.compile($('#sidecar-footer-template').html());
       Handlebars.registerPartial('footerTemplate', this.footerTemplate);
@@ -382,28 +386,29 @@ export class ItemHandler extends Handler {
   }
 
   shouldExpand(item) {
-    return this.shouldUnroll(item) || this.shouldShowSidecar(item);
+    // Fetch thread data if either sidecar or unroll is enabled
+    return this.shouldShowSidecar(item) || this.shouldUnroll(item);
   }
 
   async expandItem(item) {
-    if (!this.shouldExpand()) {
+    if (!this.shouldExpand(item)) {
       return;
     }
     const thread = await this.getThreadForItem(item);
     if (!thread) {
       return;
     }
+    // Unroll setting controls visual rearrangement
     if (this.shouldUnroll(item)) {
       await this.unrollThread(item, thread, true);
     }
+    // Sidecar setting controls showing replies panel
     if (this.shouldShowSidecar(item)) {
       await this.showSidecar(item, thread, true);
     }
   }
 
   async unrollThread(item, thread) {
-    const bodyTemplate = Handlebars.compile($('#sidecar-body-template').html());
-    Handlebars.registerPartial('bodyTemplate', bodyTemplate);
     console.log(
       thread.parent,
       thread.parent?.post,
@@ -448,7 +453,7 @@ export class ItemHandler extends Handler {
             `<a href="${urlForPost(p)}" class="unrolled-post-number" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
           )
         );
-        reply.append($(bodyTemplate(formatPost(p))));
+        reply.append($(this.bodyTemplate(formatPost(p))));
         reply.append($(this.footerTemplate(formatPost(p))));
         div.append(reply);
       });

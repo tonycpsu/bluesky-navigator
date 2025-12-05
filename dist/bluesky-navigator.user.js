@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+406.f481974f
+// @version     1.0.31+407.e109df0c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -67750,6 +67750,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
       this.onSearchKeydown = this.onSearchKeydown.bind(this);
       this.setFilter = this.setFilter.bind(this);
+      this.mediaCache = {};
       this.feedTabObserver = waitForElement$1(constants.FEED_TAB_SELECTOR, (tab) => {
         observeChanges(
           tab,
@@ -68790,27 +68791,35 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const likes = getCount('button[data-testid="likeBtn"]');
       const reposts = getCount('button[data-testid="repostBtn"]');
       const replies = getCount('button[data-testid="replyBtn"]');
-      if (!this._debuggedItem) {
-        this._debuggedItem = true;
-        console.log("[bsky-navigator] Item structure debug:", {
-          itemTag: item.tagName,
-          itemClasses: item.className,
-          likeBtnFound: $item.find('button[data-testid="likeBtn"]').length,
-          likeBtnInThread: $item.closest(".thread").find('button[data-testid="likeBtn"]').length,
-          allButtons: $item.find("button").length,
-          allButtonsInThread: $item.closest(".thread").find("button").length
-        });
-      }
       const timestamp = this.getTimestampForItem(item);
       const hoursOld = timestamp ? (Date.now() - timestamp.getTime()) / (1e3 * 60 * 60) : 1;
-      const hasImage = $item.find('img[src*="feed_thumbnail"], img[src*="feed_fullsize"]').length > 0;
-      const hasVideo = $item.find('video, div[data-testid*="video"]').length > 0;
-      const hasEmbed = $item.find('div[data-testid="contentHider-embed"]').length > 0;
+      const postId = this.postIdForItem($item);
+      const $thread = $item.closest(".thread");
+      const $searchScope = $thread.length ? $thread : $item;
+      let hasImage = $searchScope.find('img[src*="feed_thumbnail"], img[src*="feed_fullsize"]').length > 0;
+      let hasVideo = $searchScope.find('video, div[data-testid*="video"], button[aria-label="Play Video"], [data-testid="videoPlayer"], img[src*="video.bsky"]').length > 0;
+      const hasEmbed = $searchScope.find('div[data-testid="contentHider-embed"]').length > 0;
+      if (!hasVideo) {
+        $searchScope.find("img").each((i2, img) => {
+          if (img.src && img.src.includes("video")) {
+            hasVideo = true;
+            return false;
+          }
+        });
+      }
+      if (postId && this.mediaCache) {
+        const cached = this.mediaCache[postId];
+        if (cached) {
+          hasImage = hasImage || cached.hasImage;
+          hasVideo = hasVideo || cached.hasVideo;
+        }
+        if (hasImage || hasVideo) {
+          this.mediaCache[postId] = { hasImage, hasVideo };
+        }
+      }
       const isRepost = $item.closest(".thread").find('svg[aria-label*="Reposted"]').length > 0 || $item.closest(".thread").find('div[data-testid*="repost"]').length > 0;
       const isReply = $item.find('div[data-testid*="replyLine"]').length > 0 || $item.closest(".thread").find('a[href*="/post/"][aria-label*="Reply"]').length > 0;
-      const $thread = $item.closest(".thread");
       let isSelfThread = false;
-      const postId = this.postIdForItem($item);
       if (postId && this.selfThreadCache && this.selfThreadCache[postId]) {
         isSelfThread = true;
       }

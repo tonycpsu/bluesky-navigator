@@ -44,6 +44,8 @@ export class FeedItemHandler extends ItemHandler {
     this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
     this.onSearchKeydown = this.onSearchKeydown.bind(this);
     this.setFilter = this.setFilter.bind(this);
+    // Cache for media detection (postId -> {hasImage, hasVideo}) to avoid flaky detection
+    this.mediaCache = {};
     this.feedTabObserver = waitForElement(constants.FEED_TAB_SELECTOR, (tab) => {
       utils.observeChanges(
         tab,
@@ -1388,27 +1390,43 @@ export class FeedItemHandler extends ItemHandler {
     const reposts = getCount('button[data-testid="repostBtn"]');
     const replies = getCount('button[data-testid="replyBtn"]');
 
-    // Debug: log first item structure
-    if (!this._debuggedItem) {
-      this._debuggedItem = true;
-      console.log('[bsky-navigator] Item structure debug:', {
-        itemTag: item.tagName,
-        itemClasses: item.className,
-        likeBtnFound: $item.find('button[data-testid="likeBtn"]').length,
-        likeBtnInThread: $item.closest('.thread').find('button[data-testid="likeBtn"]').length,
-        allButtons: $item.find('button').length,
-        allButtonsInThread: $item.closest('.thread').find('button').length,
-      });
-    }
-
     // Get post timestamp for time-based calculations
     const timestamp = this.getTimestampForItem(item);
     const hoursOld = timestamp ? (Date.now() - timestamp.getTime()) / (1000 * 60 * 60) : 1;
 
-    // Detect content type
-    const hasImage = $item.find('img[src*="feed_thumbnail"], img[src*="feed_fullsize"]').length > 0;
-    const hasVideo = $item.find('video, div[data-testid*="video"]').length > 0;
-    const hasEmbed = $item.find('div[data-testid="contentHider-embed"]').length > 0;
+    // Detect content type - use cache to avoid flaky detection for off-screen posts
+    const postId = this.postIdForItem($item);
+    // For reposts, content is in the .thread container, so search both $item and $thread
+    const $thread = $item.closest('.thread');
+    const $searchScope = $thread.length ? $thread : $item;
+    let hasImage = $searchScope.find('img[src*="feed_thumbnail"], img[src*="feed_fullsize"]').length > 0;
+    // Video detection: check for video element, video testid, play button (for YouTube embeds), or video thumbnail
+    let hasVideo = $searchScope.find('video, div[data-testid*="video"], button[aria-label="Play Video"], [data-testid="videoPlayer"], img[src*="video.bsky"]').length > 0;
+    const hasEmbed = $searchScope.find('div[data-testid="contentHider-embed"]').length > 0;
+
+    // Fallback: check for any image with 'video' in URL
+    if (!hasVideo) {
+      $searchScope.find('img').each((i, img) => {
+        if (img.src && img.src.includes('video')) {
+          hasVideo = true;
+          return false; // break
+        }
+      });
+    }
+
+    // Use cache: once media is detected, remember it (media elements may not exist when off-screen)
+    if (postId && this.mediaCache) {
+      const cached = this.mediaCache[postId];
+      if (cached) {
+        // Use cached values, but allow upgrading from false to true
+        hasImage = hasImage || cached.hasImage;
+        hasVideo = hasVideo || cached.hasVideo;
+      }
+      // Update cache if we detected media
+      if (hasImage || hasVideo) {
+        this.mediaCache[postId] = { hasImage, hasVideo };
+      }
+    }
 
     // Detect post type
     const isRepost = $item.closest('.thread').find('svg[aria-label*="Reposted"]').length > 0 ||
@@ -1421,9 +1439,9 @@ export class FeedItemHandler extends ItemHandler {
     // 1. Cache from previous API calls (selfThreadCache)
     // 2. DOM evidence of previous unrolling (.unrolled-replies element)
     // 3. Bluesky DOM: thread line going down (r-lchren with margin-top) + same author next
-    const $thread = $item.closest('.thread');
+    // $thread already declared above for media detection
     let isSelfThread = false;
-    const postId = this.postIdForItem($item);
+    // postId already declared above for media cache
 
     // Check cache first (populated when thread is selected and API returns)
     if (postId && this.selfThreadCache && this.selfThreadCache[postId]) {

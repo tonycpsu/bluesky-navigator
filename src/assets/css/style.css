@@ -1700,7 +1700,7 @@ div.item-banner {
   height: 100%;
   flex: 1;
   background-color: transparent;
-  border-right: 1px solid rgba(255, 255, 255, 0.3);
+  border-right: 2px solid white;
   box-sizing: border-box;
   transition: background-color var(--transition-duration, 150ms) ease;
 }
@@ -2165,7 +2165,7 @@ div#statusBar.has-scroll-indicator {
   }
 
   .scroll-segment {
-    border-right-color: rgba(0, 0, 0, 0.3);
+    border-right-color: #374151;
   }
 
   .scroll-segment-read {

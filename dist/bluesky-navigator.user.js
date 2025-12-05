@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+410.77ea128c
+// @version     1.0.31+411.ab8677b5
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47925,7 +47925,7 @@ div.item-banner {
   height: 100%;
   flex: 1;
   background-color: transparent;
-  border-right: 1px solid rgba(255, 255, 255, 0.3);
+  border-right: 2px solid white;
   box-sizing: border-box;
   transition: background-color var(--transition-duration, 150ms) ease;
 }
@@ -48390,7 +48390,7 @@ div#statusBar.has-scroll-indicator {
   }
 
   .scroll-segment {
-    border-right-color: rgba(0, 0, 0, 0.3);
+    border-right-color: #374151;
   }
 
   .scroll-segment-read {

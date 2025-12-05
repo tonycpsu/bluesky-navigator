@@ -221,7 +221,21 @@ export class ItemHandler extends Handler {
         $(this.selectedItem).addClass('item-selection-child-focused');
         $(this.selectedItem).removeClass('item-selection-active');
         this.selectedPost.addClass('reply-selection-active');
-        this.scrollToElement(this.selectedPost[0], 'nearest');
+        // When at first post (index 0), scroll to show top of entire thread container
+        // For other posts, scroll to the specific reply
+        if (value === 0) {
+          const threadContainer = $(this.selectedItem).closest('.thread')[0];
+          const target = threadContainer || $(this.selectedItem)[0];
+          // Use window.scrollTo to ensure thread top is visible accounting for toolbar
+          const rect = target.getBoundingClientRect();
+          const scrollTop = window.pageYOffset + rect.top - this.scrollMargin;
+          window.scrollTo({
+            top: Math.max(0, scrollTop),
+            behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant'
+          });
+        } else {
+          this.scrollToElement(this.selectedPost[0], 'nearest');
+        }
       } else {
         return;
       }
@@ -457,7 +471,13 @@ export class ItemHandler extends Handler {
         return !isRedundant(item, threadIndex);
       });
       console.log(this.items.length);
-      this.threadIndex = 0;
+      // Show focus on first post without scrolling (set directly to skip setter's scroll)
+      this._threadIndex = 0;
+      $(this.selectedItem).addClass('item-selection-child-focused');
+      $(this.selectedItem).removeClass('item-selection-active');
+      if (this.selectedPost) {
+        this.selectedPost.addClass('reply-selection-active');
+      }
     }
   }
 

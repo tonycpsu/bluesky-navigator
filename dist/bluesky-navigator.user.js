@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+403.120bd3bf
+// @version     1.0.31+404.bcc2fab8
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -66112,7 +66112,18 @@ div#statusBar.has-scroll-indicator {
           $(this.selectedItem).addClass("item-selection-child-focused");
           $(this.selectedItem).removeClass("item-selection-active");
           this.selectedPost.addClass("reply-selection-active");
-          this.scrollToElement(this.selectedPost[0], "nearest");
+          if (value === 0) {
+            const threadContainer = $(this.selectedItem).closest(".thread")[0];
+            const target2 = threadContainer || $(this.selectedItem)[0];
+            const rect = target2.getBoundingClientRect();
+            const scrollTop = window.pageYOffset + rect.top - this.scrollMargin;
+            window.scrollTo({
+              top: Math.max(0, scrollTop),
+              behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
+            });
+          } else {
+            this.scrollToElement(this.selectedPost[0], "nearest");
+          }
         } else {
           return;
         }
@@ -66311,7 +66322,12 @@ div#statusBar.has-scroll-indicator {
           return !isRedundant(item2, threadIndex);
         });
         console.log(this.items.length);
-        this.threadIndex = 0;
+        this._threadIndex = 0;
+        $(this.selectedItem).addClass("item-selection-child-focused");
+        $(this.selectedItem).removeClass("item-selection-active");
+        if (this.selectedPost) {
+          this.selectedPost.addClass("reply-selection-active");
+        }
       }
     }
     async getSidecarContent(item, thread) {

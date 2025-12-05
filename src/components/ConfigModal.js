@@ -152,6 +152,16 @@ const CONFIG_SCHEMA = {
         help: 'Show zoomed view of N posts around selection (0 to disable)',
         showWhen: { scrollIndicatorStyle: 'Advanced' },
       },
+      scrollIndicatorAnimationSpeed: {
+        label: 'Animation interval',
+        type: 'range',
+        default: 100,
+        min: 0,
+        max: 1000,
+        step: 50,
+        help: 'Zoom scroll animation duration (0=instant, 100=normal)',
+        showWhen: { scrollIndicatorStyle: 'Advanced' },
+      },
     },
   },
   'Threads & Sidecar': {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+402.915b0057
+// @version     1.0.31+403.120bd3bf
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44903,6 +44903,16 @@ if (cid) {
           default: 0,
           help: "Show zoomed view of N posts around selection (0 to disable)",
           showWhen: { scrollIndicatorStyle: "Advanced" }
+        },
+        scrollIndicatorAnimationSpeed: {
+          label: "Animation interval",
+          type: "range",
+          default: 100,
+          min: 0,
+          max: 1e3,
+          step: 50,
+          help: "Zoom scroll animation duration (0=instant, 100=normal)",
+          showWhen: { scrollIndicatorStyle: "Advanced" }
         }
       }
     },
@@ -47902,7 +47912,7 @@ div.item-banner {
 
 /* Segment states */
 .scroll-segment-read {
-  background-color: #9ca3af;
+  filter: brightness(0.6);
 }
 
 .scroll-segment-current {
@@ -47921,9 +47931,8 @@ div.item-banner {
 }
 
 /* === CAMPFIRE THEME (amber/orange) === */
-/* Unread: light amber, Read: gray, Current: orange outline */
+/* Unread: light amber, Read: dimmed (via filter), Current: orange outline */
 .scroll-indicator-theme-campfire .scroll-position-indicator { background-color: #fffbeb; }
-.scroll-indicator-theme-campfire .scroll-segment-read { background-color: #9ca3af; }
 .scroll-indicator-theme-campfire .scroll-segment-current { outline-color: #f59e0b !important; }
 .scroll-indicator-theme-campfire .scroll-segment-ratioed { background-color: #ef4444 !important; }
 
@@ -47938,9 +47947,8 @@ div.item-banner {
 .scroll-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
 
 /* === OCEAN THEME (blue/teal) === */
-/* Unread: light sky, Read: slate, Current: yellow outline (contrasts with blue) */
+/* Unread: light sky, Read: dimmed (via filter), Current: yellow outline (contrasts with blue) */
 .scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #e0f2fe; }
-.scroll-indicator-theme-ocean .scroll-segment-read { background-color: #64748b; }
 .scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #eab308 !important; }
 .scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #f97316 !important; }
 .scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #e0f2fe; }
@@ -47953,9 +47961,8 @@ div.item-banner {
 .scroll-indicator-theme-ocean .scroll-segment-heat-8 { background-color: #075985; }
 
 /* === FOREST THEME (green) === */
-/* Unread: light green, Read: stone, Current: lime outline */
+/* Unread: light green, Read: dimmed (via filter), Current: lime outline */
 .scroll-indicator-theme-forest .scroll-position-indicator { background-color: #dcfce7; }
-.scroll-indicator-theme-forest .scroll-segment-read { background-color: #78716c; }
 .scroll-indicator-theme-forest .scroll-segment-current { outline-color: #84cc16 !important; }
 .scroll-indicator-theme-forest .scroll-segment-ratioed { background-color: #ea580c !important; }
 .scroll-indicator-theme-forest .scroll-segment-heat-1 { background-color: #dcfce7; }
@@ -47968,9 +47975,8 @@ div.item-banner {
 .scroll-indicator-theme-forest .scroll-segment-heat-8 { background-color: #166534; }
 
 /* === MONOCHROME THEME (grayscale) === */
-/* Unread: light gray, Read: dark gray, Current: white outline */
+/* Unread: light gray, Read: dimmed (via filter), Current: dark outline */
 .scroll-indicator-theme-monochrome .scroll-position-indicator { background-color: #e5e7eb; }
-.scroll-indicator-theme-monochrome .scroll-segment-read { background-color: #4b5563; }
 .scroll-indicator-theme-monochrome .scroll-segment-current { outline-color: #1f2937 !important; }
 .scroll-indicator-theme-monochrome .scroll-segment-ratioed { background-color: #dc2626 !important; }
 .scroll-indicator-theme-monochrome .scroll-segment-heat-1 { background-color: #f3f4f6; }
@@ -48039,6 +48045,20 @@ div.item-banner {
     drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
 }
 
+/* Post type icons - grayscale with white outline */
+.scroll-icon-stack img[alt="post"],
+.scroll-icon-stack img[alt="reply"],
+.scroll-icon-stack img[alt="repost"],
+.scroll-icon-stack img[alt="thread"] {
+  filter: brightness(0) invert(0.3) drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
+  opacity: 0.9;
+}
+
+/* Thread icon is taller SVG - constrain to match others */
+.scroll-icon-stack img[alt="thread"] {
+  height: 40%;
+}
+
 .scroll-segment {
   position: relative;
   overflow: hidden;
@@ -48104,6 +48124,19 @@ div.item-banner {
 .scroll-position-indicator-zoom {
   border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 3px;
+  overflow: hidden;
+}
+
+/* Inner wrapper for smooth scroll animation */
+.scroll-zoom-inner {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+
+.scroll-zoom-inner.scroll-zoom-animating {
+  transition: transform calc(var(--animation-duration, 300ms) * var(--zoom-animation-speed, 1)) ease-out;
 }
 
 /* When zoom is enabled, allow brackets to overflow */
@@ -48173,10 +48206,12 @@ div.item-banner {
       drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
   }
 
-  /* Fallback for other icons (post types) */
+
+  /* Post type icons */
   .scroll-icon-stack img[alt="post"],
   .scroll-icon-stack img[alt="reply"],
-  .scroll-icon-stack img[alt="repost"] {
+  .scroll-icon-stack img[alt="repost"],
+  .scroll-icon-stack img[alt="thread"] {
     filter: invert(1) drop-shadow(0 0 1px rgba(0,0,0,0.8));
     opacity: 0.8;
   }
@@ -48319,7 +48354,7 @@ div#statusBar.has-scroll-indicator {
   }
 
   .scroll-segment-read {
-    background-color: #6b7280;
+    filter: brightness(0.5);
   }
 
   .scroll-segment-current {
@@ -48342,7 +48377,6 @@ div#statusBar.has-scroll-indicator {
 
   /* === DARK MODE: CAMPFIRE THEME === */
   .scroll-indicator-theme-campfire .scroll-position-indicator { background-color: #451a03; }
-  .scroll-indicator-theme-campfire .scroll-segment-read { background-color: #4b5563; }
   .scroll-indicator-theme-campfire .scroll-segment-current { outline-color: #fbbf24 !important; }
   .scroll-indicator-theme-campfire .scroll-segment-ratioed { background-color: #f87171 !important; }
   .scroll-segment-heat-1 { background-color: #1e3a5f; }
@@ -48356,7 +48390,6 @@ div#statusBar.has-scroll-indicator {
 
   /* === DARK MODE: OCEAN THEME === */
   .scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #164e63; }
-  .scroll-indicator-theme-ocean .scroll-segment-read { background-color: #334155; }
   .scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #facc15 !important; }
   .scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #fb923c !important; }
   .scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #164e63; }
@@ -48370,7 +48403,6 @@ div#statusBar.has-scroll-indicator {
 
   /* === DARK MODE: FOREST THEME === */
   .scroll-indicator-theme-forest .scroll-position-indicator { background-color: #14532d; }
-  .scroll-indicator-theme-forest .scroll-segment-read { background-color: #44403c; }
   .scroll-indicator-theme-forest .scroll-segment-current { outline-color: #a3e635 !important; }
   .scroll-indicator-theme-forest .scroll-segment-ratioed { background-color: #fb923c !important; }
   .scroll-indicator-theme-forest .scroll-segment-heat-1 { background-color: #14532d; }
@@ -48384,7 +48416,6 @@ div#statusBar.has-scroll-indicator {
 
   /* === DARK MODE: MONOCHROME THEME === */
   .scroll-indicator-theme-monochrome .scroll-position-indicator { background-color: #374151; }
-  .scroll-indicator-theme-monochrome .scroll-segment-read { background-color: #6b7280; }
   .scroll-indicator-theme-monochrome .scroll-segment-current { outline-color: #f9fafb !important; }
   .scroll-indicator-theme-monochrome .scroll-segment-ratioed { background-color: #ef4444 !important; }
   .scroll-indicator-theme-monochrome .scroll-segment-heat-1 { background-color: #1f2937; }
@@ -48404,7 +48435,7 @@ div#statusBar.has-scroll-indicator {
   }
 
   .scroll-segment-read {
-    background-color: #6b7280;
+    filter: brightness(0.4);
   }
 
   .scroll-segment-current {
@@ -65951,6 +65982,7 @@ div#statusBar.has-scroll-indicator {
       this.scrollTick = false;
       this.scrollTop = 0;
       this.scrollDirection = 0;
+      this.selfThreadCache = {};
       if (this.state.mobileView && this.config.get("enableSwipeGestures")) {
         this.gestureHandler = new GestureHandler(this.config, this);
         this.bottomSheet = new BottomSheet(this.config, this);
@@ -66236,6 +66268,13 @@ div#statusBar.has-scroll-indicator {
         let isRedundant = function(item2, threadIndex2) {
           return $(item2).data("bsky-navigator-thread-offset") != 0 && $(item2).closest(".thread").data("bsky-navigator-thread-index") == threadIndex2;
         };
+        const postId = this.postIdForItem(item);
+        if (postId) {
+          this.selfThreadCache[postId] = true;
+          if (typeof this.updateScrollIndicator === "function") {
+            this.updateScrollIndicator();
+          }
+        }
         const unrolledPosts = await this.api.unrollThread(thread);
         const parent = $(item).find('div[data-testid="contentHider-post"]').first().parent();
         parent.css({ "overflow-y": "scroll", "max-height": "80vH", "padding-top": "1em" });
@@ -67684,7 +67723,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       contentText: "https://www.svgrepo.com/show/333882/detail.svg",
       contentRepost: "https://www.svgrepo.com/show/334212/repost.svg",
       contentReply: "https://www.svgrepo.com/show/334206/reply.svg",
-      contentPost: "https://www.svgrepo.com/show/333848/comment.svg"
+      contentPost: "https://www.svgrepo.com/show/333848/comment.svg",
+      contentThread: "https://www.svgrepo.com/show/142955/spool-of-thread.svg"
     };
     constructor(name, config2, state2, api, selector) {
       super(name, config2, state2, api, selector);
@@ -67822,7 +67862,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
       const indicatorScale = parseInt(this.config.get("scrollIndicatorScale"), 10) || 100;
       const scaleValue = indicatorScale / 100;
-      const scaleStyle = `--indicator-scale: ${scaleValue};`;
+      const animationInterval = parseInt(this.config.get("scrollIndicatorAnimationSpeed"), 10);
+      const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
+      const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
       if (indicatorPosition === "Top toolbar") {
         this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar"></div>`);
         this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
@@ -67832,7 +67874,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.scrollIndicatorContainer.append(this.scrollIndicator);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
         this.scrollIndicatorZoomHighlight = this.scrollIndicator.find(".scroll-position-zoom-highlight");
-        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper ${styleClass} ${themeClass}" style="${scaleStyle}"></div>`);
+        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
         this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
         this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
         <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
@@ -67845,10 +67887,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
         this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
         this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
+        this.scrollIndicatorZoomInner = $(`<div class="scroll-zoom-inner"></div>`);
+        this.scrollIndicatorZoom.append(this.scrollIndicatorZoomInner);
         this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
         this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
         this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
         this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
+        this.zoomWindowStart = null;
       }
       this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1"/>`);
       $(this.toolbarDiv).append(this.toolbarRow1);
@@ -68065,7 +68110,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
       const indicatorScale = parseInt(this.config.get("scrollIndicatorScale"), 10) || 100;
       const scaleValue = indicatorScale / 100;
-      const scaleStyle = `--indicator-scale: ${scaleValue};`;
+      const animationInterval = parseInt(this.config.get("scrollIndicatorAnimationSpeed"), 10);
+      const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
+      const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
       if (indicatorPosition === "Bottom status bar") {
         this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container"></div>`);
         this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
@@ -68075,7 +68122,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.scrollIndicatorContainer.append(this.scrollIndicator);
         this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
         this.scrollIndicatorZoomHighlight = this.scrollIndicator.find(".scroll-position-zoom-highlight");
-        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar ${styleClass} ${themeClass}" style="${scaleStyle}"></div>`);
+        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
         this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
         this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
         <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
@@ -68743,6 +68790,45 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const hasEmbed = $item.find('div[data-testid="contentHider-embed"]').length > 0;
       const isRepost = $item.closest(".thread").find('svg[aria-label*="Reposted"]').length > 0 || $item.closest(".thread").find('div[data-testid*="repost"]').length > 0;
       const isReply = $item.find('div[data-testid*="replyLine"]').length > 0 || $item.closest(".thread").find('a[href*="/post/"][aria-label*="Reply"]').length > 0;
+      const $thread = $item.closest(".thread");
+      let isSelfThread = false;
+      const postId = this.postIdForItem($item);
+      if (postId && this.selfThreadCache && this.selfThreadCache[postId]) {
+        isSelfThread = true;
+      }
+      if (!isSelfThread) {
+        const unrolledInItem = $item.find(".unrolled-replies");
+        const unrolledInThread = $thread.length ? $thread.find(".unrolled-replies") : $();
+        if (unrolledInItem.length > 0 || unrolledInThread.length > 0) {
+          isSelfThread = true;
+        } else {
+          const unrolledGlobal = $(".unrolled-replies");
+          if (unrolledGlobal.length > 0) {
+            const unrolledParent = unrolledGlobal.closest('[data-testid^="feedItem-by-"]');
+            const unrolledPostId = unrolledParent.length ? this.postIdForItem(unrolledParent) : null;
+            if (unrolledPostId === postId) {
+              isSelfThread = true;
+            }
+          }
+        }
+      }
+      if (!isSelfThread && !isReply && !isRepost) {
+        const threadLineDown = $item.find('.r-lchren[style*="margin-top"]');
+        if (threadLineDown.length > 0) {
+          const author = this.handleFromItem($item);
+          const $container = $item.parent().parent();
+          const $nextContainer = $container.next();
+          if ($nextContainer.length) {
+            const $nextItem = $nextContainer.find('[data-testid^="feedItem-by-"]');
+            if ($nextItem.length) {
+              const nextAuthor = this.handleFromItem($nextItem);
+              if (author && nextAuthor && author === nextAuthor) {
+                isSelfThread = true;
+              }
+            }
+          }
+        }
+      }
       const isRatioed = replies > likes && likes + replies >= 10;
       return {
         likes,
@@ -68757,6 +68843,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         hasMedia: hasImage || hasVideo,
         isRepost,
         isReply,
+        isSelfThread,
         isRatioed
       };
     }
@@ -68805,7 +68892,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     getContentIcon(engagement) {
       if (!engagement) return "";
       let postTypeIcon;
-      if (engagement.isRepost) {
+      if (engagement.isSelfThread) {
+        postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentThread}" alt="thread">`;
+      } else if (engagement.isRepost) {
         postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentRepost}" alt="repost">`;
       } else if (engagement.isReply) {
         postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentReply}" alt="reply">`;
@@ -68879,26 +68968,50 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      */
     updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore) {
       const zoomIndicator = this.scrollIndicatorZoom;
-      if (!zoomIndicator) return;
+      const zoomInner = this.scrollIndicatorZoomInner;
+      if (!zoomIndicator || !zoomInner) return;
       if (this.loading || this.loadingNew) return;
       const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
       if (zoomWindowSize === 0) return;
       const total = this.items.length;
       if (total === 0) return;
-      const halfWindow = Math.floor(zoomWindowSize / 2);
-      let windowStart = Math.max(0, currentIndex - halfWindow);
+      const edgeMargin = Math.max(1, Math.floor(zoomWindowSize * 0.2));
+      let windowStart = this.zoomWindowStart;
+      if (windowStart === null) {
+        const halfWindow = Math.floor(zoomWindowSize / 2);
+        windowStart = Math.max(0, currentIndex - halfWindow);
+      } else {
+        const windowEnd2 = windowStart + zoomWindowSize - 1;
+        if (currentIndex < windowStart + edgeMargin) {
+          windowStart = Math.max(0, currentIndex - edgeMargin);
+        } else if (currentIndex > windowEnd2 - edgeMargin) {
+          windowStart = currentIndex - (zoomWindowSize - 1 - edgeMargin);
+        }
+      }
+      windowStart = Math.max(0, windowStart);
       if (windowStart + zoomWindowSize > total) {
         windowStart = Math.max(0, total - zoomWindowSize);
       }
-      let segments = zoomIndicator.find(".scroll-segment");
+      let segments = zoomInner.find(".scroll-segment");
       if (segments.length !== zoomWindowSize) {
-        zoomIndicator.find(".scroll-segment").remove();
+        zoomInner.find(".scroll-segment").remove();
         for (let i2 = 0; i2 < zoomWindowSize; i2++) {
           const segment = $('<div class="scroll-segment scroll-segment-zoom"></div>');
-          zoomIndicator.append(segment);
+          zoomInner.append(segment);
         }
-        segments = zoomIndicator.find(".scroll-segment");
+        segments = zoomInner.find(".scroll-segment");
       }
+      if (this.zoomWindowStart !== null && this.zoomWindowStart !== windowStart) {
+        const shift = windowStart - this.zoomWindowStart;
+        const segmentWidth = zoomIndicator.width() / zoomWindowSize;
+        const offsetPx = -shift * segmentWidth;
+        zoomInner.removeClass("scroll-zoom-animating");
+        zoomInner.css("transform", `translateX(${offsetPx}px)`);
+        zoomInner[0].offsetHeight;
+        zoomInner.addClass("scroll-zoom-animating");
+        zoomInner.css("transform", "translateX(0)");
+      }
+      this.zoomWindowStart = windowStart;
       const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
       segments.each((i2, segment) => {
         const $segment = $(segment);
@@ -68916,6 +69029,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           $segment.addClass("scroll-segment-empty");
           return;
         }
+        if (isRead) {
+          $segment.addClass("scroll-segment-read");
+        }
         if (isCurrent) {
           $segment.addClass("scroll-segment-current");
         } else if (engagementData[itemIndex]?.engagement?.isRatioed) {
@@ -68924,11 +69040,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const heatLevel = this.getHeatLevel(engagementData[itemIndex].score, maxScore);
           if (heatLevel > 0) {
             $segment.addClass(`scroll-segment-heat-${heatLevel}`);
-          } else if (isRead) {
-            $segment.addClass("scroll-segment-read");
           }
-        } else if (isRead) {
-          $segment.addClass("scroll-segment-read");
         }
         if (showIcons && engagementData[itemIndex]?.engagement) {
           const icon = this.getContentIcon(engagementData[itemIndex].engagement);

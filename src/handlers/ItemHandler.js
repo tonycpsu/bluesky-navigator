@@ -69,6 +69,7 @@ export class ItemHandler extends Handler {
     this.scrollTick = false;
     this.scrollTop = 0;
     this.scrollDirection = 0;
+    this.selfThreadCache = {}; // Cache for API-detected self-threads (postId -> true)
 
     // Initialize gesture handler and bottom sheet for mobile
     if (this.state.mobileView && this.config.get('enableSwipeGestures')) {
@@ -404,6 +405,15 @@ export class ItemHandler extends Handler {
       return;
     }
     if (thread.replies.map((r) => r.post && r.post.author.did).includes(thread.post.author.did)) {
+      // Cache this post as a self-thread for feed map display
+      const postId = this.postIdForItem(item);
+      if (postId) {
+        this.selfThreadCache[postId] = true;
+        // Update scroll indicator to show thread icon (if method exists in subclass)
+        if (typeof this.updateScrollIndicator === 'function') {
+          this.updateScrollIndicator();
+        }
+      }
       const unrolledPosts = await this.api.unrollThread(thread);
       const parent = $(item).find('div[data-testid="contentHider-post"]').first().parent();
       parent.css({ 'overflow-y': 'scroll', 'max-height': '80vH', 'padding-top': '1em' });

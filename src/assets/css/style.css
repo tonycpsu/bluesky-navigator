@@ -1711,7 +1711,7 @@ div.item-banner {
 
 /* Segment states */
 .scroll-segment-read {
-  background-color: #9ca3af;
+  filter: brightness(0.6);
 }
 
 .scroll-segment-current {
@@ -1730,9 +1730,8 @@ div.item-banner {
 }
 
 /* === CAMPFIRE THEME (amber/orange) === */
-/* Unread: light amber, Read: gray, Current: orange outline */
+/* Unread: light amber, Read: dimmed (via filter), Current: orange outline */
 .scroll-indicator-theme-campfire .scroll-position-indicator { background-color: #fffbeb; }
-.scroll-indicator-theme-campfire .scroll-segment-read { background-color: #9ca3af; }
 .scroll-indicator-theme-campfire .scroll-segment-current { outline-color: #f59e0b !important; }
 .scroll-indicator-theme-campfire .scroll-segment-ratioed { background-color: #ef4444 !important; }
 
@@ -1747,9 +1746,8 @@ div.item-banner {
 .scroll-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
 
 /* === OCEAN THEME (blue/teal) === */
-/* Unread: light sky, Read: slate, Current: yellow outline (contrasts with blue) */
+/* Unread: light sky, Read: dimmed (via filter), Current: yellow outline (contrasts with blue) */
 .scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #e0f2fe; }
-.scroll-indicator-theme-ocean .scroll-segment-read { background-color: #64748b; }
 .scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #eab308 !important; }
 .scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #f97316 !important; }
 .scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #e0f2fe; }
@@ -1762,9 +1760,8 @@ div.item-banner {
 .scroll-indicator-theme-ocean .scroll-segment-heat-8 { background-color: #075985; }
 
 /* === FOREST THEME (green) === */
-/* Unread: light green, Read: stone, Current: lime outline */
+/* Unread: light green, Read: dimmed (via filter), Current: lime outline */
 .scroll-indicator-theme-forest .scroll-position-indicator { background-color: #dcfce7; }
-.scroll-indicator-theme-forest .scroll-segment-read { background-color: #78716c; }
 .scroll-indicator-theme-forest .scroll-segment-current { outline-color: #84cc16 !important; }
 .scroll-indicator-theme-forest .scroll-segment-ratioed { background-color: #ea580c !important; }
 .scroll-indicator-theme-forest .scroll-segment-heat-1 { background-color: #dcfce7; }
@@ -1777,9 +1774,8 @@ div.item-banner {
 .scroll-indicator-theme-forest .scroll-segment-heat-8 { background-color: #166534; }
 
 /* === MONOCHROME THEME (grayscale) === */
-/* Unread: light gray, Read: dark gray, Current: white outline */
+/* Unread: light gray, Read: dimmed (via filter), Current: dark outline */
 .scroll-indicator-theme-monochrome .scroll-position-indicator { background-color: #e5e7eb; }
-.scroll-indicator-theme-monochrome .scroll-segment-read { background-color: #4b5563; }
 .scroll-indicator-theme-monochrome .scroll-segment-current { outline-color: #1f2937 !important; }
 .scroll-indicator-theme-monochrome .scroll-segment-ratioed { background-color: #dc2626 !important; }
 .scroll-indicator-theme-monochrome .scroll-segment-heat-1 { background-color: #f3f4f6; }
@@ -1848,6 +1844,20 @@ div.item-banner {
     drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
 }
 
+/* Post type icons - grayscale with white outline */
+.scroll-icon-stack img[alt="post"],
+.scroll-icon-stack img[alt="reply"],
+.scroll-icon-stack img[alt="repost"],
+.scroll-icon-stack img[alt="thread"] {
+  filter: brightness(0) invert(0.3) drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
+  opacity: 0.9;
+}
+
+/* Thread icon is taller SVG - constrain to match others */
+.scroll-icon-stack img[alt="thread"] {
+  height: 40%;
+}
+
 .scroll-segment {
   position: relative;
   overflow: hidden;
@@ -1913,6 +1923,19 @@ div.item-banner {
 .scroll-position-indicator-zoom {
   border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 3px;
+  overflow: hidden;
+}
+
+/* Inner wrapper for smooth scroll animation */
+.scroll-zoom-inner {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+
+.scroll-zoom-inner.scroll-zoom-animating {
+  transition: transform calc(var(--animation-duration, 300ms) * var(--zoom-animation-speed, 1)) ease-out;
 }
 
 /* When zoom is enabled, allow brackets to overflow */
@@ -1982,10 +2005,12 @@ div.item-banner {
       drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
   }
 
-  /* Fallback for other icons (post types) */
+
+  /* Post type icons */
   .scroll-icon-stack img[alt="post"],
   .scroll-icon-stack img[alt="reply"],
-  .scroll-icon-stack img[alt="repost"] {
+  .scroll-icon-stack img[alt="repost"],
+  .scroll-icon-stack img[alt="thread"] {
     filter: invert(1) drop-shadow(0 0 1px rgba(0,0,0,0.8));
     opacity: 0.8;
   }
@@ -2128,7 +2153,7 @@ div#statusBar.has-scroll-indicator {
   }
 
   .scroll-segment-read {
-    background-color: #6b7280;
+    filter: brightness(0.5);
   }
 
   .scroll-segment-current {
@@ -2151,7 +2176,6 @@ div#statusBar.has-scroll-indicator {
 
   /* === DARK MODE: CAMPFIRE THEME === */
   .scroll-indicator-theme-campfire .scroll-position-indicator { background-color: #451a03; }
-  .scroll-indicator-theme-campfire .scroll-segment-read { background-color: #4b5563; }
   .scroll-indicator-theme-campfire .scroll-segment-current { outline-color: #fbbf24 !important; }
   .scroll-indicator-theme-campfire .scroll-segment-ratioed { background-color: #f87171 !important; }
   .scroll-segment-heat-1 { background-color: #1e3a5f; }
@@ -2165,7 +2189,6 @@ div#statusBar.has-scroll-indicator {
 
   /* === DARK MODE: OCEAN THEME === */
   .scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #164e63; }
-  .scroll-indicator-theme-ocean .scroll-segment-read { background-color: #334155; }
   .scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #facc15 !important; }
   .scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #fb923c !important; }
   .scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #164e63; }
@@ -2179,7 +2202,6 @@ div#statusBar.has-scroll-indicator {
 
   /* === DARK MODE: FOREST THEME === */
   .scroll-indicator-theme-forest .scroll-position-indicator { background-color: #14532d; }
-  .scroll-indicator-theme-forest .scroll-segment-read { background-color: #44403c; }
   .scroll-indicator-theme-forest .scroll-segment-current { outline-color: #a3e635 !important; }
   .scroll-indicator-theme-forest .scroll-segment-ratioed { background-color: #fb923c !important; }
   .scroll-indicator-theme-forest .scroll-segment-heat-1 { background-color: #14532d; }
@@ -2193,7 +2215,6 @@ div#statusBar.has-scroll-indicator {
 
   /* === DARK MODE: MONOCHROME THEME === */
   .scroll-indicator-theme-monochrome .scroll-position-indicator { background-color: #374151; }
-  .scroll-indicator-theme-monochrome .scroll-segment-read { background-color: #6b7280; }
   .scroll-indicator-theme-monochrome .scroll-segment-current { outline-color: #f9fafb !important; }
   .scroll-indicator-theme-monochrome .scroll-segment-ratioed { background-color: #ef4444 !important; }
   .scroll-indicator-theme-monochrome .scroll-segment-heat-1 { background-color: #1f2937; }
@@ -2213,7 +2234,7 @@ div#statusBar.has-scroll-indicator {
   }
 
   .scroll-segment-read {
-    background-color: #6b7280;
+    filter: brightness(0.4);
   }
 
   .scroll-segment-current {

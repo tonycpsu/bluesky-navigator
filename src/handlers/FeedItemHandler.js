@@ -35,6 +35,7 @@ export class FeedItemHandler extends ItemHandler {
     contentRepost: 'https://www.svgrepo.com/show/334212/repost.svg',
     contentReply: 'https://www.svgrepo.com/show/334206/reply.svg',
     contentPost: 'https://www.svgrepo.com/show/333848/comment.svg',
+    contentThread: 'https://www.svgrepo.com/show/142955/spool-of-thread.svg',
   };
 
   constructor(name, config, state, api, selector) {
@@ -208,7 +209,10 @@ export class FeedItemHandler extends ItemHandler {
     const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
     const indicatorScale = parseInt(this.config.get('scrollIndicatorScale'), 10) || 100;
     const scaleValue = indicatorScale / 100;
-    const scaleStyle = `--indicator-scale: ${scaleValue};`;
+    const animationInterval = parseInt(this.config.get('scrollIndicatorAnimationSpeed'), 10);
+    // 0 = instant, 100 = normal, 200 = 2x slower
+    const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
+    const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
     // Prepare scroll indicator elements (will be appended after toolbar rows)
     if (indicatorPosition === 'Top toolbar') {
       // Always use wrapper for dynamic style switching (styleClass goes on wrapper for CSS to hide zoom elements)
@@ -224,7 +228,7 @@ export class FeedItemHandler extends ItemHandler {
       // Get reference to zoom highlight element
       this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
       // Create wrapper for both indicators and connector (styleClass + themeClass on wrapper so CSS can target children)
-      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper ${styleClass} ${themeClass}" style="${scaleStyle}"></div>`);
+      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
       this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
 
       // Add connector div between main indicator and zoom with SVG inside
@@ -240,10 +244,15 @@ export class FeedItemHandler extends ItemHandler {
       this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
       this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
       this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
+      // Inner wrapper for smooth scroll animation
+      this.scrollIndicatorZoomInner = $(`<div class="scroll-zoom-inner"></div>`);
+      this.scrollIndicatorZoom.append(this.scrollIndicatorZoomInner);
       this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
       this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
       this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
       this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
+      // Track previous window position for smooth scrolling
+      this.zoomWindowStart = null;
     }
 
     // First row: icons
@@ -514,7 +523,10 @@ export class FeedItemHandler extends ItemHandler {
     const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
     const indicatorScale = parseInt(this.config.get('scrollIndicatorScale'), 10) || 100;
     const scaleValue = indicatorScale / 100;
-    const scaleStyle = `--indicator-scale: ${scaleValue};`;
+    const animationInterval = parseInt(this.config.get('scrollIndicatorAnimationSpeed'), 10);
+    // 0 = instant, 100 = normal, 200 = 2x slower
+    const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
+    const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
     if (indicatorPosition === 'Bottom status bar') {
       // Always use wrapper for dynamic style switching (styleClass goes on wrapper for CSS to hide zoom elements)
       this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container"></div>`);
@@ -529,7 +541,7 @@ export class FeedItemHandler extends ItemHandler {
       // Get reference to zoom highlight element
       this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
       // Create wrapper for both indicators and connector (styleClass + themeClass on wrapper so CSS can target children)
-      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar ${styleClass} ${themeClass}" style="${scaleStyle}"></div>`);
+      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
       this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
 
       // Add connector div between main indicator and zoom with SVG inside
@@ -1404,6 +1416,61 @@ export class FeedItemHandler extends ItemHandler {
     const isReply = $item.find('div[data-testid*="replyLine"]').length > 0 ||
                     $item.closest('.thread').find('a[href*="/post/"][aria-label*="Reply"]').length > 0;
 
+    // Detect self-thread: author posted and replied to themselves
+    // Detection methods:
+    // 1. Cache from previous API calls (selfThreadCache)
+    // 2. DOM evidence of previous unrolling (.unrolled-replies element)
+    // 3. Bluesky DOM: thread line going down (r-lchren with margin-top) + same author next
+    const $thread = $item.closest('.thread');
+    let isSelfThread = false;
+    const postId = this.postIdForItem($item);
+
+    // Check cache first (populated when thread is selected and API returns)
+    if (postId && this.selfThreadCache && this.selfThreadCache[postId]) {
+      isSelfThread = true;
+    }
+
+    // Check if thread was previously unrolled (has .unrolled-replies div)
+    if (!isSelfThread) {
+      const unrolledInItem = $item.find('.unrolled-replies');
+      const unrolledInThread = $thread.length ? $thread.find('.unrolled-replies') : $();
+      if (unrolledInItem.length > 0 || unrolledInThread.length > 0) {
+        isSelfThread = true;
+      } else {
+        // Check globally - the unrolled-replies might be in a different DOM location
+        const unrolledGlobal = $('.unrolled-replies');
+        if (unrolledGlobal.length > 0) {
+          const unrolledParent = unrolledGlobal.closest('[data-testid^="feedItem-by-"]');
+          const unrolledPostId = unrolledParent.length ? this.postIdForItem(unrolledParent) : null;
+          if (unrolledPostId === postId) {
+            isSelfThread = true;
+          }
+        }
+      }
+    }
+
+    // DOM-based detection: check for thread line going down + same author in next item
+    // r-lchren with margin-top indicates thread continues below
+    if (!isSelfThread && !isReply && !isRepost) {
+      const threadLineDown = $item.find('.r-lchren[style*="margin-top"]');
+      if (threadLineDown.length > 0) {
+        // This post has a thread line going down - check if next sibling is same author
+        const author = this.handleFromItem($item);
+        // Find the parent container and get next sibling feed item
+        const $container = $item.parent().parent(); // go up to thread container level
+        const $nextContainer = $container.next();
+        if ($nextContainer.length) {
+          const $nextItem = $nextContainer.find('[data-testid^="feedItem-by-"]');
+          if ($nextItem.length) {
+            const nextAuthor = this.handleFromItem($nextItem);
+            if (author && nextAuthor && author === nextAuthor) {
+              isSelfThread = true;
+            }
+          }
+        }
+      }
+    }
+
     // Detect ratioed posts: more replies than likes, with minimum engagement threshold
     const isRatioed = (replies > likes) && (likes + replies >= 10);
 
@@ -1419,6 +1486,7 @@ export class FeedItemHandler extends ItemHandler {
       hasMedia: hasImage || hasVideo,
       isRepost,
       isReply,
+      isSelfThread,
       isRatioed,
     };
   }
@@ -1474,9 +1542,14 @@ export class FeedItemHandler extends ItemHandler {
   getContentIcon(engagement) {
     if (!engagement) return '';
 
-    // Top icon: post type (reply, repost, or default post)
+    // Top icon: post type (self-thread, repost, reply to others, or single post)
+    // Self-thread takes priority - showing content type is more informative than delivery method
+    // Self-thread: author posted and replied to themselves (multiple posts, single author)
+    // Reply: replying to another author
     let postTypeIcon;
-    if (engagement.isRepost) {
+    if (engagement.isSelfThread) {
+      postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentThread}" alt="thread">`;
+    } else if (engagement.isRepost) {
       postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentRepost}" alt="repost">`;
     } else if (engagement.isReply) {
       postTypeIcon = `<img src="${this.INDICATOR_IMAGES.contentReply}" alt="reply">`;
@@ -1573,7 +1646,8 @@ export class FeedItemHandler extends ItemHandler {
    */
   updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore) {
     const zoomIndicator = this.scrollIndicatorZoom;
-    if (!zoomIndicator) return;
+    const zoomInner = this.scrollIndicatorZoomInner;
+    if (!zoomIndicator || !zoomInner) return;
 
     // Skip updates while loading to prevent visual jumping
     if (this.loading || this.loadingNew) return;
@@ -1584,26 +1658,62 @@ export class FeedItemHandler extends ItemHandler {
     const total = this.items.length;
     if (total === 0) return;
 
-    // Calculate the window of items to show
-    const halfWindow = Math.floor(zoomWindowSize / 2);
-    let windowStart = Math.max(0, currentIndex - halfWindow);
+    // Calculate the window of items to show with edge-based scrolling
+    // Only shift when current post gets within margin of the edge
+    const edgeMargin = Math.max(1, Math.floor(zoomWindowSize * 0.2)); // 20% of window, min 1
+    let windowStart = this.zoomWindowStart;
 
-    // Adjust if we would go past the end
+    // Initialize window if first time
+    if (windowStart === null) {
+      const halfWindow = Math.floor(zoomWindowSize / 2);
+      windowStart = Math.max(0, currentIndex - halfWindow);
+    } else {
+      const windowEnd = windowStart + zoomWindowSize - 1;
+
+      // Shift left if current is too close to start edge
+      if (currentIndex < windowStart + edgeMargin) {
+        windowStart = Math.max(0, currentIndex - edgeMargin);
+      }
+      // Shift right if current is too close to end edge
+      else if (currentIndex > windowEnd - edgeMargin) {
+        windowStart = currentIndex - (zoomWindowSize - 1 - edgeMargin);
+      }
+    }
+
+    // Clamp to valid range
+    windowStart = Math.max(0, windowStart);
     if (windowStart + zoomWindowSize > total) {
       windowStart = Math.max(0, total - zoomWindowSize);
     }
 
     // Always create exactly zoomWindowSize segments (fixed size)
-    let segments = zoomIndicator.find('.scroll-segment');
+    let segments = zoomInner.find('.scroll-segment');
     if (segments.length !== zoomWindowSize) {
-      zoomIndicator.find('.scroll-segment').remove();
+      zoomInner.find('.scroll-segment').remove();
 
       for (let i = 0; i < zoomWindowSize; i++) {
         const segment = $('<div class="scroll-segment scroll-segment-zoom"></div>');
-        zoomIndicator.append(segment);
+        zoomInner.append(segment);
       }
-      segments = zoomIndicator.find('.scroll-segment');
+      segments = zoomInner.find('.scroll-segment');
     }
+
+    // Smooth scroll animation when window shifts
+    if (this.zoomWindowStart !== null && this.zoomWindowStart !== windowStart) {
+      const shift = windowStart - this.zoomWindowStart;
+      const segmentWidth = zoomIndicator.width() / zoomWindowSize;
+      const offsetPx = -shift * segmentWidth;
+
+      // Disable transition, apply offset instantly
+      zoomInner.removeClass('scroll-zoom-animating');
+      zoomInner.css('transform', `translateX(${offsetPx}px)`);
+
+      // Force reflow then animate back to 0
+      zoomInner[0].offsetHeight;
+      zoomInner.addClass('scroll-zoom-animating');
+      zoomInner.css('transform', 'translateX(0)');
+    }
+    this.zoomWindowStart = windowStart;
 
     // Update segment states
     const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
@@ -1635,6 +1745,11 @@ export class FeedItemHandler extends ItemHandler {
         return;
       }
 
+      // Apply read state first (filter dims the segment regardless of color)
+      if (isRead) {
+        $segment.addClass('scroll-segment-read');
+      }
+
       if (isCurrent) {
         $segment.addClass('scroll-segment-current');
       } else if (engagementData[itemIndex]?.engagement?.isRatioed) {
@@ -1644,11 +1759,7 @@ export class FeedItemHandler extends ItemHandler {
         const heatLevel = this.getHeatLevel(engagementData[itemIndex].score, maxScore);
         if (heatLevel > 0) {
           $segment.addClass(`scroll-segment-heat-${heatLevel}`);
-        } else if (isRead) {
-          $segment.addClass('scroll-segment-read');
         }
-      } else if (isRead) {
-        $segment.addClass('scroll-segment-read');
       }
 
       // Add content icon if enabled

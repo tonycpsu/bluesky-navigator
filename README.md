@@ -24,6 +24,8 @@ Features
     - press `?` to view all keyboard shortcuts
 - Display features:
     - visual indicator for post read/unread status
+    - **Feed Map**: visual overview of all posts in feed showing read/unread status,
+      engagement heatmap, content type icons, and more (see below)
     - configurable override of main content width
     - optionally reverse sorting of feeds to browse them in chronological order
       (currently only works on "Following" feed)
@@ -34,6 +36,7 @@ Features
 - Additional functionality (`(*)` = requires AT protocol agent, see below):
     - automatic "unrolling" of threads (*)
     - show replies in a "sidecar" next to each post (*)
+    - navigate within unrolled threads using j/k keys
     - full-screen post view with sidecar (`v`) and reader mode (`V`)
     - capture post screenshots to clipboard (`c`)
     - dynamically filter posts by authors, keywords, etc. using configurable
@@ -42,6 +45,11 @@ Features
     - sync read/unread state between multiple browsers via cloud service(s)
     - optionally disable built-in behavior of loading more items when scrolling
       (can still load more using toolbar button or keyboard shortcut)
+- Mobile/Touch:
+    - swipe gestures for navigation (configurable)
+- Accessibility:
+    - reduced motion support (follows system preference or can be forced)
+    - high contrast mode option
 
 
 Keyboard Shortcuts
@@ -168,6 +176,28 @@ by their order, `Alt+Shift+1-9` to negate them, or `Alt+0` to clear the filter.
 
 These searches can be combined, and any search can be negated by prefixing it
 with `!`.
+
+
+Feed Map
+--------
+
+The Feed Map provides a visual overview of all loaded posts in your feed. It can
+be positioned at the top toolbar or bottom status bar (or hidden).
+
+**Features:**
+- **Click navigation**: Click any segment to jump directly to that post
+- **Hover tooltips**: Hover over segments to see a preview of the post content,
+  author, timestamp, and engagement stats
+- **Color themes**: Choose from Ocean, Campfire, Forest, or Monochrome themes
+- **Scale**: Adjust the size from 50% to 400%
+
+**Advanced mode** (enable in settings) adds:
+- **Heatmap**: Color intensity based on engagement (likes, reposts, replies)
+  with multiple calculation modes
+- **Content icons**: Visual indicators for post type (post, reply, repost,
+  thread) and media (image, video, embed)
+- **Zoom window**: Shows a magnified view of posts around your current selection
+  with smooth scroll animation
 
 
 AT Protocol Agent (beta)

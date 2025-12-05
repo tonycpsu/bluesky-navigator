@@ -452,7 +452,10 @@ export class FeedItemHandler extends ItemHandler {
     this.savedSearchesBtn.on('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      this.toggleSavedSearchesDropdown();
+      // Focus search input and trigger autocomplete to show saved searches
+      const searchInput = $('#bsky-navigator-search');
+      searchInput.focus();
+      searchInput.autocomplete('search', '');
     });
 
     this.saveSearchBtn.on('click', (e) => {
@@ -460,24 +463,78 @@ export class FeedItemHandler extends ItemHandler {
       e.stopPropagation();
       this.saveCurrentSearch();
     });
+    const self = this;
     $('#bsky-navigator-search').autocomplete({
       minLength: 0,
-      appendTo: 'div[data-testid="homeScreenFeedTabs"]',
+      appendTo: this.searchWrapper,
       source: this.onSearchAutocomplete,
       focus: function (event, _ui) {
         event.preventDefault();
       },
       select: function (event, ui) {
+        // Don't select if clicking the delete button
+        if ($(event.originalEvent?.target).hasClass('autocomplete-delete-btn')) {
+          event.preventDefault();
+          return false;
+        }
+
         event.preventDefault();
 
         const input = this;
-        const terms = utils.splitTerms(input.value);
-        terms.pop();
-        terms.push(ui.item.value);
-        input.value = terms.join(' ') + ' ';
+        // For saved searches, replace the entire input value
+        if (ui.item.category === 'saved') {
+          input.value = ui.item.value;
+        } else {
+          const terms = utils.splitTerms(input.value);
+          terms.pop();
+          terms.push(ui.item.value);
+          input.value = terms.join(' ') + ' ';
+        }
 
         $(this).autocomplete('close');
       },
+    });
+
+    // Custom rendering for autocomplete items
+    $('#bsky-navigator-search').autocomplete('instance')._renderItem = function (ul, item) {
+      const li = $('<li>').addClass('ui-menu-item');
+
+      if (item.category === 'saved') {
+        // Saved search with delete button
+        const content = $('<div>')
+          .addClass('autocomplete-item-content autocomplete-saved-item')
+          .append($('<span>').addClass('autocomplete-item-icon').text('★'))
+          .append($('<span>').addClass('autocomplete-item-label').text(item.label))
+          .append(
+            $('<button>')
+              .addClass('autocomplete-delete-btn')
+              .attr('data-index', item.savedIndex)
+              .attr('title', 'Delete saved search')
+              .text('×')
+          );
+        li.append(content).data('ui-autocomplete-item', item);
+      } else {
+        // Regular item
+        const content = $('<div>')
+          .addClass('autocomplete-item-content')
+          .append($('<span>').addClass('autocomplete-item-label').text(item.label));
+        li.append(content).data('ui-autocomplete-item', item);
+      }
+
+      return li.appendTo(ul);
+    };
+
+    // Handle delete button clicks via event delegation
+    $(this.searchWrapper).on('click', '.autocomplete-delete-btn', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const index = parseInt($(e.target).data('index'), 10);
+      const searches = self.getSavedSearches();
+      const removed = searches.splice(index, 1);
+      self.saveSavedSearches(searches);
+      announceToScreenReader(`Deleted saved search: ${removed[0]}`);
+      // Refresh the autocomplete dropdown
+      $('#bsky-navigator-search').autocomplete('search', '');
     });
 
     $('#bsky-navigator-search').on('keydown', function (event) {
@@ -612,6 +669,7 @@ export class FeedItemHandler extends ItemHandler {
       a.handle.localeCompare(b.handle, undefined, { sensitivity: 'base' })
     );
     const rules = Object.keys(this.state.rules);
+    const savedSearches = this.getSavedSearches();
 
     let term = utils.extractLastTerm(request.term).toLowerCase();
     const isNegation = term.startsWith('!');
@@ -620,7 +678,15 @@ export class FeedItemHandler extends ItemHandler {
     let results = [];
 
     if (term === '') {
-      results = rules.map((r) => ({ label: `$${r}`, value: `$${r}` }));
+      // Show saved searches first, then rules
+      const savedItems = savedSearches.map((search, index) => ({
+        label: search,
+        value: search,
+        category: 'saved',
+        savedIndex: index,
+      }));
+      const ruleItems = rules.map((r) => ({ label: `$${r}`, value: `$${r}`, category: 'rule' }));
+      results = [...savedItems, ...ruleItems];
     } else if (term.startsWith('@') || term.startsWith('$')) {
       const type = term.charAt(0);
       const search = term.substring(1).toLowerCase();
@@ -635,14 +701,27 @@ export class FeedItemHandler extends ItemHandler {
           .map((a) => ({
             label: `${isNegation ? '!' : ''}@${a.handle} (${a.displayName})`,
             value: `${isNegation ? '!' : ''}@${a.handle}`,
+            category: 'author',
           }));
       } else if (type === '$') {
         results = rules
           .filter((r) => r.toLowerCase().includes(search))
           .map((r) => ({
             label: `${isNegation ? '!' : ''}$${r}`,
+            category: 'rule',
           }));
       }
+    } else {
+      // For plain text, also search saved searches
+      const matchingSaved = savedSearches
+        .filter((s) => s.toLowerCase().includes(term))
+        .map((search, index) => ({
+          label: search,
+          value: search,
+          category: 'saved',
+          savedIndex: savedSearches.indexOf(search),
+        }));
+      results = matchingSaved;
     }
     response(results);
   }
@@ -1053,7 +1132,8 @@ export class FeedItemHandler extends ItemHandler {
         e.stopPropagation();
         this.clearFilter();
       });
-      $('.toolbar-row-2').append(pill);
+      // Insert after search wrapper to keep it close to the search box
+      $('.search-wrapper').after(pill);
     }
 
     $('#bsky-navigator-filter-pill .filter-pill-text').text(this.state.filter);
@@ -1100,62 +1180,6 @@ export class FeedItemHandler extends ItemHandler {
     // Visual feedback
     this.saveSearchBtn.addClass('save-search-btn-saved');
     setTimeout(() => this.saveSearchBtn.removeClass('save-search-btn-saved'), 300);
-  }
-
-  toggleSavedSearchesDropdown() {
-    const existing = $('#saved-searches-dropdown');
-    if (existing.length) {
-      existing.remove();
-      return;
-    }
-
-    const searches = this.getSavedSearches();
-    if (searches.length === 0) {
-      announceToScreenReader('No saved searches');
-      return;
-    }
-
-    const dropdown = $(`
-      <div id="saved-searches-dropdown" class="saved-searches-dropdown" role="listbox" aria-label="Saved searches">
-        ${searches.map((search, i) => `
-          <div class="saved-search-item" role="option" data-search="${this.escapeHtml(search)}">
-            <span class="saved-search-text">${this.escapeHtml(search)}</span>
-            <button class="saved-search-delete" data-index="${i}" aria-label="Delete saved search" title="Delete">×</button>
-          </div>
-        `).join('')}
-      </div>
-    `);
-
-    dropdown.find('.saved-search-item').on('click', (e) => {
-      if (!$(e.target).hasClass('saved-search-delete')) {
-        const search = $(e.currentTarget).data('search');
-        $('#bsky-navigator-search').val(search);
-        this.commitFilter(search);
-        dropdown.remove();
-      }
-    });
-
-    dropdown.find('.saved-search-delete').on('click', (e) => {
-      e.stopPropagation();
-      const index = parseInt($(e.currentTarget).data('index'), 10);
-      const searches = this.getSavedSearches();
-      const removed = searches.splice(index, 1);
-      this.saveSavedSearches(searches);
-      $(e.currentTarget).parent().remove();
-      announceToScreenReader(`Deleted saved search: ${removed[0]}`);
-      if (searches.length === 0) {
-        dropdown.remove();
-      }
-    });
-
-    this.searchWrapper.append(dropdown);
-
-    // Close on click outside
-    $(document).one('click', (e) => {
-      if (!$(e.target).closest('.search-wrapper').length) {
-        dropdown.remove();
-      }
-    });
   }
 
   /**
@@ -1487,7 +1511,7 @@ export class FeedItemHandler extends ItemHandler {
 
   updateScrollPosition() {
     const indicator = $('#scroll-position-indicator');
-    if (!indicator.length || !this.items.length) return;
+    if (!indicator.length) return;
 
     // Get filtered items display mode
     const filteredItemsMode = this.config.get('scrollIndicatorFilteredItems') || 'Show (grayed)';
@@ -1517,6 +1541,30 @@ export class FeedItemHandler extends ItemHandler {
       displayItems = allItems;
       displayIndices = displayItems.map((_, i) => i);
     }
+
+    // If no items to display, show empty state
+    if (!displayItems.length) {
+      indicator.find('.scroll-segment').remove();
+      indicator.find('.scroll-viewport-indicator').remove();
+      // Add empty state message if not already present
+      if (!indicator.find('.scroll-indicator-empty').length) {
+        indicator.append('<div class="scroll-indicator-empty">No results</div>');
+      }
+      // Also hide zoom indicator
+      if (this.scrollIndicatorZoomContainer) {
+        this.scrollIndicatorZoomContainer.hide();
+      }
+      if (this.scrollIndicatorConnector) {
+        this.scrollIndicatorConnector.hide();
+      }
+      if (this.scrollIndicatorZoomHighlight) {
+        this.scrollIndicatorZoomHighlight.hide();
+      }
+      return;
+    }
+
+    // Remove empty state message if present
+    indicator.find('.scroll-indicator-empty').remove();
 
     // Store display items for click handler (actual DOM elements)
     this._displayItems = displayItems;

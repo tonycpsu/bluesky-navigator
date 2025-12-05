@@ -122,6 +122,7 @@ div#bsky-navigator-toolbar {
     background-color: inherit;
     border-bottom: 1px solid rgb(192, 192, 192);
     z-index: 100;
+    overflow: visible;
 }
 
 .toolbar-row {
@@ -130,6 +131,7 @@ div#bsky-navigator-toolbar {
     align-items: center;
     width: 100%;
     height: 32px;
+    overflow: visible;
 }
 
 .toolbar-row-1 {
@@ -139,6 +141,7 @@ div#bsky-navigator-toolbar {
 .toolbar-row-2 {
     gap: 8px;
     padding: 0 8px;
+    overflow: visible;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1678,6 +1681,25 @@ div.item-banner {
   -webkit-user-select: none;
 }
 
+/* Empty state when no results match filter */
+.scroll-indicator-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 500;
+  color: #9ca3af;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(156, 163, 175, 0.15) 4px,
+    rgba(156, 163, 175, 0.15) 8px
+  );
+}
+
 /* Basic style - simple thin indicator */
 .scroll-indicator-basic .scroll-position-indicator {
   height: calc(8px * var(--indicator-scale, 1));
@@ -1911,6 +1933,8 @@ div.item-banner {
   width: 100%;
   user-select: none;
   -webkit-user-select: none;
+  position: relative;
+  z-index: 1;
 }
 
 /* Zoom indicator connector */
@@ -2174,6 +2198,17 @@ div#statusBar.has-scroll-indicator {
 @media (prefers-color-scheme: dark) {
   .scroll-position-indicator {
     background-color: #374151;
+  }
+
+  .scroll-indicator-empty {
+    color: #6b7280;
+    background: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 4px,
+      rgba(107, 114, 128, 0.2) 4px,
+      rgba(107, 114, 128, 0.2) 8px
+    );
   }
 
   .scroll-segment {
@@ -2527,6 +2562,7 @@ div#statusBar.has-scroll-indicator {
   flex: 0 0 auto;
   min-width: 150px;
   max-width: 300px;
+  z-index: 100;
 }
 
 .saved-searches-btn,
@@ -2572,92 +2608,57 @@ div#statusBar.has-scroll-indicator {
   }
 }
 
-.saved-searches-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 4px;
-  min-width: 200px;
-  max-width: 300px;
-  max-height: 300px;
-  overflow-y: auto;
-  background-color: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  animation: dropdownSlide var(--animation-duration, 150ms) ease-out;
-}
-
-@keyframes dropdownSlide {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.saved-search-item {
+/* Autocomplete item styling */
+.autocomplete-item-content {
   display: flex;
   align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  width: 100%;
+}
+
+.autocomplete-saved-item {
   justify-content: space-between;
-  padding: 10px 12px;
-  cursor: pointer;
-  transition: background-color var(--transition-duration, 200ms) ease;
 }
 
-.saved-search-item:hover {
-  background-color: #f3f4f6;
+.autocomplete-item-icon {
+  color: #eab308;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
-.saved-search-item:first-child {
-  border-radius: 8px 8px 0 0;
-}
-
-.saved-search-item:last-child {
-  border-radius: 0 0 8px 8px;
-}
-
-.saved-search-item:only-child {
-  border-radius: 8px;
-}
-
-.saved-search-text {
-  font-size: 13px;
-  color: #374151;
+.autocomplete-item-label {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
 }
 
-.saved-search-delete {
+.autocomplete-delete-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  margin-left: 8px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: none;
   border-radius: 4px;
   background-color: transparent;
   color: #9ca3af;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--transition-duration, 200ms) ease,
-              background-color var(--transition-duration, 200ms) ease;
+  transition: opacity var(--transition-duration, 150ms) ease,
+              background-color var(--transition-duration, 150ms) ease;
+  flex-shrink: 0;
 }
 
-.saved-search-item:hover .saved-search-delete {
+.ui-menu-item:hover .autocomplete-delete-btn,
+.ui-state-active .autocomplete-delete-btn {
   opacity: 1;
 }
 
-.saved-search-delete:hover {
+.autocomplete-delete-btn:hover {
   background-color: #fecaca;
   color: #dc2626;
 }
@@ -2674,24 +2675,11 @@ div#statusBar.has-scroll-indicator {
     color: #e5e7eb;
   }
 
-  .saved-searches-dropdown {
-    background-color: #1f2937;
-    border-color: #374151;
-  }
-
-  .saved-search-item:hover {
-    background-color: #374151;
-  }
-
-  .saved-search-text {
-    color: #e5e7eb;
-  }
-
-  .saved-search-delete {
+  .autocomplete-delete-btn {
     color: #6b7280;
   }
 
-  .saved-search-delete:hover {
+  .autocomplete-delete-btn:hover {
     background-color: #7f1d1d;
     color: #fecaca;
   }

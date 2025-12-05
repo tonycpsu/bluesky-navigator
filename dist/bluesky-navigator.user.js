@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+413.9d7dd3ad
+// @version     1.0.31+414.a5fc6a42
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46360,6 +46360,7 @@ div#bsky-navigator-toolbar {
     background-color: inherit;
     border-bottom: 1px solid rgb(192, 192, 192);
     z-index: 100;
+    overflow: visible;
 }
 
 .toolbar-row {
@@ -46368,6 +46369,7 @@ div#bsky-navigator-toolbar {
     align-items: center;
     width: 100%;
     height: 32px;
+    overflow: visible;
 }
 
 .toolbar-row-1 {
@@ -46377,6 +46379,7 @@ div#bsky-navigator-toolbar {
 .toolbar-row-2 {
     gap: 8px;
     padding: 0 8px;
+    overflow: visible;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -47916,6 +47919,25 @@ div.item-banner {
   -webkit-user-select: none;
 }
 
+/* Empty state when no results match filter */
+.scroll-indicator-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 500;
+  color: #9ca3af;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(156, 163, 175, 0.15) 4px,
+    rgba(156, 163, 175, 0.15) 8px
+  );
+}
+
 /* Basic style - simple thin indicator */
 .scroll-indicator-basic .scroll-position-indicator {
   height: calc(8px * var(--indicator-scale, 1));
@@ -48149,6 +48171,8 @@ div.item-banner {
   width: 100%;
   user-select: none;
   -webkit-user-select: none;
+  position: relative;
+  z-index: 1;
 }
 
 /* Zoom indicator connector */
@@ -48412,6 +48436,17 @@ div#statusBar.has-scroll-indicator {
 @media (prefers-color-scheme: dark) {
   .scroll-position-indicator {
     background-color: #374151;
+  }
+
+  .scroll-indicator-empty {
+    color: #6b7280;
+    background: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 4px,
+      rgba(107, 114, 128, 0.2) 4px,
+      rgba(107, 114, 128, 0.2) 8px
+    );
   }
 
   .scroll-segment {
@@ -48765,6 +48800,7 @@ div#statusBar.has-scroll-indicator {
   flex: 0 0 auto;
   min-width: 150px;
   max-width: 300px;
+  z-index: 100;
 }
 
 .saved-searches-btn,
@@ -48810,92 +48846,57 @@ div#statusBar.has-scroll-indicator {
   }
 }
 
-.saved-searches-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 4px;
-  min-width: 200px;
-  max-width: 300px;
-  max-height: 300px;
-  overflow-y: auto;
-  background-color: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  animation: dropdownSlide var(--animation-duration, 150ms) ease-out;
-}
-
-@keyframes dropdownSlide {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.saved-search-item {
+/* Autocomplete item styling */
+.autocomplete-item-content {
   display: flex;
   align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  width: 100%;
+}
+
+.autocomplete-saved-item {
   justify-content: space-between;
-  padding: 10px 12px;
-  cursor: pointer;
-  transition: background-color var(--transition-duration, 200ms) ease;
 }
 
-.saved-search-item:hover {
-  background-color: #f3f4f6;
+.autocomplete-item-icon {
+  color: #eab308;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
-.saved-search-item:first-child {
-  border-radius: 8px 8px 0 0;
-}
-
-.saved-search-item:last-child {
-  border-radius: 0 0 8px 8px;
-}
-
-.saved-search-item:only-child {
-  border-radius: 8px;
-}
-
-.saved-search-text {
-  font-size: 13px;
-  color: #374151;
+.autocomplete-item-label {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
 }
 
-.saved-search-delete {
+.autocomplete-delete-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  margin-left: 8px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: none;
   border-radius: 4px;
   background-color: transparent;
   color: #9ca3af;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--transition-duration, 200ms) ease,
-              background-color var(--transition-duration, 200ms) ease;
+  transition: opacity var(--transition-duration, 150ms) ease,
+              background-color var(--transition-duration, 150ms) ease;
+  flex-shrink: 0;
 }
 
-.saved-search-item:hover .saved-search-delete {
+.ui-menu-item:hover .autocomplete-delete-btn,
+.ui-state-active .autocomplete-delete-btn {
   opacity: 1;
 }
 
-.saved-search-delete:hover {
+.autocomplete-delete-btn:hover {
   background-color: #fecaca;
   color: #dc2626;
 }
@@ -48912,24 +48913,11 @@ div#statusBar.has-scroll-indicator {
     color: #e5e7eb;
   }
 
-  .saved-searches-dropdown {
-    background-color: #1f2937;
-    border-color: #374151;
-  }
-
-  .saved-search-item:hover {
-    background-color: #374151;
-  }
-
-  .saved-search-text {
-    color: #e5e7eb;
-  }
-
-  .saved-search-delete {
+  .autocomplete-delete-btn {
     color: #6b7280;
   }
 
-  .saved-search-delete:hover {
+  .autocomplete-delete-btn:hover {
     background-color: #7f1d1d;
     color: #fecaca;
   }
@@ -67788,6 +67776,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           rootBounds: document.documentElement.getBoundingClientRect()
         }
       ]);
+      setTimeout(() => {
+        if (this.loading) {
+          console.log("[bsky-navigator] Loading timeout - resetting state");
+          this.loading = false;
+          $("img#loadOlderIndicatorImage").addClass("image-highlight");
+          $("img#loadOlderIndicatorImage").removeClass("toolbar-icon-pending");
+          this.loadItems();
+        }
+      }, 3e3);
     }
   }
   const { waitForElement: waitForElement$1, announceToScreenReader } = utils$1;
@@ -68125,29 +68122,63 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.savedSearchesBtn.on("click", (e2) => {
         e2.preventDefault();
         e2.stopPropagation();
-        this.toggleSavedSearchesDropdown();
+        const searchInput = $("#bsky-navigator-search");
+        searchInput.focus();
+        searchInput.autocomplete("search", "");
       });
       this.saveSearchBtn.on("click", (e2) => {
         e2.preventDefault();
         e2.stopPropagation();
         this.saveCurrentSearch();
       });
+      const self = this;
       $("#bsky-navigator-search").autocomplete({
         minLength: 0,
-        appendTo: 'div[data-testid="homeScreenFeedTabs"]',
+        appendTo: this.searchWrapper,
         source: this.onSearchAutocomplete,
         focus: function(event, _ui) {
           event.preventDefault();
         },
         select: function(event, ui2) {
+          if ($(event.originalEvent?.target).hasClass("autocomplete-delete-btn")) {
+            event.preventDefault();
+            return false;
+          }
           event.preventDefault();
           const input = this;
-          const terms = splitTerms(input.value);
-          terms.pop();
-          terms.push(ui2.item.value);
-          input.value = terms.join(" ") + " ";
+          if (ui2.item.category === "saved") {
+            input.value = ui2.item.value;
+          } else {
+            const terms = splitTerms(input.value);
+            terms.pop();
+            terms.push(ui2.item.value);
+            input.value = terms.join(" ") + " ";
+          }
           $(this).autocomplete("close");
         }
+      });
+      $("#bsky-navigator-search").autocomplete("instance")._renderItem = function(ul, item) {
+        const li = $("<li>").addClass("ui-menu-item");
+        if (item.category === "saved") {
+          const content2 = $("<div>").addClass("autocomplete-item-content autocomplete-saved-item").append($("<span>").addClass("autocomplete-item-icon").text("\u2605")).append($("<span>").addClass("autocomplete-item-label").text(item.label)).append(
+            $("<button>").addClass("autocomplete-delete-btn").attr("data-index", item.savedIndex).attr("title", "Delete saved search").text("\xD7")
+          );
+          li.append(content2).data("ui-autocomplete-item", item);
+        } else {
+          const content2 = $("<div>").addClass("autocomplete-item-content").append($("<span>").addClass("autocomplete-item-label").text(item.label));
+          li.append(content2).data("ui-autocomplete-item", item);
+        }
+        return li.appendTo(ul);
+      };
+      $(this.searchWrapper).on("click", ".autocomplete-delete-btn", (e2) => {
+        e2.preventDefault();
+        e2.stopPropagation();
+        const index = parseInt($(e2.target).data("index"), 10);
+        const searches = self.getSavedSearches();
+        const removed = searches.splice(index, 1);
+        self.saveSavedSearches(searches);
+        announceToScreenReader(`Deleted saved search: ${removed[0]}`);
+        $("#bsky-navigator-search").autocomplete("search", "");
       });
       $("#bsky-navigator-search").on("keydown", function(event) {
         if (event.key === "Escape") {
@@ -68255,12 +68286,20 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         (a2, b) => a2.handle.localeCompare(b.handle, void 0, { sensitivity: "base" })
       );
       const rules = Object.keys(this.state.rules);
+      const savedSearches = this.getSavedSearches();
       let term = extractLastTerm(request.term).toLowerCase();
       const isNegation = term.startsWith("!");
       if (isNegation) term = term.substring(1);
       let results = [];
       if (term === "") {
-        results = rules.map((r) => ({ label: `$${r}`, value: `$${r}` }));
+        const savedItems = savedSearches.map((search, index) => ({
+          label: search,
+          value: search,
+          category: "saved",
+          savedIndex: index
+        }));
+        const ruleItems = rules.map((r) => ({ label: `$${r}`, value: `$${r}`, category: "rule" }));
+        results = [...savedItems, ...ruleItems];
       } else if (term.startsWith("@") || term.startsWith("$")) {
         const type = term.charAt(0);
         const search = term.substring(1).toLowerCase();
@@ -68269,13 +68308,23 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             (a2) => a2.handle.toLowerCase().includes(search) || a2.displayName.toLowerCase().includes(search)
           ).map((a2) => ({
             label: `${isNegation ? "!" : ""}@${a2.handle} (${a2.displayName})`,
-            value: `${isNegation ? "!" : ""}@${a2.handle}`
+            value: `${isNegation ? "!" : ""}@${a2.handle}`,
+            category: "author"
           }));
         } else if (type === "$") {
           results = rules.filter((r) => r.toLowerCase().includes(search)).map((r) => ({
-            label: `${isNegation ? "!" : ""}$${r}`
+            label: `${isNegation ? "!" : ""}$${r}`,
+            category: "rule"
           }));
         }
+      } else {
+        const matchingSaved = savedSearches.filter((s) => s.toLowerCase().includes(term)).map((search, index) => ({
+          label: search,
+          value: search,
+          category: "saved",
+          savedIndex: savedSearches.indexOf(search)
+        }));
+        results = matchingSaved;
       }
       response(results);
     }
@@ -68597,7 +68646,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           e2.stopPropagation();
           this.clearFilter();
         });
-        $(".toolbar-row-2").append(pill);
+        $(".search-wrapper").after(pill);
       }
       $("#bsky-navigator-filter-pill .filter-pill-text").text(this.state.filter);
       announceToScreenReader(`Filter active: ${this.state.filter}`);
@@ -68635,54 +68684,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       announceToScreenReader(`Search "${currentSearch}" saved`);
       this.saveSearchBtn.addClass("save-search-btn-saved");
       setTimeout(() => this.saveSearchBtn.removeClass("save-search-btn-saved"), 300);
-    }
-    toggleSavedSearchesDropdown() {
-      const existing = $("#saved-searches-dropdown");
-      if (existing.length) {
-        existing.remove();
-        return;
-      }
-      const searches = this.getSavedSearches();
-      if (searches.length === 0) {
-        announceToScreenReader("No saved searches");
-        return;
-      }
-      const dropdown = $(`
-      <div id="saved-searches-dropdown" class="saved-searches-dropdown" role="listbox" aria-label="Saved searches">
-        ${searches.map((search, i2) => `
-          <div class="saved-search-item" role="option" data-search="${this.escapeHtml(search)}">
-            <span class="saved-search-text">${this.escapeHtml(search)}</span>
-            <button class="saved-search-delete" data-index="${i2}" aria-label="Delete saved search" title="Delete">\xD7</button>
-          </div>
-        `).join("")}
-      </div>
-    `);
-      dropdown.find(".saved-search-item").on("click", (e2) => {
-        if (!$(e2.target).hasClass("saved-search-delete")) {
-          const search = $(e2.currentTarget).data("search");
-          $("#bsky-navigator-search").val(search);
-          this.commitFilter(search);
-          dropdown.remove();
-        }
-      });
-      dropdown.find(".saved-search-delete").on("click", (e2) => {
-        e2.stopPropagation();
-        const index = parseInt($(e2.currentTarget).data("index"), 10);
-        const searches2 = this.getSavedSearches();
-        const removed = searches2.splice(index, 1);
-        this.saveSavedSearches(searches2);
-        $(e2.currentTarget).parent().remove();
-        announceToScreenReader(`Deleted saved search: ${removed[0]}`);
-        if (searches2.length === 0) {
-          dropdown.remove();
-        }
-      });
-      this.searchWrapper.append(dropdown);
-      $(document).one("click", (e2) => {
-        if (!$(e2.target).closest(".search-wrapper").length) {
-          dropdown.remove();
-        }
-      });
     }
     /**
      * Determines if an item should be shown based on read status and filter rules.
@@ -68940,7 +68941,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     updateScrollPosition() {
       const indicator = $("#scroll-position-indicator");
-      if (!indicator.length || !this.items.length) return;
+      if (!indicator.length) return;
       const filteredItemsMode = this.config.get("scrollIndicatorFilteredItems") || "Show (grayed)";
       const hideFiltered = filteredItemsMode === "Hide";
       const allItems = $(".item").filter((i2, item) => {
@@ -68959,6 +68960,24 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         displayItems = allItems;
         displayIndices = displayItems.map((_, i2) => i2);
       }
+      if (!displayItems.length) {
+        indicator.find(".scroll-segment").remove();
+        indicator.find(".scroll-viewport-indicator").remove();
+        if (!indicator.find(".scroll-indicator-empty").length) {
+          indicator.append('<div class="scroll-indicator-empty">No results</div>');
+        }
+        if (this.scrollIndicatorZoomContainer) {
+          this.scrollIndicatorZoomContainer.hide();
+        }
+        if (this.scrollIndicatorConnector) {
+          this.scrollIndicatorConnector.hide();
+        }
+        if (this.scrollIndicatorZoomHighlight) {
+          this.scrollIndicatorZoomHighlight.hide();
+        }
+        return;
+      }
+      indicator.find(".scroll-indicator-empty").remove();
       this._displayItems = displayItems;
       const total = displayItems.length;
       const currentIndex = this.index;

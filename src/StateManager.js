@@ -122,9 +122,13 @@ export class StateManager {
       if (this.config.stateSyncEnabled) {
         const remoteState = await this.loadRemoteState(this.state.lastUpdated);
         // console.dir(remoteState);
-        return remoteState
-          ? { ...defaultState, ...remoteState }
-          : { ...defaultState, ...savedState };
+        if (remoteState) {
+          // Preserve filter from local state - it's session-only and shouldn't be synced
+          const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
+          return { ...defaultState, ...remoteWithoutFilter, filter: savedState.filter || defaultState.filter || '' };
+        } else {
+          return { ...defaultState, ...savedState };
+        }
       } else {
         return { ...defaultState, ...savedState };
       }
@@ -226,8 +230,10 @@ export class StateManager {
 
       console.log('Saving remote state...');
       this.setSyncStatus('pending');
+      // Exclude session-only fields (filter) from remote sync
+      const { filter, ...stateToSync } = this.state;
       await this.executeRemoteQuery(
-        `UPSERT state:current MERGE {${JSON.stringify(this.state).slice(1, -1)}, created_at: time::now()}`,
+        `UPSERT state:current MERGE {${JSON.stringify(stateToSync).slice(1, -1)}, created_at: time::now()}`,
         'success'
       );
     } catch (error) {

@@ -2199,5 +2199,17 @@ ${
         rootBounds: document.documentElement.getBoundingClientRect(),
       },
     ]);
+
+    // Fallback timeout to reset loading state if items don't trigger loadItems()
+    // This handles edge cases where new items aren't detected by the MutationObserver
+    setTimeout(() => {
+      if (this.loading) {
+        console.log('[bsky-navigator] Loading timeout - resetting state');
+        this.loading = false;
+        $('img#loadOlderIndicatorImage').addClass('image-highlight');
+        $('img#loadOlderIndicatorImage').removeClass('toolbar-icon-pending');
+        this.loadItems();
+      }
+    }, 3000);
   }
 }

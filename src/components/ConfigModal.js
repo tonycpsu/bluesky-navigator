@@ -162,13 +162,6 @@ const CONFIG_SCHEMA = {
         help: 'Zoom scroll animation duration (0=instant, 100=normal)',
         showWhen: { scrollIndicatorStyle: 'Advanced' },
       },
-      scrollIndicatorFilteredItems: {
-        label: 'Filtered items',
-        type: 'select',
-        options: ['Show (grayed)', 'Hide'],
-        default: 'Show (grayed)',
-        help: 'How to display filtered items in the feed map',
-      },
     },
   },
   'Threads & Sidecar': {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+415.94699837
+// @version     1.0.31+416.092c990f
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44943,13 +44943,6 @@ if (cid) {
           step: 50,
           help: "Zoom scroll animation duration (0=instant, 100=normal)",
           showWhen: { scrollIndicatorStyle: "Advanced" }
-        },
-        scrollIndicatorFilteredItems: {
-          label: "Filtered items",
-          type: "select",
-          options: ["Show (grayed)", "Hide"],
-          default: "Show (grayed)",
-          help: "How to display filtered items in the feed map"
         }
       }
     },
@@ -68441,22 +68434,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const isAdvancedStyle = indicatorStyle === "Advanced";
             const heatmapMode = isAdvancedStyle ? this.config.get("scrollIndicatorHeatmap") || "None" : "None";
             const showIcons = isAdvancedStyle ? this.config.get("scrollIndicatorIcons") !== false : false;
-            const filteredItemsMode = this.config.get("scrollIndicatorFilteredItems") || "Show (grayed)";
-            const hideFiltered = filteredItemsMode === "Hide";
             const allItems = $(".item").filter((i2, item) => $(item).parents(".item").length === 0).toArray();
             let displayItems = [];
             let displayIndices = [];
-            if (hideFiltered) {
-              allItems.forEach((item, i2) => {
-                if (!$(item).hasClass("filtered")) {
-                  displayItems.push(item);
-                  displayIndices.push(i2);
-                }
-              });
-            } else {
-              displayItems = allItems;
-              displayIndices = allItems.map((_, i2) => i2);
-            }
+            allItems.forEach((item, i2) => {
+              if (!$(item).hasClass("filtered")) {
+                displayItems.push(item);
+                displayIndices.push(i2);
+              }
+            });
             let engagementData = [];
             let maxScore = 0;
             if (isAdvancedStyle && (heatmapMode !== "None" || showIcons)) {
@@ -68964,24 +68950,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     updateScrollPosition() {
       const indicator = $("#scroll-position-indicator");
       if (!indicator.length) return;
-      const filteredItemsMode = this.config.get("scrollIndicatorFilteredItems") || "Show (grayed)";
-      const hideFiltered = filteredItemsMode === "Hide";
       const allItems = $(".item").filter((i2, item) => {
         return $(item).parents(".item").length === 0;
       }).toArray();
       let displayItems = [];
       let displayIndices = [];
-      if (hideFiltered) {
-        allItems.forEach((item, i2) => {
-          if (!$(item).hasClass("filtered")) {
-            displayItems.push(item);
-            displayIndices.push(i2);
-          }
-        });
-      } else {
-        displayItems = allItems;
-        displayIndices = displayItems.map((_, i2) => i2);
-      }
+      allItems.forEach((item, i2) => {
+        if (!$(item).hasClass("filtered")) {
+          displayItems.push(item);
+          displayIndices.push(i2);
+        }
+      });
       if (!displayItems.length) {
         indicator.find(".scroll-segment").remove();
         indicator.find(".scroll-viewport-indicator").remove();
@@ -69013,22 +68992,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const total = displayItems.length;
       const selectedElement = this.items[this.index];
       const currentDisplayIndex = displayItems.indexOf(selectedElement);
-      console.log("[FeedMap] updateScrollPosition:", {
-        "this.index": this.index,
-        "this.items.length": this.items.length,
-        "displayItems.length": displayItems.length,
-        "allItems.length": allItems.length,
-        currentDisplayIndex,
-        selectedElement: selectedElement ? "found" : "null",
-        hideFiltered
-      });
       let segments = indicator.find(".scroll-segment");
       if (segments.length !== total) {
         if (this.loading || this.loadingNew) {
-          console.log("[FeedMap] updateScrollPosition: skipping rebuild due to loading", { segmentsLength: segments.length, total, loading: this.loading, loadingNew: this.loadingNew });
           return;
         }
-        console.log("[FeedMap] updateScrollPosition: rebuilding segments", { segmentsLength: segments.length, total });
         indicator.find(".scroll-segment").remove();
         indicator.find(".scroll-viewport-indicator").remove();
         for (let i2 = 0; i2 < total; i2++) {
@@ -69046,34 +69014,24 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const showIcons = isAdvancedStyle ? iconsValue === true || iconsValue === "true" || iconsValue === void 0 : false;
       let engagementData = [];
       let maxScore = 0;
-      console.log("[FeedMap] before engagement calc", { isAdvancedStyle, heatmapMode, showIcons });
       if (isAdvancedStyle && (heatmapMode !== "None" || showIcons)) {
-        try {
-          engagementData = allItems.map((item) => {
-            const engagement = this.getPostEngagement(item);
-            const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
-            if (score > maxScore) maxScore = score;
-            return { engagement, score };
-          });
-        } catch (e2) {
-          console.error("[FeedMap] engagement calc error:", e2);
-        }
+        engagementData = allItems.map((item) => {
+          const engagement = this.getPostEngagement(item);
+          const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
+          if (score > maxScore) maxScore = score;
+          return { engagement, score };
+        });
       }
-      console.log("[FeedMap] before segment.each", { segmentsLength: segments.length, engagementDataLength: engagementData.length });
       segments.each((i2, segment) => {
         const $segment = $(segment);
         const item = displayItems[i2];
         const actualIndex = displayIndices[i2];
         const isRead = item && $(item).hasClass("item-read");
-        const isFiltered = item && $(item).hasClass("filtered");
         const isCurrent = i2 === currentDisplayIndex;
         $segment.removeClass(
-          "scroll-segment-read scroll-segment-current scroll-segment-ratioed scroll-segment-filtered scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+          "scroll-segment-read scroll-segment-current scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
         );
         $segment.find(".scroll-segment-icon").remove();
-        if (!hideFiltered && isFiltered) {
-          $segment.addClass("scroll-segment-filtered");
-        }
         if (isRead) {
           $segment.addClass("scroll-segment-read");
         }
@@ -69087,14 +69045,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             $segment.addClass(`scroll-segment-heat-${heatLevel}`);
           }
         }
-        if (showIcons && !isFiltered && engagementData[actualIndex]?.engagement) {
+        if (showIcons && engagementData[actualIndex]?.engagement) {
           const icon = this.getContentIcon(engagementData[actualIndex].engagement);
           if (icon) {
             $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
           }
         }
       });
-      console.log("[FeedMap] after segment updates");
       if (showIcons && total > 0) {
         const indicatorWidth = indicator.width();
         const segmentWidth = indicatorWidth / total;
@@ -69104,10 +69061,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           indicator.css("--scroll-icon-display", "flex");
         }
       }
-      console.log("[FeedMap] before updateViewportIndicator");
       this.updateViewportIndicator(indicator, total);
-      console.log("[FeedMap] after updateViewportIndicator");
-      console.log("[FeedMap] checking zoom indicator", { hasZoom: !!this.scrollIndicatorZoom, total });
       if (this.scrollIndicatorZoom) {
         this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, total, displayItems, displayIndices);
       }
@@ -69386,30 +69340,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * Update the zoom indicator showing posts around the current selection
      */
     updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore, displayTotal, displayItems, displayIndices) {
-      console.log("[FeedMap] updateZoomIndicator called");
       const zoomIndicator = this.scrollIndicatorZoom;
       const zoomInner = this.scrollIndicatorZoomInner;
-      if (!zoomIndicator || !zoomInner) {
-        console.log("[FeedMap] updateZoomIndicator: no zoom elements", { zoomIndicator: !!zoomIndicator, zoomInner: !!zoomInner });
-        return;
-      }
-      if (this.loading || this.loadingNew) {
-        console.log("[FeedMap] updateZoomIndicator: skipping due to loading", { loading: this.loading, loadingNew: this.loadingNew });
-        return;
-      }
+      if (!zoomIndicator || !zoomInner) return;
+      if (this.loading || this.loadingNew) return;
       const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
-      if (zoomWindowSize === 0) {
-        console.log("[FeedMap] updateZoomIndicator: zoom disabled (zoomWindowSize=0)");
-        return;
-      }
+      if (zoomWindowSize === 0) return;
       const total = displayTotal;
-      console.log("[FeedMap] updateZoomIndicator:", {
-        currentIndex,
-        displayTotal,
-        "displayItems.length": displayItems?.length,
-        zoomWindowSize,
-        zoomWindowStart: this.zoomWindowStart
-      });
       if (total <= zoomWindowSize) {
         this.scrollIndicatorZoomContainer.hide();
         if (this.scrollIndicatorConnector) {
@@ -69466,8 +69403,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.zoomWindowStart = windowStart;
       const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
-      const filteredItemsMode = this.config.get("scrollIndicatorFilteredItems") || "Show (grayed)";
-      const hideFiltered = filteredItemsMode === "Hide";
       segments.each((i2, segment) => {
         const $segment = $(segment);
         const displayIndex = windowStart + i2;
@@ -69475,19 +69410,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const actualIndex = displayIndices ? displayIndices[displayIndex] : displayIndex;
         const hasItem = displayIndex >= 0 && displayIndex < total && item;
         const isRead = item && $(item).hasClass("item-read");
-        const isFiltered = item && $(item).hasClass("filtered");
         const isCurrent = displayIndex === currentIndex;
         $segment.attr("data-index", hasItem ? displayIndex : -1);
         $segment.removeClass(
-          "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-filtered scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+          "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
         );
         $segment.find(".scroll-segment-icon").remove();
         if (!hasItem) {
           $segment.addClass("scroll-segment-empty");
           return;
-        }
-        if (!hideFiltered && isFiltered) {
-          $segment.addClass("scroll-segment-filtered");
         }
         if (isRead) {
           $segment.addClass("scroll-segment-read");
@@ -69502,7 +69433,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             $segment.addClass(`scroll-segment-heat-${heatLevel}`);
           }
         }
-        if (showIcons && !isFiltered && engagementData[actualIndex]?.engagement) {
+        if (showIcons && engagementData[actualIndex]?.engagement) {
           const icon = this.getContentIcon(engagementData[actualIndex].engagement);
           if (icon) {
             $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);

@@ -878,27 +878,18 @@ export class FeedItemHandler extends ItemHandler {
           const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
           const showIcons = isAdvancedStyle ? (this.config.get('scrollIndicatorIcons') !== false) : false;
 
-          // Get filtered items display mode
-          const filteredItemsMode = this.config.get('scrollIndicatorFilteredItems') || 'Show (grayed)';
-          const hideFiltered = filteredItemsMode === 'Hide';
-
-          // Get all items including filtered
+          // Get all items excluding filtered ones
           const allItems = $('.item').filter((i, item) => $(item).parents('.item').length === 0).toArray();
 
-          // Build display items based on filter mode
+          // Build display items (only non-filtered items)
           let displayItems = [];
           let displayIndices = [];
-          if (hideFiltered) {
-            allItems.forEach((item, i) => {
-              if (!$(item).hasClass('filtered')) {
-                displayItems.push(item);
-                displayIndices.push(i);
-              }
-            });
-          } else {
-            displayItems = allItems;
-            displayIndices = allItems.map((_, i) => i);
-          }
+          allItems.forEach((item, i) => {
+            if (!$(item).hasClass('filtered')) {
+              displayItems.push(item);
+              displayIndices.push(i);
+            }
+          });
 
           // Recalculate engagement data for ALL items
           let engagementData = [];
@@ -1548,34 +1539,21 @@ export class FeedItemHandler extends ItemHandler {
     const indicator = $('#scroll-position-indicator');
     if (!indicator.length) return;
 
-    // Get filtered items display mode
-    const filteredItemsMode = this.config.get('scrollIndicatorFilteredItems') || 'Show (grayed)';
-    const hideFiltered = filteredItemsMode === 'Hide';
-
-    // Get ALL items including filtered ones (this.items excludes filtered due to :visible filter)
-    // Use .item class to match what filterItems() uses when adding .filtered class
+    // Get all items excluding filtered ones
     const allItems = $('.item').filter((i, item) => {
       // Filter out embedded posts (posts inside other posts) to match this.items logic
       return $(item).parents('.item').length === 0;
     }).toArray();
 
-    // Build list of items to display based on mode
+    // Build list of non-filtered items to display
     let displayItems = [];
     let displayIndices = [];
-
-    if (hideFiltered) {
-      // Only include non-filtered items
-      allItems.forEach((item, i) => {
-        if (!$(item).hasClass('filtered')) {
-          displayItems.push(item);
-          displayIndices.push(i);
-        }
-      });
-    } else {
-      // Include all items
-      displayItems = allItems;
-      displayIndices = displayItems.map((_, i) => i);
-    }
+    allItems.forEach((item, i) => {
+      if (!$(item).hasClass('filtered')) {
+        displayItems.push(item);
+        displayIndices.push(i);
+      }
+    });
 
     // If no items to display, show empty state
     if (!displayItems.length) {
@@ -1621,26 +1599,13 @@ export class FeedItemHandler extends ItemHandler {
     const selectedElement = this.items[this.index];
     const currentDisplayIndex = displayItems.indexOf(selectedElement);
 
-    // Debug logging
-    console.log('[FeedMap] updateScrollPosition:', {
-      'this.index': this.index,
-      'this.items.length': this.items.length,
-      'displayItems.length': displayItems.length,
-      'allItems.length': allItems.length,
-      currentDisplayIndex,
-      selectedElement: selectedElement ? 'found' : 'null',
-      hideFiltered
-    });
-
     // Create or update segments
     let segments = indicator.find('.scroll-segment');
     if (segments.length !== total) {
       // Skip rebuild while loading to prevent visual jumping
       if (this.loading || this.loadingNew) {
-        console.log('[FeedMap] updateScrollPosition: skipping rebuild due to loading', { segmentsLength: segments.length, total, loading: this.loading, loadingNew: this.loadingNew });
         return;
       }
-      console.log('[FeedMap] updateScrollPosition: rebuilding segments', { segmentsLength: segments.length, total });
 
       // Rebuild segments
       indicator.find('.scroll-segment').remove();
@@ -1669,22 +1634,14 @@ export class FeedItemHandler extends ItemHandler {
     let engagementData = [];
     let maxScore = 0;
 
-    console.log('[FeedMap] before engagement calc', { isAdvancedStyle, heatmapMode, showIcons });
-
     if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons)) {
-      try {
-        engagementData = allItems.map((item) => {
-          const engagement = this.getPostEngagement(item);
-          const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
-          if (score > maxScore) maxScore = score;
-          return { engagement, score };
-        });
-      } catch (e) {
-        console.error('[FeedMap] engagement calc error:', e);
-      }
+      engagementData = allItems.map((item) => {
+        const engagement = this.getPostEngagement(item);
+        const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
+        if (score > maxScore) maxScore = score;
+        return { engagement, score };
+      });
     }
-
-    console.log('[FeedMap] before segment.each', { segmentsLength: segments.length, engagementDataLength: engagementData.length });
 
     // Update segment states
     segments.each((i, segment) => {
@@ -1692,23 +1649,17 @@ export class FeedItemHandler extends ItemHandler {
       const item = displayItems[i];
       const actualIndex = displayIndices[i]; // Map back to actual item index for engagementData
       const isRead = item && $(item).hasClass('item-read');
-      const isFiltered = item && $(item).hasClass('filtered');
       const isCurrent = i === currentDisplayIndex;
 
       // Remove all state classes
       $segment.removeClass(
-        'scroll-segment-read scroll-segment-current scroll-segment-ratioed scroll-segment-filtered ' +
+        'scroll-segment-read scroll-segment-current scroll-segment-ratioed ' +
         'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
         'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
       );
 
       // Clear existing icon
       $segment.find('.scroll-segment-icon').remove();
-
-      // Apply filtered state (grayed out) - only in "Show (grayed)" mode
-      if (!hideFiltered && isFiltered) {
-        $segment.addClass('scroll-segment-filtered');
-      }
 
       // Apply read state first (can be combined with current)
       if (isRead) {
@@ -1728,16 +1679,14 @@ export class FeedItemHandler extends ItemHandler {
         }
       }
 
-      // Add content icon if enabled (skip for filtered items in show mode)
-      if (showIcons && !isFiltered && engagementData[actualIndex]?.engagement) {
+      // Add content icon if enabled
+      if (showIcons && engagementData[actualIndex]?.engagement) {
         const icon = this.getContentIcon(engagementData[actualIndex].engagement);
         if (icon) {
           $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
         }
       }
     });
-
-    console.log('[FeedMap] after segment updates');
 
     // Hide icons if segments are too narrow (main indicator only, zoom always shows icons)
     if (showIcons && total > 0) {
@@ -1751,15 +1700,10 @@ export class FeedItemHandler extends ItemHandler {
       }
     }
 
-    console.log('[FeedMap] before updateViewportIndicator');
-
     // Update viewport indicator position
     this.updateViewportIndicator(indicator, total);
 
-    console.log('[FeedMap] after updateViewportIndicator');
-
     // Update zoom indicator if present (uses display items count for proper windowing)
-    console.log('[FeedMap] checking zoom indicator', { hasZoom: !!this.scrollIndicatorZoom, total });
     if (this.scrollIndicatorZoom) {
       this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, total, displayItems, displayIndices);
     }
@@ -2140,37 +2084,18 @@ export class FeedItemHandler extends ItemHandler {
    * Update the zoom indicator showing posts around the current selection
    */
   updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore, displayTotal, displayItems, displayIndices) {
-    console.log('[FeedMap] updateZoomIndicator called');
     const zoomIndicator = this.scrollIndicatorZoom;
     const zoomInner = this.scrollIndicatorZoomInner;
-    if (!zoomIndicator || !zoomInner) {
-      console.log('[FeedMap] updateZoomIndicator: no zoom elements', { zoomIndicator: !!zoomIndicator, zoomInner: !!zoomInner });
-      return;
-    }
+    if (!zoomIndicator || !zoomInner) return;
 
     // Skip updates while loading to prevent visual jumping
-    if (this.loading || this.loadingNew) {
-      console.log('[FeedMap] updateZoomIndicator: skipping due to loading', { loading: this.loading, loadingNew: this.loadingNew });
-      return;
-    }
+    if (this.loading || this.loadingNew) return;
 
     const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
-    if (zoomWindowSize === 0) {
-      console.log('[FeedMap] updateZoomIndicator: zoom disabled (zoomWindowSize=0)');
-      return;
-    }
+    if (zoomWindowSize === 0) return;
 
-    // Use displayTotal from caller (accounts for filtered items in Hide mode)
+    // Use displayTotal from caller (accounts for filtered items)
     const total = displayTotal;
-
-    // Debug logging
-    console.log('[FeedMap] updateZoomIndicator:', {
-      currentIndex,
-      displayTotal,
-      'displayItems.length': displayItems?.length,
-      zoomWindowSize,
-      zoomWindowStart: this.zoomWindowStart
-    });
 
     // Hide zoom indicator when there are fewer items than the window size
     if (total <= zoomWindowSize) {
@@ -2255,20 +2180,15 @@ export class FeedItemHandler extends ItemHandler {
     // Update segment states
     const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
 
-    // Get filtered items display mode for zoom indicator
-    const filteredItemsMode = this.config.get('scrollIndicatorFilteredItems') || 'Show (grayed)';
-    const hideFiltered = filteredItemsMode === 'Hide';
-
     segments.each((i, segment) => {
       const $segment = $(segment);
       const displayIndex = windowStart + i;
-      // Use displayItems passed from caller (already filtered if hideFiltered is true)
+      // Use displayItems passed from caller (already filtered)
       const item = displayItems[displayIndex];
       // Map to actual index for engagementData (which is indexed by allItems position)
       const actualIndex = displayIndices ? displayIndices[displayIndex] : displayIndex;
       const hasItem = displayIndex >= 0 && displayIndex < total && item;
       const isRead = item && $(item).hasClass('item-read');
-      const isFiltered = item && $(item).hasClass('filtered');
       const isCurrent = displayIndex === currentIndex;
 
       // Update data-index in case window shifted
@@ -2276,7 +2196,7 @@ export class FeedItemHandler extends ItemHandler {
 
       // Remove all state classes
       $segment.removeClass(
-        'scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-filtered ' +
+        'scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed ' +
         'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
         'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
       );
@@ -2290,12 +2210,7 @@ export class FeedItemHandler extends ItemHandler {
         return;
       }
 
-      // Apply filtered state (grayed out) - only in "Show (grayed)" mode
-      if (!hideFiltered && isFiltered) {
-        $segment.addClass('scroll-segment-filtered');
-      }
-
-      // Apply read state first (filter dims the segment regardless of color)
+      // Apply read state first
       if (isRead) {
         $segment.addClass('scroll-segment-read');
       }
@@ -2312,8 +2227,8 @@ export class FeedItemHandler extends ItemHandler {
         }
       }
 
-      // Add content icon if enabled (skip for filtered items)
-      if (showIcons && !isFiltered && engagementData[actualIndex]?.engagement) {
+      // Add content icon if enabled
+      if (showIcons && engagementData[actualIndex]?.engagement) {
         const icon = this.getContentIcon(engagementData[actualIndex].engagement);
         if (icon) {
           $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);

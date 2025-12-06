@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+424.6a1ff229
+// @version     1.0.31+425.e947a51a
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44958,9 +44958,9 @@ if (cid) {
           type: "range",
           default: 100,
           min: 25,
-          max: 100,
+          max: 200,
           step: 5,
-          help: "Avatar size as percentage of segment height",
+          help: "Avatar size as percentage (base 32px)",
           showWhen: { scrollIndicatorAvatars: true }
         },
         scrollIndicatorTimestamps: {
@@ -45446,6 +45446,10 @@ if (cid) {
         input.value = defaultValue;
         const textInput = this.modalEl.querySelector(`#${id}-text`);
         if (textInput) textInput.value = defaultValue;
+      } else if (field.type === "range") {
+        input.value = defaultValue;
+        const valueDisplay = input.parentElement?.querySelector(".config-range-value");
+        if (valueDisplay) valueDisplay.textContent = defaultValue;
       } else {
         input.value = defaultValue;
       }
@@ -47991,9 +47995,14 @@ div.item-banner {
   height: calc(12px * var(--indicator-scale, 1));
 }
 
-/* Advanced style - zoom indicator same height as main indicator */
+/* Advanced style - zoom indicator auto-scales to fit content */
 .scroll-position-indicator-zoom {
-  height: calc(12px * var(--indicator-scale, 1));
+  height: auto;
+  min-height: calc(12px * var(--indicator-scale, 1));
+  padding: 2px 0;
+  overflow: visible;
+  align-items: stretch;
+  width: 100%;
 }
 
 /* Toolbar position: place at bottom of toolbar */
@@ -48194,9 +48203,17 @@ div.item-banner {
 
 /* Zoom indicator segments - larger for better visibility */
 .scroll-segment-zoom {
+  flex: 1 1 0;
   min-width: 20px;
-  height: auto;
+  height: auto !important;
   min-height: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 4px 0;
+  gap: 2px;
+  overflow: hidden;
 }
 
 .scroll-segment-zoom .scroll-icon-stack {
@@ -48220,33 +48237,25 @@ div.item-banner {
 }
 
 
-/* Stack vertically: icons on top, then avatar, handle, time */
-.scroll-segment-zoom:has(.scroll-segment-avatar),
-.scroll-segment-zoom:has(.scroll-segment-handle),
-.scroll-segment-zoom:has(.scroll-segment-time) {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-}
-
-.scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-segment-icon {
+/* Icons in zoom segments - always at top */
+.scroll-segment-zoom .scroll-segment-icon {
   position: static;
   transform: none;
-  height: 14px;
+  height: 16px;
   width: auto;
   order: -1; /* Icons appear first (top) */
+  flex-shrink: 0;
 }
 
-.scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-icon-stack {
+.scroll-segment-zoom .scroll-icon-stack {
   flex-direction: row;
-  height: 14px;
+  height: 16px;
   gap: 0;
+  flex-shrink: 0;
 }
 
-.scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-icon-stack img {
-  height: 14px;
+.scroll-segment-zoom .scroll-icon-stack img {
+  height: 16px;
   width: auto;
 }
 
@@ -48256,6 +48265,7 @@ div.item-banner {
   line-height: 1;
   color: rgba(0, 0, 0, 0.5);
   pointer-events: none;
+  flex-shrink: 0;
 }
 
 /* Handle in zoom segments */
@@ -48269,16 +48279,9 @@ div.item-banner {
   text-overflow: ellipsis;
   max-width: 100%;
   padding: 0 2px;
+  flex-shrink: 0;
 }
 
-/* When avatar, handle, or timestamp is present, let height scale to fit contents */
-.scroll-position-indicator-zoom:has(.scroll-segment-avatar),
-.scroll-position-indicator-zoom:has(.scroll-segment-handle),
-.scroll-position-indicator-zoom:has(.scroll-segment-time) {
-  height: auto;
-  min-height: calc(24px * var(--indicator-scale, 1));
-  padding: 2px 0;
-}
 
 /* Empty segments (no corresponding item) */
 .scroll-segment-empty {
@@ -48327,22 +48330,29 @@ div.item-banner {
   }
 }
 
-/* Zoom indicator container */
+/* Zoom indicator container - inherits from .scroll-indicator-container */
 .scroll-indicator-zoom-container {
   margin-top: 0;
+  overflow-y: visible;
 }
 
 .scroll-position-indicator-zoom {
   border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 3px;
+  overflow-x: hidden;
+  overflow-y: visible;
+  height: auto !important;
+  width: 100%;
 }
 
 /* Inner wrapper for smooth scroll animation */
 .scroll-zoom-inner {
   display: flex;
   width: 100%;
-  height: 100%;
+  height: auto;
+  min-height: 100%;
   will-change: transform;
+  align-items: stretch;
 }
 
 .scroll-zoom-inner.scroll-zoom-animating {
@@ -69740,7 +69750,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         if (isCurrent) {
           $segment.addClass("scroll-segment-current");
-        } else if (engagementData[actualIndex]?.engagement?.isRatioed) {
+        }
+        if (engagementData[actualIndex]?.engagement?.isRatioed) {
           $segment.addClass("scroll-segment-ratioed");
         } else if (heatmapMode !== "None" && engagementData[actualIndex]) {
           const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
@@ -69756,7 +69767,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
           const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
-          const avatarHeight = Math.round(24 * (avatarScale / 100));
+          const avatarHeight = Math.round(32 * (avatarScale / 100));
           $segment.append(`<img class="scroll-segment-avatar" src="${avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
         }
         if (showHandles && engagementData[actualIndex]?.engagement?.handle) {

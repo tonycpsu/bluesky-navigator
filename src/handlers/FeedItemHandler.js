@@ -2267,10 +2267,13 @@ export class FeedItemHandler extends ItemHandler {
         $segment.addClass('scroll-segment-read');
       }
 
+      // Apply current selection indicator (outline only, doesn't affect background)
       if (isCurrent) {
         $segment.addClass('scroll-segment-current');
-      } else if (engagementData[actualIndex]?.engagement?.isRatioed) {
-        // Ratioed posts get distinctive styling (takes precedence over heatmap)
+      }
+
+      // Apply background color: ratioed takes precedence, then heatmap
+      if (engagementData[actualIndex]?.engagement?.isRatioed) {
         $segment.addClass('scroll-segment-ratioed');
       } else if (heatmapMode !== 'None' && engagementData[actualIndex]) {
         const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
@@ -2290,8 +2293,8 @@ export class FeedItemHandler extends ItemHandler {
       // Add avatar if enabled (appears below icons)
       if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
         const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
-        // Avatar size in pixels: base 24px scaled by user preference (25-100%)
-        const avatarHeight = Math.round(24 * (avatarScale / 100));
+        // Avatar size in pixels: base 32px scaled by user preference (25-100%)
+        const avatarHeight = Math.round(32 * (avatarScale / 100));
         $segment.append(`<img class="scroll-segment-avatar" src="${avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
       }
 

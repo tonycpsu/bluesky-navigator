@@ -176,9 +176,9 @@ const CONFIG_SCHEMA = {
         type: 'range',
         default: 100,
         min: 25,
-        max: 100,
+        max: 200,
         step: 5,
-        help: 'Avatar size as percentage of segment height',
+        help: 'Avatar size as percentage (base 32px)',
         showWhen: { scrollIndicatorAvatars: true },
       },
       scrollIndicatorTimestamps: {
@@ -703,6 +703,10 @@ export class ConfigModal {
       input.value = defaultValue;
       const textInput = this.modalEl.querySelector(`#${id}-text`);
       if (textInput) textInput.value = defaultValue;
+    } else if (field.type === 'range') {
+      input.value = defaultValue;
+      const valueDisplay = input.parentElement?.querySelector('.config-range-value');
+      if (valueDisplay) valueDisplay.textContent = defaultValue;
     } else {
       input.value = defaultValue;
     }

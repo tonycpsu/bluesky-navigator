@@ -2026,10 +2026,10 @@ div.item-banner {
 .scroll-indicator-connector {
   display: block;
   width: 100%;
-  height: 16px;
+  height: 20px;
   position: relative;
   overflow: visible;
-  margin-top: -4px;
+  margin-top: -2px;
 }
 
 .scroll-indicator-connector-svg {

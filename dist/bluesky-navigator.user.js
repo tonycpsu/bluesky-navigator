@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+426.cddb24a3
+// @version     1.0.31+427.ec2b21e2
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -48311,10 +48311,10 @@ div.item-banner {
 .scroll-indicator-connector {
   display: block;
   width: 100%;
-  height: 16px;
+  height: 20px;
   position: relative;
   overflow: visible;
-  margin-top: -4px;
+  margin-top: -2px;
 }
 
 .scroll-indicator-connector-svg {
@@ -69376,11 +69376,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       if (showIcons && total > 0) {
         const indicatorWidth = indicator.width();
-        const segmentWidth = indicatorWidth / total;
-        if (segmentWidth < 16) {
-          indicator.css("--scroll-icon-display", "none");
-        } else {
-          indicator.css("--scroll-icon-display", "flex");
+        if (indicatorWidth > 0) {
+          const segmentWidth = indicatorWidth / total;
+          if (segmentWidth < 16) {
+            indicator.css("--scroll-icon-display", "none");
+          } else {
+            indicator.css("--scroll-icon-display", "flex");
+          }
         }
       }
       this.updateViewportIndicator(indicator, total);

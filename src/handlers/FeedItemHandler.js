@@ -1733,12 +1733,15 @@ export class FeedItemHandler extends ItemHandler {
     // Hide icons if segments are too narrow (main indicator only, zoom always shows icons)
     if (showIcons && total > 0) {
       const indicatorWidth = indicator.width();
-      const segmentWidth = indicatorWidth / total;
-      // Hide icons if segments are narrower than 16px - icons need more space to be readable
-      if (segmentWidth < 16) {
-        indicator.css('--scroll-icon-display', 'none');
-      } else {
-        indicator.css('--scroll-icon-display', 'flex');
+      // Only update icon visibility if we have a valid width (can be 0 during DOM updates)
+      if (indicatorWidth > 0) {
+        const segmentWidth = indicatorWidth / total;
+        // Hide icons if segments are narrower than 16px - icons need more space to be readable
+        if (segmentWidth < 16) {
+          indicator.css('--scroll-icon-display', 'none');
+        } else {
+          indicator.css('--scroll-icon-display', 'flex');
+        }
       }
     }
 

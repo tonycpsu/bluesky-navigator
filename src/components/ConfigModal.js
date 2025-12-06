@@ -188,6 +188,13 @@ const CONFIG_SCHEMA = {
         help: 'Show relative timestamps in zoom indicator segments',
         showWhen: { scrollIndicatorStyle: 'Advanced' },
       },
+      scrollIndicatorHandles: {
+        label: 'Show handles',
+        type: 'checkbox',
+        default: true,
+        help: 'Show user handles in zoom indicator segments',
+        showWhen: { scrollIndicatorStyle: 'Advanced' },
+      },
       scrollIndicatorZoom: {
         label: 'Zoom window size',
         type: 'number',
@@ -1422,6 +1429,7 @@ export class ConfigModal {
       case 'scrollIndicatorAvatars':
       case 'scrollIndicatorAvatarScale':
       case 'scrollIndicatorTimestamps':
+      case 'scrollIndicatorHandles':
         // Dispatch event for handler to update indicator
         document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
           detail: { setting: name, value }

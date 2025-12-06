@@ -2136,9 +2136,14 @@ export class ItemHandler extends Handler {
     this.filterItems();
 
     // Filter out embedded posts (posts that are inside another post)
+    // Also filter out "View full thread" placeholders (they match selector but have no data-testid)
     this.items = $(this.selector).filter(':visible').filter((i, item) => {
       // Check if this item is inside another item matching the selector
-      return $(item).parents(this.selector).length === 0;
+      if ($(item).parents(this.selector).length > 0) return false;
+      // Exclude "View full thread" elements - real posts have data-testid="feedItem-by-..."
+      const testId = $(item).attr('data-testid') || '';
+      if (!testId.startsWith('feedItem-by-') && !testId.startsWith('postThreadItem-by-')) return false;
+      return true;
     });
 
     // Re-setup intersection observer for the new items

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+423.082ccc68
+// @version     1.0.31+424.6a1ff229
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44970,6 +44970,13 @@ if (cid) {
           help: "Show relative timestamps in zoom indicator segments",
           showWhen: { scrollIndicatorStyle: "Advanced" }
         },
+        scrollIndicatorHandles: {
+          label: "Show handles",
+          type: "checkbox",
+          default: true,
+          help: "Show user handles in zoom indicator segments",
+          showWhen: { scrollIndicatorStyle: "Advanced" }
+        },
         scrollIndicatorZoom: {
           label: "Zoom window size",
           type: "number",
@@ -46030,6 +46037,7 @@ if (cid) {
         case "scrollIndicatorAvatars":
         case "scrollIndicatorAvatarScale":
         case "scrollIndicatorTimestamps":
+        case "scrollIndicatorHandles":
           document.dispatchEvent(new CustomEvent("scrollIndicatorSettingChanged", {
             detail: { setting: name, value }
           }));
@@ -48187,7 +48195,8 @@ div.item-banner {
 /* Zoom indicator segments - larger for better visibility */
 .scroll-segment-zoom {
   min-width: 20px;
-  container-type: size;
+  height: auto;
+  min-height: 24px;
 }
 
 .scroll-segment-zoom .scroll-icon-stack {
@@ -48210,48 +48219,65 @@ div.item-banner {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
 }
 
-/* When avatar is present, double height for two rows */
-.scroll-position-indicator-zoom:has(.scroll-segment-avatar) {
-  height: calc(24px * var(--indicator-scale, 1));
-}
 
-/* Stack vertically: icons on top, avatar below */
-.scroll-segment-zoom:has(.scroll-segment-avatar) {
+/* Stack vertically: icons on top, then avatar, handle, time */
+.scroll-segment-zoom:has(.scroll-segment-avatar),
+.scroll-segment-zoom:has(.scroll-segment-handle),
+.scroll-segment-zoom:has(.scroll-segment-time) {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
 }
 
 .scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-segment-icon {
   position: static;
   transform: none;
-  height: 45%;
+  height: 14px;
   width: auto;
   order: -1; /* Icons appear first (top) */
 }
 
 .scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-icon-stack {
   flex-direction: row;
-  height: 100%;
+  height: 14px;
   gap: 0;
 }
 
 .scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-icon-stack img {
-  height: 100%;
+  height: 14px;
   width: auto;
 }
 
 /* Relative time in zoom segments */
 .scroll-segment-time {
-  position: absolute;
-  bottom: 1px;
-  right: 2px;
-  font-size: clamp(6px, 20cqh, 10px);
+  font-size: 8px;
   line-height: 1;
   color: rgba(0, 0, 0, 0.5);
   pointer-events: none;
+}
+
+/* Handle in zoom segments */
+.scroll-segment-handle {
+  font-family: ui-monospace, monospace;
+  font-size: 8px;
+  line-height: 1.1;
+  color: rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding: 0 2px;
+}
+
+/* When avatar, handle, or timestamp is present, let height scale to fit contents */
+.scroll-position-indicator-zoom:has(.scroll-segment-avatar),
+.scroll-position-indicator-zoom:has(.scroll-segment-handle),
+.scroll-position-indicator-zoom:has(.scroll-segment-time) {
+  height: auto;
+  min-height: calc(24px * var(--indicator-scale, 1));
+  padding: 2px 0;
 }
 
 /* Empty segments (no corresponding item) */
@@ -48309,7 +48335,6 @@ div.item-banner {
 .scroll-position-indicator-zoom {
   border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 3px;
-  overflow: hidden;
 }
 
 /* Inner wrapper for smooth scroll animation */
@@ -48555,6 +48580,10 @@ div#statusBar.has-scroll-indicator {
 
   .scroll-segment-time {
     color: rgba(255, 255, 255, 0.5);
+  }
+
+  .scroll-segment-handle {
+    color: rgba(255, 255, 255, 0.6);
   }
 
   /* Basic mode dark: theme colors with brightness filter for read */
@@ -67853,7 +67882,10 @@ div#statusBar.has-scroll-indicator {
       this.sortItems();
       this.filterItems();
       this.items = $(this.selector).filter(":visible").filter((i2, item) => {
-        return $(item).parents(this.selector).length === 0;
+        if ($(item).parents(this.selector).length > 0) return false;
+        const testId = $(item).attr("data-testid") || "";
+        if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-")) return false;
+        return true;
       });
       this.visibleItems = [];
       this.setupIntersectionObserver();
@@ -68676,6 +68708,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const showAvatars = isAdvancedStyle ? this.config.get("scrollIndicatorAvatars") !== false : false;
             const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
             const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
+            const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
             const allItems = $(".item").filter((i2, item) => $(item).parents(".item").length === 0).toArray();
             let displayItems = [];
             let displayIndices = [];
@@ -68687,7 +68720,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             });
             let engagementData = [];
             let maxScore = 0;
-            if (isAdvancedStyle && (heatmapMode !== "None" || showIcons)) {
+            if (isAdvancedStyle && (heatmapMode !== "None" || showIcons || showAvatars || showHandles)) {
               engagementData = allItems.map((item) => {
                 const engagement = this.getPostEngagement(item);
                 const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
@@ -68698,7 +68731,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const selectedElement = this.items[this.index];
             const currentDisplayIndex = displayItems.indexOf(selectedElement);
             if (isAdvancedStyle) {
-              this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, displayItems.length, displayItems, displayIndices);
+              this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, displayItems.length, displayItems, displayIndices);
             } else {
               if (this.scrollIndicatorZoomContainer) this.scrollIndicatorZoomContainer.hide();
               if (this.scrollIndicatorConnector) this.scrollIndicatorConnector.hide();
@@ -69275,9 +69308,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const showAvatars = isAdvancedStyle ? this.config.get("scrollIndicatorAvatars") !== false : false;
       const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
       const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
+      const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
       let engagementData = [];
       let maxScore = 0;
-      if (isAdvancedStyle && (heatmapMode !== "None" || showIcons)) {
+      if (isAdvancedStyle && (heatmapMode !== "None" || showIcons || showAvatars || showHandles)) {
         engagementData = allItems.map((item) => {
           const engagement = this.getPostEngagement(item);
           const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
@@ -69326,7 +69360,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.updateViewportIndicator(indicator, total);
       if (this.scrollIndicatorZoom && isAdvancedStyle) {
-        this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, total, displayItems, displayIndices);
+        this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, total, displayItems, displayIndices);
       }
       this.updateScrollIndicatorLabels();
       const position2 = currentDisplayIndex >= 0 ? currentDisplayIndex + 1 : 0;
@@ -69461,6 +69495,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const isRatioed = replies > likes && likes + replies >= 10;
       const avatarImg = $item.find('div[data-testid="userAvatarImage"] img').first();
       const avatarUrl = avatarImg.length ? avatarImg.attr("src") : null;
+      let handle2 = this.handleFromItem($item);
+      if (!handle2) {
+        const testId = $item.attr("data-testid") || "";
+        const match2 = testId.match(/^feedItem-by-(.+)$/);
+        if (match2) {
+          handle2 = match2[1];
+        }
+      }
       return {
         likes,
         reposts,
@@ -69476,7 +69518,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         isReply,
         isSelfThread,
         isRatioed,
-        avatarUrl
+        avatarUrl,
+        handle: handle2
       };
     }
     /**
@@ -69605,7 +69648,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     /**
      * Update the zoom indicator showing posts around the current selection
      */
-    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, displayTotal, displayItems, displayIndices) {
+    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, displayTotal, displayItems, displayIndices) {
       const zoomIndicator = this.scrollIndicatorZoom;
       const zoomInner = this.scrollIndicatorZoomInner;
       if (!zoomIndicator || !zoomInner) return;
@@ -69687,7 +69730,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $segment.removeClass(
           "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
         );
-        $segment.find(".scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-time").remove();
+        $segment.find(".scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-handle, .scroll-segment-time").remove();
         if (!hasItem) {
           $segment.addClass("scroll-segment-empty");
           return;
@@ -69713,9 +69756,19 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
           const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
-          const hasIcon = showIcons && engagementData[actualIndex]?.engagement;
-          const effectiveScale = hasIcon ? avatarScale * 0.45 : avatarScale;
-          $segment.append(`<img class="scroll-segment-avatar" src="${avatarUrl}" alt="" style="height: ${effectiveScale}%">`);
+          const avatarHeight = Math.round(24 * (avatarScale / 100));
+          $segment.append(`<img class="scroll-segment-avatar" src="${avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+        }
+        if (showHandles && engagementData[actualIndex]?.engagement?.handle) {
+          const handle2 = engagementData[actualIndex].engagement.handle;
+          const dotIndex = handle2.indexOf(".");
+          let handleHtml;
+          if (dotIndex > 0) {
+            handleHtml = `<b>${handle2.substring(0, dotIndex)}</b>${handle2.substring(dotIndex)}`;
+          } else {
+            handleHtml = `<b>${handle2}</b>`;
+          }
+          $segment.append(`<span class="scroll-segment-handle">${handleHtml}</span>`);
         }
         if (showTimestamps) {
           const timestamp = this.getTimestampForItem(item);

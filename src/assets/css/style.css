@@ -1914,7 +1914,8 @@ div.item-banner {
 /* Zoom indicator segments - larger for better visibility */
 .scroll-segment-zoom {
   min-width: 20px;
-  container-type: size;
+  height: auto;
+  min-height: 24px;
 }
 
 .scroll-segment-zoom .scroll-icon-stack {
@@ -1937,48 +1938,65 @@ div.item-banner {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
 }
 
-/* When avatar is present, double height for two rows */
-.scroll-position-indicator-zoom:has(.scroll-segment-avatar) {
-  height: calc(24px * var(--indicator-scale, 1));
-}
 
-/* Stack vertically: icons on top, avatar below */
-.scroll-segment-zoom:has(.scroll-segment-avatar) {
+/* Stack vertically: icons on top, then avatar, handle, time */
+.scroll-segment-zoom:has(.scroll-segment-avatar),
+.scroll-segment-zoom:has(.scroll-segment-handle),
+.scroll-segment-zoom:has(.scroll-segment-time) {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
 }
 
 .scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-segment-icon {
   position: static;
   transform: none;
-  height: 45%;
+  height: 14px;
   width: auto;
   order: -1; /* Icons appear first (top) */
 }
 
 .scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-icon-stack {
   flex-direction: row;
-  height: 100%;
+  height: 14px;
   gap: 0;
 }
 
 .scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-icon-stack img {
-  height: 100%;
+  height: 14px;
   width: auto;
 }
 
 /* Relative time in zoom segments */
 .scroll-segment-time {
-  position: absolute;
-  bottom: 1px;
-  right: 2px;
-  font-size: clamp(6px, 20cqh, 10px);
+  font-size: 8px;
   line-height: 1;
   color: rgba(0, 0, 0, 0.5);
   pointer-events: none;
+}
+
+/* Handle in zoom segments */
+.scroll-segment-handle {
+  font-family: ui-monospace, monospace;
+  font-size: 8px;
+  line-height: 1.1;
+  color: rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding: 0 2px;
+}
+
+/* When avatar, handle, or timestamp is present, let height scale to fit contents */
+.scroll-position-indicator-zoom:has(.scroll-segment-avatar),
+.scroll-position-indicator-zoom:has(.scroll-segment-handle),
+.scroll-position-indicator-zoom:has(.scroll-segment-time) {
+  height: auto;
+  min-height: calc(24px * var(--indicator-scale, 1));
+  padding: 2px 0;
 }
 
 /* Empty segments (no corresponding item) */
@@ -2036,7 +2054,6 @@ div.item-banner {
 .scroll-position-indicator-zoom {
   border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 3px;
-  overflow: hidden;
 }
 
 /* Inner wrapper for smooth scroll animation */
@@ -2282,6 +2299,10 @@ div#statusBar.has-scroll-indicator {
 
   .scroll-segment-time {
     color: rgba(255, 255, 255, 0.5);
+  }
+
+  .scroll-segment-handle {
+    color: rgba(255, 255, 255, 0.6);
   }
 
   /* Basic mode dark: theme colors with brightness filter for read */

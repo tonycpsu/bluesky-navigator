@@ -880,6 +880,7 @@ export class FeedItemHandler extends ItemHandler {
           const showAvatars = isAdvancedStyle ? (this.config.get('scrollIndicatorAvatars') !== false) : false;
           const avatarScale = this.config.get('scrollIndicatorAvatarScale') ?? 100;
           const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
+          const showHandles = isAdvancedStyle ? (this.config.get('scrollIndicatorHandles') !== false) : false;
 
           // Get all items excluding filtered ones
           const allItems = $('.item').filter((i, item) => $(item).parents('.item').length === 0).toArray();
@@ -897,7 +898,7 @@ export class FeedItemHandler extends ItemHandler {
           // Recalculate engagement data for ALL items
           let engagementData = [];
           let maxScore = 0;
-          if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons)) {
+          if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons || showAvatars || showHandles)) {
             engagementData = allItems.map((item) => {
               const engagement = this.getPostEngagement(item);
               const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
@@ -912,7 +913,7 @@ export class FeedItemHandler extends ItemHandler {
 
           // Only show zoom indicator in Advanced mode
           if (isAdvancedStyle) {
-            this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, displayItems.length, displayItems, displayIndices);
+            this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, displayItems.length, displayItems, displayIndices);
           } else {
             // Hide zoom elements in Basic mode
             if (this.scrollIndicatorZoomContainer) this.scrollIndicatorZoomContainer.hide();
@@ -1658,12 +1659,13 @@ export class FeedItemHandler extends ItemHandler {
     const showAvatars = isAdvancedStyle ? (this.config.get('scrollIndicatorAvatars') !== false) : false;
     const avatarScale = this.config.get('scrollIndicatorAvatarScale') ?? 100;
     const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
+    const showHandles = isAdvancedStyle ? (this.config.get('scrollIndicatorHandles') !== false) : false;
 
     // Calculate engagement data for ALL items (indexed by actual item index for zoom indicator)
     let engagementData = [];
     let maxScore = 0;
 
-    if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons)) {
+    if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons || showAvatars || showHandles)) {
       engagementData = allItems.map((item) => {
         const engagement = this.getPostEngagement(item);
         const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
@@ -1734,7 +1736,7 @@ export class FeedItemHandler extends ItemHandler {
 
     // Update zoom indicator if present and in Advanced mode
     if (this.scrollIndicatorZoom && isAdvancedStyle) {
-      this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, total, displayItems, displayIndices);
+      this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, total, displayItems, displayIndices);
     }
 
     // Update date labels
@@ -1932,6 +1934,16 @@ export class FeedItemHandler extends ItemHandler {
     const avatarImg = $item.find('div[data-testid="userAvatarImage"] img').first();
     const avatarUrl = avatarImg.length ? avatarImg.attr('src') : null;
 
+    // Extract handle (with fallback to data-testid)
+    let handle = this.handleFromItem($item);
+    if (!handle) {
+      const testId = $item.attr('data-testid') || '';
+      const match = testId.match(/^feedItem-by-(.+)$/);
+      if (match) {
+        handle = match[1];
+      }
+    }
+
     return {
       likes,
       reposts,
@@ -1947,6 +1959,7 @@ export class FeedItemHandler extends ItemHandler {
       isSelfThread,
       isRatioed,
       avatarUrl,
+      handle,
     };
   }
 
@@ -2117,7 +2130,7 @@ export class FeedItemHandler extends ItemHandler {
   /**
    * Update the zoom indicator showing posts around the current selection
    */
-  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, displayTotal, displayItems, displayIndices) {
+  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, displayTotal, displayItems, displayIndices) {
     const zoomIndicator = this.scrollIndicatorZoom;
     const zoomInner = this.scrollIndicatorZoomInner;
     if (!zoomIndicator || !zoomInner) return;
@@ -2240,8 +2253,8 @@ export class FeedItemHandler extends ItemHandler {
         'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
       );
 
-      // Clear existing icon, avatar, and time
-      $segment.find('.scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-time').remove();
+      // Clear existing icon, avatar, handle, and time
+      $segment.find('.scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-handle, .scroll-segment-time').remove();
 
       // Mark empty segments (no corresponding item)
       if (!hasItem) {
@@ -2277,10 +2290,22 @@ export class FeedItemHandler extends ItemHandler {
       // Add avatar if enabled (appears below icons)
       if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
         const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
-        // When icons are present, avatar shares space (icons ~50%, avatar gets remaining ~50% minus gap)
-        const hasIcon = showIcons && engagementData[actualIndex]?.engagement;
-        const effectiveScale = hasIcon ? (avatarScale * 0.45) : avatarScale;
-        $segment.append(`<img class="scroll-segment-avatar" src="${avatarUrl}" alt="" style="height: ${effectiveScale}%">`);
+        // Avatar size in pixels: base 24px scaled by user preference (25-100%)
+        const avatarHeight = Math.round(24 * (avatarScale / 100));
+        $segment.append(`<img class="scroll-segment-avatar" src="${avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+      }
+
+      // Add handle if enabled (appears below avatar)
+      if (showHandles && engagementData[actualIndex]?.engagement?.handle) {
+        const handle = engagementData[actualIndex].engagement.handle;
+        const dotIndex = handle.indexOf('.');
+        let handleHtml;
+        if (dotIndex > 0) {
+          handleHtml = `<b>${handle.substring(0, dotIndex)}</b>${handle.substring(dotIndex)}`;
+        } else {
+          handleHtml = `<b>${handle}</b>`;
+        }
+        $segment.append(`<span class="scroll-segment-handle">${handleHtml}</span>`);
       }
 
       // Add relative time in bottom right if enabled

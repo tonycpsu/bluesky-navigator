@@ -130,7 +130,10 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     // Estimate from adjacent posts
-    const itemIndex = this.items.indexOf($item[0]);
+    // this.items may be an array (during init) or jQuery object (after loadItems)
+    const itemIndex = typeof this.items.index === 'function'
+      ? this.items.index($item[0])
+      : Array.prototype.indexOf.call(this.items, $item[0]);
     if (itemIndex < 0) return null;
 
     const prevItem = itemIndex > 0 ? this.items[itemIndex - 1] : null;
@@ -875,11 +878,33 @@ export class FeedItemHandler extends ItemHandler {
           const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
           const showIcons = isAdvancedStyle ? (this.config.get('scrollIndicatorIcons') !== false) : false;
 
-          // Recalculate engagement data for zoom update
+          // Get filtered items display mode
+          const filteredItemsMode = this.config.get('scrollIndicatorFilteredItems') || 'Show (grayed)';
+          const hideFiltered = filteredItemsMode === 'Hide';
+
+          // Get all items including filtered
+          const allItems = $('.item').filter((i, item) => $(item).parents('.item').length === 0).toArray();
+
+          // Build display items based on filter mode
+          let displayItems = [];
+          let displayIndices = [];
+          if (hideFiltered) {
+            allItems.forEach((item, i) => {
+              if (!$(item).hasClass('filtered')) {
+                displayItems.push(item);
+                displayIndices.push(i);
+              }
+            });
+          } else {
+            displayItems = allItems;
+            displayIndices = allItems.map((_, i) => i);
+          }
+
+          // Recalculate engagement data for ALL items
           let engagementData = [];
           let maxScore = 0;
           if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons)) {
-            engagementData = this.items.toArray().map((item) => {
+            engagementData = allItems.map((item) => {
               const engagement = this.getPostEngagement(item);
               const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
               if (score > maxScore) maxScore = score;
@@ -887,7 +912,11 @@ export class FeedItemHandler extends ItemHandler {
             });
           }
 
-          this.updateZoomIndicator(this.index, engagementData, heatmapMode, showIcons, maxScore);
+          // Find current item's position in displayItems by element comparison
+          const selectedElement = this.items[this.index];
+          const currentDisplayIndex = displayItems.indexOf(selectedElement);
+
+          this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, displayItems.length, displayItems, displayIndices);
         }
       }
       this._scrollUpdatePending = false;
@@ -1404,7 +1433,10 @@ export class FeedItemHandler extends ItemHandler {
     });
 
     this.refreshItems();
-    this.updateScrollPosition();
+    // Use requestAnimationFrame to ensure DOM is fully rendered before updating feed map
+    requestAnimationFrame(() => {
+      this.updateScrollPosition();
+    });
     if (hideRead && $(this.selectedItem).hasClass('item-read')) {
       this.jumpToNextUnseenItem();
     }
@@ -1440,7 +1472,10 @@ export class FeedItemHandler extends ItemHandler {
 
   updateInfoIndicator() {
     super.updateInfoIndicator();
-    this.updateScrollPosition();
+    // Use requestAnimationFrame to ensure DOM is fully rendered before updating feed map
+    requestAnimationFrame(() => {
+      this.updateScrollPosition();
+    });
     this.updateBreadcrumb();
   }
 
@@ -1566,21 +1601,46 @@ export class FeedItemHandler extends ItemHandler {
     // Remove empty state message if present
     indicator.find('.scroll-indicator-empty').remove();
 
+    // Ensure zoom elements are visible (updateZoomIndicator will hide if not needed)
+    if (this.scrollIndicatorZoomContainer) {
+      this.scrollIndicatorZoomContainer.show();
+    }
+    if (this.scrollIndicatorConnector) {
+      this.scrollIndicatorConnector.show();
+    }
+    if (this.scrollIndicatorZoomHighlight) {
+      this.scrollIndicatorZoomHighlight.show();
+    }
+
     // Store display items for click handler (actual DOM elements)
     this._displayItems = displayItems;
 
     const total = displayItems.length;
-    const currentIndex = this.index;
-    // Find current index in display items
-    const currentDisplayIndex = displayIndices.indexOf(currentIndex);
+    // Find the current item's position in displayItems by element comparison
+    // (this.index is into this.items, which may differ from displayItems due to filtering)
+    const selectedElement = this.items[this.index];
+    const currentDisplayIndex = displayItems.indexOf(selectedElement);
+
+    // Debug logging
+    console.log('[FeedMap] updateScrollPosition:', {
+      'this.index': this.index,
+      'this.items.length': this.items.length,
+      'displayItems.length': displayItems.length,
+      'allItems.length': allItems.length,
+      currentDisplayIndex,
+      selectedElement: selectedElement ? 'found' : 'null',
+      hideFiltered
+    });
 
     // Create or update segments
     let segments = indicator.find('.scroll-segment');
     if (segments.length !== total) {
       // Skip rebuild while loading to prevent visual jumping
       if (this.loading || this.loadingNew) {
+        console.log('[FeedMap] updateScrollPosition: skipping rebuild due to loading', { segmentsLength: segments.length, total, loading: this.loading, loadingNew: this.loadingNew });
         return;
       }
+      console.log('[FeedMap] updateScrollPosition: rebuilding segments', { segmentsLength: segments.length, total });
 
       // Rebuild segments
       indicator.find('.scroll-segment').remove();
@@ -1609,14 +1669,22 @@ export class FeedItemHandler extends ItemHandler {
     let engagementData = [];
     let maxScore = 0;
 
+    console.log('[FeedMap] before engagement calc', { isAdvancedStyle, heatmapMode, showIcons });
+
     if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons)) {
-      engagementData = allItems.map((item) => {
-        const engagement = this.getPostEngagement(item);
-        const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
-        if (score > maxScore) maxScore = score;
-        return { engagement, score };
-      });
+      try {
+        engagementData = allItems.map((item) => {
+          const engagement = this.getPostEngagement(item);
+          const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
+          if (score > maxScore) maxScore = score;
+          return { engagement, score };
+        });
+      } catch (e) {
+        console.error('[FeedMap] engagement calc error:', e);
+      }
     }
+
+    console.log('[FeedMap] before segment.each', { segmentsLength: segments.length, engagementDataLength: engagementData.length });
 
     // Update segment states
     segments.each((i, segment) => {
@@ -1669,6 +1737,8 @@ export class FeedItemHandler extends ItemHandler {
       }
     });
 
+    console.log('[FeedMap] after segment updates');
+
     // Hide icons if segments are too narrow (main indicator only, zoom always shows icons)
     if (showIcons && total > 0) {
       const indicatorWidth = indicator.width();
@@ -1681,12 +1751,17 @@ export class FeedItemHandler extends ItemHandler {
       }
     }
 
+    console.log('[FeedMap] before updateViewportIndicator');
+
     // Update viewport indicator position
     this.updateViewportIndicator(indicator, total);
 
+    console.log('[FeedMap] after updateViewportIndicator');
+
     // Update zoom indicator if present (uses display items count for proper windowing)
+    console.log('[FeedMap] checking zoom indicator', { hasZoom: !!this.scrollIndicatorZoom, total });
     if (this.scrollIndicatorZoom) {
-      this.updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore, total, displayItems);
+      this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, total, displayItems, displayIndices);
     }
 
     // Update date labels
@@ -2064,19 +2139,38 @@ export class FeedItemHandler extends ItemHandler {
   /**
    * Update the zoom indicator showing posts around the current selection
    */
-  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore, displayTotal, displayItems) {
+  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore, displayTotal, displayItems, displayIndices) {
+    console.log('[FeedMap] updateZoomIndicator called');
     const zoomIndicator = this.scrollIndicatorZoom;
     const zoomInner = this.scrollIndicatorZoomInner;
-    if (!zoomIndicator || !zoomInner) return;
+    if (!zoomIndicator || !zoomInner) {
+      console.log('[FeedMap] updateZoomIndicator: no zoom elements', { zoomIndicator: !!zoomIndicator, zoomInner: !!zoomInner });
+      return;
+    }
 
     // Skip updates while loading to prevent visual jumping
-    if (this.loading || this.loadingNew) return;
+    if (this.loading || this.loadingNew) {
+      console.log('[FeedMap] updateZoomIndicator: skipping due to loading', { loading: this.loading, loadingNew: this.loadingNew });
+      return;
+    }
 
     const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
-    if (zoomWindowSize === 0) return;
+    if (zoomWindowSize === 0) {
+      console.log('[FeedMap] updateZoomIndicator: zoom disabled (zoomWindowSize=0)');
+      return;
+    }
 
     // Use displayTotal from caller (accounts for filtered items in Hide mode)
     const total = displayTotal;
+
+    // Debug logging
+    console.log('[FeedMap] updateZoomIndicator:', {
+      currentIndex,
+      displayTotal,
+      'displayItems.length': displayItems?.length,
+      zoomWindowSize,
+      zoomWindowStart: this.zoomWindowStart
+    });
 
     // Hide zoom indicator when there are fewer items than the window size
     if (total <= zoomWindowSize) {
@@ -2167,16 +2261,18 @@ export class FeedItemHandler extends ItemHandler {
 
     segments.each((i, segment) => {
       const $segment = $(segment);
-      const itemIndex = windowStart + i;
+      const displayIndex = windowStart + i;
       // Use displayItems passed from caller (already filtered if hideFiltered is true)
-      const item = displayItems[itemIndex];
-      const hasItem = itemIndex >= 0 && itemIndex < total && item;
+      const item = displayItems[displayIndex];
+      // Map to actual index for engagementData (which is indexed by allItems position)
+      const actualIndex = displayIndices ? displayIndices[displayIndex] : displayIndex;
+      const hasItem = displayIndex >= 0 && displayIndex < total && item;
       const isRead = item && $(item).hasClass('item-read');
       const isFiltered = item && $(item).hasClass('filtered');
-      const isCurrent = itemIndex === currentIndex;
+      const isCurrent = displayIndex === currentIndex;
 
       // Update data-index in case window shifted
-      $segment.attr('data-index', hasItem ? itemIndex : -1);
+      $segment.attr('data-index', hasItem ? displayIndex : -1);
 
       // Remove all state classes
       $segment.removeClass(
@@ -2206,19 +2302,19 @@ export class FeedItemHandler extends ItemHandler {
 
       if (isCurrent) {
         $segment.addClass('scroll-segment-current');
-      } else if (engagementData[itemIndex]?.engagement?.isRatioed) {
+      } else if (engagementData[actualIndex]?.engagement?.isRatioed) {
         // Ratioed posts get distinctive styling (takes precedence over heatmap)
         $segment.addClass('scroll-segment-ratioed');
-      } else if (heatmapMode !== 'None' && engagementData[itemIndex]) {
-        const heatLevel = this.getHeatLevel(engagementData[itemIndex].score, maxScore);
+      } else if (heatmapMode !== 'None' && engagementData[actualIndex]) {
+        const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
         if (heatLevel > 0) {
           $segment.addClass(`scroll-segment-heat-${heatLevel}`);
         }
       }
 
       // Add content icon if enabled (skip for filtered items)
-      if (showIcons && !isFiltered && engagementData[itemIndex]?.engagement) {
-        const icon = this.getContentIcon(engagementData[itemIndex].engagement);
+      if (showIcons && !isFiltered && engagementData[actualIndex]?.engagement) {
+        const icon = this.getContentIcon(engagementData[actualIndex].engagement);
         if (icon) {
           $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
         }

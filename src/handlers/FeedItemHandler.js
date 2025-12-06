@@ -877,6 +877,9 @@ export class FeedItemHandler extends ItemHandler {
           const isAdvancedStyle = indicatorStyle === 'Advanced';
           const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
           const showIcons = isAdvancedStyle ? (this.config.get('scrollIndicatorIcons') !== false) : false;
+          const showAvatars = isAdvancedStyle ? (this.config.get('scrollIndicatorAvatars') !== false) : false;
+          const avatarScale = this.config.get('scrollIndicatorAvatarScale') ?? 100;
+          const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
 
           // Get all items excluding filtered ones
           const allItems = $('.item').filter((i, item) => $(item).parents('.item').length === 0).toArray();
@@ -909,7 +912,7 @@ export class FeedItemHandler extends ItemHandler {
 
           // Only show zoom indicator in Advanced mode
           if (isAdvancedStyle) {
-            this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, displayItems.length, displayItems, displayIndices);
+            this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, displayItems.length, displayItems, displayIndices);
           } else {
             // Hide zoom elements in Basic mode
             if (this.scrollIndicatorZoomContainer) this.scrollIndicatorZoomContainer.hide();
@@ -1652,6 +1655,9 @@ export class FeedItemHandler extends ItemHandler {
     const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
     const iconsValue = this.config.get('scrollIndicatorIcons');
     const showIcons = isAdvancedStyle ? (iconsValue === true || iconsValue === 'true' || iconsValue === undefined) : false;
+    const showAvatars = isAdvancedStyle ? (this.config.get('scrollIndicatorAvatars') !== false) : false;
+    const avatarScale = this.config.get('scrollIndicatorAvatarScale') ?? 100;
+    const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
 
     // Calculate engagement data for ALL items (indexed by actual item index for zoom indicator)
     let engagementData = [];
@@ -1728,7 +1734,7 @@ export class FeedItemHandler extends ItemHandler {
 
     // Update zoom indicator if present and in Advanced mode
     if (this.scrollIndicatorZoom && isAdvancedStyle) {
-      this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, total, displayItems, displayIndices);
+      this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, total, displayItems, displayIndices);
     }
 
     // Update date labels
@@ -1922,6 +1928,10 @@ export class FeedItemHandler extends ItemHandler {
     // Detect ratioed posts: more replies than likes, with minimum engagement threshold
     const isRatioed = (replies > likes) && (likes + replies >= 10);
 
+    // Extract avatar URL from the post's author avatar image
+    const avatarImg = $item.find('div[data-testid="userAvatarImage"] img').first();
+    const avatarUrl = avatarImg.length ? avatarImg.attr('src') : null;
+
     return {
       likes,
       reposts,
@@ -1936,6 +1946,7 @@ export class FeedItemHandler extends ItemHandler {
       isReply,
       isSelfThread,
       isRatioed,
+      avatarUrl,
     };
   }
 
@@ -2106,7 +2117,7 @@ export class FeedItemHandler extends ItemHandler {
   /**
    * Update the zoom indicator showing posts around the current selection
    */
-  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore, displayTotal, displayItems, displayIndices) {
+  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, displayTotal, displayItems, displayIndices) {
     const zoomIndicator = this.scrollIndicatorZoom;
     const zoomInner = this.scrollIndicatorZoomInner;
     if (!zoomIndicator || !zoomInner) return;
@@ -2120,25 +2131,30 @@ export class FeedItemHandler extends ItemHandler {
     // Use displayTotal from caller (accounts for filtered items)
     const total = displayTotal;
 
-    // Hide zoom indicator when there are fewer items than the window size
+    // When fewer items than window size, show only zoom indicator (hide main indicator)
     if (total <= zoomWindowSize) {
-      this.scrollIndicatorZoomContainer.hide();
+      if (this.scrollIndicatorContainer) {
+        this.scrollIndicatorContainer.hide();
+      }
       if (this.scrollIndicatorConnector) {
         this.scrollIndicatorConnector.hide();
       }
       if (this.scrollIndicatorZoomHighlight) {
         this.scrollIndicatorZoomHighlight.hide();
       }
-      return;
-    }
-
-    // Show zoom indicator and related elements
-    this.scrollIndicatorZoomContainer.show();
-    if (this.scrollIndicatorConnector) {
-      this.scrollIndicatorConnector.show();
-    }
-    if (this.scrollIndicatorZoomHighlight) {
-      this.scrollIndicatorZoomHighlight.show();
+      this.scrollIndicatorZoomContainer.show();
+    } else {
+      // Show both indicators when there are enough items
+      if (this.scrollIndicatorContainer) {
+        this.scrollIndicatorContainer.show();
+      }
+      this.scrollIndicatorZoomContainer.show();
+      if (this.scrollIndicatorConnector) {
+        this.scrollIndicatorConnector.show();
+      }
+      if (this.scrollIndicatorZoomHighlight) {
+        this.scrollIndicatorZoomHighlight.show();
+      }
     }
 
     if (total === 0) return;
@@ -2224,8 +2240,8 @@ export class FeedItemHandler extends ItemHandler {
         'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
       );
 
-      // Clear existing icon
-      $segment.find('.scroll-segment-icon').remove();
+      // Clear existing icon, avatar, and time
+      $segment.find('.scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-time').remove();
 
       // Mark empty segments (no corresponding item)
       if (!hasItem) {
@@ -2250,11 +2266,29 @@ export class FeedItemHandler extends ItemHandler {
         }
       }
 
-      // Add content icon if enabled
+      // Add content icon if enabled (appears on top)
       if (showIcons && engagementData[actualIndex]?.engagement) {
         const icon = this.getContentIcon(engagementData[actualIndex].engagement);
         if (icon) {
           $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+        }
+      }
+
+      // Add avatar if enabled (appears below icons)
+      if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
+        const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
+        // When icons are present, avatar shares space (icons ~50%, avatar gets remaining ~50% minus gap)
+        const hasIcon = showIcons && engagementData[actualIndex]?.engagement;
+        const effectiveScale = hasIcon ? (avatarScale * 0.45) : avatarScale;
+        $segment.append(`<img class="scroll-segment-avatar" src="${avatarUrl}" alt="" style="height: ${effectiveScale}%">`);
+      }
+
+      // Add relative time in bottom right if enabled
+      if (showTimestamps) {
+        const timestamp = this.getTimestampForItem(item);
+        if (timestamp) {
+          const relativeTime = this.formatRelativeTime(timestamp);
+          $segment.append(`<span class="scroll-segment-time">${relativeTime}</span>`);
         }
       }
     });
@@ -2469,8 +2503,11 @@ export class FeedItemHandler extends ItemHandler {
       this._feedMapTooltip = $(`
         <div class="feed-map-tooltip">
           <div class="feed-map-tooltip-header">
-            <span class="feed-map-tooltip-handle"></span>
-            <span class="feed-map-tooltip-time"></span>
+            <img class="feed-map-tooltip-avatar" style="display: none;">
+            <div class="feed-map-tooltip-header-text">
+              <span class="feed-map-tooltip-handle"></span>
+              <span class="feed-map-tooltip-time"></span>
+            </div>
           </div>
           <div class="feed-map-tooltip-author"></div>
           <div class="feed-map-tooltip-content"></div>
@@ -2532,6 +2569,14 @@ export class FeedItemHandler extends ItemHandler {
     const truncatedText = postText.length > 150
       ? postText.substring(0, 150).trim() + '...'
       : postText;
+
+    // Update avatar if setting is enabled
+    const avatarImg = tooltip.find('.feed-map-tooltip-avatar');
+    if (this.config.get('scrollIndicatorAvatars') !== false && engagement?.avatarUrl) {
+      avatarImg.attr('src', engagement.avatarUrl).show();
+    } else {
+      avatarImg.hide();
+    }
 
     // Update tooltip content
     tooltip.find('.feed-map-tooltip-handle').text(`@${handle}`);

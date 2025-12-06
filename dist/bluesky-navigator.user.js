@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+422.a625864a
+// @version     1.0.31+423.082ccc68
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44946,6 +44946,30 @@ if (cid) {
           help: "Show icons for media, replies, and reposts in feed map",
           showWhen: { scrollIndicatorStyle: "Advanced" }
         },
+        scrollIndicatorAvatars: {
+          label: "Show avatars",
+          type: "checkbox",
+          default: true,
+          help: "Show author avatars in zoom indicator segments",
+          showWhen: { scrollIndicatorStyle: "Advanced" }
+        },
+        scrollIndicatorAvatarScale: {
+          label: "Avatar scale",
+          type: "range",
+          default: 100,
+          min: 25,
+          max: 100,
+          step: 5,
+          help: "Avatar size as percentage of segment height",
+          showWhen: { scrollIndicatorAvatars: true }
+        },
+        scrollIndicatorTimestamps: {
+          label: "Show timestamps",
+          type: "checkbox",
+          default: true,
+          help: "Show relative timestamps in zoom indicator segments",
+          showWhen: { scrollIndicatorStyle: "Advanced" }
+        },
         scrollIndicatorZoom: {
           label: "Zoom window size",
           type: "number",
@@ -45472,14 +45496,10 @@ if (cid) {
       switch (field.type) {
         case "checkbox":
           inputHtml = `
-          <div class="config-field-wrapper config-field-checkbox">
-            <label class="config-field">
-              <input type="checkbox" id="${id}" name="${key}" ${value ? "checked" : ""}>
-              <span class="config-checkbox-label">${field.label}</span>
-              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
-            </label>
-            ${resetBtn}
-          </div>
+          <label class="config-field-checkbox"${field.help ? ` data-help="${this.escapeHtml(field.help)}"` : ""}>
+            <span class="config-checkbox-label">${field.label}</span>
+            <input type="checkbox" id="${id}" name="${key}" ${value ? "checked" : ""}>
+          </label>
         `;
           break;
         case "select":
@@ -46007,6 +46027,9 @@ if (cid) {
           }));
           break;
         case "scrollIndicatorIcons":
+        case "scrollIndicatorAvatars":
+        case "scrollIndicatorAvatarScale":
+        case "scrollIndicatorTimestamps":
           document.dispatchEvent(new CustomEvent("scrollIndicatorSettingChanged", {
             detail: { setting: name, value }
           }));
@@ -47960,9 +47983,9 @@ div.item-banner {
   height: calc(12px * var(--indicator-scale, 1));
 }
 
-/* Advanced style - zoom indicator is taller for detail */
+/* Advanced style - zoom indicator same height as main indicator */
 .scroll-position-indicator-zoom {
-  height: calc(24px * var(--indicator-scale, 1));
+  height: calc(12px * var(--indicator-scale, 1));
 }
 
 /* Toolbar position: place at bottom of toolbar */
@@ -48164,10 +48187,71 @@ div.item-banner {
 /* Zoom indicator segments - larger for better visibility */
 .scroll-segment-zoom {
   min-width: 20px;
+  container-type: size;
+}
+
+.scroll-segment-zoom .scroll-icon-stack {
+  flex-direction: row;
+  gap: 2px;
 }
 
 .scroll-segment-zoom .scroll-icon-stack img {
-  height: 50%;
+  height: 60%;
+  width: auto;
+}
+
+/* Avatar in zoom segments */
+.scroll-segment-avatar {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: 0.9;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+/* When avatar is present, double height for two rows */
+.scroll-position-indicator-zoom:has(.scroll-segment-avatar) {
+  height: calc(24px * var(--indicator-scale, 1));
+}
+
+/* Stack vertically: icons on top, avatar below */
+.scroll-segment-zoom:has(.scroll-segment-avatar) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-segment-icon {
+  position: static;
+  transform: none;
+  height: 45%;
+  width: auto;
+  order: -1; /* Icons appear first (top) */
+}
+
+.scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-icon-stack {
+  flex-direction: row;
+  height: 100%;
+  gap: 0;
+}
+
+.scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-icon-stack img {
+  height: 100%;
+  width: auto;
+}
+
+/* Relative time in zoom segments */
+.scroll-segment-time {
+  position: absolute;
+  bottom: 1px;
+  right: 2px;
+  font-size: clamp(6px, 20cqh, 10px);
+  line-height: 1;
+  color: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }
 
 /* Empty segments (no corresponding item) */
@@ -48469,6 +48553,10 @@ div#statusBar.has-scroll-indicator {
     filter: brightness(0.5);
   }
 
+  .scroll-segment-time {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
   /* Basic mode dark: theme colors with brightness filter for read */
   .scroll-indicator-basic .scroll-segment { background-color: #4b5563; }
   .scroll-indicator-basic.scroll-indicator-theme-ocean .scroll-segment { background-color: #0e7490; } /* cyan-700 */
@@ -48587,9 +48675,25 @@ div#statusBar.has-scroll-indicator {
 }
 
 .feed-map-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
   color: #6b7280;
   margin-bottom: 2px;
+}
+
+.feed-map-tooltip-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.feed-map-tooltip-header-text {
+  display: flex;
+  flex-direction: column;
 }
 
 .feed-map-tooltip-handle {
@@ -49438,11 +49542,6 @@ div#statusBar.has-scroll-indicator {
   margin-top: 22px; /* Align with input fields that have labels */
 }
 
-.config-field-wrapper.config-field-checkbox .config-field-reset {
-  margin-top: 0; /* Checkboxes don't have separate labels */
-  align-self: center;
-}
-
 .config-field-wrapper.config-field-textarea .config-field-reset {
   margin-top: 22px;
   align-self: flex-start;
@@ -49505,31 +49604,49 @@ div#statusBar.has-scroll-indicator {
   width: 100%;
 }
 
-/* Checkbox styling */
+/* Checkbox styling - compact inline */
 .config-field-checkbox {
-  flex-direction: row;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
   cursor: pointer;
-  margin-bottom: 12px;
+  margin: 0 16px 4px 0;
+  position: relative;
 }
 
 .config-field-checkbox input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 13px;
+  height: 13px;
   margin: 0;
   cursor: pointer;
   accent-color: #3b82f6;
 }
 
 .config-checkbox-label {
-  font-size: 13px;
+  font-size: 11px;
   color: #374151;
+  white-space: nowrap;
 }
 
-.config-field-checkbox .config-field-help {
-  margin-left: auto;
-  flex-shrink: 0;
+/* Conditional wrapper should be inline for checkboxes */
+.config-field-conditional:has(.config-field-checkbox) {
+  display: inline;
+}
+
+/* Show help as tooltip on hover */
+.config-field-checkbox[data-help]:hover::after {
+  content: attr(data-help);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: #1f2937;
+  color: #fff;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
 }
 
 /* Color input */
@@ -68556,6 +68673,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const isAdvancedStyle = indicatorStyle === "Advanced";
             const heatmapMode = isAdvancedStyle ? this.config.get("scrollIndicatorHeatmap") || "None" : "None";
             const showIcons = isAdvancedStyle ? this.config.get("scrollIndicatorIcons") !== false : false;
+            const showAvatars = isAdvancedStyle ? this.config.get("scrollIndicatorAvatars") !== false : false;
+            const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
+            const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
             const allItems = $(".item").filter((i2, item) => $(item).parents(".item").length === 0).toArray();
             let displayItems = [];
             let displayIndices = [];
@@ -68578,7 +68698,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const selectedElement = this.items[this.index];
             const currentDisplayIndex = displayItems.indexOf(selectedElement);
             if (isAdvancedStyle) {
-              this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, displayItems.length, displayItems, displayIndices);
+              this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, displayItems.length, displayItems, displayIndices);
             } else {
               if (this.scrollIndicatorZoomContainer) this.scrollIndicatorZoomContainer.hide();
               if (this.scrollIndicatorConnector) this.scrollIndicatorConnector.hide();
@@ -69152,6 +69272,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const heatmapMode = isAdvancedStyle ? this.config.get("scrollIndicatorHeatmap") || "None" : "None";
       const iconsValue = this.config.get("scrollIndicatorIcons");
       const showIcons = isAdvancedStyle ? iconsValue === true || iconsValue === "true" || iconsValue === void 0 : false;
+      const showAvatars = isAdvancedStyle ? this.config.get("scrollIndicatorAvatars") !== false : false;
+      const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
+      const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
       let engagementData = [];
       let maxScore = 0;
       if (isAdvancedStyle && (heatmapMode !== "None" || showIcons)) {
@@ -69203,7 +69326,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.updateViewportIndicator(indicator, total);
       if (this.scrollIndicatorZoom && isAdvancedStyle) {
-        this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, total, displayItems, displayIndices);
+        this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, total, displayItems, displayIndices);
       }
       this.updateScrollIndicatorLabels();
       const position2 = currentDisplayIndex >= 0 ? currentDisplayIndex + 1 : 0;
@@ -69336,6 +69459,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
       const isRatioed = replies > likes && likes + replies >= 10;
+      const avatarImg = $item.find('div[data-testid="userAvatarImage"] img').first();
+      const avatarUrl = avatarImg.length ? avatarImg.attr("src") : null;
       return {
         likes,
         reposts,
@@ -69350,7 +69475,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         isRepost,
         isReply,
         isSelfThread,
-        isRatioed
+        isRatioed,
+        avatarUrl
       };
     }
     /**
@@ -69479,7 +69605,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     /**
      * Update the zoom indicator showing posts around the current selection
      */
-    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, maxScore, displayTotal, displayItems, displayIndices) {
+    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, maxScore, displayTotal, displayItems, displayIndices) {
       const zoomIndicator = this.scrollIndicatorZoom;
       const zoomInner = this.scrollIndicatorZoomInner;
       if (!zoomIndicator || !zoomInner) return;
@@ -69488,21 +69614,27 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (zoomWindowSize === 0) return;
       const total = displayTotal;
       if (total <= zoomWindowSize) {
-        this.scrollIndicatorZoomContainer.hide();
+        if (this.scrollIndicatorContainer) {
+          this.scrollIndicatorContainer.hide();
+        }
         if (this.scrollIndicatorConnector) {
           this.scrollIndicatorConnector.hide();
         }
         if (this.scrollIndicatorZoomHighlight) {
           this.scrollIndicatorZoomHighlight.hide();
         }
-        return;
-      }
-      this.scrollIndicatorZoomContainer.show();
-      if (this.scrollIndicatorConnector) {
-        this.scrollIndicatorConnector.show();
-      }
-      if (this.scrollIndicatorZoomHighlight) {
-        this.scrollIndicatorZoomHighlight.show();
+        this.scrollIndicatorZoomContainer.show();
+      } else {
+        if (this.scrollIndicatorContainer) {
+          this.scrollIndicatorContainer.show();
+        }
+        this.scrollIndicatorZoomContainer.show();
+        if (this.scrollIndicatorConnector) {
+          this.scrollIndicatorConnector.show();
+        }
+        if (this.scrollIndicatorZoomHighlight) {
+          this.scrollIndicatorZoomHighlight.show();
+        }
       }
       if (total === 0) return;
       const edgeMargin = Math.max(1, Math.floor(zoomWindowSize * 0.2));
@@ -69555,7 +69687,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $segment.removeClass(
           "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
         );
-        $segment.find(".scroll-segment-icon").remove();
+        $segment.find(".scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-time").remove();
         if (!hasItem) {
           $segment.addClass("scroll-segment-empty");
           return;
@@ -69577,6 +69709,19 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const icon = this.getContentIcon(engagementData[actualIndex].engagement);
           if (icon) {
             $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+          }
+        }
+        if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
+          const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
+          const hasIcon = showIcons && engagementData[actualIndex]?.engagement;
+          const effectiveScale = hasIcon ? avatarScale * 0.45 : avatarScale;
+          $segment.append(`<img class="scroll-segment-avatar" src="${avatarUrl}" alt="" style="height: ${effectiveScale}%">`);
+        }
+        if (showTimestamps) {
+          const timestamp = this.getTimestampForItem(item);
+          if (timestamp) {
+            const relativeTime = this.formatRelativeTime(timestamp);
+            $segment.append(`<span class="scroll-segment-time">${relativeTime}</span>`);
           }
         }
       });
@@ -69721,8 +69866,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this._feedMapTooltip = $(`
         <div class="feed-map-tooltip">
           <div class="feed-map-tooltip-header">
-            <span class="feed-map-tooltip-handle"></span>
-            <span class="feed-map-tooltip-time"></span>
+            <img class="feed-map-tooltip-avatar" style="display: none;">
+            <div class="feed-map-tooltip-header-text">
+              <span class="feed-map-tooltip-handle"></span>
+              <span class="feed-map-tooltip-time"></span>
+            </div>
           </div>
           <div class="feed-map-tooltip-author"></div>
           <div class="feed-map-tooltip-content"></div>
@@ -69767,6 +69915,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const isRead = $item.hasClass("item-read");
       const relativeTime = timestamp ? this.formatRelativeTime(timestamp) : "";
       const truncatedText = postText.length > 150 ? postText.substring(0, 150).trim() + "..." : postText;
+      const avatarImg = tooltip.find(".feed-map-tooltip-avatar");
+      if (this.config.get("scrollIndicatorAvatars") !== false && engagement?.avatarUrl) {
+        avatarImg.attr("src", engagement.avatarUrl).show();
+      } else {
+        avatarImg.hide();
+      }
       tooltip.find(".feed-map-tooltip-handle").text(`@${handle2}`);
       tooltip.find(".feed-map-tooltip-time").text(relativeTime ? ` \xB7 ${relativeTime}` : "");
       tooltip.find(".feed-map-tooltip-author").text(displayName || handle2);

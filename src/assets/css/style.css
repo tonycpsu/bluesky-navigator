@@ -1710,9 +1710,9 @@ div.item-banner {
   height: calc(12px * var(--indicator-scale, 1));
 }
 
-/* Advanced style - zoom indicator is taller for detail */
+/* Advanced style - zoom indicator same height as main indicator */
 .scroll-position-indicator-zoom {
-  height: calc(24px * var(--indicator-scale, 1));
+  height: calc(12px * var(--indicator-scale, 1));
 }
 
 /* Toolbar position: place at bottom of toolbar */
@@ -1914,10 +1914,71 @@ div.item-banner {
 /* Zoom indicator segments - larger for better visibility */
 .scroll-segment-zoom {
   min-width: 20px;
+  container-type: size;
+}
+
+.scroll-segment-zoom .scroll-icon-stack {
+  flex-direction: row;
+  gap: 2px;
 }
 
 .scroll-segment-zoom .scroll-icon-stack img {
-  height: 50%;
+  height: 60%;
+  width: auto;
+}
+
+/* Avatar in zoom segments */
+.scroll-segment-avatar {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: 0.9;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+/* When avatar is present, double height for two rows */
+.scroll-position-indicator-zoom:has(.scroll-segment-avatar) {
+  height: calc(24px * var(--indicator-scale, 1));
+}
+
+/* Stack vertically: icons on top, avatar below */
+.scroll-segment-zoom:has(.scroll-segment-avatar) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-segment-icon {
+  position: static;
+  transform: none;
+  height: 45%;
+  width: auto;
+  order: -1; /* Icons appear first (top) */
+}
+
+.scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-icon-stack {
+  flex-direction: row;
+  height: 100%;
+  gap: 0;
+}
+
+.scroll-segment-zoom:has(.scroll-segment-avatar) .scroll-icon-stack img {
+  height: 100%;
+  width: auto;
+}
+
+/* Relative time in zoom segments */
+.scroll-segment-time {
+  position: absolute;
+  bottom: 1px;
+  right: 2px;
+  font-size: clamp(6px, 20cqh, 10px);
+  line-height: 1;
+  color: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }
 
 /* Empty segments (no corresponding item) */
@@ -2219,6 +2280,10 @@ div#statusBar.has-scroll-indicator {
     filter: brightness(0.5);
   }
 
+  .scroll-segment-time {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
   /* Basic mode dark: theme colors with brightness filter for read */
   .scroll-indicator-basic .scroll-segment { background-color: #4b5563; }
   .scroll-indicator-basic.scroll-indicator-theme-ocean .scroll-segment { background-color: #0e7490; } /* cyan-700 */
@@ -2337,9 +2402,25 @@ div#statusBar.has-scroll-indicator {
 }
 
 .feed-map-tooltip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
   color: #6b7280;
   margin-bottom: 2px;
+}
+
+.feed-map-tooltip-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.feed-map-tooltip-header-text {
+  display: flex;
+  flex-direction: column;
 }
 
 .feed-map-tooltip-handle {
@@ -3188,11 +3269,6 @@ div#statusBar.has-scroll-indicator {
   margin-top: 22px; /* Align with input fields that have labels */
 }
 
-.config-field-wrapper.config-field-checkbox .config-field-reset {
-  margin-top: 0; /* Checkboxes don't have separate labels */
-  align-self: center;
-}
-
 .config-field-wrapper.config-field-textarea .config-field-reset {
   margin-top: 22px;
   align-self: flex-start;
@@ -3255,31 +3331,49 @@ div#statusBar.has-scroll-indicator {
   width: 100%;
 }
 
-/* Checkbox styling */
+/* Checkbox styling - compact inline */
 .config-field-checkbox {
-  flex-direction: row;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
   cursor: pointer;
-  margin-bottom: 12px;
+  margin: 0 16px 4px 0;
+  position: relative;
 }
 
 .config-field-checkbox input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 13px;
+  height: 13px;
   margin: 0;
   cursor: pointer;
   accent-color: #3b82f6;
 }
 
 .config-checkbox-label {
-  font-size: 13px;
+  font-size: 11px;
   color: #374151;
+  white-space: nowrap;
 }
 
-.config-field-checkbox .config-field-help {
-  margin-left: auto;
-  flex-shrink: 0;
+/* Conditional wrapper should be inline for checkboxes */
+.config-field-conditional:has(.config-field-checkbox) {
+  display: inline;
+}
+
+/* Show help as tooltip on hover */
+.config-field-checkbox[data-help]:hover::after {
+  content: attr(data-help);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: #1f2937;
+  color: #fff;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 100;
+  pointer-events: none;
 }
 
 /* Color input */

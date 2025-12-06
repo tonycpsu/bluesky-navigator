@@ -164,6 +164,30 @@ const CONFIG_SCHEMA = {
         help: 'Show icons for media, replies, and reposts in feed map',
         showWhen: { scrollIndicatorStyle: 'Advanced' },
       },
+      scrollIndicatorAvatars: {
+        label: 'Show avatars',
+        type: 'checkbox',
+        default: true,
+        help: 'Show author avatars in zoom indicator segments',
+        showWhen: { scrollIndicatorStyle: 'Advanced' },
+      },
+      scrollIndicatorAvatarScale: {
+        label: 'Avatar scale',
+        type: 'range',
+        default: 100,
+        min: 25,
+        max: 100,
+        step: 5,
+        help: 'Avatar size as percentage of segment height',
+        showWhen: { scrollIndicatorAvatars: true },
+      },
+      scrollIndicatorTimestamps: {
+        label: 'Show timestamps',
+        type: 'checkbox',
+        default: true,
+        help: 'Show relative timestamps in zoom indicator segments',
+        showWhen: { scrollIndicatorStyle: 'Advanced' },
+      },
       scrollIndicatorZoom: {
         label: 'Zoom window size',
         type: 'number',
@@ -748,14 +772,10 @@ export class ConfigModal {
     switch (field.type) {
       case 'checkbox':
         inputHtml = `
-          <div class="config-field-wrapper config-field-checkbox">
-            <label class="config-field">
-              <input type="checkbox" id="${id}" name="${key}" ${value ? 'checked' : ''}>
-              <span class="config-checkbox-label">${field.label}</span>
-              ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
-            </label>
-            ${resetBtn}
-          </div>
+          <label class="config-field-checkbox"${field.help ? ` data-help="${this.escapeHtml(field.help)}"` : ''}>
+            <span class="config-checkbox-label">${field.label}</span>
+            <input type="checkbox" id="${id}" name="${key}" ${value ? 'checked' : ''}>
+          </label>
         `;
         break;
 
@@ -1399,7 +1419,10 @@ export class ConfigModal {
         break;
 
       case 'scrollIndicatorIcons':
-        // Dispatch event for handler to update indicator (value is already boolean from checkbox)
+      case 'scrollIndicatorAvatars':
+      case 'scrollIndicatorAvatarScale':
+      case 'scrollIndicatorTimestamps':
+        // Dispatch event for handler to update indicator
         document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
           detail: { setting: name, value }
         }));

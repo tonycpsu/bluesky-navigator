@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+418.951af8cf
+// @version     1.0.31+419.da189521
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -66023,6 +66023,7 @@ div#statusBar.has-scroll-indicator {
       this.loadingNew = false;
       this.enableScrollMonitor = false;
       this.hoverDebounceTimer = null;
+      this.scrollEndTimer = null;
       this.isScrolling = false;
       this.lastScrollTime = 0;
       this.HOVER_DEBOUNCE_MS = 150;
@@ -66076,6 +66077,7 @@ div#statusBar.has-scroll-indicator {
       $(this.selector).off("mouseenter");
       $(document).off("scroll", this.onScroll);
       this.cancelHoverFocus();
+      clearTimeout(this.scrollEndTimer);
       super.deactivate();
     }
     // ===========================================================================
@@ -67259,6 +67261,10 @@ div#statusBar.has-scroll-indicator {
       this.lastScrollTime = Date.now();
       this.isScrolling = true;
       this.cancelHoverFocus();
+      clearTimeout(this.scrollEndTimer);
+      this.scrollEndTimer = setTimeout(() => {
+        this.isScrolling = false;
+      }, 200);
       if (!this.enableScrollMonitor) {
         return;
       }
@@ -67272,11 +67278,6 @@ div#statusBar.has-scroll-indicator {
           }
           this.scrollTop = currentScroll;
           this.scrollTick = false;
-          setTimeout(() => {
-            if (Date.now() - this.lastScrollTime >= 100) {
-              this.isScrolling = false;
-            }
-          }, 150);
         });
         this.scrollTick = true;
       }

@@ -52,6 +52,7 @@ export class ItemHandler extends Handler {
 
     // Hover focus state
     this.hoverDebounceTimer = null;
+    this.scrollEndTimer = null;
     this.isScrolling = false;
     this.lastScrollTime = 0;
     this.HOVER_DEBOUNCE_MS = 150;
@@ -116,6 +117,7 @@ export class ItemHandler extends Handler {
     $(this.selector).off('mouseenter');
     $(document).off('scroll', this.onScroll);
     this.cancelHoverFocus();
+    clearTimeout(this.scrollEndTimer);
     super.deactivate();
   }
 
@@ -1550,6 +1552,12 @@ export class ItemHandler extends Handler {
     this.isScrolling = true;
     this.cancelHoverFocus();
 
+    // Always reset isScrolling after scroll stops (debounced)
+    clearTimeout(this.scrollEndTimer);
+    this.scrollEndTimer = setTimeout(() => {
+      this.isScrolling = false;
+    }, 200);
+
     if (!this.enableScrollMonitor) {
       return;
     }
@@ -1563,12 +1571,6 @@ export class ItemHandler extends Handler {
         }
         this.scrollTop = currentScroll;
         this.scrollTick = false;
-        // Mark scrolling as done after a brief delay
-        setTimeout(() => {
-          if (Date.now() - this.lastScrollTime >= 100) {
-            this.isScrolling = false;
-          }
-        }, 150);
       });
       this.scrollTick = true;
     }

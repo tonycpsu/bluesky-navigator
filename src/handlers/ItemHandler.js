@@ -24,16 +24,6 @@ function extractPostIdFromUrl(url) {
 }
 
 /**
- * Calculate euclidean distance between two points.
- * @param {{x: number, y: number}} p1
- * @param {{x: number, y: number}} p2
- * @returns {number}
- */
-function distance(p1, p2) {
-  return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-}
-
-/**
  * Handler for navigating and interacting with scrollable item lists.
  * Provides keyboard navigation, mouse hover selection, intersection observers,
  * sidecar rendering, and various item actions (like, repost, reply, etc.).
@@ -41,7 +31,6 @@ function distance(p1, p2) {
 export class ItemHandler extends Handler {
   POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
   THREAD_PAGE_SELECTOR = 'main > div > div > div';
-  MOUSE_MOVEMENT_THRESHOLD = 10;
 
   FLOATING_BUTTON_IMAGES = {
     prev: ['https://www.svgrepo.com/show/238452/up-arrow.svg'],
@@ -56,12 +45,16 @@ export class ItemHandler extends Handler {
 
     this.loadNewerCallback = null;
     this.debounceTimeout = null;
-    this.lastMousePosition = null;
     this.isPopupVisible = false;
-    this.ignoreMouseMovement = false;
     this.loading = false;
     this.loadingNew = false;
     this.enableScrollMonitor = false;
+
+    // Hover focus state
+    this.hoverDebounceTimer = null;
+    this.isScrolling = false;
+    this.lastScrollTime = 0;
+    this.HOVER_DEBOUNCE_MS = 150;
     this.enableIntersectionObserver = false;
     this.handlingClick = false;
     this.itemStats = {};
@@ -85,9 +78,8 @@ export class ItemHandler extends Handler {
     this.onItemAdded = this.onItemAdded.bind(this);
     this.onScroll = this.onScroll.bind(this);
     this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
-    this.onItemMouseOver = this.onItemMouseOver.bind(this);
-    this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
-    this.didMouseMove = this.didMouseMove.bind(this);
+    this.onItemMouseEnter = this.onItemMouseEnter.bind(this);
+    this.onSidecarItemMouseEnter = this.onSidecarItemMouseEnter.bind(this);
     this.getTimestampForItem = this.getTimestampForItem.bind(this);
   }
 
@@ -110,9 +102,6 @@ export class ItemHandler extends Handler {
 
     this.enableIntersectionObserver = true;
     $(document).on('scroll', this.onScroll);
-    $(document).on('scrollend', () => {
-      setTimeout(() => (this.ignoreMouseMovement = false), 500);
-    });
 
     super.activate();
   }
@@ -124,8 +113,9 @@ export class ItemHandler extends Handler {
     if (this.intersectionObserver) this.intersectionObserver.disconnect();
     this.disableFooterObserver();
 
-    $(this.selector).off('mouseover mouseleave');
+    $(this.selector).off('mouseenter');
     $(document).off('scroll', this.onScroll);
+    this.cancelHoverFocus();
     super.deactivate();
   }
 
@@ -539,7 +529,7 @@ export class ItemHandler extends Handler {
     console.log(sidecarContent);
     container.find('.sidecar-replies').replaceWith($(sidecarContent));
     container.find('.sidecar-post').each((i, post) => {
-      $(post).on('mouseover', this.onSidecarItemMouseOver);
+      $(post).on('mouseenter', this.onSidecarItemMouseEnter);
     });
 
     // Initialize collapsible sections
@@ -707,7 +697,7 @@ export class ItemHandler extends Handler {
     if (this.isPopupVisible) {
       return;
     }
-    this.ignoreMouseMovement = true;
+    this.cancelHoverFocus();
 
     // Check if page/home/end keys should be handled
     const pageKeysEnabled = this.config.get('enablePageKeys');
@@ -1555,11 +1545,14 @@ export class ItemHandler extends Handler {
   }
 
   onScroll(_event) {
+    // Track scroll time to prevent hover during/after scroll
+    this.lastScrollTime = Date.now();
+    this.isScrolling = true;
+    this.cancelHoverFocus();
+
     if (!this.enableScrollMonitor) {
-      console.log('!this.enableScrollMonitor');
       return;
     }
-    this.ignoreMouseMovement = true;
     if (!this.scrollTick) {
       requestAnimationFrame(() => {
         const currentScroll = $(window).scrollTop();
@@ -1570,6 +1563,12 @@ export class ItemHandler extends Handler {
         }
         this.scrollTop = currentScroll;
         this.scrollTick = false;
+        // Mark scrolling as done after a brief delay
+        setTimeout(() => {
+          if (Date.now() - this.lastScrollTime >= 100) {
+            this.isScrolling = false;
+          }
+        }, 150);
       });
       this.scrollTick = true;
     }
@@ -1640,39 +1639,87 @@ export class ItemHandler extends Handler {
   // Mouse Handling
   // ===========================================================================
 
-  didMouseMove(event) {
-    const currentPosition = { x: event.pageX, y: event.pageY };
-
-    if (this.lastMousePosition) {
-      const distanceMoved = distance(this.lastMousePosition, currentPosition);
-      this.lastMousePosition = currentPosition;
-      if (distanceMoved >= this.MOUSE_MOVEMENT_THRESHOLD) {
-        return true;
-      }
-    } else {
-      this.lastMousePosition = currentPosition;
+  /**
+   * Cancel any pending hover focus
+   */
+  cancelHoverFocus() {
+    if (this.hoverDebounceTimer) {
+      clearTimeout(this.hoverDebounceTimer);
+      this.hoverDebounceTimer = null;
     }
-    return false;
   }
 
-  onItemMouseOver(event) {
-    if (this.ignoreMouseMovement) return;
+  /**
+   * Check if hover focus should be allowed
+   * Returns false if scrolling recently or popup is visible
+   */
+  canHoverFocus() {
+    // Don't hover focus during scroll
+    if (this.isScrolling) return false;
+
+    // Don't hover focus shortly after scrolling
+    if (Date.now() - this.lastScrollTime < 200) return false;
+
+    // Don't hover focus if popup is visible
+    if (this.isPopupVisible) return false;
+
+    // Don't hover focus during loading
+    if (this.loading || this.loadingNew) return false;
+
+    return true;
+  }
+
+  /**
+   * Handle mouse entering a feed item - debounced focus
+   */
+  onItemMouseEnter(event) {
+    // Cancel any existing pending hover
+    this.cancelHoverFocus();
+
+    // Don't process if conditions aren't met
+    if (!this.canHoverFocus()) return;
+
     const target = $(event.target).closest(this.selector);
     const index = this.getIndexFromItem(target);
-    this.replyIndex = null;
-    if (index != this.index) {
-      this.setIndex(index);
-    }
+
+    // Don't do anything if already selected
+    if (index === this.index) return;
+
+    // Debounce the focus change
+    this.hoverDebounceTimer = setTimeout(() => {
+      // Re-check conditions at execution time
+      if (!this.canHoverFocus()) return;
+
+      this.replyIndex = null;
+      if (index !== this.index) {
+        this.setIndex(index);
+      }
+    }, this.HOVER_DEBOUNCE_MS);
   }
 
-  onSidecarItemMouseOver(event) {
-    if (this.ignoreMouseMovement) return;
+  /**
+   * Handle mouse entering a sidecar item - debounced focus
+   */
+  onSidecarItemMouseEnter(event) {
+    // Cancel any existing pending hover
+    this.cancelHoverFocus();
+
+    // Don't process if conditions aren't met
+    if (!this.canHoverFocus()) return;
+
     const target = $(event.target).closest('.sidecar-post');
     const index = this.getSidecarIndexFromItem(target);
     const parent = target.closest('.thread').find('.item');
     const parentIndex = this.getIndexFromItem(parent);
-    this.setIndex(parentIndex);
-    this.replyIndex = index;
+
+    // Debounce the focus change
+    this.hoverDebounceTimer = setTimeout(() => {
+      // Re-check conditions at execution time
+      if (!this.canHoverFocus()) return;
+
+      this.setIndex(parentIndex);
+      this.replyIndex = index;
+    }, this.HOVER_DEBOUNCE_MS);
   }
 
   // ===========================================================================
@@ -1711,15 +1758,15 @@ export class ItemHandler extends Handler {
 
   updateItems() {
     this.enableScrollMonitor = false;
-    this.ignoreMouseMovement = true;
+    this.cancelHoverFocus();
+    this.isScrolling = true;
     if (this.index == 0) {
       window.scrollTo(0, 0);
     } else if ($(this.selectedItem).length) {
       this.scrollToElement($(this.selectedItem)[0]);
     }
     setTimeout(() => {
-      console.log('enable');
-      this.ignoreMouseMovement = false;
+      this.isScrolling = false;
       this.enableScrollMonitor = true;
     }, 2000);
   }
@@ -2028,7 +2075,7 @@ export class ItemHandler extends Handler {
 
     this.applyThreadIndicatorStyles();
 
-    $(this.selector).on('mouseover', this.onItemMouseOver);
+    $(this.selector).on('mouseenter', this.onItemMouseEnter);
     $(this.selector).closest('div.thread').addClass('bsky-navigator-seen');
     $(this.selector)
       .closest('div.thread')
@@ -2065,8 +2112,6 @@ export class ItemHandler extends Handler {
     } else {
       this.hideMessage();
     }
-
-    this.ignoreMouseMovement = false;
   }
 
   applyThreadIndicatorStyles() {

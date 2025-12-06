@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+417.6b39dd37
+// @version     1.0.31+418.951af8cf
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -59535,7 +59535,7 @@ div#statusBar.has-scroll-indicator {
     var xDiff = Math.cos(radian - Math.PI / 2) * halfLineLength;
     return [lineLength, halfWidth - xDiff, halfWidth + xDiff, halfHeight - yDiff, halfHeight + yDiff];
   };
-  var distance$1 = function(a2, b) {
+  var distance = function(a2, b) {
     return Math.sqrt(a2 * a2 + b * b);
   };
   var findCorner = function(width, height, x, y, closest) {
@@ -59547,7 +59547,7 @@ div#statusBar.has-scroll-indicator {
     ];
     return corners.reduce(function(stat, corner) {
       var cx = corner[0], cy = corner[1];
-      var d = distance$1(x - cx, y - cy);
+      var d = distance(x - cx, y - cy);
       if (closest ? d < stat.optimumDistance : d > stat.optimumDistance) {
         return {
           optimumCorner: corner,
@@ -59574,11 +59574,11 @@ div#statusBar.has-scroll-indicator {
         break;
       case 2:
         if (gradient.shape === 0) {
-          rx = ry = Math.min(distance$1(x, y), distance$1(x, y - height), distance$1(x - width, y), distance$1(x - width, y - height));
+          rx = ry = Math.min(distance(x, y), distance(x, y - height), distance(x - width, y), distance(x - width, y - height));
         } else if (gradient.shape === 1) {
           var c = Math.min(Math.abs(y), Math.abs(y - height)) / Math.min(Math.abs(x), Math.abs(x - width));
           var _a = findCorner(width, height, x, y, true), cx = _a[0], cy = _a[1];
-          rx = distance$1(cx - x, (cy - y) / c);
+          rx = distance(cx - x, (cy - y) / c);
           ry = c * rx;
         }
         break;
@@ -59592,11 +59592,11 @@ div#statusBar.has-scroll-indicator {
         break;
       case 3:
         if (gradient.shape === 0) {
-          rx = ry = Math.max(distance$1(x, y), distance$1(x, y - height), distance$1(x - width, y), distance$1(x - width, y - height));
+          rx = ry = Math.max(distance(x, y), distance(x, y - height), distance(x - width, y), distance(x - width, y - height));
         } else if (gradient.shape === 1) {
           var c = Math.max(Math.abs(y), Math.abs(y - height)) / Math.max(Math.abs(x), Math.abs(x - width));
           var _b = findCorner(width, height, x, y, false), cx = _b[0], cy = _b[1];
-          rx = distance$1(cx - x, (cy - y) / c);
+          rx = distance(cx - x, (cy - y) / c);
           ry = c * rx;
         }
         break;
@@ -66004,13 +66004,9 @@ div#statusBar.has-scroll-indicator {
     const match2 = url.match(/post\/([^/]+)/);
     return match2 ? match2[1] : null;
   }
-  function distance(p1, p2) {
-    return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
-  }
   class ItemHandler extends Handler {
     POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
     THREAD_PAGE_SELECTOR = "main > div > div > div";
-    MOUSE_MOVEMENT_THRESHOLD = 10;
     FLOATING_BUTTON_IMAGES = {
       prev: ["https://www.svgrepo.com/show/238452/up-arrow.svg"],
       next: ["https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg"]
@@ -66022,12 +66018,14 @@ div#statusBar.has-scroll-indicator {
       this.initSidecarTemplates();
       this.loadNewerCallback = null;
       this.debounceTimeout = null;
-      this.lastMousePosition = null;
       this.isPopupVisible = false;
-      this.ignoreMouseMovement = false;
       this.loading = false;
       this.loadingNew = false;
       this.enableScrollMonitor = false;
+      this.hoverDebounceTimer = null;
+      this.isScrolling = false;
+      this.lastScrollTime = 0;
+      this.HOVER_DEBOUNCE_MS = 150;
       this.enableIntersectionObserver = false;
       this.handlingClick = false;
       this.itemStats = {};
@@ -66047,9 +66045,8 @@ div#statusBar.has-scroll-indicator {
       this.onItemAdded = this.onItemAdded.bind(this);
       this.onScroll = this.onScroll.bind(this);
       this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
-      this.onItemMouseOver = this.onItemMouseOver.bind(this);
-      this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
-      this.didMouseMove = this.didMouseMove.bind(this);
+      this.onItemMouseEnter = this.onItemMouseEnter.bind(this);
+      this.onSidecarItemMouseEnter = this.onSidecarItemMouseEnter.bind(this);
       this.getTimestampForItem = this.getTimestampForItem.bind(this);
     }
     isActive() {
@@ -66068,9 +66065,6 @@ div#statusBar.has-scroll-indicator {
       this.setupFloatingButtons();
       this.enableIntersectionObserver = true;
       $(document).on("scroll", this.onScroll);
-      $(document).on("scrollend", () => {
-        setTimeout(() => this.ignoreMouseMovement = false, 500);
-      });
       super.activate();
     }
     deactivate() {
@@ -66079,8 +66073,9 @@ div#statusBar.has-scroll-indicator {
       if (this.popupObserver) this.popupObserver.disconnect();
       if (this.intersectionObserver) this.intersectionObserver.disconnect();
       this.disableFooterObserver();
-      $(this.selector).off("mouseover mouseleave");
+      $(this.selector).off("mouseenter");
       $(document).off("scroll", this.onScroll);
+      this.cancelHoverFocus();
       super.deactivate();
     }
     // ===========================================================================
@@ -66425,7 +66420,7 @@ div#statusBar.has-scroll-indicator {
       console.log(sidecarContent);
       container.find(".sidecar-replies").replaceWith($(sidecarContent));
       container.find(".sidecar-post").each((i2, post2) => {
-        $(post2).on("mouseover", this.onSidecarItemMouseOver);
+        $(post2).on("mouseenter", this.onSidecarItemMouseEnter);
       });
       container.find(".sidecar-section-toggle").each((i2, toggle) => {
         $(toggle).on("click", (e2) => {
@@ -66553,7 +66548,7 @@ div#statusBar.has-scroll-indicator {
       if (this.isPopupVisible) {
         return;
       }
-      this.ignoreMouseMovement = true;
+      this.cancelHoverFocus();
       const pageKeysEnabled = this.config.get("enablePageKeys");
       ["PageDown", "PageUp", "Home", "End"].includes(event.key);
       if (this.keyState.length == 0) {
@@ -67261,11 +67256,12 @@ div#statusBar.has-scroll-indicator {
       }
     }
     onScroll(_event) {
+      this.lastScrollTime = Date.now();
+      this.isScrolling = true;
+      this.cancelHoverFocus();
       if (!this.enableScrollMonitor) {
-        console.log("!this.enableScrollMonitor");
         return;
       }
-      this.ignoreMouseMovement = true;
       if (!this.scrollTick) {
         requestAnimationFrame(() => {
           const currentScroll = $(window).scrollTop();
@@ -67276,6 +67272,11 @@ div#statusBar.has-scroll-indicator {
           }
           this.scrollTop = currentScroll;
           this.scrollTick = false;
+          setTimeout(() => {
+            if (Date.now() - this.lastScrollTime >= 100) {
+              this.isScrolling = false;
+            }
+          }, 150);
         });
         this.scrollTick = true;
       }
@@ -67334,36 +67335,58 @@ div#statusBar.has-scroll-indicator {
     // ===========================================================================
     // Mouse Handling
     // ===========================================================================
-    didMouseMove(event) {
-      const currentPosition = { x: event.pageX, y: event.pageY };
-      if (this.lastMousePosition) {
-        const distanceMoved = distance(this.lastMousePosition, currentPosition);
-        this.lastMousePosition = currentPosition;
-        if (distanceMoved >= this.MOUSE_MOVEMENT_THRESHOLD) {
-          return true;
-        }
-      } else {
-        this.lastMousePosition = currentPosition;
+    /**
+     * Cancel any pending hover focus
+     */
+    cancelHoverFocus() {
+      if (this.hoverDebounceTimer) {
+        clearTimeout(this.hoverDebounceTimer);
+        this.hoverDebounceTimer = null;
       }
-      return false;
     }
-    onItemMouseOver(event) {
-      if (this.ignoreMouseMovement) return;
+    /**
+     * Check if hover focus should be allowed
+     * Returns false if scrolling recently or popup is visible
+     */
+    canHoverFocus() {
+      if (this.isScrolling) return false;
+      if (Date.now() - this.lastScrollTime < 200) return false;
+      if (this.isPopupVisible) return false;
+      if (this.loading || this.loadingNew) return false;
+      return true;
+    }
+    /**
+     * Handle mouse entering a feed item - debounced focus
+     */
+    onItemMouseEnter(event) {
+      this.cancelHoverFocus();
+      if (!this.canHoverFocus()) return;
       const target2 = $(event.target).closest(this.selector);
       const index = this.getIndexFromItem(target2);
-      this.replyIndex = null;
-      if (index != this.index) {
-        this.setIndex(index);
-      }
+      if (index === this.index) return;
+      this.hoverDebounceTimer = setTimeout(() => {
+        if (!this.canHoverFocus()) return;
+        this.replyIndex = null;
+        if (index !== this.index) {
+          this.setIndex(index);
+        }
+      }, this.HOVER_DEBOUNCE_MS);
     }
-    onSidecarItemMouseOver(event) {
-      if (this.ignoreMouseMovement) return;
+    /**
+     * Handle mouse entering a sidecar item - debounced focus
+     */
+    onSidecarItemMouseEnter(event) {
+      this.cancelHoverFocus();
+      if (!this.canHoverFocus()) return;
       const target2 = $(event.target).closest(".sidecar-post");
       const index = this.getSidecarIndexFromItem(target2);
       const parent = target2.closest(".thread").find(".item");
       const parentIndex = this.getIndexFromItem(parent);
-      this.setIndex(parentIndex);
-      this.replyIndex = index;
+      this.hoverDebounceTimer = setTimeout(() => {
+        if (!this.canHoverFocus()) return;
+        this.setIndex(parentIndex);
+        this.replyIndex = index;
+      }, this.HOVER_DEBOUNCE_MS);
     }
     // ===========================================================================
     // Scroll & Navigation Helpers
@@ -67397,15 +67420,15 @@ div#statusBar.has-scroll-indicator {
     }
     updateItems() {
       this.enableScrollMonitor = false;
-      this.ignoreMouseMovement = true;
+      this.cancelHoverFocus();
+      this.isScrolling = true;
       if (this.index == 0) {
         window.scrollTo(0, 0);
       } else if ($(this.selectedItem).length) {
         this.scrollToElement($(this.selectedItem)[0]);
       }
       setTimeout(() => {
-        console.log("enable");
-        this.ignoreMouseMovement = false;
+        this.isScrolling = false;
         this.enableScrollMonitor = true;
       }, 2e3);
     }
@@ -67639,7 +67662,7 @@ div#statusBar.has-scroll-indicator {
         this.applyItemStyle(this.selectedItem, true);
       }
       this.applyThreadIndicatorStyles();
-      $(this.selector).on("mouseover", this.onItemMouseOver);
+      $(this.selector).on("mouseenter", this.onItemMouseEnter);
       $(this.selector).closest("div.thread").addClass("bsky-navigator-seen");
       $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
       this.refreshItems();
@@ -67669,7 +67692,6 @@ div#statusBar.has-scroll-indicator {
       } else {
         this.hideMessage();
       }
-      this.ignoreMouseMovement = false;
     }
     applyThreadIndicatorStyles() {
       $("div.r-1mhb1uw").each((i2, el) => {

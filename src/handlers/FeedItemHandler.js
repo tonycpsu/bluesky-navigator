@@ -1050,16 +1050,22 @@ export class FeedItemHandler extends ItemHandler {
       this._filterEnforcementInterval = setInterval(() => {
         // Find items without .filtered class that should be filtered
         const unfiltered = $('.item').not('.filtered');
+        let itemsFiltered = false;
         if (unfiltered.length > 0) {
           unfiltered.each((i, item) => {
             const thread = $(item).closest('.thread');
             if (!this.filterItem(item, thread)) {
               $(item).addClass('filtered');
+              itemsFiltered = true;
               if (thread.length && !this.filterThread(thread[0])) {
                 $(thread).addClass('filtered');
               }
             }
           });
+        }
+        // Update feed map if any items were filtered
+        if (itemsFiltered) {
+          this.updateScrollPosition(true);
         }
       }, 200); // Check every 200ms
     }
@@ -1437,8 +1443,9 @@ export class FeedItemHandler extends ItemHandler {
 
     this.refreshItems();
     // Use requestAnimationFrame to ensure DOM is fully rendered before updating feed map
+    // Pass forceRebuild=true to bypass loading check since filtering is a deliberate user action
     requestAnimationFrame(() => {
-      this.updateScrollPosition();
+      this.updateScrollPosition(true);
     });
     if (hideRead && $(this.selectedItem).hasClass('item-read')) {
       this.jumpToNextUnseenItem();
@@ -1547,7 +1554,7 @@ export class FeedItemHandler extends ItemHandler {
     return div.innerHTML;
   }
 
-  updateScrollPosition() {
+  updateScrollPosition(forceRebuild = false) {
     const indicator = $('#scroll-position-indicator');
     if (!indicator.length) return;
 
@@ -1575,7 +1582,11 @@ export class FeedItemHandler extends ItemHandler {
       if (!indicator.find('.scroll-indicator-empty').length) {
         indicator.append('<div class="scroll-indicator-empty">No results</div>');
       }
-      // Also hide zoom indicator
+      // Show main container (may have been hidden when fewer items than zoom window)
+      if (this.scrollIndicatorContainer) {
+        this.scrollIndicatorContainer.show();
+      }
+      // Hide zoom indicator and related elements
       if (this.scrollIndicatorZoomContainer) {
         this.scrollIndicatorZoomContainer.hide();
       }
@@ -1631,8 +1642,8 @@ export class FeedItemHandler extends ItemHandler {
     // Create or update segments
     let segments = indicator.find('.scroll-segment');
     if (segments.length !== total) {
-      // Skip rebuild while loading to prevent visual jumping
-      if (this.loading || this.loadingNew) {
+      // Skip rebuild while loading to prevent visual jumping (unless forced, e.g., by filtering)
+      if (!forceRebuild && (this.loading || this.loadingNew)) {
         return;
       }
 

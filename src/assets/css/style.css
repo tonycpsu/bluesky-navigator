@@ -1683,11 +1683,11 @@ div.item-banner {
 
 /* Empty state when no results match filter */
 .scroll-indicator-empty {
-  position: absolute;
-  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  min-height: 20px;
   font-size: 10px;
   font-weight: 500;
   color: #9ca3af;
@@ -1698,6 +1698,13 @@ div.item-banner {
     rgba(156, 163, 175, 0.15) 4px,
     rgba(156, 163, 175, 0.15) 8px
   );
+}
+
+/* Allow indicator to expand for empty state */
+.scroll-position-indicator:has(.scroll-indicator-empty) {
+  height: auto !important;
+  min-height: 20px;
+  overflow: visible;
 }
 
 /* Basic style - simple thin indicator */

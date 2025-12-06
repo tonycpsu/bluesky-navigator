@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+425.e947a51a
+// @version     1.0.31+426.cddb24a3
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47968,11 +47968,11 @@ div.item-banner {
 
 /* Empty state when no results match filter */
 .scroll-indicator-empty {
-  position: absolute;
-  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  min-height: 20px;
   font-size: 10px;
   font-weight: 500;
   color: #9ca3af;
@@ -47983,6 +47983,13 @@ div.item-banner {
     rgba(156, 163, 175, 0.15) 4px,
     rgba(156, 163, 175, 0.15) 8px
   );
+}
+
+/* Allow indicator to expand for empty state */
+.scroll-position-indicator:has(.scroll-indicator-empty) {
+  height: auto !important;
+  min-height: 20px;
+  overflow: visible;
 }
 
 /* Basic style - simple thin indicator */
@@ -68848,16 +68855,21 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.state.filter) {
         this._filterEnforcementInterval = setInterval(() => {
           const unfiltered = $(".item").not(".filtered");
+          let itemsFiltered = false;
           if (unfiltered.length > 0) {
             unfiltered.each((i2, item) => {
               const thread = $(item).closest(".thread");
               if (!this.filterItem(item, thread)) {
                 $(item).addClass("filtered");
+                itemsFiltered = true;
                 if (thread.length && !this.filterThread(thread[0])) {
                   $(thread).addClass("filtered");
                 }
               }
             });
+          }
+          if (itemsFiltered) {
+            this.updateScrollPosition(true);
           }
         }, 200);
       }
@@ -69157,7 +69169,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       this.refreshItems();
       requestAnimationFrame(() => {
-        this.updateScrollPosition();
+        this.updateScrollPosition(true);
       });
       if (hideRead && $(this.selectedItem).hasClass("item-read")) {
         this.jumpToNextUnseenItem();
@@ -69238,7 +69250,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       div.textContent = text;
       return div.innerHTML;
     }
-    updateScrollPosition() {
+    updateScrollPosition(forceRebuild = false) {
       const indicator = $("#scroll-position-indicator");
       if (!indicator.length) return;
       const allItems = $(".item").filter((i2, item) => {
@@ -69257,6 +69269,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         indicator.find(".scroll-viewport-indicator").remove();
         if (!indicator.find(".scroll-indicator-empty").length) {
           indicator.append('<div class="scroll-indicator-empty">No results</div>');
+        }
+        if (this.scrollIndicatorContainer) {
+          this.scrollIndicatorContainer.show();
         }
         if (this.scrollIndicatorZoomContainer) {
           this.scrollIndicatorZoomContainer.hide();
@@ -69299,7 +69314,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const currentDisplayIndex = displayItems.indexOf(selectedElement);
       let segments = indicator.find(".scroll-segment");
       if (segments.length !== total) {
-        if (this.loading || this.loadingNew) {
+        if (!forceRebuild && (this.loading || this.loadingNew)) {
           return;
         }
         indicator.find(".scroll-segment").remove();

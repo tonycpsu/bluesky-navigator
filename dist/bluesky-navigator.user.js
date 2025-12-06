@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+416.092c990f
+// @version     1.0.31+417.6b39dd37
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -68455,7 +68455,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             }
             const selectedElement = this.items[this.index];
             const currentDisplayIndex = displayItems.indexOf(selectedElement);
-            this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, displayItems.length, displayItems, displayIndices);
+            if (isAdvancedStyle) {
+              this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, displayItems.length, displayItems, displayIndices);
+            } else {
+              if (this.scrollIndicatorZoomContainer) this.scrollIndicatorZoomContainer.hide();
+              if (this.scrollIndicatorConnector) this.scrollIndicatorConnector.hide();
+              if (this.scrollIndicatorZoomHighlight) this.scrollIndicatorZoomHighlight.hide();
+            }
           }
         }
         this._scrollUpdatePending = false;
@@ -68979,14 +68985,28 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return;
       }
       indicator.find(".scroll-indicator-empty").remove();
-      if (this.scrollIndicatorZoomContainer) {
-        this.scrollIndicatorZoomContainer.show();
-      }
-      if (this.scrollIndicatorConnector) {
-        this.scrollIndicatorConnector.show();
-      }
-      if (this.scrollIndicatorZoomHighlight) {
-        this.scrollIndicatorZoomHighlight.show();
+      const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
+      const isAdvancedStyle = indicatorStyle === "Advanced";
+      if (isAdvancedStyle) {
+        if (this.scrollIndicatorZoomContainer) {
+          this.scrollIndicatorZoomContainer.show();
+        }
+        if (this.scrollIndicatorConnector) {
+          this.scrollIndicatorConnector.show();
+        }
+        if (this.scrollIndicatorZoomHighlight) {
+          this.scrollIndicatorZoomHighlight.show();
+        }
+      } else {
+        if (this.scrollIndicatorZoomContainer) {
+          this.scrollIndicatorZoomContainer.hide();
+        }
+        if (this.scrollIndicatorConnector) {
+          this.scrollIndicatorConnector.hide();
+        }
+        if (this.scrollIndicatorZoomHighlight) {
+          this.scrollIndicatorZoomHighlight.hide();
+        }
       }
       this._displayItems = displayItems;
       const total = displayItems.length;
@@ -69007,8 +69027,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         indicator.append('<div class="scroll-viewport-indicator"></div>');
         segments = indicator.find(".scroll-segment");
       }
-      const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
-      const isAdvancedStyle = indicatorStyle === "Advanced";
       const heatmapMode = isAdvancedStyle ? this.config.get("scrollIndicatorHeatmap") || "None" : "None";
       const iconsValue = this.config.get("scrollIndicatorIcons");
       const showIcons = isAdvancedStyle ? iconsValue === true || iconsValue === "true" || iconsValue === void 0 : false;
@@ -69062,7 +69080,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
       this.updateViewportIndicator(indicator, total);
-      if (this.scrollIndicatorZoom) {
+      if (this.scrollIndicatorZoom && isAdvancedStyle) {
         this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, total, displayItems, displayIndices);
       }
       this.updateScrollIndicatorLabels();

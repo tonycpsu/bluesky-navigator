@@ -907,7 +907,15 @@ export class FeedItemHandler extends ItemHandler {
           const selectedElement = this.items[this.index];
           const currentDisplayIndex = displayItems.indexOf(selectedElement);
 
-          this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, displayItems.length, displayItems, displayIndices);
+          // Only show zoom indicator in Advanced mode
+          if (isAdvancedStyle) {
+            this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, displayItems.length, displayItems, displayIndices);
+          } else {
+            // Hide zoom elements in Basic mode
+            if (this.scrollIndicatorZoomContainer) this.scrollIndicatorZoomContainer.hide();
+            if (this.scrollIndicatorConnector) this.scrollIndicatorConnector.hide();
+            if (this.scrollIndicatorZoomHighlight) this.scrollIndicatorZoomHighlight.hide();
+          }
         }
       }
       this._scrollUpdatePending = false;
@@ -1579,15 +1587,32 @@ export class FeedItemHandler extends ItemHandler {
     // Remove empty state message if present
     indicator.find('.scroll-indicator-empty').remove();
 
-    // Ensure zoom elements are visible (updateZoomIndicator will hide if not needed)
-    if (this.scrollIndicatorZoomContainer) {
-      this.scrollIndicatorZoomContainer.show();
-    }
-    if (this.scrollIndicatorConnector) {
-      this.scrollIndicatorConnector.show();
-    }
-    if (this.scrollIndicatorZoomHighlight) {
-      this.scrollIndicatorZoomHighlight.show();
+    // Get style setting early to determine if zoom should be shown
+    const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
+    const isAdvancedStyle = indicatorStyle === 'Advanced';
+
+    // Only show zoom elements in Advanced mode (updateZoomIndicator will hide if not needed)
+    if (isAdvancedStyle) {
+      if (this.scrollIndicatorZoomContainer) {
+        this.scrollIndicatorZoomContainer.show();
+      }
+      if (this.scrollIndicatorConnector) {
+        this.scrollIndicatorConnector.show();
+      }
+      if (this.scrollIndicatorZoomHighlight) {
+        this.scrollIndicatorZoomHighlight.show();
+      }
+    } else {
+      // Hide zoom elements in Basic mode
+      if (this.scrollIndicatorZoomContainer) {
+        this.scrollIndicatorZoomContainer.hide();
+      }
+      if (this.scrollIndicatorConnector) {
+        this.scrollIndicatorConnector.hide();
+      }
+      if (this.scrollIndicatorZoomHighlight) {
+        this.scrollIndicatorZoomHighlight.hide();
+      }
     }
 
     // Store display items for click handler (actual DOM elements)
@@ -1623,9 +1648,7 @@ export class FeedItemHandler extends ItemHandler {
       segments = indicator.find('.scroll-segment');
     }
 
-    // Get style and heatmap settings
-    const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
-    const isAdvancedStyle = indicatorStyle === 'Advanced';
+    // Get heatmap settings (style already determined above)
     const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
     const iconsValue = this.config.get('scrollIndicatorIcons');
     const showIcons = isAdvancedStyle ? (iconsValue === true || iconsValue === 'true' || iconsValue === undefined) : false;
@@ -1703,8 +1726,8 @@ export class FeedItemHandler extends ItemHandler {
     // Update viewport indicator position
     this.updateViewportIndicator(indicator, total);
 
-    // Update zoom indicator if present (uses display items count for proper windowing)
-    if (this.scrollIndicatorZoom) {
+    // Update zoom indicator if present and in Advanced mode
+    if (this.scrollIndicatorZoom && isAdvancedStyle) {
       this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, maxScore, total, displayItems, displayIndices);
     }
 

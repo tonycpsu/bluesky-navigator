@@ -54,7 +54,8 @@ export class ItemHandler extends Handler {
     this.hoverDebounceTimer = null;
     this.scrollEndTimer = null;
     this.isScrolling = false;
-    this.lastScrollTime = 0;
+    this.lastMouseX = 0;
+    this.lastMouseY = 0;
     this.HOVER_DEBOUNCE_MS = 150;
     this.enableIntersectionObserver = false;
     this.handlingClick = false;
@@ -81,6 +82,7 @@ export class ItemHandler extends Handler {
     this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
     this.onItemMouseEnter = this.onItemMouseEnter.bind(this);
     this.onSidecarItemMouseEnter = this.onSidecarItemMouseEnter.bind(this);
+    this.onMouseMove = this.onMouseMove.bind(this);
     this.getTimestampForItem = this.getTimestampForItem.bind(this);
   }
 
@@ -103,6 +105,7 @@ export class ItemHandler extends Handler {
 
     this.enableIntersectionObserver = true;
     $(document).on('scroll', this.onScroll);
+    $(document).on('mousemove', this.onMouseMove);
 
     super.activate();
   }
@@ -116,6 +119,7 @@ export class ItemHandler extends Handler {
 
     $(this.selector).off('mouseenter');
     $(document).off('scroll', this.onScroll);
+    $(document).off('mousemove', this.onMouseMove);
     this.cancelHoverFocus();
     clearTimeout(this.scrollEndTimer);
     super.deactivate();
@@ -1547,8 +1551,7 @@ export class ItemHandler extends Handler {
   }
 
   onScroll(_event) {
-    // Track scroll time to prevent hover during/after scroll
-    this.lastScrollTime = Date.now();
+    // Prevent hover during scroll
     this.isScrolling = true;
     this.cancelHoverFocus();
 
@@ -1556,6 +1559,8 @@ export class ItemHandler extends Handler {
     clearTimeout(this.scrollEndTimer);
     this.scrollEndTimer = setTimeout(() => {
       this.isScrolling = false;
+      // Check if mouse is over an item and trigger hover focus
+      this.checkHoverAfterScroll();
     }, 200);
 
     if (!this.enableScrollMonitor) {
@@ -1653,14 +1658,11 @@ export class ItemHandler extends Handler {
 
   /**
    * Check if hover focus should be allowed
-   * Returns false if scrolling recently or popup is visible
+   * Returns false if scrolling or popup is visible
    */
   canHoverFocus() {
     // Don't hover focus during scroll
     if (this.isScrolling) return false;
-
-    // Don't hover focus shortly after scrolling
-    if (Date.now() - this.lastScrollTime < 200) return false;
 
     // Don't hover focus if popup is visible
     if (this.isPopupVisible) return false;
@@ -1722,6 +1724,39 @@ export class ItemHandler extends Handler {
       this.setIndex(parentIndex);
       this.replyIndex = index;
     }, this.HOVER_DEBOUNCE_MS);
+  }
+
+  /**
+   * Track mouse position for scroll-end hover detection
+   */
+  onMouseMove(event) {
+    this.lastMouseX = event.clientX;
+    this.lastMouseY = event.clientY;
+  }
+
+  /**
+   * Check if mouse is over an item after scrolling stops and focus it
+   */
+  checkHoverAfterScroll() {
+    // Don't check if conditions aren't met
+    if (this.isPopupVisible || this.loading || this.loadingNew) return;
+
+    // Find element under cursor
+    const element = document.elementFromPoint(this.lastMouseX, this.lastMouseY);
+    if (!element) return;
+
+    // Check if it's an item or inside an item
+    const item = $(element).closest(this.selector);
+    if (item.length === 0) return;
+
+    const index = this.getIndexFromItem(item);
+
+    // Don't do anything if already selected
+    if (index === this.index) return;
+
+    // Focus the item (no debounce needed since we already waited)
+    this.replyIndex = null;
+    this.setIndex(index);
   }
 
   // ===========================================================================

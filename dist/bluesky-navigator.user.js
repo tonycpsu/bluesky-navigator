@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+419.da189521
+// @version     1.0.31+420.582a4fde
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -66025,7 +66025,8 @@ div#statusBar.has-scroll-indicator {
       this.hoverDebounceTimer = null;
       this.scrollEndTimer = null;
       this.isScrolling = false;
-      this.lastScrollTime = 0;
+      this.lastMouseX = 0;
+      this.lastMouseY = 0;
       this.HOVER_DEBOUNCE_MS = 150;
       this.enableIntersectionObserver = false;
       this.handlingClick = false;
@@ -66048,6 +66049,7 @@ div#statusBar.has-scroll-indicator {
       this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
       this.onItemMouseEnter = this.onItemMouseEnter.bind(this);
       this.onSidecarItemMouseEnter = this.onSidecarItemMouseEnter.bind(this);
+      this.onMouseMove = this.onMouseMove.bind(this);
       this.getTimestampForItem = this.getTimestampForItem.bind(this);
     }
     isActive() {
@@ -66066,6 +66068,7 @@ div#statusBar.has-scroll-indicator {
       this.setupFloatingButtons();
       this.enableIntersectionObserver = true;
       $(document).on("scroll", this.onScroll);
+      $(document).on("mousemove", this.onMouseMove);
       super.activate();
     }
     deactivate() {
@@ -66076,6 +66079,7 @@ div#statusBar.has-scroll-indicator {
       this.disableFooterObserver();
       $(this.selector).off("mouseenter");
       $(document).off("scroll", this.onScroll);
+      $(document).off("mousemove", this.onMouseMove);
       this.cancelHoverFocus();
       clearTimeout(this.scrollEndTimer);
       super.deactivate();
@@ -67258,12 +67262,12 @@ div#statusBar.has-scroll-indicator {
       }
     }
     onScroll(_event) {
-      this.lastScrollTime = Date.now();
       this.isScrolling = true;
       this.cancelHoverFocus();
       clearTimeout(this.scrollEndTimer);
       this.scrollEndTimer = setTimeout(() => {
         this.isScrolling = false;
+        this.checkHoverAfterScroll();
       }, 200);
       if (!this.enableScrollMonitor) {
         return;
@@ -67347,11 +67351,10 @@ div#statusBar.has-scroll-indicator {
     }
     /**
      * Check if hover focus should be allowed
-     * Returns false if scrolling recently or popup is visible
+     * Returns false if scrolling or popup is visible
      */
     canHoverFocus() {
       if (this.isScrolling) return false;
-      if (Date.now() - this.lastScrollTime < 200) return false;
       if (this.isPopupVisible) return false;
       if (this.loading || this.loadingNew) return false;
       return true;
@@ -67388,6 +67391,27 @@ div#statusBar.has-scroll-indicator {
         this.setIndex(parentIndex);
         this.replyIndex = index;
       }, this.HOVER_DEBOUNCE_MS);
+    }
+    /**
+     * Track mouse position for scroll-end hover detection
+     */
+    onMouseMove(event) {
+      this.lastMouseX = event.clientX;
+      this.lastMouseY = event.clientY;
+    }
+    /**
+     * Check if mouse is over an item after scrolling stops and focus it
+     */
+    checkHoverAfterScroll() {
+      if (this.isPopupVisible || this.loading || this.loadingNew) return;
+      const element = document.elementFromPoint(this.lastMouseX, this.lastMouseY);
+      if (!element) return;
+      const item = $(element).closest(this.selector);
+      if (item.length === 0) return;
+      const index = this.getIndexFromItem(item);
+      if (index === this.index) return;
+      this.replyIndex = null;
+      this.setIndex(index);
     }
     // ===========================================================================
     // Scroll & Navigation Helpers

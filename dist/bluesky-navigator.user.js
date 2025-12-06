@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+420.582a4fde
+// @version     1.0.31+421.737e8eb1
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -66019,15 +66019,10 @@ div#statusBar.has-scroll-indicator {
       this.loadNewerCallback = null;
       this.debounceTimeout = null;
       this.isPopupVisible = false;
+      this.ignoreMouseMovement = false;
       this.loading = false;
       this.loadingNew = false;
       this.enableScrollMonitor = false;
-      this.hoverDebounceTimer = null;
-      this.scrollEndTimer = null;
-      this.isScrolling = false;
-      this.lastMouseX = 0;
-      this.lastMouseY = 0;
-      this.HOVER_DEBOUNCE_MS = 150;
       this.enableIntersectionObserver = false;
       this.handlingClick = false;
       this.itemStats = {};
@@ -66036,6 +66031,8 @@ div#statusBar.has-scroll-indicator {
       this.scrollTop = 0;
       this.scrollDirection = 0;
       this.selfThreadCache = {};
+      this.hoverDebounceTimeout = null;
+      this.hoverDebounceDelay = 100;
       if (this.state.mobileView && this.config.get("enableSwipeGestures")) {
         this.gestureHandler = new GestureHandler(this.config, this);
         this.bottomSheet = new BottomSheet(this.config, this);
@@ -66047,9 +66044,8 @@ div#statusBar.has-scroll-indicator {
       this.onItemAdded = this.onItemAdded.bind(this);
       this.onScroll = this.onScroll.bind(this);
       this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
-      this.onItemMouseEnter = this.onItemMouseEnter.bind(this);
-      this.onSidecarItemMouseEnter = this.onSidecarItemMouseEnter.bind(this);
-      this.onMouseMove = this.onMouseMove.bind(this);
+      this.onItemMouseOver = this.onItemMouseOver.bind(this);
+      this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
       this.getTimestampForItem = this.getTimestampForItem.bind(this);
     }
     isActive() {
@@ -66066,9 +66062,12 @@ div#statusBar.has-scroll-indicator {
       this.setupItemObserver();
       this.setupLoadNewerObserver();
       this.setupFloatingButtons();
+      this.enableScrollMonitor = true;
       this.enableIntersectionObserver = true;
       $(document).on("scroll", this.onScroll);
-      $(document).on("mousemove", this.onMouseMove);
+      $(document).on("scrollend", () => {
+        setTimeout(() => this.ignoreMouseMovement = false, 500);
+      });
       super.activate();
     }
     deactivate() {
@@ -66077,11 +66076,10 @@ div#statusBar.has-scroll-indicator {
       if (this.popupObserver) this.popupObserver.disconnect();
       if (this.intersectionObserver) this.intersectionObserver.disconnect();
       this.disableFooterObserver();
-      $(this.selector).off("mouseenter");
+      if (this.hoverDebounceTimeout) clearTimeout(this.hoverDebounceTimeout);
+      if (this.intersectionDebounceTimeout) clearTimeout(this.intersectionDebounceTimeout);
+      $(this.selector).off("mouseover mouseleave");
       $(document).off("scroll", this.onScroll);
-      $(document).off("mousemove", this.onMouseMove);
-      this.cancelHoverFocus();
-      clearTimeout(this.scrollEndTimer);
       super.deactivate();
     }
     // ===========================================================================
@@ -66193,10 +66191,9 @@ div#statusBar.has-scroll-indicator {
     get selectedPost() {
       return this.getPostForThreadIndex(this.threadIndex);
     }
-    setIndex(index, mark, update) {
+    setIndex(index, mark, update, skipSidecar = false) {
       const oldIndex = this.index;
       if (index == oldIndex) {
-        console.log("unnecessary setIndex");
         return;
       }
       if (oldIndex != null) {
@@ -66210,7 +66207,9 @@ div#statusBar.has-scroll-indicator {
       this.applyItemStyle(this.items[oldIndex], false);
       this.index = index;
       this.applyItemStyle(this.selectedItem, true);
-      this.expandItem(this.selectedItem);
+      if (!skipSidecar) {
+        this.expandItem(this.selectedItem);
+      }
       $(this.selectedItem).find("video").each((_i, video2) => {
         const playbackMode = this.config.get("videoPreviewPlayback");
         if (playbackMode === "Pause all") {
@@ -66231,7 +66230,7 @@ div#statusBar.has-scroll-indicator {
       return true;
     }
     getIndexFromItem(item) {
-      return $(".item").filter(":visible").index(item);
+      return $(this.items).index(item);
     }
     getSidecarIndexFromItem(item) {
       return $(item).closest(".thread").find(".sidecar-post").filter(":visible").index(item);
@@ -66426,7 +66425,7 @@ div#statusBar.has-scroll-indicator {
       console.log(sidecarContent);
       container.find(".sidecar-replies").replaceWith($(sidecarContent));
       container.find(".sidecar-post").each((i2, post2) => {
-        $(post2).on("mouseenter", this.onSidecarItemMouseEnter);
+        $(post2).on("mouseover", this.onSidecarItemMouseOver);
       });
       container.find(".sidecar-section-toggle").each((i2, toggle) => {
         $(toggle).on("click", (e2) => {
@@ -66554,7 +66553,7 @@ div#statusBar.has-scroll-indicator {
       if (this.isPopupVisible) {
         return;
       }
-      this.cancelHoverFocus();
+      this.ignoreMouseMovement = true;
       const pageKeysEnabled = this.config.get("enablePageKeys");
       ["PageDown", "PageUp", "Home", "End"].includes(event.key);
       if (this.keyState.length == 0) {
@@ -67137,6 +67136,14 @@ div#statusBar.has-scroll-indicator {
         threshold: Array.from({ length: 101 }, (_, i2) => i2 / 100)
       });
     }
+    setupIntersectionObserver() {
+      if (this.intersectionObserver) {
+        console.log("[bsky-nav] setupIntersectionObserver: observing", $(this.items).length, "items");
+        $(this.items).each((i2, item) => {
+          this.intersectionObserver.observe($(item)[0]);
+        });
+      }
+    }
     setupItemObserver() {
       const safeSelector = `${this.selector}:not(.thread ${this.selector})`;
       this.observer = waitForElement$2(safeSelector, (element) => {
@@ -67224,13 +67231,6 @@ div#statusBar.has-scroll-indicator {
         }
       );
     }
-    setupIntersectionObserver(_entries) {
-      if (this.intersectionObserver) {
-        $(this.items).each((i2, item) => {
-          this.intersectionObserver.observe($(item)[0]);
-        });
-      }
-    }
     enableFooterObserver() {
       if (this.config.get("disableLoadMoreOnScroll")) return;
       if (!this.state.feedSortReverse && this.items.length > 0) {
@@ -67247,8 +67247,8 @@ div#statusBar.has-scroll-indicator {
     // ===========================================================================
     onItemAdded(element) {
       this.applyItemStyle(element);
-      clearTimeout(this.debounceTimeout);
-      this.debounceTimeout = setTimeout(() => this.loadItems(), 500);
+      clearTimeout(this.loadItemsDebounceTimeout);
+      this.loadItemsDebounceTimeout = setTimeout(() => this.loadItems(), 500);
       if (this.gestureHandler) {
         this.gestureHandler.init(element);
       }
@@ -67256,22 +67256,16 @@ div#statusBar.has-scroll-indicator {
         this.bottomSheet.init(element);
       }
     }
-    onItemRemoved(element) {
-      if (this.intersectionObserver) {
-        this.intersectionObserver.disconnect(element);
-      }
+    onItemRemoved(_element) {
     }
+    /**
+     * Handle scroll events - track direction and set ignoreMouseMovement
+     */
     onScroll(_event) {
-      this.isScrolling = true;
-      this.cancelHoverFocus();
-      clearTimeout(this.scrollEndTimer);
-      this.scrollEndTimer = setTimeout(() => {
-        this.isScrolling = false;
-        this.checkHoverAfterScroll();
-      }, 200);
       if (!this.enableScrollMonitor) {
         return;
       }
+      this.ignoreMouseMovement = true;
       if (!this.scrollTick) {
         requestAnimationFrame(() => {
           const currentScroll = $(window).scrollTop();
@@ -67286,17 +67280,13 @@ div#statusBar.has-scroll-indicator {
         this.scrollTick = true;
       }
     }
-    onPopupAdd() {
-      this.isPopupVisible = true;
-    }
-    onPopupRemove() {
-      this.isPopupVisible = false;
-    }
+    /**
+     * Handle intersection observer events - track visible items and focus best target
+     */
     onIntersection(entries) {
       if (!this.enableIntersectionObserver || this.loading || this.loadingNew) {
         return;
       }
-      let target2 = null;
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
           this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
@@ -67305,29 +67295,108 @@ div#statusBar.has-scroll-indicator {
           const oldLength = this.visibleItems.length;
           this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
           if (this.visibleItems.length < oldLength) {
-            console.log("removed", entry.target);
             if (this.config.get("markReadOnScroll")) {
-              const index2 = this.getIndexFromItem(entry.target);
-              this.markItemRead(index2, true);
+              const index = this.getIndexFromItem(entry.target);
+              this.markItemRead(index, true);
             }
           }
         }
       });
-      const visibleItems = this.visibleItems.sort(
-        (a2, b) => this.scrollDirection == 1 ? b.target.getBoundingClientRect().top - a2.target.getBoundingClientRect().top : a2.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
-      );
-      if (!visibleItems.length) return;
-      for (const [_i, item] of visibleItems.entries()) {
-        if (item.intersectionRatio == 1) {
-          target2 = item.target;
-          break;
+      if (!this.visibleItems.length) return;
+      if (this.intersectionDebounceTimeout) {
+        clearTimeout(this.intersectionDebounceTimeout);
+      }
+      this.intersectionDebounceTimeout = setTimeout(() => {
+        this.selectBestVisibleItem();
+      }, 50);
+    }
+    /**
+     * Select the best visible item based on scroll direction
+     * Scrolling down: select item closest to bottom where bottom is visible
+     * Scrolling up: select item closest to top where top is visible
+     */
+    selectBestVisibleItem() {
+      const toolbarHeight = this.getToolbarHeight();
+      const statusBarHeight = this.getStatusBarHeight();
+      const viewportTop = toolbarHeight;
+      const viewportBottom = window.innerHeight - statusBarHeight;
+      const visibleInViewport = [];
+      $(this.items).each((arrayIndex, item) => {
+        if ($(item).parents(this.selector).length > 0) return;
+        const rect = item.getBoundingClientRect();
+        if (rect.height > 0 && rect.bottom > viewportTop && rect.top < viewportBottom) {
+          visibleInViewport.push({ item, rect, arrayIndex });
+        }
+      });
+      if (!visibleInViewport.length) return;
+      let newIndex = -1;
+      if (this.scrollDirection === -1) {
+        let bestBottom = -Infinity;
+        for (const v of visibleInViewport) {
+          if (v.rect.bottom <= viewportBottom && v.rect.bottom > bestBottom) {
+            bestBottom = v.rect.bottom;
+            newIndex = v.arrayIndex;
+          }
+        }
+        if (newIndex < 0) {
+          let closestDist = Infinity;
+          for (const v of visibleInViewport) {
+            const dist2 = Math.abs(v.rect.bottom - viewportBottom);
+            if (dist2 < closestDist) {
+              closestDist = dist2;
+              newIndex = v.arrayIndex;
+            }
+          }
+        }
+      } else {
+        let bestTop = Infinity;
+        for (const v of visibleInViewport) {
+          if (v.rect.top >= viewportTop && v.rect.top < bestTop) {
+            bestTop = v.rect.top;
+            newIndex = v.arrayIndex;
+          }
+        }
+        if (newIndex < 0) {
+          let closestDist = Infinity;
+          for (const v of visibleInViewport) {
+            const dist2 = Math.abs(v.rect.top - viewportTop);
+            if (dist2 < closestDist) {
+              closestDist = dist2;
+              newIndex = v.arrayIndex;
+            }
+          }
         }
       }
-      if (target2 == null) {
-        target2 = this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
+      if (newIndex >= 0 && newIndex !== this.index) {
+        this.setIndex(newIndex, false, false, true);
       }
-      const index = this.getIndexFromItem(target2);
-      this.setIndex(index);
+    }
+    /**
+     * Get the height of the toolbar at the top (fixed position, not scroll-dependent)
+     */
+    getToolbarHeight() {
+      const toolbar = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
+      if (toolbar.length) {
+        const rect = toolbar[0].getBoundingClientRect();
+        return rect.bottom || 60;
+      }
+      return 60;
+    }
+    /**
+     * Get the height of the status bar at the bottom
+     */
+    getStatusBarHeight() {
+      const statusBar = $("#scroll-indicator-container");
+      if (statusBar.length && statusBar.is(":visible")) {
+        return statusBar.outerHeight() || 0;
+      }
+      return 0;
+    }
+    onPopupAdd() {
+      this.isPopupVisible = true;
+    }
+    onPopupRemove() {
+      this.isPopupVisible = false;
     }
     onFooterIntersection(entries) {
       entries.forEach((entry) => {
@@ -67341,87 +67410,55 @@ div#statusBar.has-scroll-indicator {
     // Mouse Handling
     // ===========================================================================
     /**
-     * Cancel any pending hover focus
+     * Debounced mouse over handler for items - only focus when not scrolling
      */
-    cancelHoverFocus() {
-      if (this.hoverDebounceTimer) {
-        clearTimeout(this.hoverDebounceTimer);
-        this.hoverDebounceTimer = null;
-      }
-    }
-    /**
-     * Check if hover focus should be allowed
-     * Returns false if scrolling or popup is visible
-     */
-    canHoverFocus() {
-      if (this.isScrolling) return false;
-      if (this.isPopupVisible) return false;
-      if (this.loading || this.loadingNew) return false;
-      return true;
-    }
-    /**
-     * Handle mouse entering a feed item - debounced focus
-     */
-    onItemMouseEnter(event) {
-      this.cancelHoverFocus();
-      if (!this.canHoverFocus()) return;
+    onItemMouseOver(event) {
+      if (this.ignoreMouseMovement) return;
       const target2 = $(event.target).closest(this.selector);
       const index = this.getIndexFromItem(target2);
-      if (index === this.index) return;
-      this.hoverDebounceTimer = setTimeout(() => {
-        if (!this.canHoverFocus()) return;
+      if (this.hoverDebounceTimeout) {
+        clearTimeout(this.hoverDebounceTimeout);
+      }
+      this.hoverDebounceTimeout = setTimeout(() => {
+        if (this.ignoreMouseMovement) return;
         this.replyIndex = null;
-        if (index !== this.index) {
-          this.setIndex(index);
+        if (index !== this.index && index >= 0) {
+          this.setIndex(index, false, false, false);
         }
-      }, this.HOVER_DEBOUNCE_MS);
+      }, this.hoverDebounceDelay);
     }
     /**
-     * Handle mouse entering a sidecar item - debounced focus
+     * Debounced mouse over handler for sidecar items
      */
-    onSidecarItemMouseEnter(event) {
-      this.cancelHoverFocus();
-      if (!this.canHoverFocus()) return;
+    onSidecarItemMouseOver(event) {
+      if (this.ignoreMouseMovement) return;
       const target2 = $(event.target).closest(".sidecar-post");
       const index = this.getSidecarIndexFromItem(target2);
       const parent = target2.closest(".thread").find(".item");
       const parentIndex = this.getIndexFromItem(parent);
-      this.hoverDebounceTimer = setTimeout(() => {
-        if (!this.canHoverFocus()) return;
-        this.setIndex(parentIndex);
+      if (this.hoverDebounceTimeout) {
+        clearTimeout(this.hoverDebounceTimeout);
+      }
+      this.hoverDebounceTimeout = setTimeout(() => {
+        if (this.ignoreMouseMovement) return;
+        if (parentIndex !== this.index && parentIndex >= 0) {
+          this.setIndex(parentIndex, false, false, false);
+        }
         this.replyIndex = index;
-      }, this.HOVER_DEBOUNCE_MS);
-    }
-    /**
-     * Track mouse position for scroll-end hover detection
-     */
-    onMouseMove(event) {
-      this.lastMouseX = event.clientX;
-      this.lastMouseY = event.clientY;
-    }
-    /**
-     * Check if mouse is over an item after scrolling stops and focus it
-     */
-    checkHoverAfterScroll() {
-      if (this.isPopupVisible || this.loading || this.loadingNew) return;
-      const element = document.elementFromPoint(this.lastMouseX, this.lastMouseY);
-      if (!element) return;
-      const item = $(element).closest(this.selector);
-      if (item.length === 0) return;
-      const index = this.getIndexFromItem(item);
-      if (index === this.index) return;
-      this.replyIndex = null;
-      this.setIndex(index);
+      }, this.hoverDebounceDelay);
     }
     // ===========================================================================
     // Scroll & Navigation Helpers
     // ===========================================================================
     scrollToElement(target2, block2 = null) {
-      this.enableIntersectionObserver = false;
+      this.ignoreMouseMovement = true;
       target2.scrollIntoView({
         behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
         block: block2 == null ? "start" : block2
       });
+      setTimeout(() => {
+        this.ignoreMouseMovement = false;
+      }, 500);
     }
     get scrollMargin() {
       let margin;
@@ -67444,18 +67481,15 @@ div#statusBar.has-scroll-indicator {
       return margin + itemMargin;
     }
     updateItems() {
-      this.enableScrollMonitor = false;
-      this.cancelHoverFocus();
-      this.isScrolling = true;
+      this.ignoreMouseMovement = true;
       if (this.index == 0) {
         window.scrollTo(0, 0);
       } else if ($(this.selectedItem).length) {
         this.scrollToElement($(this.selectedItem)[0]);
       }
       setTimeout(() => {
-        this.isScrolling = false;
-        this.enableScrollMonitor = true;
-      }, 2e3);
+        this.ignoreMouseMovement = false;
+      }, 500);
     }
     handleNewThreadPage(_element) {
       console.log(this.items.length);
@@ -67666,6 +67700,8 @@ div#statusBar.has-scroll-indicator {
       this.items = $(this.selector).filter(":visible").filter((i2, item) => {
         return $(item).parents(this.selector).length === 0;
       });
+      this.visibleItems = [];
+      this.setupIntersectionObserver();
       this.itemStats.oldest = this.itemStats.newest = null;
       $(this.selector).filter(":visible").each((i2, item) => {
         const timestamp = this.getTimestampForItem(item);
@@ -67681,13 +67717,12 @@ div#statusBar.has-scroll-indicator {
           }
         }
       });
-      this.setupIntersectionObserver();
       this.enableFooterObserver();
       if (this.index != null) {
         this.applyItemStyle(this.selectedItem, true);
       }
       this.applyThreadIndicatorStyles();
-      $(this.selector).on("mouseenter", this.onItemMouseEnter);
+      $(this.selector).on("mouseover", this.onItemMouseOver);
       $(this.selector).closest("div.thread").addClass("bsky-navigator-seen");
       $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
       this.refreshItems();
@@ -67698,6 +67733,7 @@ div#statusBar.has-scroll-indicator {
         this.jumpToPost(focusedPostId);
       } else if (!this.jumpToPost(this.postId)) {
         this.setIndex(0);
+        this.expandItem(this.selectedItem);
       }
       this.updateInfoIndicator();
       this.enableFooterObserver();
@@ -67717,6 +67753,7 @@ div#statusBar.has-scroll-indicator {
       } else {
         this.hideMessage();
       }
+      this.ignoreMouseMovement = false;
     }
     applyThreadIndicatorStyles() {
       $("div.r-1mhb1uw").each((i2, el) => {

@@ -46,17 +46,10 @@ export class ItemHandler extends Handler {
     this.loadNewerCallback = null;
     this.debounceTimeout = null;
     this.isPopupVisible = false;
+    this.ignoreMouseMovement = false;
     this.loading = false;
     this.loadingNew = false;
     this.enableScrollMonitor = false;
-
-    // Hover focus state
-    this.hoverDebounceTimer = null;
-    this.scrollEndTimer = null;
-    this.isScrolling = false;
-    this.lastMouseX = 0;
-    this.lastMouseY = 0;
-    this.HOVER_DEBOUNCE_MS = 150;
     this.enableIntersectionObserver = false;
     this.handlingClick = false;
     this.itemStats = {};
@@ -65,6 +58,10 @@ export class ItemHandler extends Handler {
     this.scrollTop = 0;
     this.scrollDirection = 0;
     this.selfThreadCache = {}; // Cache for API-detected self-threads (postId -> true)
+
+    // Hover debounce for mouse focus
+    this.hoverDebounceTimeout = null;
+    this.hoverDebounceDelay = 100; // ms
 
     // Initialize gesture handler and bottom sheet for mobile
     if (this.state.mobileView && this.config.get('enableSwipeGestures')) {
@@ -80,9 +77,8 @@ export class ItemHandler extends Handler {
     this.onItemAdded = this.onItemAdded.bind(this);
     this.onScroll = this.onScroll.bind(this);
     this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
-    this.onItemMouseEnter = this.onItemMouseEnter.bind(this);
-    this.onSidecarItemMouseEnter = this.onSidecarItemMouseEnter.bind(this);
-    this.onMouseMove = this.onMouseMove.bind(this);
+    this.onItemMouseOver = this.onItemMouseOver.bind(this);
+    this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
     this.getTimestampForItem = this.getTimestampForItem.bind(this);
   }
 
@@ -103,9 +99,12 @@ export class ItemHandler extends Handler {
     this.setupLoadNewerObserver();
     this.setupFloatingButtons();
 
+    this.enableScrollMonitor = true;
     this.enableIntersectionObserver = true;
     $(document).on('scroll', this.onScroll);
-    $(document).on('mousemove', this.onMouseMove);
+    $(document).on('scrollend', () => {
+      setTimeout(() => (this.ignoreMouseMovement = false), 500);
+    });
 
     super.activate();
   }
@@ -117,11 +116,11 @@ export class ItemHandler extends Handler {
     if (this.intersectionObserver) this.intersectionObserver.disconnect();
     this.disableFooterObserver();
 
-    $(this.selector).off('mouseenter');
+    if (this.hoverDebounceTimeout) clearTimeout(this.hoverDebounceTimeout);
+    if (this.intersectionDebounceTimeout) clearTimeout(this.intersectionDebounceTimeout);
+
+    $(this.selector).off('mouseover mouseleave');
     $(document).off('scroll', this.onScroll);
-    $(document).off('mousemove', this.onMouseMove);
-    this.cancelHoverFocus();
-    clearTimeout(this.scrollEndTimer);
     super.deactivate();
   }
 
@@ -253,10 +252,9 @@ export class ItemHandler extends Handler {
     return this.getPostForThreadIndex(this.threadIndex);
   }
 
-  setIndex(index, mark, update) {
+  setIndex(index, mark, update, skipSidecar = false) {
     const oldIndex = this.index;
     if (index == oldIndex) {
-      console.log('unnecessary setIndex');
       return;
     }
     if (oldIndex != null) {
@@ -271,7 +269,9 @@ export class ItemHandler extends Handler {
     this.index = index;
     this.applyItemStyle(this.selectedItem, true);
 
-    this.expandItem(this.selectedItem);
+    if (!skipSidecar) {
+      this.expandItem(this.selectedItem);
+    }
 
     $(this.selectedItem)
       .find('video')
@@ -298,7 +298,7 @@ export class ItemHandler extends Handler {
   }
 
   getIndexFromItem(item) {
-    return $('.item').filter(':visible').index(item);
+    return $(this.items).index(item);
   }
 
   getSidecarIndexFromItem(item) {
@@ -535,7 +535,7 @@ export class ItemHandler extends Handler {
     console.log(sidecarContent);
     container.find('.sidecar-replies').replaceWith($(sidecarContent));
     container.find('.sidecar-post').each((i, post) => {
-      $(post).on('mouseenter', this.onSidecarItemMouseEnter);
+      $(post).on('mouseover', this.onSidecarItemMouseOver);
     });
 
     // Initialize collapsible sections
@@ -703,7 +703,8 @@ export class ItemHandler extends Handler {
     if (this.isPopupVisible) {
       return;
     }
-    this.cancelHoverFocus();
+    // Temporarily suppress mouse hover during keyboard navigation
+    this.ignoreMouseMovement = true;
 
     // Check if page/home/end keys should be handled
     const pageKeysEnabled = this.config.get('enablePageKeys');
@@ -1405,6 +1406,15 @@ export class ItemHandler extends Handler {
     });
   }
 
+  setupIntersectionObserver() {
+    if (this.intersectionObserver) {
+      console.log('[bsky-nav] setupIntersectionObserver: observing', $(this.items).length, 'items');
+      $(this.items).each((i, item) => {
+        this.intersectionObserver.observe($(item)[0]);
+      });
+    }
+  }
+
   setupItemObserver() {
     const safeSelector = `${this.selector}:not(.thread ${this.selector})`;
     this.observer = waitForElement(safeSelector, (element) => {
@@ -1505,14 +1515,6 @@ export class ItemHandler extends Handler {
     );
   }
 
-  setupIntersectionObserver(_entries) {
-    if (this.intersectionObserver) {
-      $(this.items).each((i, item) => {
-        this.intersectionObserver.observe($(item)[0]);
-      });
-    }
-  }
-
   enableFooterObserver() {
     if (this.config.get('disableLoadMoreOnScroll')) return;
     if (!this.state.feedSortReverse && this.items.length > 0) {
@@ -1532,8 +1534,8 @@ export class ItemHandler extends Handler {
 
   onItemAdded(element) {
     this.applyItemStyle(element);
-    clearTimeout(this.debounceTimeout);
-    this.debounceTimeout = setTimeout(() => this.loadItems(), 500);
+    clearTimeout(this.loadItemsDebounceTimeout);
+    this.loadItemsDebounceTimeout = setTimeout(() => this.loadItems(), 500);
 
     // Initialize swipe gestures and long press on mobile
     if (this.gestureHandler) {
@@ -1544,28 +1546,18 @@ export class ItemHandler extends Handler {
     }
   }
 
-  onItemRemoved(element) {
-    if (this.intersectionObserver) {
-      this.intersectionObserver.disconnect(element);
-    }
+  onItemRemoved(_element) {
+    // No-op - footer observer handles its own cleanup
   }
 
+  /**
+   * Handle scroll events - track direction and set ignoreMouseMovement
+   */
   onScroll(_event) {
-    // Prevent hover during scroll
-    this.isScrolling = true;
-    this.cancelHoverFocus();
-
-    // Always reset isScrolling after scroll stops (debounced)
-    clearTimeout(this.scrollEndTimer);
-    this.scrollEndTimer = setTimeout(() => {
-      this.isScrolling = false;
-      // Check if mouse is over an item and trigger hover focus
-      this.checkHoverAfterScroll();
-    }, 200);
-
     if (!this.enableScrollMonitor) {
       return;
     }
+    this.ignoreMouseMovement = true;
     if (!this.scrollTick) {
       requestAnimationFrame(() => {
         const currentScroll = $(window).scrollTop();
@@ -1581,20 +1573,15 @@ export class ItemHandler extends Handler {
     }
   }
 
-  onPopupAdd() {
-    this.isPopupVisible = true;
-  }
-
-  onPopupRemove() {
-    this.isPopupVisible = false;
-  }
-
+  /**
+   * Handle intersection observer events - track visible items and focus best target
+   */
   onIntersection(entries) {
     if (!this.enableIntersectionObserver || this.loading || this.loadingNew) {
       return;
     }
-    let target = null;
 
+    // Update visible items tracking
     entries.forEach((entry) => {
       if (entry.isIntersecting) {
         this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
@@ -1603,7 +1590,6 @@ export class ItemHandler extends Handler {
         const oldLength = this.visibleItems.length;
         this.visibleItems = this.visibleItems.filter((item) => item.target != entry.target);
         if (this.visibleItems.length < oldLength) {
-          console.log('removed', entry.target);
           if (this.config.get('markReadOnScroll')) {
             const index = this.getIndexFromItem(entry.target);
             this.markItemRead(index, true);
@@ -1612,25 +1598,126 @@ export class ItemHandler extends Handler {
       }
     });
 
-    const visibleItems = this.visibleItems.sort((a, b) =>
-      this.scrollDirection == 1
-        ? b.target.getBoundingClientRect().top - a.target.getBoundingClientRect().top
-        : a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top
-    );
-    if (!visibleItems.length) return;
+    if (!this.visibleItems.length) return;
 
-    for (const [_i, item] of visibleItems.entries()) {
-      if (item.intersectionRatio == 1) {
-        target = item.target;
-        break;
+    // Debounce selection changes to prevent blinking
+    if (this.intersectionDebounceTimeout) {
+      clearTimeout(this.intersectionDebounceTimeout);
+    }
+
+    this.intersectionDebounceTimeout = setTimeout(() => {
+      this.selectBestVisibleItem();
+    }, 50);
+  }
+
+  /**
+   * Select the best visible item based on scroll direction
+   * Scrolling down: select item closest to bottom where bottom is visible
+   * Scrolling up: select item closest to top where top is visible
+   */
+  selectBestVisibleItem() {
+    // Get viewport bounds accounting for toolbar and status bar
+    const toolbarHeight = this.getToolbarHeight();
+    const statusBarHeight = this.getStatusBarHeight();
+    const viewportTop = toolbarHeight;
+    const viewportBottom = window.innerHeight - statusBarHeight;
+
+    // Query visible items and their viewport positions
+    const visibleInViewport = [];
+    $(this.items).each((arrayIndex, item) => {
+      // Skip embedded posts (posts inside another post)
+      if ($(item).parents(this.selector).length > 0) return;
+
+      const rect = item.getBoundingClientRect();
+      if (rect.height > 0 && rect.bottom > viewportTop && rect.top < viewportBottom) {
+        visibleInViewport.push({ item, rect, arrayIndex });
+      }
+    });
+
+    if (!visibleInViewport.length) return;
+
+    let newIndex = -1;
+
+    if (this.scrollDirection === -1) {
+      // Scrolling DOWN: find item closest to bottom where bottom is visible
+      let bestBottom = -Infinity;
+      for (const v of visibleInViewport) {
+        // Item's bottom must be within viewport
+        if (v.rect.bottom <= viewportBottom && v.rect.bottom > bestBottom) {
+          bestBottom = v.rect.bottom;
+          newIndex = v.arrayIndex;
+        }
+      }
+      // Fallback: if no item has bottom in viewport, pick the one closest to viewport bottom
+      if (newIndex < 0) {
+        let closestDist = Infinity;
+        for (const v of visibleInViewport) {
+          const dist = Math.abs(v.rect.bottom - viewportBottom);
+          if (dist < closestDist) {
+            closestDist = dist;
+            newIndex = v.arrayIndex;
+          }
+        }
+      }
+    } else {
+      // Scrolling UP: find item closest to top where top is visible
+      let bestTop = Infinity;
+      for (const v of visibleInViewport) {
+        // Item's top must be within viewport
+        if (v.rect.top >= viewportTop && v.rect.top < bestTop) {
+          bestTop = v.rect.top;
+          newIndex = v.arrayIndex;
+        }
+      }
+      // Fallback: if no item has top in viewport, pick the one closest to viewport top
+      if (newIndex < 0) {
+        let closestDist = Infinity;
+        for (const v of visibleInViewport) {
+          const dist = Math.abs(v.rect.top - viewportTop);
+          if (dist < closestDist) {
+            closestDist = dist;
+            newIndex = v.arrayIndex;
+          }
+        }
       }
     }
-    if (target == null) {
-      target =
-        this.scrollDirection == -1 ? visibleItems[0].target : visibleItems.slice(-1)[0].target;
+
+    if (newIndex >= 0 && newIndex !== this.index) {
+      // Use setIndex with update=false to avoid scrolling, skipSidecar=true
+      this.setIndex(newIndex, false, false, true);
     }
-    const index = this.getIndexFromItem(target);
-    this.setIndex(index);
+  }
+
+  /**
+   * Get the height of the toolbar at the top (fixed position, not scroll-dependent)
+   */
+  getToolbarHeight() {
+    const toolbar = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
+    if (toolbar.length) {
+      // Use getBoundingClientRect for screen position, not offset() which includes scroll
+      const rect = toolbar[0].getBoundingClientRect();
+      return rect.bottom || 60;
+    }
+    return 60;
+  }
+
+  /**
+   * Get the height of the status bar at the bottom
+   */
+  getStatusBarHeight() {
+    const statusBar = $('#scroll-indicator-container');
+    if (statusBar.length && statusBar.is(':visible')) {
+      return statusBar.outerHeight() || 0;
+    }
+    return 0;
+  }
+
+  onPopupAdd() {
+    this.isPopupVisible = true;
+  }
+
+  onPopupRemove() {
+    this.isPopupVisible = false;
   }
 
   onFooterIntersection(entries) {
@@ -1647,116 +1734,60 @@ export class ItemHandler extends Handler {
   // ===========================================================================
 
   /**
-   * Cancel any pending hover focus
+   * Debounced mouse over handler for items - only focus when not scrolling
    */
-  cancelHoverFocus() {
-    if (this.hoverDebounceTimer) {
-      clearTimeout(this.hoverDebounceTimer);
-      this.hoverDebounceTimer = null;
-    }
-  }
-
-  /**
-   * Check if hover focus should be allowed
-   * Returns false if scrolling or popup is visible
-   */
-  canHoverFocus() {
-    // Don't hover focus during scroll
-    if (this.isScrolling) return false;
-
-    // Don't hover focus if popup is visible
-    if (this.isPopupVisible) return false;
-
-    // Don't hover focus during loading
-    if (this.loading || this.loadingNew) return false;
-
-    return true;
-  }
-
-  /**
-   * Handle mouse entering a feed item - debounced focus
-   */
-  onItemMouseEnter(event) {
-    // Cancel any existing pending hover
-    this.cancelHoverFocus();
-
-    // Don't process if conditions aren't met
-    if (!this.canHoverFocus()) return;
+  onItemMouseOver(event) {
+    // Ignore mouse events while scrolling
+    if (this.ignoreMouseMovement) return;
 
     const target = $(event.target).closest(this.selector);
     const index = this.getIndexFromItem(target);
 
-    // Don't do anything if already selected
-    if (index === this.index) return;
+    // Clear any pending debounce
+    if (this.hoverDebounceTimeout) {
+      clearTimeout(this.hoverDebounceTimeout);
+    }
 
     // Debounce the focus change
-    this.hoverDebounceTimer = setTimeout(() => {
-      // Re-check conditions at execution time
-      if (!this.canHoverFocus()) return;
+    this.hoverDebounceTimeout = setTimeout(() => {
+      // Double-check we're still not scrolling
+      if (this.ignoreMouseMovement) return;
 
       this.replyIndex = null;
-      if (index !== this.index) {
-        this.setIndex(index);
+      if (index !== this.index && index >= 0) {
+        // Hover opens sidecar (unlike scroll which skips it)
+        this.setIndex(index, false, false, false);
       }
-    }, this.HOVER_DEBOUNCE_MS);
+    }, this.hoverDebounceDelay);
   }
 
   /**
-   * Handle mouse entering a sidecar item - debounced focus
+   * Debounced mouse over handler for sidecar items
    */
-  onSidecarItemMouseEnter(event) {
-    // Cancel any existing pending hover
-    this.cancelHoverFocus();
-
-    // Don't process if conditions aren't met
-    if (!this.canHoverFocus()) return;
+  onSidecarItemMouseOver(event) {
+    // Ignore mouse events while scrolling
+    if (this.ignoreMouseMovement) return;
 
     const target = $(event.target).closest('.sidecar-post');
     const index = this.getSidecarIndexFromItem(target);
     const parent = target.closest('.thread').find('.item');
     const parentIndex = this.getIndexFromItem(parent);
 
+    // Clear any pending debounce
+    if (this.hoverDebounceTimeout) {
+      clearTimeout(this.hoverDebounceTimeout);
+    }
+
     // Debounce the focus change
-    this.hoverDebounceTimer = setTimeout(() => {
-      // Re-check conditions at execution time
-      if (!this.canHoverFocus()) return;
+    this.hoverDebounceTimeout = setTimeout(() => {
+      if (this.ignoreMouseMovement) return;
 
-      this.setIndex(parentIndex);
+      if (parentIndex !== this.index && parentIndex >= 0) {
+        // Hover opens sidecar (unlike scroll which skips it)
+        this.setIndex(parentIndex, false, false, false);
+      }
       this.replyIndex = index;
-    }, this.HOVER_DEBOUNCE_MS);
-  }
-
-  /**
-   * Track mouse position for scroll-end hover detection
-   */
-  onMouseMove(event) {
-    this.lastMouseX = event.clientX;
-    this.lastMouseY = event.clientY;
-  }
-
-  /**
-   * Check if mouse is over an item after scrolling stops and focus it
-   */
-  checkHoverAfterScroll() {
-    // Don't check if conditions aren't met
-    if (this.isPopupVisible || this.loading || this.loadingNew) return;
-
-    // Find element under cursor
-    const element = document.elementFromPoint(this.lastMouseX, this.lastMouseY);
-    if (!element) return;
-
-    // Check if it's an item or inside an item
-    const item = $(element).closest(this.selector);
-    if (item.length === 0) return;
-
-    const index = this.getIndexFromItem(item);
-
-    // Don't do anything if already selected
-    if (index === this.index) return;
-
-    // Focus the item (no debounce needed since we already waited)
-    this.replyIndex = null;
-    this.setIndex(index);
+    }, this.hoverDebounceDelay);
   }
 
   // ===========================================================================
@@ -1764,11 +1795,16 @@ export class ItemHandler extends Handler {
   // ===========================================================================
 
   scrollToElement(target, block = null) {
-    this.enableIntersectionObserver = false;
+    // Temporarily suppress focus changes during programmatic scroll
+    this.ignoreMouseMovement = true;
     target.scrollIntoView({
       behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
       block: block == null ? 'start' : block,
     });
+    // Reset after scroll completes
+    setTimeout(() => {
+      this.ignoreMouseMovement = false;
+    }, 500);
   }
 
   get scrollMargin() {
@@ -1794,18 +1830,16 @@ export class ItemHandler extends Handler {
   }
 
   updateItems() {
-    this.enableScrollMonitor = false;
-    this.cancelHoverFocus();
-    this.isScrolling = true;
+    // Temporarily suppress focus changes during programmatic scroll
+    this.ignoreMouseMovement = true;
     if (this.index == 0) {
       window.scrollTo(0, 0);
     } else if ($(this.selectedItem).length) {
       this.scrollToElement($(this.selectedItem)[0]);
     }
     setTimeout(() => {
-      this.isScrolling = false;
-      this.enableScrollMonitor = true;
-    }, 2000);
+      this.ignoreMouseMovement = false;
+    }, 500);
   }
 
   handleNewThreadPage(_element) {
@@ -2076,6 +2110,10 @@ export class ItemHandler extends Handler {
       return $(item).parents(this.selector).length === 0;
     });
 
+    // Re-setup intersection observer for the new items
+    this.visibleItems = [];
+    this.setupIntersectionObserver();
+
     this.itemStats.oldest = this.itemStats.newest = null;
     $(this.selector)
       .filter(':visible')
@@ -2103,7 +2141,6 @@ export class ItemHandler extends Handler {
         }
       });
 
-    this.setupIntersectionObserver();
     this.enableFooterObserver();
 
     if (this.index != null) {
@@ -2112,7 +2149,7 @@ export class ItemHandler extends Handler {
 
     this.applyThreadIndicatorStyles();
 
-    $(this.selector).on('mouseenter', this.onItemMouseEnter);
+    $(this.selector).on('mouseover', this.onItemMouseOver);
     $(this.selector).closest('div.thread').addClass('bsky-navigator-seen');
     $(this.selector)
       .closest('div.thread')
@@ -2128,6 +2165,8 @@ export class ItemHandler extends Handler {
       this.jumpToPost(focusedPostId);
     } else if (!this.jumpToPost(this.postId)) {
       this.setIndex(0);
+      // Ensure sidecar opens on initial load
+      this.expandItem(this.selectedItem);
     }
 
     this.updateInfoIndicator();
@@ -2149,6 +2188,9 @@ export class ItemHandler extends Handler {
     } else {
       this.hideMessage();
     }
+
+    // Re-enable mouse focus after loading
+    this.ignoreMouseMovement = false;
   }
 
   applyThreadIndicatorStyles() {

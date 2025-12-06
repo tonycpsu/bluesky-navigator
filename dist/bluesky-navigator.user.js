@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+421.737e8eb1
+// @version     1.0.31+422.a625864a
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44869,6 +44869,25 @@ if (cid) {
           type: "checkbox",
           default: true,
           help: "Use PgUp/PgDn/Home/End for post navigation"
+        },
+        scrollToFocus: {
+          label: "Scroll to focus",
+          type: "checkbox",
+          default: true,
+          help: "Focus posts when scrolling through the feed"
+        },
+        hoverToFocus: {
+          label: "Hover to focus",
+          type: "checkbox",
+          default: true,
+          help: "Focus posts when hovering with the mouse"
+        },
+        hoverToFocusSidecar: {
+          label: "Hover to focus (sidecar)",
+          type: "checkbox",
+          default: true,
+          help: "Focus sidecar items when hovering with the mouse",
+          showWhen: { hoverToFocus: true }
         }
       }
     },
@@ -45902,7 +45921,7 @@ if (cid) {
       const conditionalFields = this.modalEl.querySelectorAll(`[data-show-when-key="${changedKey}"]`);
       conditionalFields.forEach((field) => {
         const requiredValue = field.dataset.showWhenValue;
-        const shouldShow = newValue === requiredValue;
+        const shouldShow = String(newValue) === requiredValue;
         field.classList.toggle("hidden", !shouldShow);
       });
     }
@@ -66033,6 +66052,7 @@ div#statusBar.has-scroll-indicator {
       this.selfThreadCache = {};
       this.hoverDebounceTimeout = null;
       this.hoverDebounceDelay = 100;
+      this.userInitiatedScroll = false;
       if (this.state.mobileView && this.config.get("enableSwipeGestures")) {
         this.gestureHandler = new GestureHandler(this.config, this);
         this.bottomSheet = new BottomSheet(this.config, this);
@@ -66047,6 +66067,7 @@ div#statusBar.has-scroll-indicator {
       this.onItemMouseOver = this.onItemMouseOver.bind(this);
       this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
       this.getTimestampForItem = this.getTimestampForItem.bind(this);
+      this.onWheel = this.onWheel.bind(this);
     }
     isActive() {
       return false;
@@ -66065,8 +66086,12 @@ div#statusBar.has-scroll-indicator {
       this.enableScrollMonitor = true;
       this.enableIntersectionObserver = true;
       $(document).on("scroll", this.onScroll);
+      $(document).on("wheel", this.onWheel);
       $(document).on("scrollend", () => {
-        setTimeout(() => this.ignoreMouseMovement = false, 500);
+        setTimeout(() => {
+          this.ignoreMouseMovement = false;
+          this.userInitiatedScroll = false;
+        }, 500);
       });
       super.activate();
     }
@@ -66080,6 +66105,7 @@ div#statusBar.has-scroll-indicator {
       if (this.intersectionDebounceTimeout) clearTimeout(this.intersectionDebounceTimeout);
       $(this.selector).off("mouseover mouseleave");
       $(document).off("scroll", this.onScroll);
+      $(document).off("wheel", this.onWheel);
       super.deactivate();
     }
     // ===========================================================================
@@ -67259,6 +67285,12 @@ div#statusBar.has-scroll-indicator {
     onItemRemoved(_element) {
     }
     /**
+     * Handle wheel events - mark scroll as user-initiated
+     */
+    onWheel(_event) {
+      this.userInitiatedScroll = true;
+    }
+    /**
      * Handle scroll events - track direction and set ignoreMouseMovement
      */
     onScroll(_event) {
@@ -67316,6 +67348,8 @@ div#statusBar.has-scroll-indicator {
      * Scrolling up: select item closest to top where top is visible
      */
     selectBestVisibleItem() {
+      if (!this.config.get("scrollToFocus")) return;
+      if (!this.userInitiatedScroll) return;
       const toolbarHeight = this.getToolbarHeight();
       const statusBarHeight = this.getStatusBarHeight();
       const viewportTop = toolbarHeight;
@@ -67413,6 +67447,7 @@ div#statusBar.has-scroll-indicator {
      * Debounced mouse over handler for items - only focus when not scrolling
      */
     onItemMouseOver(event) {
+      if (!this.config.get("hoverToFocus")) return;
       if (this.ignoreMouseMovement) return;
       const target2 = $(event.target).closest(this.selector);
       const index = this.getIndexFromItem(target2);
@@ -67424,6 +67459,8 @@ div#statusBar.has-scroll-indicator {
         this.replyIndex = null;
         if (index !== this.index && index >= 0) {
           this.setIndex(index, false, false, false);
+        } else if (index === this.index && index >= 0) {
+          this.expandItem(this.selectedItem);
         }
       }, this.hoverDebounceDelay);
     }
@@ -67431,6 +67468,7 @@ div#statusBar.has-scroll-indicator {
      * Debounced mouse over handler for sidecar items
      */
     onSidecarItemMouseOver(event) {
+      if (!this.config.get("hoverToFocus") || !this.config.get("hoverToFocusSidecar")) return;
       if (this.ignoreMouseMovement) return;
       const target2 = $(event.target).closest(".sidecar-post");
       const index = this.getSidecarIndexFromItem(target2);

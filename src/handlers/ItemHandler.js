@@ -63,6 +63,9 @@ export class ItemHandler extends Handler {
     this.hoverDebounceTimeout = null;
     this.hoverDebounceDelay = 100; // ms
 
+    // Track user-initiated scrolling (mouse wheel/touchpad)
+    this.userInitiatedScroll = false;
+
     // Initialize gesture handler and bottom sheet for mobile
     if (this.state.mobileView && this.config.get('enableSwipeGestures')) {
       this.gestureHandler = new GestureHandler(this.config, this);
@@ -80,6 +83,7 @@ export class ItemHandler extends Handler {
     this.onItemMouseOver = this.onItemMouseOver.bind(this);
     this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
     this.getTimestampForItem = this.getTimestampForItem.bind(this);
+    this.onWheel = this.onWheel.bind(this);
   }
 
   isActive() {
@@ -102,8 +106,12 @@ export class ItemHandler extends Handler {
     this.enableScrollMonitor = true;
     this.enableIntersectionObserver = true;
     $(document).on('scroll', this.onScroll);
+    $(document).on('wheel', this.onWheel);
     $(document).on('scrollend', () => {
-      setTimeout(() => (this.ignoreMouseMovement = false), 500);
+      setTimeout(() => {
+        this.ignoreMouseMovement = false;
+        this.userInitiatedScroll = false;
+      }, 500);
     });
 
     super.activate();
@@ -121,6 +129,7 @@ export class ItemHandler extends Handler {
 
     $(this.selector).off('mouseover mouseleave');
     $(document).off('scroll', this.onScroll);
+    $(document).off('wheel', this.onWheel);
     super.deactivate();
   }
 
@@ -1551,6 +1560,13 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Handle wheel events - mark scroll as user-initiated
+   */
+  onWheel(_event) {
+    this.userInitiatedScroll = true;
+  }
+
+  /**
    * Handle scroll events - track direction and set ignoreMouseMovement
    */
   onScroll(_event) {
@@ -1616,6 +1632,12 @@ export class ItemHandler extends Handler {
    * Scrolling up: select item closest to top where top is visible
    */
   selectBestVisibleItem() {
+    // Check if scroll-to-focus is enabled
+    if (!this.config.get('scrollToFocus')) return;
+
+    // Only activate on user-initiated scrolls (mouse wheel/touchpad), not programmatic
+    if (!this.userInitiatedScroll) return;
+
     // Get viewport bounds accounting for toolbar and status bar
     const toolbarHeight = this.getToolbarHeight();
     const statusBarHeight = this.getStatusBarHeight();
@@ -1737,6 +1759,9 @@ export class ItemHandler extends Handler {
    * Debounced mouse over handler for items - only focus when not scrolling
    */
   onItemMouseOver(event) {
+    // Check if hover-to-focus is enabled
+    if (!this.config.get('hoverToFocus')) return;
+
     // Ignore mouse events while scrolling
     if (this.ignoreMouseMovement) return;
 
@@ -1757,6 +1782,9 @@ export class ItemHandler extends Handler {
       if (index !== this.index && index >= 0) {
         // Hover opens sidecar (unlike scroll which skips it)
         this.setIndex(index, false, false, false);
+      } else if (index === this.index && index >= 0) {
+        // Hovering over already-selected item (e.g., focused via scroll) - ensure sidecar is open
+        this.expandItem(this.selectedItem);
       }
     }, this.hoverDebounceDelay);
   }
@@ -1765,6 +1793,9 @@ export class ItemHandler extends Handler {
    * Debounced mouse over handler for sidecar items
    */
   onSidecarItemMouseOver(event) {
+    // Check if hover-to-focus is enabled (parent setting and sidecar-specific)
+    if (!this.config.get('hoverToFocus') || !this.config.get('hoverToFocusSidecar')) return;
+
     // Ignore mouse events while scrolling
     if (this.ignoreMouseMovement) return;
 

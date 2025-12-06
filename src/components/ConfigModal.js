@@ -88,6 +88,25 @@ const CONFIG_SCHEMA = {
         default: true,
         help: 'Use PgUp/PgDn/Home/End for post navigation',
       },
+      scrollToFocus: {
+        label: 'Scroll to focus',
+        type: 'checkbox',
+        default: true,
+        help: 'Focus posts when scrolling through the feed',
+      },
+      hoverToFocus: {
+        label: 'Hover to focus',
+        type: 'checkbox',
+        default: true,
+        help: 'Focus posts when hovering with the mouse',
+      },
+      hoverToFocusSidecar: {
+        label: 'Hover to focus (sidecar)',
+        type: 'checkbox',
+        default: true,
+        help: 'Focus sidecar items when hovering with the mouse',
+        showWhen: { hoverToFocus: true },
+      },
     },
   },
   'Feed Map': {
@@ -1270,7 +1289,8 @@ export class ConfigModal {
     const conditionalFields = this.modalEl.querySelectorAll(`[data-show-when-key="${changedKey}"]`);
     conditionalFields.forEach((field) => {
       const requiredValue = field.dataset.showWhenValue;
-      const shouldShow = newValue === requiredValue;
+      // Convert newValue to string for comparison (dataset values are always strings)
+      const shouldShow = String(newValue) === requiredValue;
       field.classList.toggle('hidden', !shouldShow);
     });
   }

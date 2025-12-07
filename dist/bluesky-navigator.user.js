@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+428.2e8e1666
+// @version     1.0.31+429.b4a40fa8
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46705,6 +46705,17 @@ div.loading-indicator-forward {
     display: none !important;
 }
 
+/* Hide parent containers of filtered items to remove leftover borders */
+div:has(> .item.filtered),
+div:has(> div > .item.filtered) {
+    display: none !important;
+}
+
+/* But don't hide thread containers that have some visible items */
+.thread:has(.item:not(.filtered)) {
+    display: block !important;
+}
+
 /* .filter-preview-hidden removed - now using actual hiding instead of gray preview */
 
 #messageContainer {
@@ -48529,13 +48540,13 @@ div#statusBar.has-scroll-indicator {
 }
 
 .scroll-indicator-label {
-  font-size: 11px;
+  font-size: 10px;
   color: #6b7280;
   white-space: nowrap;
-  padding: 0 6px;
+  padding: 0 4px;
   flex-shrink: 0;
-  width: 85px;
-  min-width: 85px;
+  width: 60px;
+  min-width: 60px;
 }
 
 /* Basic style - hide date labels, zoom highlight, zoom indicator, and connector */
@@ -67983,17 +67994,18 @@ div#statusBar.has-scroll-indicator {
       $(this.items).css("opacity", "100%");
     }
     updateInfoIndicator() {
-      const allItems = $(".item").filter((i2, item) => $(item).parents(".item").length === 0);
-      const filteredItems = allItems.filter(".filtered");
-      const visibleItems = allItems.not(".filtered");
+      const allItems = this.items;
+      const visibleItems = $(allItems).not(".filtered");
+      const filteredItems = $(allItems).filter(".filtered");
       this.itemStats.unreadCount = visibleItems.filter(".item-unread").length;
       this.itemStats.filteredCount = filteredItems.length;
       this.itemStats.shownCount = visibleItems.length;
       const visibleIndex = visibleItems.index(this.selectedItem);
       const index = this.itemStats.shownCount ? visibleIndex + 1 : 0;
+      const filterStats = this.itemStats.filteredCount > 0 ? `<strong>${this.itemStats.filteredCount}</strong> filtered, ` : "";
       $("div#infoIndicatorText").html(`
 <div id="itemCountStats">
-<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
+<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong> (${filterStats}<strong>${this.itemStats.unreadCount}</strong> new)
 </div>
 <div id="itemTimestampStats">
 ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa")} - ${format(this.itemStats.newest, "yyyy-MM-dd hh:mmaaa")}</div>` : ``}`);
@@ -69193,9 +69205,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         });
       });
       this.refreshItems();
-      requestAnimationFrame(() => {
-        this.updateScrollPosition(true);
-      });
+      this.updateInfoIndicator();
       if (hideRead && $(this.selectedItem).hasClass("item-read")) {
         this.jumpToNextUnseenItem();
       }

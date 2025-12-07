@@ -2255,10 +2255,10 @@ export class ItemHandler extends Handler {
   }
 
   updateInfoIndicator() {
-    // Query ALL items including filtered ones (this.items excludes filtered due to :visible)
-    const allItems = $('.item').filter((i, item) => $(item).parents('.item').length === 0);
-    const filteredItems = allItems.filter('.filtered');
-    const visibleItems = allItems.not('.filtered');
+    // Use this.items but filter out items with .filtered class
+    const allItems = this.items;
+    const visibleItems = $(allItems).not('.filtered');
+    const filteredItems = $(allItems).filter('.filtered');
 
     this.itemStats.unreadCount = visibleItems.filter('.item-unread').length;
     this.itemStats.filteredCount = filteredItems.length;
@@ -2267,9 +2267,12 @@ export class ItemHandler extends Handler {
     // Find current index within visible items only
     const visibleIndex = visibleItems.index(this.selectedItem);
     const index = this.itemStats.shownCount ? visibleIndex + 1 : 0;
+
+    // Build stats string - only show filtered count if there are filtered items
+    const filterStats = this.itemStats.filteredCount > 0 ? `<strong>${this.itemStats.filteredCount}</strong> filtered, ` : '';
     $('div#infoIndicatorText').html(`
 <div id="itemCountStats">
-<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong> (<strong>${this.itemStats.filteredCount}</strong> filtered, <strong>${this.itemStats.unreadCount}</strong> new)
+<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong> (${filterStats}<strong>${this.itemStats.unreadCount}</strong> new)
 </div>
 <div id="itemTimestampStats">
 ${

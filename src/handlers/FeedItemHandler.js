@@ -1476,11 +1476,8 @@ export class FeedItemHandler extends ItemHandler {
     });
 
     this.refreshItems();
-    // Use requestAnimationFrame to ensure DOM is fully rendered before updating feed map
-    // Pass forceRebuild=true to bypass loading check since filtering is a deliberate user action
-    requestAnimationFrame(() => {
-      this.updateScrollPosition(true);
-    });
+    // Update info indicator to reflect filtered counts
+    this.updateInfoIndicator();
     if (hideRead && $(this.selectedItem).hasClass('item-read')) {
       this.jumpToNextUnseenItem();
     }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+442.86b606fc
+// @version     1.0.31+443.2b2c1cbb
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69576,8 +69576,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               engagementData = allItems.map((item) => {
                 const engagement = this.getPostEngagement(item);
                 const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
-                if (score > maxScore) maxScore = score;
                 return { engagement, score };
+              });
+              displayItems.forEach((item, i2) => {
+                const actualIndex = displayIndices[i2];
+                if (engagementData[actualIndex]?.score > maxScore) {
+                  maxScore = engagementData[actualIndex].score;
+                }
               });
             }
             const selectedElement = this.items[this.index];
@@ -70229,8 +70234,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         engagementData = allItems.map((item) => {
           const engagement = this.getPostEngagement(item);
           const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
-          if (score > maxScore) maxScore = score;
           return { engagement, score };
+        });
+        displayItems.forEach((item, i2) => {
+          const actualIndex = displayIndices[i2];
+          if (engagementData[actualIndex]?.score > maxScore) {
+            maxScore = engagementData[actualIndex].score;
+          }
         });
       }
       segments.each((i2, segment) => {

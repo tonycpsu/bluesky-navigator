@@ -950,8 +950,14 @@ export class FeedItemHandler extends ItemHandler {
             engagementData = allItems.map((item) => {
               const engagement = this.getPostEngagement(item);
               const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
-              if (score > maxScore) maxScore = score;
               return { engagement, score };
+            });
+            // Calculate maxScore only from displayed items (excludes unrolled thread duplicates)
+            displayItems.forEach((item, i) => {
+              const actualIndex = displayIndices[i];
+              if (engagementData[actualIndex]?.score > maxScore) {
+                maxScore = engagementData[actualIndex].score;
+              }
             });
           }
 
@@ -1787,8 +1793,15 @@ export class FeedItemHandler extends ItemHandler {
       engagementData = allItems.map((item) => {
         const engagement = this.getPostEngagement(item);
         const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
-        if (score > maxScore) maxScore = score;
         return { engagement, score };
+      });
+      // Calculate maxScore only from displayed items (excludes unrolled thread duplicates)
+      // This prevents heatmap colors from shifting when viewing unrolled threads
+      displayItems.forEach((item, i) => {
+        const actualIndex = displayIndices[i];
+        if (engagementData[actualIndex]?.score > maxScore) {
+          maxScore = engagementData[actualIndex].score;
+        }
       });
     }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+440.d92ab96a
+// @version     1.0.31+441.bffa8c3c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47179,6 +47179,19 @@ div.item-banner {
     color: var(--text-primary, #1f2937);
 }
 
+/* Indicator dot when thread has context */
+.fixed-sidecar-toggle.has-context::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #3b82f6;
+    border: 2px solid var(--background-color, white);
+}
+
 /* Hide fixed sidecar on mobile */
 @media only screen and (max-width: 800px) {
     .fixed-sidecar-panel,
@@ -67283,7 +67296,10 @@ div#statusBar.has-scroll-indicator {
           await this.updateFixedSidecarPanel(item, thread);
         } else {
           this.positionFixedSidecarToggle();
-          $("#fixed-sidecar-toggle").addClass("visible");
+          const toggle = $("#fixed-sidecar-toggle");
+          toggle.addClass("visible");
+          const hasContext = thread && (thread.parent || thread.replies && thread.replies.length > 0);
+          toggle.toggleClass("has-context", hasContext);
         }
         return;
       }

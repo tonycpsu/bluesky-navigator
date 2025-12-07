@@ -929,7 +929,12 @@ export class ItemHandler extends Handler {
       } else {
         // Show the toggle button when sidecar is hidden
         this.positionFixedSidecarToggle();
-        $('#fixed-sidecar-toggle').addClass('visible');
+        const toggle = $('#fixed-sidecar-toggle');
+        toggle.addClass('visible');
+
+        // Show indicator if thread has context (parent or replies)
+        const hasContext = thread && (thread.parent || (thread.replies && thread.replies.length > 0));
+        toggle.toggleClass('has-context', hasContext);
       }
       return;
     }

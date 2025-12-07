@@ -1691,6 +1691,31 @@ div.item-banner {
   position: relative;
   user-select: none;
   -webkit-user-select: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.scroll-position-indicator:focus,
+.scroll-position-indicator:focus-visible,
+.scroll-position-indicator:active,
+.scroll-position-indicator:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.scroll-segment:focus,
+.scroll-segment:focus-visible,
+.scroll-segment:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Prevent text selection highlight on feed map */
+.scroll-indicator-wrapper,
+.scroll-indicator-wrapper * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Empty state when no results match filter */

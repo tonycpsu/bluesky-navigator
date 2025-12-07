@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+431.88afd09f
+// @version     1.0.31+432.1a1f673d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -28,9 +28,27 @@
 (function() {
   "use strict";
   const constants = {
+    // Timing constants
+    DEFAULT_STATE_SAVE_TIMEOUT: 5e3,
     URL_MONITOR_INTERVAL: 500,
     REPOST_MENU_DELAY: 1e3,
     // Delay before clicking repost menu item
+    // Video playback modes
+    VIDEO_PLAYBACK: {
+      PLAY_ALL: "Play all",
+      PLAY_SELECTED: "Play selected",
+      PAUSE_ALL: "Pause all"
+    },
+    // Layout constants for sidebar positioning
+    SIDEBAR_LAYOUT: {
+      LEFT_TRANSLATE_X_DEFAULT: -540,
+      RIGHT_TRANSLATE_X_DEFAULT: 300
+    },
+    // Embed dimensions
+    EMBED_DIMENSIONS: {
+      YOUTUBE: { width: 320, height: 200 },
+      TIKTOK: { maxWidth: 605, minWidth: 325 }
+    },
     // State management
     STATE_KEY: "bluesky_state",
     DRAWER_MENU_SELECTOR: 'button[aria-label="Open drawer menu"]',
@@ -43,6 +61,9 @@
       return `${constants.FEED_TAB_SELECTOR} > div:first-child`;
     },
     LOAD_NEW_BUTTON_SELECTOR: "button[aria-label^='Load new']",
+    get LOAD_NEW_INDICATOR_SELECTOR() {
+      return `${constants.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
+    },
     get FEED_CONTAINER_SELECTOR() {
       return `${constants.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div`;
     },
@@ -53,12 +74,14 @@
     LEFT_SIDEBAR_SELECTOR: 'nav[role="navigation"]',
     POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
     POST_CONTENT_SELECTOR: 'div[data-testid="contentHider-post"]',
+    MAIN_SELECTOR: 'main[role="main"]',
     WIDTH_SELECTOR: 'div[style*="removed-body-scroll-bar-size"][style*="width: 100%"]',
     PROFILE_SELECTOR: 'a[aria-label="View profile"]',
     LINK_SELECTOR: 'a[target="_blank"]',
     CLEARSKY_LIST_REFRESH_INTERVAL: 60 * 60 * 24,
     CLEARSKY_BLOCKED_ALL_CSS: { "background-color": "#ff8080" },
     CLEARSKY_BLOCKED_RECENT_CSS: { "background-color": "#cc4040" },
+    ITEM_SCROLL_MARGIN: 100,
     SIDECAR_SVG_REPLY: `<svg fill="none" width="18" viewBox="0 0 24 24" height="18" style="color: rgb(111, 134, 159); pointer-events: none; flex-shrink: 0; display: block;"><path fill="hsl(211, 20%, 53%)" fill-rule="evenodd" clip-rule="evenodd" d="M2.002 6a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H12.28l-4.762 2.858A1 1 0 0 1 6.002 21v-2h-1a3 3 0 0 1-3-3V6Zm3-1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2a1 1 0 0 1 1 1v1.234l3.486-2.092a1 1 0 0 1 .514-.142h7a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-14Z"></path></svg>`,
     SIDECAR_SVG_REPOST: [
       `<svg fill="none" width="18" viewBox="0 0 24 24" height="18" style="color: rgb(111, 134, 159); flex-shrink: 0; display: block;"><path fill="hsl(211, 20%, 53%)" fill-rule="evenodd" clip-rule="evenodd" d="M17.957 2.293a1 1 0 1 0-1.414 1.414L17.836 5H6a3 3 0 0 0-3 3v3a1 1 0 1 0 2 0V8a1 1 0 0 1 1-1h11.836l-1.293 1.293a1 1 0 0 0 1.414 1.414l2.47-2.47a1.75 1.75 0 0 0 0-2.474l-2.47-2.47ZM20 12a1 1 0 0 1 1 1v3a3 3 0 0 1-3 3H6.164l1.293 1.293a1 1 0 1 1-1.414 1.414l-2.47-2.47a1.75 1.75 0 0 1 0-2.474l2.47-2.47a1 1 0 0 1 1.414 1.414L6.164 17H18a1 1 0 0 0 1-1v-3a1 1 0 0 1 1-1Z"></path></svg>`,
@@ -67,7 +90,8 @@
     SIDECAR_SVG_LIKE: [
       `<svg fill="none" width="18" viewBox="0 0 24 24" height="18" style="color: rgb(111, 134, 159); pointer-events: none; flex-shrink: 0; display: block;"><path fill="hsl(211, 20%, 53%)" fill-rule="evenodd" clip-rule="evenodd" d="M16.734 5.091c-1.238-.276-2.708.047-4.022 1.38a1 1 0 0 1-1.424 0C9.974 5.137 8.504 4.814 7.266 5.09c-1.263.282-2.379 1.206-2.92 2.556C3.33 10.18 4.252 14.84 12 19.348c7.747-4.508 8.67-9.168 7.654-11.7-.541-1.351-1.657-2.275-2.92-2.557Zm4.777 1.812c1.604 4-.494 9.69-9.022 14.47a1 1 0 0 1-.978 0C2.983 16.592.885 10.902 2.49 6.902c.779-1.942 2.414-3.334 4.342-3.764 1.697-.378 3.552.003 5.169 1.286 1.617-1.283 3.472-1.664 5.17-1.286 1.927.43 3.562 1.822 4.34 3.764Z"></path></svg>`,
       `<svg fill="none" width="18" viewBox="0 0 24 24" height="18" class="r-84gixx" style="flex-shrink: 0; display: block;"><path fill="#ec4899" fill-rule="evenodd" clip-rule="evenodd" d="M12.489 21.372c8.528-4.78 10.626-10.47 9.022-14.47-.779-1.941-2.414-3.333-4.342-3.763-1.697-.378-3.552.003-5.169 1.287-1.617-1.284-3.472-1.665-5.17-1.287-1.927.43-3.562 1.822-4.34 3.764-1.605 4 .493 9.69 9.021 14.47a1 1 0 0 0 .978 0Z"></path></svg>`
-    ]
+    ],
+    WIDTH_OFFSET: 32
   };
   const DEFAULT_HISTORY_MAX = 5e3;
   class StateManager {
@@ -47973,6 +47997,31 @@ div.item-banner {
   position: relative;
   user-select: none;
   -webkit-user-select: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.scroll-position-indicator:focus,
+.scroll-position-indicator:focus-visible,
+.scroll-position-indicator:active,
+.scroll-position-indicator:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.scroll-segment:focus,
+.scroll-segment:focus-visible,
+.scroll-segment:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Prevent text selection highlight on feed map */
+.scroll-indicator-wrapper,
+.scroll-indicator-wrapper * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Empty state when no results match filter */
@@ -66434,9 +66483,14 @@ div#statusBar.has-scroll-indicator {
       if (index < 0 || index >= this.items.length) {
         return;
       }
-      this.applyItemStyle(this.items[oldIndex], false);
+      const oldItem = this.items[oldIndex];
+      if (oldItem && document.contains(oldItem)) {
+        this.applyItemStyle(oldItem, false);
+      }
       this.index = index;
-      this.applyItemStyle(this.selectedItem, true);
+      if (this.selectedItem && document.contains($(this.selectedItem)[0])) {
+        this.applyItemStyle(this.selectedItem, true);
+      }
       if (!skipSidecar) {
         this.expandItem(this.selectedItem);
       }
@@ -66656,17 +66710,38 @@ div#statusBar.has-scroll-indicator {
     }
     async showSidecar(item, thread, action = null) {
       const container = $(item).parent();
+      if (!container.length || !document.contains(container[0])) {
+        return;
+      }
       const itemKey = this.postIdForItem(item) || Date.now();
       if (container.data("sidecar-loading") === itemKey) {
         return;
       }
       container.data("sidecar-loading", itemKey);
-      container.find(".sidecar-replies").remove();
+      container.find(".sidecar-replies").each((i2, el) => {
+        try {
+          if (el.parentNode) el.parentNode.removeChild(el);
+        } catch (e2) {
+        }
+      });
+      if (!document.contains(container[0])) {
+        container.removeData("sidecar-loading");
+        return;
+      }
       const skeletonContent = this.getSkeletonContent();
       $(container).append(skeletonContent);
       const sidecarContent = await this.getSidecarContent(item, thread);
       console.log(sidecarContent);
-      container.find(".sidecar-replies").remove();
+      if (!document.contains(container[0])) {
+        container.removeData("sidecar-loading");
+        return;
+      }
+      container.find(".sidecar-replies").each((i2, el) => {
+        try {
+          if (el.parentNode) el.parentNode.removeChild(el);
+        } catch (e2) {
+        }
+      });
       container.append($(sidecarContent));
       container.find(".sidecar-post").each((i2, post2) => {
         $(post2).on("mouseover", this.onSidecarItemMouseOver);
@@ -67405,6 +67480,10 @@ div#statusBar.has-scroll-indicator {
         console.log("[bsky-navigator] Load newer button found:", btn);
         $("img#loadNewerIndicatorImage").addClass("image-highlight");
         $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
+        if ($("#messageActions").length && $("#loadNewerAction").length === 0) {
+          $("#messageActions").append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
+          $("#loadNewerAction > a").on("click", () => this.loadNewerItems());
+        }
         this.showNewPostsPill();
       });
     }
@@ -67708,24 +67787,31 @@ div#statusBar.has-scroll-indicator {
       }, 500);
     }
     get scrollMargin() {
-      let margin;
+      let margin = 0;
       let el;
-      if (this.state.mobileView) {
-        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
-        el = el.first().children().filter(":visible").first();
-        if (this.index) {
-          const transform2 = el[0].style.transform;
-          const translateY = transform2.indexOf("(") == -1 ? 0 : parseInt(transform2.split("(")[1].split("px")[0]);
-          margin = el.outerHeight() + translateY;
+      try {
+        if (this.state.mobileView) {
+          el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
+          el = el.first().children().filter(":visible").first();
+          if (el.length && this.index) {
+            const transform2 = el[0]?.style?.transform || "";
+            const translateY = transform2.indexOf("(") == -1 ? 0 : parseInt(transform2.split("(")[1].split("px")[0]);
+            margin = el.outerHeight() + translateY;
+          } else if (el.length) {
+            margin = el.outerHeight();
+          }
         } else {
-          margin = el.outerHeight();
+          el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
+          margin = el.length ? el.outerHeight() : 0;
         }
-      } else {
-        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
-        margin = el.outerHeight();
+        const selectorEl = $(this.selector);
+        const marginTop2 = selectorEl.length ? selectorEl.css("margin-top") : "0px";
+        const itemMargin = parseInt((marginTop2 || "0px").replace("px", ""));
+        return margin + itemMargin;
+      } catch (e2) {
+        console.warn("[bsky-navigator] scrollMargin error:", e2);
+        return 0;
       }
-      const itemMargin = parseInt($(this.selector).css("margin-top").replace("px", ""));
-      return margin + itemMargin;
     }
     updateItems() {
       this.ignoreMouseMovement = true;
@@ -67922,17 +68008,45 @@ div#statusBar.has-scroll-indicator {
     loadItems(focusedPostId) {
       const classes = ["thread-first", "thread-middle", "thread-last"];
       const set = [];
-      $(".unrolled-replies").not(".post-view-modal *").remove();
-      $(".sidecar-replies").not(".post-view-modal *").remove();
-      this.unrolledPostIds.clear();
-      $(".unrolled-duplicate").removeClass("unrolled-duplicate filtered");
-      $("div.thread").each((i2, thread) => {
-        const hasVisibleItems = $(thread).find(this.selector).filter(":visible").length > 0;
-        if (!hasVisibleItems) {
-          $(thread).remove();
+      $(".unrolled-replies").not(".post-view-modal *").each((i2, el) => {
+        try {
+          if (el.parentNode) {
+            el.parentNode.removeChild(el);
+          }
+        } catch (e2) {
         }
       });
-      $(this.items).css("opacity", "0%");
+      $(".sidecar-replies").not(".post-view-modal *").each((i2, el) => {
+        try {
+          if (el.parentNode) {
+            el.parentNode.removeChild(el);
+          }
+        } catch (e2) {
+        }
+      });
+      this.unrolledPostIds.clear();
+      try {
+        $(".unrolled-duplicate").removeClass("unrolled-duplicate filtered");
+      } catch (e2) {
+      }
+      $("div.thread").each((i2, thread) => {
+        try {
+          if (!document.contains(thread)) return;
+          const hasVisibleItems = $(thread).find(this.selector).filter(":visible").length > 0;
+          if (!hasVisibleItems) {
+            $(thread).css("display", "none");
+          }
+        } catch (e2) {
+        }
+      });
+      $(this.items).each((i2, item) => {
+        try {
+          if (document.contains(item)) {
+            $(item).css("opacity", "0%");
+          }
+        } catch (e2) {
+        }
+      });
       let itemIndex = 0;
       let threadIndex = 0;
       let threadOffset = 0;
@@ -68004,7 +68118,7 @@ div#statusBar.has-scroll-indicator {
           $("#messageActions").append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
           $("#loadOlderAction > a").on("click", () => this.loadOlderItems());
         }
-        if ($("img#loadNewerIndicatorImage").hasClass("image-highlight")) {
+        if (this.loadNewerButton && $("#loadNewerAction").length == 0) {
           $("#messageActions").append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
           $("#loadNewerAction > a").on("click", () => this.loadNewerItems());
         }
@@ -68072,11 +68186,21 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.loadingNew = true;
       this.hideNewPostsPill();
-      this.applyItemStyle(this.selectedItem, false);
-      const oldPostId = this.postIdForItem(this.selectedItem);
+      const oldPostId = this.selectedItem ? this.postIdForItem(this.selectedItem) : null;
+      try {
+        if (this.selectedItem && $(this.selectedItem).length && document.contains($(this.selectedItem)[0])) {
+          this.applyItemStyle(this.selectedItem, false);
+        }
+      } catch (e2) {
+        console.warn("[bsky-navigator] Error clearing selection:", e2);
+      }
       $(this.loadNewerButton).click();
       setTimeout(() => {
-        this.loadItems(oldPostId);
+        try {
+          this.loadItems(oldPostId);
+        } catch (e2) {
+          console.warn("[bsky-navigator] Error in loadItems after loadNewer:", e2);
+        }
         $("img#loadNewerIndicatorImage").removeClass("image-highlight");
         $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
         $("#loadNewerAction").remove();
@@ -68526,19 +68650,24 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           $(this).autocomplete("close");
         }
       });
-      $("#bsky-navigator-search").autocomplete("instance")._renderItem = function(ul, item) {
-        const li = $("<li>").addClass("ui-menu-item");
-        if (item.category === "saved") {
-          const content2 = $("<div>").addClass("autocomplete-item-content autocomplete-saved-item").append($("<span>").addClass("autocomplete-item-icon").text("\u2605")).append($("<span>").addClass("autocomplete-item-label").text(item.label)).append(
-            $("<button>").addClass("autocomplete-delete-btn").attr("data-index", item.savedIndex).attr("title", "Delete saved search").text("\xD7")
-          );
-          li.append(content2).data("ui-autocomplete-item", item);
-        } else {
-          const content2 = $("<div>").addClass("autocomplete-item-content").append($("<span>").addClass("autocomplete-item-label").text(item.label));
-          li.append(content2).data("ui-autocomplete-item", item);
-        }
-        return li.appendTo(ul);
-      };
+      const autocompleteInstance = $("#bsky-navigator-search").autocomplete("instance");
+      if (autocompleteInstance) {
+        autocompleteInstance._renderItem = function(ul, item) {
+          const li = $("<li>").addClass("ui-menu-item");
+          if (item.category === "saved") {
+            const content2 = $("<div>").addClass("autocomplete-item-content autocomplete-saved-item").append($("<span>").addClass("autocomplete-item-icon").text("\u2605")).append($("<span>").addClass("autocomplete-item-label").text(item.label)).append(
+              $("<button>").addClass("autocomplete-delete-btn").attr("data-index", item.savedIndex).attr("title", "Delete saved search").text("\xD7")
+            );
+            li.append(content2).data("ui-autocomplete-item", item);
+          } else {
+            const content2 = $("<div>").addClass("autocomplete-item-content").append($("<span>").addClass("autocomplete-item-label").text(item.label));
+            li.append(content2).data("ui-autocomplete-item", item);
+          }
+          return li.appendTo(ul);
+        };
+      } else {
+        console.warn("[bsky-navigator] Autocomplete instance not available");
+      }
       $(this.searchWrapper).on("click", ".autocomplete-delete-btn", (e2) => {
         e2.preventDefault();
         e2.stopPropagation();
@@ -68623,6 +68752,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $(this.toolbarDiv).append(this.scrollIndicatorWrapper);
         this.setupScrollIndicatorZoomClick();
         this.setupScrollIndicatorClick();
+        this.setupScrollIndicatorScroll();
         this.setupFeedMapTooltipHandlers(this.scrollIndicator);
         this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
       }
@@ -68743,6 +68873,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $(this.statusBar).append(this.scrollIndicatorWrapper);
         this.setupScrollIndicatorZoomClick();
         this.setupScrollIndicatorClick();
+        this.setupScrollIndicatorScroll();
         this.setupFeedMapTooltipHandlers(this.scrollIndicator);
         this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
         $(this.statusBar).addClass("has-scroll-indicator");
@@ -69447,7 +69578,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         if (isCurrent) {
           $segment.addClass("scroll-segment-current");
-        } else if (engagementData[actualIndex]?.engagement?.isRatioed) {
+        }
+        if (engagementData[actualIndex]?.engagement?.isRatioed) {
           $segment.addClass("scroll-segment-ratioed");
         } else if (heatmapMode !== "None" && engagementData[actualIndex]) {
           const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
@@ -69709,7 +69841,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     setupScrollIndicatorClick() {
       if (!this.scrollIndicator) return;
       this.scrollIndicator.css("cursor", "pointer");
+      this.scrollIndicator.on("mousedown", (event) => {
+        event.preventDefault();
+      });
       this.scrollIndicator.on("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         const indicator = $(event.currentTarget);
         const indicatorWidth = indicator.width();
         const clickX = event.pageX - indicator.offset().left;
@@ -69761,6 +69898,142 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
     }
     /**
+     * Set up horizontal scroll handler for feed map
+     * Allows panning the feed map view by using mouse wheel while hovering over it
+     */
+    setupScrollIndicatorScroll() {
+      let accumulatedDelta = 0;
+      let scrollTimeout = null;
+      const handleWheel = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const displayItems = this._displayItems || [];
+        const total = displayItems.length || this.items.length;
+        if (total === 0) return;
+        const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
+        if (zoomWindowSize === 0 || total <= zoomWindowSize) return;
+        const delta = event.originalEvent.deltaX !== 0 ? event.originalEvent.deltaX : event.originalEvent.deltaY;
+        accumulatedDelta += delta;
+        const threshold = 50;
+        if (scrollTimeout) {
+          clearTimeout(scrollTimeout);
+        }
+        const steps = Math.trunc(accumulatedDelta / threshold);
+        if (steps !== 0) {
+          accumulatedDelta = accumulatedDelta % threshold;
+          const currentStart = this.zoomWindowStart || 0;
+          const maxStart = total - zoomWindowSize;
+          const newWindowStart = Math.max(0, Math.min(maxStart, currentStart + steps));
+          if (newWindowStart !== currentStart) {
+            this.zoomWindowManualPan = true;
+            this.zoomWindowStart = newWindowStart;
+            this.updateZoomIndicatorDirect(newWindowStart, zoomWindowSize, total, displayItems);
+          }
+        }
+        scrollTimeout = setTimeout(() => {
+          accumulatedDelta = 0;
+        }, 150);
+      };
+      if (this.scrollIndicator) {
+        this.scrollIndicator.on("wheel", handleWheel);
+      }
+      if (this.scrollIndicatorZoom) {
+        this.scrollIndicatorZoom.on("wheel", handleWheel);
+      }
+    }
+    /**
+     * Direct update of zoom indicator for smooth panning (bypasses full updateScrollPosition)
+     */
+    updateZoomIndicatorDirect(windowStart, zoomWindowSize, total, displayItems) {
+      const zoomIndicator = this.scrollIndicatorZoom;
+      const zoomInner = this.scrollIndicatorZoomInner;
+      if (!zoomIndicator || !zoomInner) return;
+      const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
+      const selectedElement = this.items[this.index];
+      const currentIndex = displayItems.indexOf(selectedElement);
+      const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
+      const isAdvancedStyle = indicatorStyle === "Advanced";
+      const heatmapMode = isAdvancedStyle ? this.config.get("scrollIndicatorHeatmap") || "None" : "None";
+      const iconsValue = this.config.get("scrollIndicatorIcons");
+      const showIcons = isAdvancedStyle ? iconsValue === true || iconsValue === "true" || iconsValue === void 0 : false;
+      const showAvatars = isAdvancedStyle ? this.config.get("scrollIndicatorAvatars") !== false : false;
+      const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
+      const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
+      const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
+      let maxScore = 0;
+      const windowEngagement = [];
+      for (let i2 = 0; i2 < zoomWindowSize; i2++) {
+        const displayIndex = windowStart + i2;
+        const item = displayItems[displayIndex];
+        if (item && (heatmapMode !== "None" || showIcons || showAvatars || showHandles)) {
+          const engagement = this.getPostEngagement(item);
+          const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
+          if (score > maxScore) maxScore = score;
+          windowEngagement[i2] = { engagement, score };
+        } else {
+          windowEngagement[i2] = null;
+        }
+      }
+      const segments = zoomInner.find(".scroll-segment");
+      segments.each((i2, segment) => {
+        const $segment = $(segment);
+        const displayIndex = windowStart + i2;
+        const item = displayItems[displayIndex];
+        const hasItem = displayIndex >= 0 && displayIndex < total && item;
+        const isRead = item && $(item).hasClass("item-read");
+        const isCurrent = displayIndex === currentIndex;
+        $segment.attr("data-index", hasItem ? displayIndex : -1);
+        $segment.removeClass(
+          "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+        );
+        $segment.find(".scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-handle, .scroll-segment-time").remove();
+        if (!hasItem) {
+          $segment.addClass("scroll-segment-empty");
+          return;
+        }
+        if (isRead) $segment.addClass("scroll-segment-read");
+        if (isCurrent) $segment.addClass("scroll-segment-current");
+        const engData = windowEngagement[i2];
+        if (engData?.engagement?.isRatioed) {
+          $segment.addClass("scroll-segment-ratioed");
+        } else if (heatmapMode !== "None" && engData) {
+          const heatLevel = this.getHeatLevel(engData.score, maxScore);
+          if (heatLevel > 0) {
+            $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+          }
+        }
+        if (showIcons && engData?.engagement) {
+          const icon = this.getContentIcon(engData.engagement);
+          if (icon) {
+            $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+          }
+        }
+        if (showAvatars && engData?.engagement?.avatarUrl) {
+          const avatarHeight = Math.round(32 * (avatarScale / 100));
+          $segment.append(`<img class="scroll-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+        }
+        if (showHandles && engData?.engagement?.handle) {
+          const handle2 = engData.engagement.handle;
+          const dotIndex = handle2.indexOf(".");
+          const handleHtml = dotIndex > 0 ? `<b>${handle2.substring(0, dotIndex)}</b>${handle2.substring(dotIndex)}` : `<b>${handle2}</b>`;
+          $segment.append(`<span class="scroll-segment-handle">${handleHtml}</span>`);
+        }
+        if (showTimestamps) {
+          const timestamp = this.getTimestampForItem(item);
+          if (timestamp) {
+            const relativeTime = this.formatRelativeTime(timestamp);
+            $segment.append(`<span class="scroll-segment-time">${relativeTime}</span>`);
+          }
+        }
+      });
+      this.updateZoomIndicatorLabels(windowStart, windowEnd);
+      const atStart = windowStart === 0;
+      const atEnd = windowStart + zoomWindowSize >= total;
+      zoomIndicator.toggleClass("scroll-zoom-at-start", atStart);
+      zoomIndicator.toggleClass("scroll-zoom-at-end", atEnd);
+      this.updateZoomConnector(windowStart, windowEnd, total);
+    }
+    /**
      * Update the zoom indicator showing posts around the current selection
      */
     updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, displayTotal, displayItems, displayIndices) {
@@ -69800,6 +70073,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (windowStart === null) {
         const halfWindow = Math.floor(zoomWindowSize / 2);
         windowStart = Math.max(0, currentIndex - halfWindow);
+      } else if (this.zoomWindowManualPan) {
+        const windowEnd2 = windowStart + zoomWindowSize - 1;
+        if (currentIndex < windowStart || currentIndex > windowEnd2) {
+          const halfWindow = Math.floor(zoomWindowSize / 2);
+          windowStart = Math.max(0, currentIndex - halfWindow);
+          this.zoomWindowManualPan = false;
+        }
       } else {
         const windowEnd2 = windowStart + zoomWindowSize - 1;
         if (currentIndex < windowStart + edgeMargin) {

@@ -533,33 +533,38 @@ export class FeedItemHandler extends ItemHandler {
     });
 
     // Custom rendering for autocomplete items
-    $('#bsky-navigator-search').autocomplete('instance')._renderItem = function (ul, item) {
-      const li = $('<li>').addClass('ui-menu-item');
+    const autocompleteInstance = $('#bsky-navigator-search').autocomplete('instance');
+    if (autocompleteInstance) {
+      autocompleteInstance._renderItem = function (ul, item) {
+        const li = $('<li>').addClass('ui-menu-item');
 
-      if (item.category === 'saved') {
-        // Saved search with delete button
-        const content = $('<div>')
-          .addClass('autocomplete-item-content autocomplete-saved-item')
-          .append($('<span>').addClass('autocomplete-item-icon').text('★'))
-          .append($('<span>').addClass('autocomplete-item-label').text(item.label))
-          .append(
-            $('<button>')
-              .addClass('autocomplete-delete-btn')
-              .attr('data-index', item.savedIndex)
-              .attr('title', 'Delete saved search')
-              .text('×')
-          );
-        li.append(content).data('ui-autocomplete-item', item);
-      } else {
-        // Regular item
-        const content = $('<div>')
-          .addClass('autocomplete-item-content')
-          .append($('<span>').addClass('autocomplete-item-label').text(item.label));
-        li.append(content).data('ui-autocomplete-item', item);
-      }
+        if (item.category === 'saved') {
+          // Saved search with delete button
+          const content = $('<div>')
+            .addClass('autocomplete-item-content autocomplete-saved-item')
+            .append($('<span>').addClass('autocomplete-item-icon').text('★'))
+            .append($('<span>').addClass('autocomplete-item-label').text(item.label))
+            .append(
+              $('<button>')
+                .addClass('autocomplete-delete-btn')
+                .attr('data-index', item.savedIndex)
+                .attr('title', 'Delete saved search')
+                .text('×')
+            );
+          li.append(content).data('ui-autocomplete-item', item);
+        } else {
+          // Regular item
+          const content = $('<div>')
+            .addClass('autocomplete-item-content')
+            .append($('<span>').addClass('autocomplete-item-label').text(item.label));
+          li.append(content).data('ui-autocomplete-item', item);
+        }
 
-      return li.appendTo(ul);
-    };
+        return li.appendTo(ul);
+      };
+    } else {
+      console.warn('[bsky-navigator] Autocomplete instance not available');
+    }
 
     // Handle delete button clicks via event delegation
     $(this.searchWrapper).on('click', '.autocomplete-delete-btn', (e) => {
@@ -669,6 +674,7 @@ export class FeedItemHandler extends ItemHandler {
       $(this.toolbarDiv).append(this.scrollIndicatorWrapper);
       this.setupScrollIndicatorZoomClick();
       this.setupScrollIndicatorClick();
+      this.setupScrollIndicatorScroll();
       this.setupFeedMapTooltipHandlers(this.scrollIndicator);
       this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
     }
@@ -821,6 +827,7 @@ export class FeedItemHandler extends ItemHandler {
       $(this.statusBar).append(this.scrollIndicatorWrapper);
       this.setupScrollIndicatorZoomClick();
       this.setupScrollIndicatorClick();
+      this.setupScrollIndicatorScroll();
       this.setupFeedMapTooltipHandlers(this.scrollIndicator);
       this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
       // Add class to status bar for CSS styling
@@ -1743,13 +1750,16 @@ export class FeedItemHandler extends ItemHandler {
         $segment.addClass('scroll-segment-read');
       }
 
+      // Apply current selection (outline indicator - independent of background color)
       if (isCurrent) {
         $segment.addClass('scroll-segment-current');
-      } else if (engagementData[actualIndex]?.engagement?.isRatioed) {
-        // Ratioed posts get distinctive styling (takes precedence over heatmap)
+      }
+
+      // Apply background color: ratioed takes precedence, then heatmap
+      // These are applied independently of current selection
+      if (engagementData[actualIndex]?.engagement?.isRatioed) {
         $segment.addClass('scroll-segment-ratioed');
       } else if (heatmapMode !== 'None' && engagementData[actualIndex]) {
-        // Apply heatmap coloring (overrides read state visually)
         const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
         if (heatLevel > 0) {
           $segment.addClass(`scroll-segment-heat-${heatLevel}`);
@@ -2101,7 +2111,14 @@ export class FeedItemHandler extends ItemHandler {
 
     this.scrollIndicator.css('cursor', 'pointer');
 
+    // Prevent mousedown from causing visual changes
+    this.scrollIndicator.on('mousedown', (event) => {
+      event.preventDefault();
+    });
+
     this.scrollIndicator.on('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       const indicator = $(event.currentTarget);
       const indicatorWidth = indicator.width();
       const clickX = event.pageX - indicator.offset().left;
@@ -2177,6 +2194,212 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   /**
+   * Set up horizontal scroll handler for feed map
+   * Allows panning the feed map view by using mouse wheel while hovering over it
+   */
+  setupScrollIndicatorScroll() {
+    // Track accumulated scroll delta for smoother panning
+    let accumulatedDelta = 0;
+    let scrollTimeout = null;
+
+    const handleWheel = (event) => {
+      // Prevent default vertical scroll
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Get display items for navigation
+      const displayItems = this._displayItems || [];
+      const total = displayItems.length || this.items.length;
+      if (total === 0) return;
+
+      const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
+      if (zoomWindowSize === 0 || total <= zoomWindowSize) return;
+
+      // Accumulate scroll delta - support both vertical wheel and horizontal trackpad
+      const delta = event.originalEvent.deltaX !== 0 ? event.originalEvent.deltaX : event.originalEvent.deltaY;
+      accumulatedDelta += delta;
+
+      // Threshold for movement (adjust sensitivity)
+      const threshold = 50;
+
+      // Clear any pending scroll update
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+
+      // Process accumulated delta
+      const steps = Math.trunc(accumulatedDelta / threshold);
+      if (steps !== 0) {
+        accumulatedDelta = accumulatedDelta % threshold;
+
+        // Get current window position
+        const currentStart = this.zoomWindowStart || 0;
+        const maxStart = total - zoomWindowSize;
+
+        // Calculate new window position
+        const newWindowStart = Math.max(0, Math.min(maxStart, currentStart + steps));
+
+        if (newWindowStart !== currentStart) {
+          // Set manual pan flag to prevent auto-centering on selection
+          this.zoomWindowManualPan = true;
+          this.zoomWindowStart = newWindowStart;
+
+          // Update just the zoom-related visuals (connector lines, highlight, segments)
+          this.updateZoomIndicatorDirect(newWindowStart, zoomWindowSize, total, displayItems);
+        }
+      }
+
+      // Reset accumulated delta after inactivity
+      scrollTimeout = setTimeout(() => {
+        accumulatedDelta = 0;
+      }, 150);
+    };
+
+    // Add wheel handler to main indicator
+    if (this.scrollIndicator) {
+      this.scrollIndicator.on('wheel', handleWheel);
+    }
+
+    // Add wheel handler to zoom indicator
+    if (this.scrollIndicatorZoom) {
+      this.scrollIndicatorZoom.on('wheel', handleWheel);
+    }
+  }
+
+  /**
+   * Direct update of zoom indicator for smooth panning (bypasses full updateScrollPosition)
+   */
+  updateZoomIndicatorDirect(windowStart, zoomWindowSize, total, displayItems) {
+    const zoomIndicator = this.scrollIndicatorZoom;
+    const zoomInner = this.scrollIndicatorZoomInner;
+    if (!zoomIndicator || !zoomInner) return;
+
+    const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
+
+    // Find current selection in display items
+    const selectedElement = this.items[this.index];
+    const currentIndex = displayItems.indexOf(selectedElement);
+
+    // Get settings for segment content
+    const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
+    const isAdvancedStyle = indicatorStyle === 'Advanced';
+    const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
+    const iconsValue = this.config.get('scrollIndicatorIcons');
+    const showIcons = isAdvancedStyle ? (iconsValue === true || iconsValue === 'true' || iconsValue === undefined) : false;
+    const showAvatars = isAdvancedStyle ? (this.config.get('scrollIndicatorAvatars') !== false) : false;
+    const avatarScale = this.config.get('scrollIndicatorAvatarScale') ?? 100;
+    const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
+    const showHandles = isAdvancedStyle ? (this.config.get('scrollIndicatorHandles') !== false) : false;
+
+    // Calculate engagement data for visible window
+    let maxScore = 0;
+    const windowEngagement = [];
+    for (let i = 0; i < zoomWindowSize; i++) {
+      const displayIndex = windowStart + i;
+      const item = displayItems[displayIndex];
+      if (item && (heatmapMode !== 'None' || showIcons || showAvatars || showHandles)) {
+        const engagement = this.getPostEngagement(item);
+        const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
+        if (score > maxScore) maxScore = score;
+        windowEngagement[i] = { engagement, score };
+      } else {
+        windowEngagement[i] = null;
+      }
+    }
+
+    // Update segment content
+    const segments = zoomInner.find('.scroll-segment');
+    segments.each((i, segment) => {
+      const $segment = $(segment);
+      const displayIndex = windowStart + i;
+      const item = displayItems[displayIndex];
+      const hasItem = displayIndex >= 0 && displayIndex < total && item;
+      const isRead = item && $(item).hasClass('item-read');
+      const isCurrent = displayIndex === currentIndex;
+
+      // Update data-index
+      $segment.attr('data-index', hasItem ? displayIndex : -1);
+
+      // Remove all state classes
+      $segment.removeClass(
+        'scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed ' +
+        'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
+        'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
+      );
+
+      // Clear existing content
+      $segment.find('.scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-handle, .scroll-segment-time').remove();
+
+      if (!hasItem) {
+        $segment.addClass('scroll-segment-empty');
+        return;
+      }
+
+      // Apply read state
+      if (isRead) $segment.addClass('scroll-segment-read');
+
+      // Apply current selection
+      if (isCurrent) $segment.addClass('scroll-segment-current');
+
+      // Apply heatmap/ratioed styling
+      const engData = windowEngagement[i];
+      if (engData?.engagement?.isRatioed) {
+        $segment.addClass('scroll-segment-ratioed');
+      } else if (heatmapMode !== 'None' && engData) {
+        const heatLevel = this.getHeatLevel(engData.score, maxScore);
+        if (heatLevel > 0) {
+          $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+        }
+      }
+
+      // Add icons
+      if (showIcons && engData?.engagement) {
+        const icon = this.getContentIcon(engData.engagement);
+        if (icon) {
+          $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+        }
+      }
+
+      // Add avatar
+      if (showAvatars && engData?.engagement?.avatarUrl) {
+        const avatarHeight = Math.round(32 * (avatarScale / 100));
+        $segment.append(`<img class="scroll-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+      }
+
+      // Add handle
+      if (showHandles && engData?.engagement?.handle) {
+        const handle = engData.engagement.handle;
+        const dotIndex = handle.indexOf('.');
+        const handleHtml = dotIndex > 0
+          ? `<b>${handle.substring(0, dotIndex)}</b>${handle.substring(dotIndex)}`
+          : `<b>${handle}</b>`;
+        $segment.append(`<span class="scroll-segment-handle">${handleHtml}</span>`);
+      }
+
+      // Add timestamp
+      if (showTimestamps) {
+        const timestamp = this.getTimestampForItem(item);
+        if (timestamp) {
+          const relativeTime = this.formatRelativeTime(timestamp);
+          $segment.append(`<span class="scroll-segment-time">${relativeTime}</span>`);
+        }
+      }
+    });
+
+    // Update zoom labels
+    this.updateZoomIndicatorLabels(windowStart, windowEnd);
+
+    // Update start/end indicators
+    const atStart = windowStart === 0;
+    const atEnd = windowStart + zoomWindowSize >= total;
+    zoomIndicator.toggleClass('scroll-zoom-at-start', atStart);
+    zoomIndicator.toggleClass('scroll-zoom-at-end', atEnd);
+
+    // Update connector lines and highlight
+    this.updateZoomConnector(windowStart, windowEnd, total);
+  }
+
+  /**
    * Update the zoom indicator showing posts around the current selection
    */
   updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, displayTotal, displayItems, displayIndices) {
@@ -2230,6 +2453,17 @@ export class FeedItemHandler extends ItemHandler {
     if (windowStart === null) {
       const halfWindow = Math.floor(zoomWindowSize / 2);
       windowStart = Math.max(0, currentIndex - halfWindow);
+    } else if (this.zoomWindowManualPan) {
+      // User is manually panning - don't auto-center, but still ensure selection is visible
+      const windowEnd = windowStart + zoomWindowSize - 1;
+      // Only adjust if current selection is completely outside the visible window
+      if (currentIndex < windowStart || currentIndex > windowEnd) {
+        // Selection moved outside window, re-center and clear manual pan
+        const halfWindow = Math.floor(zoomWindowSize / 2);
+        windowStart = Math.max(0, currentIndex - halfWindow);
+        this.zoomWindowManualPan = false;
+      }
+      // Otherwise keep the manual pan position
     } else {
       const windowEnd = windowStart + zoomWindowSize - 1;
 

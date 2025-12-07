@@ -275,9 +275,16 @@ export class ItemHandler extends Handler {
     if (index < 0 || index >= this.items.length) {
       return;
     }
-    this.applyItemStyle(this.items[oldIndex], false);
+    // Be defensive - old item may have been removed from DOM by React
+    const oldItem = this.items[oldIndex];
+    if (oldItem && document.contains(oldItem)) {
+      this.applyItemStyle(oldItem, false);
+    }
     this.index = index;
-    this.applyItemStyle(this.selectedItem, true);
+    // Also check new item is in DOM (should always be, but be safe)
+    if (this.selectedItem && document.contains($(this.selectedItem)[0])) {
+      this.applyItemStyle(this.selectedItem, true);
+    }
 
     if (!skipSidecar) {
       this.expandItem(this.selectedItem);
@@ -547,6 +554,11 @@ export class ItemHandler extends Handler {
   async showSidecar(item, thread, action = null) {
     const container = $(item).parent();
 
+    // Verify container still exists in DOM (React may have removed it)
+    if (!container.length || !document.contains(container[0])) {
+      return;
+    }
+
     // Prevent duplicate sidecars - use data attribute as lock
     const itemKey = this.postIdForItem(item) || Date.now();
     if (container.data('sidecar-loading') === itemKey) {
@@ -555,7 +567,20 @@ export class ItemHandler extends Handler {
     container.data('sidecar-loading', itemKey);
 
     // Remove ALL existing sidecars first to prevent duplicates
-    container.find('.sidecar-replies').remove();
+    // Use native DOM removal with try-catch for each element
+    container.find('.sidecar-replies').each((i, el) => {
+      try {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      } catch (e) {
+        // Ignore - element may have been removed by React
+      }
+    });
+
+    // Verify container still exists before appending
+    if (!document.contains(container[0])) {
+      container.removeData('sidecar-loading');
+      return;
+    }
 
     // Show skeleton while loading
     const skeletonContent = this.getSkeletonContent();
@@ -565,8 +590,20 @@ export class ItemHandler extends Handler {
     const sidecarContent = await this.getSidecarContent(item, thread);
     console.log(sidecarContent);
 
+    // Verify container still exists after async operation
+    if (!document.contains(container[0])) {
+      container.removeData('sidecar-loading');
+      return;
+    }
+
     // Remove skeleton and add actual content (in case multiple skeletons were added)
-    container.find('.sidecar-replies').remove();
+    container.find('.sidecar-replies').each((i, el) => {
+      try {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      } catch (e) {
+        // Ignore - element may have been removed by React
+      }
+    });
     container.append($(sidecarContent));
     container.find('.sidecar-post').each((i, post) => {
       $(post).on('mouseover', this.onSidecarItemMouseOver);
@@ -1475,6 +1512,12 @@ export class ItemHandler extends Handler {
       $('img#loadNewerIndicatorImage').addClass('image-highlight');
       $('img#loadNewerIndicatorImage').removeClass('toolbar-icon-pending');
 
+      // Add "Load newer posts" link to message actions if message is visible
+      if ($('#messageActions').length && $('#loadNewerAction').length === 0) {
+        $('#messageActions').append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
+        $('#loadNewerAction > a').on('click', () => this.loadNewerItems());
+      }
+
       // Show floating "New posts" pill
       this.showNewPostsPill();
     });
@@ -1861,25 +1904,32 @@ export class ItemHandler extends Handler {
   }
 
   get scrollMargin() {
-    let margin;
+    let margin = 0;
     let el;
-    if (this.state.mobileView) {
-      el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
-      el = el.first().children().filter(':visible').first();
-      if (this.index) {
-        const transform = el[0].style.transform;
-        const translateY =
-          transform.indexOf('(') == -1 ? 0 : parseInt(transform.split('(')[1].split('px')[0]);
-        margin = el.outerHeight() + translateY;
+    try {
+      if (this.state.mobileView) {
+        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
+        el = el.first().children().filter(':visible').first();
+        if (el.length && this.index) {
+          const transform = el[0]?.style?.transform || '';
+          const translateY =
+            transform.indexOf('(') == -1 ? 0 : parseInt(transform.split('(')[1].split('px')[0]);
+          margin = el.outerHeight() + translateY;
+        } else if (el.length) {
+          margin = el.outerHeight();
+        }
       } else {
-        margin = el.outerHeight();
+        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
+        margin = el.length ? el.outerHeight() : 0;
       }
-    } else {
-      el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
-      margin = el.outerHeight();
+      const selectorEl = $(this.selector);
+      const marginTop = selectorEl.length ? selectorEl.css('margin-top') : '0px';
+      const itemMargin = parseInt((marginTop || '0px').replace('px', ''));
+      return margin + itemMargin;
+    } catch (e) {
+      console.warn('[bsky-navigator] scrollMargin error:', e);
+      return 0;
     }
-    const itemMargin = parseInt($(this.selector).css('margin-top').replace('px', ''));
-    return margin + itemMargin;
   }
 
   updateItems() {
@@ -2127,23 +2177,62 @@ export class ItemHandler extends Handler {
     const set = [];
 
     // Clean up unrolled replies and sidecar containers from previous load
+    // These are elements WE created and appended to React containers
+    // Use individual try-catch per element since React may have removed parents
     // Exclude elements inside post-view-modal to avoid affecting the modal's sidecar
-    $('.unrolled-replies').not('.post-view-modal *').remove();
-    $('.sidecar-replies').not('.post-view-modal *').remove();
-    // Clear tracked unrolled post IDs when unrolled content is removed
-    this.unrolledPostIds.clear();
-    // Remove unrolled-duplicate class from items
-    $('.unrolled-duplicate').removeClass('unrolled-duplicate filtered');
-
-    // Clean up empty thread containers (threads with no visible items)
-    $('div.thread').each((i, thread) => {
-      const hasVisibleItems = $(thread).find(this.selector).filter(':visible').length > 0;
-      if (!hasVisibleItems) {
-        $(thread).remove();
+    $('.unrolled-replies').not('.post-view-modal *').each((i, el) => {
+      try {
+        if (el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
+      } catch (e) {
+        // Element already removed or parent changed - ignore
+      }
+    });
+    $('.sidecar-replies').not('.post-view-modal *').each((i, el) => {
+      try {
+        if (el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
+      } catch (e) {
+        // Element already removed or parent changed - ignore
       }
     });
 
-    $(this.items).css('opacity', '0%');
+    // Clear tracked unrolled post IDs when unrolled content is removed
+    this.unrolledPostIds.clear();
+    // Remove unrolled-duplicate class from items (safely)
+    try {
+      $('.unrolled-duplicate').removeClass('unrolled-duplicate filtered');
+    } catch (e) {
+      // Ignore - elements may have been removed
+    }
+
+    // Hide empty thread containers (threads with no visible items)
+    // .thread class is added to React-managed elements, so we CANNOT remove them
+    // Only hide via CSS to avoid interfering with React's DOM management
+    $('div.thread').each((i, thread) => {
+      try {
+        if (!document.contains(thread)) return;
+        const hasVisibleItems = $(thread).find(this.selector).filter(':visible').length > 0;
+        if (!hasVisibleItems) {
+          $(thread).css('display', 'none');
+        }
+      } catch (e) {
+        // Ignore errors during visibility check
+      }
+    });
+
+    // Hide existing items temporarily - be defensive as items may have been removed by React
+    $(this.items).each((i, item) => {
+      try {
+        if (document.contains(item)) {
+          $(item).css('opacity', '0%');
+        }
+      } catch (e) {
+        // Ignore - item may have been removed
+      }
+    });
     let itemIndex = 0;
     let threadIndex = 0;
     let threadOffset = 0;
@@ -2251,7 +2340,8 @@ export class ItemHandler extends Handler {
         $('#messageActions').append($('<div id="loadOlderAction"><a>Load older posts</a></div>'));
         $('#loadOlderAction > a').on('click', () => this.loadOlderItems());
       }
-      if ($('img#loadNewerIndicatorImage').hasClass('image-highlight')) {
+      // Check if load newer button exists (more reliable than checking image class)
+      if (this.loadNewerButton && $('#loadNewerAction').length == 0) {
         $('#messageActions').append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
         $('#loadNewerAction > a').on('click', () => this.loadNewerItems());
       }
@@ -2347,11 +2437,29 @@ ${
     }
     this.loadingNew = true;
     this.hideNewPostsPill();
-    this.applyItemStyle(this.selectedItem, false);
-    const oldPostId = this.postIdForItem(this.selectedItem);
+
+    // Save post ID before any DOM changes - be defensive about missing elements
+    const oldPostId = this.selectedItem ? this.postIdForItem(this.selectedItem) : null;
+
+    // Clear selection styling before clicking (be defensive)
+    // Check that element is still in the DOM before trying to style it
+    try {
+      if (this.selectedItem && $(this.selectedItem).length && document.contains($(this.selectedItem)[0])) {
+        this.applyItemStyle(this.selectedItem, false);
+      }
+    } catch (e) {
+      console.warn('[bsky-navigator] Error clearing selection:', e);
+    }
+
+    // Click the native button to load new posts
     $(this.loadNewerButton).click();
+
     setTimeout(() => {
-      this.loadItems(oldPostId);
+      try {
+        this.loadItems(oldPostId);
+      } catch (e) {
+        console.warn('[bsky-navigator] Error in loadItems after loadNewer:', e);
+      }
       $('img#loadNewerIndicatorImage').removeClass('image-highlight');
       $('img#loadNewerIndicatorImage').removeClass('toolbar-icon-pending');
       $('#loadNewerAction').remove();

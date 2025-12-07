@@ -2240,6 +2240,7 @@ div.item-banner {
   color: rgba(0, 0, 0, 0.5);
   pointer-events: none;
   flex-shrink: 0;
+  text-shadow: 0 0 2px white, 0 0 2px white;
 }
 
 /* Handle in zoom segments */
@@ -2254,6 +2255,7 @@ div.item-banner {
   max-width: 100%;
   padding: 0 calc(2px * var(--indicator-scale, 1));
   flex-shrink: 0;
+  text-shadow: 0 0 2px white, 0 0 2px white;
 }
 
 
@@ -2601,10 +2603,12 @@ div#statusBar.has-scroll-indicator {
 
   .scroll-segment-time {
     color: rgba(255, 255, 255, 0.5);
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.8);
   }
 
   .scroll-segment-handle {
     color: rgba(255, 255, 255, 0.6);
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.8);
   }
 
   /* Basic mode dark: theme colors with brightness filter for read */

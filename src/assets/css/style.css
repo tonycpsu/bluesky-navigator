@@ -2137,6 +2137,37 @@ div.item-banner {
   box-sizing: border-box;
 }
 
+/* Zoom row end indicators - show when scrolled to start/end */
+.scroll-position-indicator-zoom::before,
+.scroll-position-indicator-zoom::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  background-color: var(--bsky-blue, #1185fe);
+  opacity: 0;
+  transition: opacity calc(var(--animation-duration, 300ms) * 0.5) ease-out;
+  z-index: 5;
+  border-radius: 2px;
+}
+
+.scroll-position-indicator-zoom::before {
+  left: 0;
+}
+
+.scroll-position-indicator-zoom::after {
+  right: 0;
+}
+
+.scroll-position-indicator-zoom.scroll-zoom-at-start::before {
+  opacity: 0.8;
+}
+
+.scroll-position-indicator-zoom.scroll-zoom-at-end::after {
+  opacity: 0.8;
+}
+
 @media (prefers-color-scheme: dark) {
   /* Dark mode: use dark outline instead of white, keep colors but brighten */
   .scroll-icon-stack img[alt="text"] {

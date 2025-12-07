@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+429.b4a40fa8
+// @version     1.0.31+430.1190b65e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -48422,6 +48422,37 @@ div.item-banner {
   box-sizing: border-box;
 }
 
+/* Zoom row end indicators - show when scrolled to start/end */
+.scroll-position-indicator-zoom::before,
+.scroll-position-indicator-zoom::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  background-color: var(--bsky-blue, #1185fe);
+  opacity: 0;
+  transition: opacity calc(var(--animation-duration, 300ms) * 0.5) ease-out;
+  z-index: 5;
+  border-radius: 2px;
+}
+
+.scroll-position-indicator-zoom::before {
+  left: 0;
+}
+
+.scroll-position-indicator-zoom::after {
+  right: 0;
+}
+
+.scroll-position-indicator-zoom.scroll-zoom-at-start::before {
+  opacity: 0.8;
+}
+
+.scroll-position-indicator-zoom.scroll-zoom-at-end::after {
+  opacity: 0.8;
+}
+
 @media (prefers-color-scheme: dark) {
   /* Dark mode: use dark outline instead of white, keep colors but brighten */
   .scroll-icon-stack img[alt="text"] {
@@ -69841,6 +69872,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       zoomIndicator.css("--scroll-icon-display", "flex");
       this.updateZoomIndicatorLabels(windowStart, windowEnd);
+      const atStart = windowStart === 0;
+      const atEnd = windowStart + zoomWindowSize >= total;
+      zoomIndicator.toggleClass("scroll-zoom-at-start", atStart);
+      zoomIndicator.toggleClass("scroll-zoom-at-end", atEnd);
       this.updateZoomConnector(windowStart, windowEnd, total);
     }
     /**

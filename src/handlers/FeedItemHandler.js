@@ -2370,6 +2370,12 @@ export class FeedItemHandler extends ItemHandler {
     // Update zoom indicator labels (only for actual items)
     this.updateZoomIndicatorLabels(windowStart, windowEnd);
 
+    // Add visual indication when zoom reaches start or end of feed
+    const atStart = windowStart === 0;
+    const atEnd = windowStart + zoomWindowSize >= total;
+    zoomIndicator.toggleClass('scroll-zoom-at-start', atStart);
+    zoomIndicator.toggleClass('scroll-zoom-at-end', atEnd);
+
     // Update connector lines between main indicator and zoom
     this.updateZoomConnector(windowStart, windowEnd, total);
   }

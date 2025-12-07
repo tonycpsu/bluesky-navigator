@@ -4278,3 +4278,23 @@ div#statusBar.has-scroll-indicator {
     color: #9ca3af;
   }
 }
+
+/* Hide vertical column dividers when right sidebar is hidden */
+.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-left"],
+.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-right"],
+.bsky-nav-hide-right-sidebar main div[style*="border-left"],
+.bsky-nav-hide-right-sidebar main div[style*="border-right"] {
+  border-left: none !important;
+  border-right: none !important;
+}
+
+/* Broader approach - target column containers */
+.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] > div > div {
+  border-left: none !important;
+  border-right: none !important;
+}
+
+.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] > div > div > div {
+  border-left: none !important;
+  border-right: none !important;
+}

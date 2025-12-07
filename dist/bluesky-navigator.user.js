@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+433.c38cd049
+// @version     1.0.31+434.48e90cd6
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -106,11 +106,28 @@
       this.maxEntries = this.config.maxEntries || DEFAULT_HISTORY_MAX;
       this.state = {};
       this.isLocalStateDirty = false;
+      this.isRemoteSyncPending = false;
       this.localSaveTimeout = null;
       this.remoteSyncTimeout = null;
       this.handleBlockListResponse = this.handleBlockListResponse.bind(this);
       this.saveStateImmediately = this.saveStateImmediately.bind(this);
-      window.addEventListener("beforeunload", () => this.saveStateImmediately());
+      this.saveRemoteStateSync = this.saveRemoteStateSync.bind(this);
+      window.addEventListener("beforeunload", () => {
+        this.saveStateImmediately();
+        if (this.config.stateSyncEnabled && this.isRemoteSyncPending) {
+          this.saveRemoteStateSync();
+        }
+      });
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden" && this.config.stateSyncEnabled && this.isRemoteSyncPending) {
+          this.saveRemoteStateSync();
+        }
+      });
+      window.addEventListener("pagehide", () => {
+        if (this.config.stateSyncEnabled && this.isRemoteSyncPending) {
+          this.saveRemoteStateSync();
+        }
+      });
     }
     static async create(key, defaultState = {}, config2 = {}) {
       const instance2 = new StateManager(key, defaultState, config2);
@@ -196,15 +213,26 @@
     }
     /**
      * Loads state from storage or initializes with the default state.
+     * Compares local and remote timestamps to use whichever is newer.
      */
     async loadState(defaultState) {
       try {
         const savedState = JSON.parse(GM_getValue(this.key, "{}"));
+        const localLastUpdated = savedState.lastUpdated;
         if (this.config.stateSyncEnabled) {
-          const remoteState = await this.loadRemoteState(this.state.lastUpdated);
+          const remoteState = await this.loadRemoteState();
           if (remoteState) {
-            const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
-            return { ...defaultState, ...remoteWithoutFilter, filter: savedState.filter || defaultState.filter || "" };
+            const remoteLastUpdated = remoteState.lastUpdated;
+            const localTime = localLastUpdated ? new Date(localLastUpdated).getTime() : 0;
+            const remoteTime = remoteLastUpdated ? new Date(remoteLastUpdated).getTime() : 0;
+            if (localTime > remoteTime) {
+              console.log(`Using local state (newer): ${localLastUpdated} > ${remoteLastUpdated}`);
+              return { ...defaultState, ...savedState };
+            } else {
+              console.log(`Using remote state (newer): ${remoteLastUpdated} >= ${localLastUpdated}`);
+              const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
+              return { ...defaultState, ...remoteWithoutFilter, filter: savedState.filter || defaultState.filter || "" };
+            }
           } else {
             return { ...defaultState, ...savedState };
           }
@@ -216,25 +244,18 @@
         return defaultState;
       }
     }
-    async loadRemoteState(since) {
+    async loadRemoteState() {
       try {
         console.log("Loading remote state...");
         this.setSyncStatus("pending");
-        const lastUpdated = await this.getRemoteStateUpdated();
-        if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
-          console.log(`Remote state is newer: ${since} < ${lastUpdated}`);
-          const result = await this.executeRemoteQuery("SELECT * FROM state:current;");
-          const stateObj = result || {};
-          delete stateObj.id;
-          console.log("Remote state loaded successfully.");
-          return stateObj;
-        } else {
-          console.log(`Local state is newer: ${since} >= ${lastUpdated}`);
-          return null;
-        }
+        const result = await this.executeRemoteQuery("SELECT * FROM state:current;");
+        const stateObj = result || {};
+        delete stateObj.id;
+        console.log("Remote state loaded successfully.");
+        return stateObj;
       } catch (error) {
         console.error("Failed to load remote state:", error);
-        return {};
+        return null;
       }
     }
     /**
@@ -244,6 +265,7 @@
       this.state = { ...this.state, ...newState };
       this.state.lastUpdated = (/* @__PURE__ */ new Date()).toISOString();
       this.isLocalStateDirty = true;
+      this.isRemoteSyncPending = true;
       this.scheduleLocalSave();
     }
     /**
@@ -303,6 +325,7 @@
           `UPSERT state:current MERGE {${JSON.stringify(stateToSync).slice(1, -1)}, created_at: time::now()}`,
           "success"
         );
+        this.isRemoteSyncPending = false;
       } catch (error) {
         console.error("Failed to save remote state:", error);
       }
@@ -316,6 +339,42 @@
       }
       if (this.config.stateSyncEnabled && saveRemote) {
         this.saveRemoteState(this.state.lastUpdated);
+      }
+    }
+    /**
+     * Saves remote state using fetch with keepalive for page unload scenarios.
+     * This method is designed to be called during visibilitychange/pagehide events
+     * where GM_xmlhttpRequest may not complete.
+     */
+    saveRemoteStateSync() {
+      if (!this.config.stateSyncEnabled || !this.config.stateSyncConfig) {
+        return;
+      }
+      this.isRemoteSyncPending = false;
+      try {
+        const {
+          url,
+          namespace = "bluesky_navigator",
+          database = "state",
+          username,
+          password
+        } = JSON.parse(this.config.stateSyncConfig);
+        const { filter, ...stateToSync } = this.state;
+        const query = `USE NS ${namespace} DB ${database}; UPSERT state:current MERGE {${JSON.stringify(stateToSync).slice(1, -1)}, created_at: time::now()}`;
+        fetch(`${url.replace(/\/$/, "")}/sql`, {
+          method: "POST",
+          headers: {
+            "Accept": "application/json",
+            "Authorization": "Basic " + btoa(`${username}:${password}`)
+          },
+          body: query,
+          keepalive: true
+        }).catch((error) => {
+          console.error("Failed to save remote state on unload:", error);
+        });
+        console.log("Remote state save initiated (keepalive)");
+      } catch (error) {
+        console.error("Error preparing remote state save:", error);
       }
     }
     /**

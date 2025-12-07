@@ -15,11 +15,35 @@ export class StateManager {
     this.maxEntries = this.config.maxEntries || DEFAULT_HISTORY_MAX;
     this.state = {};
     this.isLocalStateDirty = false; // Tracks whether local state has changed
+    this.isRemoteSyncPending = false; // Tracks whether remote sync is needed
     this.localSaveTimeout = null; // Timer for local state save
     this.remoteSyncTimeout = null; // Timer for remote state sync
     this.handleBlockListResponse = this.handleBlockListResponse.bind(this);
     this.saveStateImmediately = this.saveStateImmediately.bind(this);
-    window.addEventListener('beforeunload', () => this.saveStateImmediately());
+    this.saveRemoteStateSync = this.saveRemoteStateSync.bind(this);
+
+    // Save state on beforeunload - local is synchronous, remote uses keepalive fetch
+    window.addEventListener('beforeunload', () => {
+      this.saveStateImmediately();
+      // Also save remote if there's pending sync (must happen after local save)
+      if (this.config.stateSyncEnabled && this.isRemoteSyncPending) {
+        this.saveRemoteStateSync();
+      }
+    });
+
+    // Save remote state when page becomes hidden (more reliable for async)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && this.config.stateSyncEnabled && this.isRemoteSyncPending) {
+        this.saveRemoteStateSync();
+      }
+    });
+
+    // Fallback: attempt keepalive fetch on pagehide
+    window.addEventListener('pagehide', () => {
+      if (this.config.stateSyncEnabled && this.isRemoteSyncPending) {
+        this.saveRemoteStateSync();
+      }
+    });
   }
 
   static async create(key, defaultState = {}, config = {}) {
@@ -114,18 +138,31 @@ export class StateManager {
 
   /**
    * Loads state from storage or initializes with the default state.
+   * Compares local and remote timestamps to use whichever is newer.
    */
   async loadState(defaultState) {
     try {
       const savedState = JSON.parse(GM_getValue(this.key, '{}'));
+      const localLastUpdated = savedState.lastUpdated;
 
       if (this.config.stateSyncEnabled) {
-        const remoteState = await this.loadRemoteState(this.state.lastUpdated);
-        // console.dir(remoteState);
+        const remoteState = await this.loadRemoteState();
         if (remoteState) {
-          // Preserve filter from local state - it's session-only and shouldn't be synced
-          const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
-          return { ...defaultState, ...remoteWithoutFilter, filter: savedState.filter || defaultState.filter || '' };
+          const remoteLastUpdated = remoteState.lastUpdated;
+
+          // Compare timestamps - use whichever is newer
+          const localTime = localLastUpdated ? new Date(localLastUpdated).getTime() : 0;
+          const remoteTime = remoteLastUpdated ? new Date(remoteLastUpdated).getTime() : 0;
+
+          if (localTime > remoteTime) {
+            console.log(`Using local state (newer): ${localLastUpdated} > ${remoteLastUpdated}`);
+            return { ...defaultState, ...savedState };
+          } else {
+            console.log(`Using remote state (newer): ${remoteLastUpdated} >= ${localLastUpdated}`);
+            // Preserve filter from local state - it's session-only and shouldn't be synced
+            const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
+            return { ...defaultState, ...remoteWithoutFilter, filter: savedState.filter || defaultState.filter || '' };
+          }
         } else {
           return { ...defaultState, ...savedState };
         }
@@ -138,27 +175,18 @@ export class StateManager {
     }
   }
 
-  async loadRemoteState(since) {
-    // const query = `SELECT * FROM state:current;`;
-
+  async loadRemoteState() {
     try {
       console.log('Loading remote state...');
       this.setSyncStatus('pending');
-      const lastUpdated = await this.getRemoteStateUpdated();
-      if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
-        console.log(`Remote state is newer: ${since} < ${lastUpdated}`);
-        const result = await this.executeRemoteQuery('SELECT * FROM state:current;');
-        const stateObj = result || {};
-        delete stateObj.id;
-        console.log('Remote state loaded successfully.');
-        return stateObj;
-      } else {
-        console.log(`Local state is newer: ${since} >= ${lastUpdated}`);
-        return null;
-      }
+      const result = await this.executeRemoteQuery('SELECT * FROM state:current;');
+      const stateObj = result || {};
+      delete stateObj.id;
+      console.log('Remote state loaded successfully.');
+      return stateObj;
     } catch (error) {
       console.error('Failed to load remote state:', error);
-      return {};
+      return null;
     }
   }
 
@@ -169,6 +197,7 @@ export class StateManager {
     this.state = { ...this.state, ...newState };
     this.state.lastUpdated = new Date().toISOString();
     this.isLocalStateDirty = true; // Mark local state as dirty
+    this.isRemoteSyncPending = true; // Mark remote sync as pending
     this.scheduleLocalSave(); // Schedule local save
   }
 
@@ -236,6 +265,7 @@ export class StateManager {
         `UPSERT state:current MERGE {${JSON.stringify(stateToSync).slice(1, -1)}, created_at: time::now()}`,
         'success'
       );
+      this.isRemoteSyncPending = false; // Clear pending flag on success
     } catch (error) {
       console.error('Failed to save remote state:', error);
     }
@@ -250,6 +280,51 @@ export class StateManager {
     }
     if (this.config.stateSyncEnabled && saveRemote) {
       this.saveRemoteState(this.state.lastUpdated);
+    }
+  }
+
+  /**
+   * Saves remote state using fetch with keepalive for page unload scenarios.
+   * This method is designed to be called during visibilitychange/pagehide events
+   * where GM_xmlhttpRequest may not complete.
+   */
+  saveRemoteStateSync() {
+    if (!this.config.stateSyncEnabled || !this.config.stateSyncConfig) {
+      return;
+    }
+
+    // Clear flag immediately to prevent duplicate saves from multiple event handlers
+    this.isRemoteSyncPending = false;
+
+    try {
+      const {
+        url,
+        namespace = 'bluesky_navigator',
+        database = 'state',
+        username,
+        password,
+      } = JSON.parse(this.config.stateSyncConfig);
+
+      // Exclude session-only fields (filter) from remote sync
+      const { filter, ...stateToSync } = this.state;
+      const query = `USE NS ${namespace} DB ${database}; UPSERT state:current MERGE {${JSON.stringify(stateToSync).slice(1, -1)}, created_at: time::now()}`;
+
+      // Use fetch with keepalive to ensure request completes during page unload
+      fetch(`${url.replace(/\/$/, '')}/sql`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Basic ' + btoa(`${username}:${password}`),
+        },
+        body: query,
+        keepalive: true,
+      }).catch((error) => {
+        console.error('Failed to save remote state on unload:', error);
+      });
+
+      console.log('Remote state save initiated (keepalive)');
+    } catch (error) {
+      console.error('Error preparing remote state save:', error);
     }
   }
 

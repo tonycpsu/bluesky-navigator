@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+432.1a1f673d
+// @version     1.0.31+433.c38cd049
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45061,6 +45061,12 @@ if (cid) {
           default: "Default",
           help: "How to sort replies in the sidecar"
         },
+        fixedSidecar: {
+          label: "Fixed sidecar panel",
+          type: "checkbox",
+          default: true,
+          help: "Show sidecar in fixed panel instead of inline"
+        },
         showReplyContext: {
           label: "Show reply context",
           type: "checkbox",
@@ -46316,6 +46322,24 @@ if (cid) {
   --transition-duration: 200ms;
   --animation-duration: 300ms;
   --bsky-nav-max-width: 600px;
+
+  /* Z-index hierarchy (ascending order)
+     Use these variables for consistent stacking:
+     - base: local stacking within components
+     - raised: slightly elevated elements
+     - toolbar: fixed toolbars, tabs, sticky headers
+     - dropdown: menus, dropdowns, nav buttons
+     - panel: floating panels (sidecar)
+     - modal: modals, overlays, config
+     - tooltip: tooltips (always on top)
+  */
+  --z-base: 1;
+  --z-raised: 10;
+  --z-toolbar: 100;
+  --z-dropdown: 1000;
+  --z-panel: 5000;
+  --z-modal: 10000;
+  --z-tooltip: 11000;
 }
 
 /* High Contrast Mode */
@@ -46385,7 +46409,7 @@ div#logContainer {
     color: #e0e0e0;
     font-family: monospace;
     font-size: 12px;
-    z-index: 10000;
+    z-index: var(--z-modal);
     padding: 10px;
     padding-top: 30px;
 }
@@ -46427,7 +46451,7 @@ div#bsky-navigator-toolbar {
     width: 100%;
     background-color: inherit;
     border-bottom: 1px solid rgb(192, 192, 192);
-    z-index: 100;
+    z-index: var(--z-toolbar);
     overflow: visible;
 }
 
@@ -46540,7 +46564,7 @@ div#itemTimestampStats {
     flex: 1;
     min-width: 0;
     margin: 0px 8px;
-    z-index: 10;
+    z-index: var(--z-raised);
     font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;
 }
 
@@ -46548,7 +46572,7 @@ div#itemTimestampStats {
     position: absolute !important;
     background-color: white !important;
     border: 1px solid #ccc !important;
-    z-index: 1000 !important;
+    z-index: var(--z-dropdown) !important;
     max-height: 200px !important;
     overflow-y: auto !important;
     list-style-type: none !important;
@@ -46577,7 +46601,7 @@ div#itemTimestampStats {
         margin-left: auto;
         margin-right: auto;
         position: sticky;
-        z-index: 10;
+        z-index: var(--z-raised);
         align-items: center;
         background-color: #ffffff;
         bottom: 0;
@@ -46601,7 +46625,7 @@ div#itemTimestampStats {
         margin-left: auto;
         margin-right: auto;
         position: sticky;
-        z-index: 10;
+        z-index: var(--z-raised);
         align-items: center;
         background-color: #ffffff;
         bottom: 58px;
@@ -46643,7 +46667,7 @@ div#statusBarRight {
 }
 
 #prevButton {
-    z-index: 1000;
+    z-index: var(--z-dropdown);
     position: absolute;
     top: 30%;
     right: -10px;
@@ -46657,7 +46681,7 @@ div#statusBarRight {
 }
 
 #nextButton {
-    z-index: 1000;
+    z-index: var(--z-dropdown);
     position: absolute;
     bottom: 30%;
     right: -10px;
@@ -46767,7 +46791,7 @@ div:has(> div > .item.filtered) {
     background-color: #cccccc;
     cursor: pointer;
     justify-content: center;
-    z-index: 1000;
+    z-index: var(--z-dropdown);
 }
 
 .preferences-icon-overlay-sync-ready {
@@ -46799,7 +46823,7 @@ div.item-banner {
     left: 0;
     font-family: "Lucida Console", "Courier New", monospace;
     font-size: 0.7em;
-    z-index: 10;
+    z-index: var(--z-raised);
     color: black;
     text-shadow: 1px 1px rgba(255, 255, 255,0.8);
     background: rgba(128, 192, 192, 0.3);
@@ -46842,7 +46866,7 @@ div.item-banner {
     border-radius: 12px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     width: 400px;
-    z-index: 1000;
+    z-index: var(--z-dropdown);
 }
 
 /* Hide the reply connector line in threaded posts - only on desktop */
@@ -46952,6 +46976,129 @@ div.item-banner {
 @media only screen and (max-width: 800px) {
     .sidecar-replies {
         display: none;
+    }
+}
+
+/* ==========================================================================
+   Fixed Sidecar Panel
+   ========================================================================== */
+
+.fixed-sidecar-panel {
+    position: fixed;
+    top: 60px;
+    right: 16px; /* Default fallback, JS will override */
+    width: 350px;
+    max-height: calc(100vh - 120px);
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: var(--z-panel);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateX(20px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+}
+
+.fixed-sidecar-panel.visible {
+    opacity: 1 !important;
+    transform: translateX(0) !important;
+    pointer-events: auto !important;
+}
+
+.fixed-sidecar-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+    flex-shrink: 0;
+}
+
+.fixed-sidecar-panel-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1f2937;
+}
+
+.fixed-sidecar-panel-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: #6b7280;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fixed-sidecar-panel-close:hover {
+    background-color: #e5e7eb;
+    color: #1f2937;
+}
+
+.fixed-sidecar-panel-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+}
+
+.fixed-sidecar-panel-content .sidecar-replies {
+    display: flex !important;
+    max-height: none;
+    padding: 8px;
+}
+
+.fixed-sidecar-panel-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    color: #6b7280;
+    font-size: 13px;
+    text-align: center;
+}
+
+/* Hide fixed sidecar on mobile */
+@media only screen and (max-width: 800px) {
+    .fixed-sidecar-panel {
+        display: none;
+    }
+}
+
+/* Dark mode for fixed sidecar */
+@media (prefers-color-scheme: dark) {
+    .fixed-sidecar-panel {
+        background-color: #1f2937;
+        border-color: #374151;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .fixed-sidecar-panel-header {
+        background-color: #111827;
+        border-color: #374151;
+    }
+
+    .fixed-sidecar-panel-title {
+        color: #f9fafb;
+    }
+
+    .fixed-sidecar-panel-close {
+        color: #9ca3af;
+    }
+
+    .fixed-sidecar-panel-close:hover {
+        background-color: #374151;
+        color: #f9fafb;
+    }
+
+    .fixed-sidecar-panel-empty {
+        color: #9ca3af;
     }
 }
 
@@ -47205,7 +47352,7 @@ div.item-banner {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  z-index: 9999;
+  z-index: var(--z-panel);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   animation: newPostsPillBounce var(--animation-duration, 500ms) ease-out;
   transition: transform var(--transition-duration, 200ms) ease,
@@ -47400,7 +47547,7 @@ div.item-banner {
 .shortcut-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -47649,7 +47796,7 @@ div.item-banner {
 .post-view-modal {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -48114,7 +48261,7 @@ div.item-banner {
 .scroll-segment-current {
   outline: 2px solid #3b82f6;
   outline-offset: -1px;
-  z-index: 1;
+  z-index: var(--z-base);
 }
 
 /* Filtered posts - grayed out in feed map */
@@ -48362,7 +48509,7 @@ div.item-banner {
   user-select: none;
   -webkit-user-select: none;
   position: relative;
-  z-index: 1;
+  z-index: var(--z-base);
 }
 
 /* Zoom indicator connector */
@@ -48438,7 +48585,7 @@ div.item-banner {
   background-color: transparent;
   pointer-events: none;
   box-sizing: border-box;
-  z-index: 10;
+  z-index: var(--z-raised);
 }
 
 /* Left bracket [ */
@@ -48480,7 +48627,7 @@ div.item-banner {
   background-color: var(--bsky-blue, #1185fe);
   opacity: 0;
   transition: opacity calc(var(--animation-duration, 300ms) * 0.5) ease-out;
-  z-index: 5;
+  z-index: var(--z-base);
   border-radius: 2px;
 }
 
@@ -48792,7 +48939,7 @@ div#statusBar.has-scroll-indicator {
 
 .feed-map-tooltip {
   position: fixed;
-  z-index: 10001;
+  z-index: var(--z-tooltip);
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
@@ -49051,7 +49198,7 @@ div#statusBar.has-scroll-indicator {
   flex: 0 0 auto;
   min-width: 150px;
   max-width: 300px;
-  z-index: 100;
+  z-index: var(--z-toolbar);
 }
 
 .saved-searches-btn,
@@ -49285,7 +49432,7 @@ div#statusBar.has-scroll-indicator {
   opacity: 0;
   transition: opacity var(--transition-duration, 200ms) ease,
               transform var(--transition-duration, 200ms) ease;
-  z-index: 10;
+  z-index: var(--z-raised);
   pointer-events: none;
 }
 
@@ -49327,7 +49474,7 @@ div#statusBar.has-scroll-indicator {
   position: fixed;
   inset: 0;
   background-color: rgba(0, 0, 0, 0);
-  z-index: 10000;
+  z-index: var(--z-modal);
   transition: background-color var(--transition-duration, 200ms) ease;
 }
 
@@ -49342,7 +49489,7 @@ div#statusBar.has-scroll-indicator {
   right: 0;
   background-color: white;
   border-radius: 16px 16px 0 0;
-  z-index: 10001;
+  z-index: calc(var(--z-modal) + 1);
   transform: translateY(100%);
   transition: transform var(--transition-duration, 200ms) ease;
   max-height: 80vh;
@@ -49488,7 +49635,7 @@ div#statusBar.has-scroll-indicator {
 .config-modal {
   position: fixed;
   inset: 0;
-  z-index: 10001;
+  z-index: calc(var(--z-modal) + 1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -49780,7 +49927,7 @@ div#statusBar.has-scroll-indicator {
   padding: 4px 8px;
   border-radius: 4px;
   white-space: nowrap;
-  z-index: 100;
+  z-index: var(--z-toolbar);
   pointer-events: none;
 }
 
@@ -50390,7 +50537,8 @@ div#statusBar.has-scroll-indicator {
       { keys: ["m"], description: "Toggle media/video" },
       { keys: ["c"], description: "Screenshot to clipboard" },
       { keys: ["v"], description: "Full-screen post view" },
-      { keys: ["V"], description: "Reader mode (thread)" }
+      { keys: ["V"], description: "Reader mode (thread)" },
+      { keys: ["t"], description: "Toggle thread context" }
     ],
     "Feed Controls": [
       { keys: ["/"], description: "Focus search" },
@@ -66557,6 +66705,145 @@ div#statusBar.has-scroll-indicator {
       waitForElement$2("#sidecar-skeleton-template", () => {
         this.skeletonTemplate = Handlebars.compile($("#sidecar-skeleton-template").html());
       });
+      if (this.config.get("fixedSidecar") && this.config.get("showReplySidecar")) {
+        this.initFixedSidecarPanel();
+      }
+    }
+    /**
+     * Initialize the fixed sidecar panel that displays thread context for the selected post
+     */
+    initFixedSidecarPanel() {
+      $("#fixed-sidecar-panel").remove();
+      this.fixedSidecarPanel = $(`
+      <div id="fixed-sidecar-panel" class="fixed-sidecar-panel">
+        <div class="fixed-sidecar-panel-header">
+          <span class="fixed-sidecar-panel-title">Thread Context</span>
+          <button class="fixed-sidecar-panel-close" aria-label="Close sidecar panel">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="fixed-sidecar-panel-content">
+          <div class="fixed-sidecar-panel-empty">Select a post to see thread context</div>
+        </div>
+      </div>
+    `);
+      $("body").append(this.fixedSidecarPanel);
+      this.fixedSidecarPanel.find(".fixed-sidecar-panel-close").on("click", () => {
+        this.hideFixedSidecarPanel();
+      });
+      $(window).on("resize.fixedSidecar", () => {
+        if ($("#fixed-sidecar-panel").hasClass("visible")) {
+          this.positionFixedSidecarPanel();
+        }
+      });
+    }
+    /**
+     * Position the fixed sidecar panel next to the feed container
+     */
+    positionFixedSidecarPanel() {
+      const panel = $("#fixed-sidecar-panel");
+      if (!panel.length) return;
+      let feedContainer = null;
+      if (this.selectedItem) {
+        feedContainer = $(this.selectedItem).closest(".thread")[0];
+      }
+      if (!feedContainer) {
+        feedContainer = document.querySelector('main[role="main"] [style*="max-width"]');
+      }
+      if (feedContainer) {
+        const rect = feedContainer.getBoundingClientRect();
+        const gap = 16;
+        const panelWidth = 350;
+        const left = rect.right + gap;
+        const availableWidth = window.innerWidth - left;
+        if (availableWidth >= panelWidth) {
+          panel.css({
+            left: `${left}px`,
+            right: "auto",
+            top: `${rect.top}px`
+          });
+        } else {
+          panel.css({
+            left: "auto",
+            right: "16px",
+            top: `${rect.top}px`
+          });
+        }
+      }
+    }
+    /**
+     * Show the fixed sidecar panel
+     */
+    showFixedSidecarPanel() {
+      this.positionFixedSidecarPanel();
+      $("#fixed-sidecar-panel").addClass("visible");
+    }
+    /**
+     * Hide the fixed sidecar panel
+     */
+    hideFixedSidecarPanel() {
+      $("#fixed-sidecar-panel").removeClass("visible");
+    }
+    /**
+     * Toggle the fixed sidecar panel visibility
+     */
+    async toggleFixedSidecarPanel(item) {
+      const panel = $("#fixed-sidecar-panel");
+      if (panel.hasClass("visible")) {
+        this.config.set("fixedSidecarVisible", false);
+        this.config.save();
+        this.hideFixedSidecarPanel();
+      } else if (item && this.api) {
+        this.config.set("fixedSidecarVisible", true);
+        this.config.save();
+        const thread = await this.getThreadForItem(item);
+        if (thread) {
+          await this.updateFixedSidecarPanel(item, thread);
+        }
+      }
+    }
+    /**
+     * Update the fixed sidecar panel with content for the given item
+     */
+    async updateFixedSidecarPanel(item, thread) {
+      if (!this.fixedSidecarPanel || !document.contains(this.fixedSidecarPanel[0])) {
+        this.initFixedSidecarPanel();
+      }
+      const contentContainer = $("#fixed-sidecar-panel .fixed-sidecar-panel-content");
+      contentContainer.html(this.getSkeletonContent());
+      this.showFixedSidecarPanel();
+      const sidecarContent = await this.getSidecarContent(item, thread);
+      contentContainer.html(sidecarContent);
+      contentContainer.find(".sidecar-post").each((i2, post2) => {
+        $(post2).on("mouseover", this.onSidecarItemMouseOver);
+      });
+      contentContainer.find(".sidecar-section-toggle").each((i2, toggle) => {
+        $(toggle).on("click", (e2) => {
+          e2.preventDefault();
+          const btn = $(e2.currentTarget);
+          const contentId = btn.attr("aria-controls");
+          const content2 = $(`#${contentId}`);
+          const isExpanded = btn.attr("aria-expanded") === "true";
+          btn.attr("aria-expanded", !isExpanded);
+          btn.find(".sidecar-section-icon").text(isExpanded ? "\u25B6" : "\u25BC");
+          if (isExpanded) {
+            content2.slideUp(getAnimationDuration(200, this.config));
+          } else {
+            content2.slideDown(getAnimationDuration(200, this.config));
+          }
+        });
+      });
+    }
+    /**
+     * Clear the fixed sidecar panel content
+     */
+    clearFixedSidecarPanel() {
+      if (this.fixedSidecarPanel) {
+        const contentContainer = this.fixedSidecarPanel.find(".fixed-sidecar-panel-content");
+        contentContainer.html('<div class="fixed-sidecar-panel-empty">Select a post to see thread context</div>');
+      }
     }
     getSkeletonContent() {
       if (this.skeletonTemplate) {
@@ -66709,6 +66996,12 @@ div#statusBar.has-scroll-indicator {
       });
     }
     async showSidecar(item, thread, action = null) {
+      if (this.config.get("fixedSidecar")) {
+        if (this.config.get("fixedSidecarVisible") !== false) {
+          await this.updateFixedSidecarPanel(item, thread);
+        }
+        return;
+      }
       const container = $(item).parent();
       if (!container.length || !document.contains(container[0])) {
         return;
@@ -66857,6 +67150,9 @@ div#statusBar.has-scroll-indicator {
           break;
         case "V":
           this.showReaderModeModal(item);
+          break;
+        case "t":
+          this.toggleFixedSidecarPanel(item);
           break;
         default:
           if (!isNaN(parseInt(event.key))) {
@@ -70951,7 +71247,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             ${config.get("replySelectionInactive")}
         }
 
-        /* Sidecar width configuration */
+        /* Sidecar width configuration - only apply when using inline sidecar */
+        ${!config.get("fixedSidecar") ? `
         @media only screen and (min-width: 801px) {
             .item {
                 flex: ${100 - (config.get("sidecarWidthPercent") || 30)} !important;
@@ -70960,6 +71257,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
                 flex: ${config.get("sidecarWidthPercent") || 30} !important;
             }
         }
+        ` : ""}
 
         @media (prefers-color-scheme:light){
             .item-unread {

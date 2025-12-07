@@ -258,6 +258,12 @@ const CONFIG_SCHEMA = {
         default: 'Default',
         help: 'How to sort replies in the sidecar',
       },
+      fixedSidecar: {
+        label: 'Fixed sidecar panel',
+        type: 'checkbox',
+        default: true,
+        help: 'Show sidecar in fixed panel instead of inline',
+      },
       showReplyContext: {
         label: 'Show reply context',
         type: 'checkbox',

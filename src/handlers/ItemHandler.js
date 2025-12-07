@@ -361,6 +361,186 @@ export class ItemHandler extends Handler {
     waitForElement('#sidecar-skeleton-template', () => {
       this.skeletonTemplate = Handlebars.compile($('#sidecar-skeleton-template').html());
     });
+
+    // Initialize fixed sidecar panel if enabled
+    if (this.config.get('fixedSidecar') && this.config.get('showReplySidecar')) {
+      this.initFixedSidecarPanel();
+    }
+  }
+
+  /**
+   * Initialize the fixed sidecar panel that displays thread context for the selected post
+   */
+  initFixedSidecarPanel() {
+    // Remove any existing panel
+    $('#fixed-sidecar-panel').remove();
+
+    // Create the fixed panel
+    this.fixedSidecarPanel = $(`
+      <div id="fixed-sidecar-panel" class="fixed-sidecar-panel">
+        <div class="fixed-sidecar-panel-header">
+          <span class="fixed-sidecar-panel-title">Thread Context</span>
+          <button class="fixed-sidecar-panel-close" aria-label="Close sidecar panel">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="fixed-sidecar-panel-content">
+          <div class="fixed-sidecar-panel-empty">Select a post to see thread context</div>
+        </div>
+      </div>
+    `);
+
+    $('body').append(this.fixedSidecarPanel);
+
+    // Close button handler
+    this.fixedSidecarPanel.find('.fixed-sidecar-panel-close').on('click', () => {
+      this.hideFixedSidecarPanel();
+    });
+
+    // Update position on resize
+    $(window).on('resize.fixedSidecar', () => {
+      if ($('#fixed-sidecar-panel').hasClass('visible')) {
+        this.positionFixedSidecarPanel();
+      }
+    });
+  }
+
+  /**
+   * Position the fixed sidecar panel next to the feed container
+   */
+  positionFixedSidecarPanel() {
+    const panel = $('#fixed-sidecar-panel');
+    if (!panel.length) return;
+
+    // Find the feed container or use the selected item's thread container
+    let feedContainer = null;
+    if (this.selectedItem) {
+      feedContainer = $(this.selectedItem).closest('.thread')[0];
+    }
+    if (!feedContainer) {
+      // Fallback: find the main feed area
+      feedContainer = document.querySelector('main[role="main"] [style*="max-width"]');
+    }
+
+    if (feedContainer) {
+      const rect = feedContainer.getBoundingClientRect();
+      const gap = 16; // Gap between feed and sidecar
+      const panelWidth = 350;
+
+      // Position to the right of the feed container
+      const left = rect.right + gap;
+
+      // Check if there's enough space on the right
+      const availableWidth = window.innerWidth - left;
+      if (availableWidth >= panelWidth) {
+        panel.css({
+          left: `${left}px`,
+          right: 'auto',
+          top: `${rect.top}px`
+        });
+      } else {
+        // Fall back to right-aligned if not enough space
+        panel.css({
+          left: 'auto',
+          right: '16px',
+          top: `${rect.top}px`
+        });
+      }
+    }
+  }
+
+  /**
+   * Show the fixed sidecar panel
+   */
+  showFixedSidecarPanel() {
+    this.positionFixedSidecarPanel();
+    $('#fixed-sidecar-panel').addClass('visible');
+  }
+
+  /**
+   * Hide the fixed sidecar panel
+   */
+  hideFixedSidecarPanel() {
+    $('#fixed-sidecar-panel').removeClass('visible');
+  }
+
+  /**
+   * Toggle the fixed sidecar panel visibility
+   */
+  async toggleFixedSidecarPanel(item) {
+    const panel = $('#fixed-sidecar-panel');
+    if (panel.hasClass('visible')) {
+      this.config.set('fixedSidecarVisible', false);
+      this.config.save();
+      this.hideFixedSidecarPanel();
+    } else if (item && this.api) {
+      this.config.set('fixedSidecarVisible', true);
+      this.config.save();
+      // Show and update with current item's thread
+      const thread = await this.getThreadForItem(item);
+      if (thread) {
+        await this.updateFixedSidecarPanel(item, thread);
+      }
+    }
+  }
+
+  /**
+   * Update the fixed sidecar panel with content for the given item
+   */
+  async updateFixedSidecarPanel(item, thread) {
+    if (!this.fixedSidecarPanel || !document.contains(this.fixedSidecarPanel[0])) {
+      this.initFixedSidecarPanel();
+    }
+
+    // Use direct DOM selection to avoid stale jQuery reference
+    const contentContainer = $('#fixed-sidecar-panel .fixed-sidecar-panel-content');
+
+    // Show loading skeleton
+    contentContainer.html(this.getSkeletonContent());
+    this.showFixedSidecarPanel();
+
+    // Get the sidecar content
+    const sidecarContent = await this.getSidecarContent(item, thread);
+
+    // Update the panel content
+    contentContainer.html(sidecarContent);
+
+    // Initialize event handlers for sidecar posts
+    contentContainer.find('.sidecar-post').each((i, post) => {
+      $(post).on('mouseover', this.onSidecarItemMouseOver);
+    });
+
+    // Initialize collapsible sections
+    contentContainer.find('.sidecar-section-toggle').each((i, toggle) => {
+      $(toggle).on('click', (e) => {
+        e.preventDefault();
+        const btn = $(e.currentTarget);
+        const contentId = btn.attr('aria-controls');
+        const content = $(`#${contentId}`);
+        const isExpanded = btn.attr('aria-expanded') === 'true';
+
+        btn.attr('aria-expanded', !isExpanded);
+        btn.find('.sidecar-section-icon').text(isExpanded ? '▶' : '▼');
+
+        if (isExpanded) {
+          content.slideUp(getAnimationDuration(200, this.config));
+        } else {
+          content.slideDown(getAnimationDuration(200, this.config));
+        }
+      });
+    });
+  }
+
+  /**
+   * Clear the fixed sidecar panel content
+   */
+  clearFixedSidecarPanel() {
+    if (this.fixedSidecarPanel) {
+      const contentContainer = this.fixedSidecarPanel.find('.fixed-sidecar-panel-content');
+      contentContainer.html('<div class="fixed-sidecar-panel-empty">Select a post to see thread context</div>');
+    }
   }
 
   getSkeletonContent() {
@@ -552,6 +732,16 @@ export class ItemHandler extends Handler {
   }
 
   async showSidecar(item, thread, action = null) {
+    // If fixed sidecar is enabled, use the fixed panel instead of inline
+    if (this.config.get('fixedSidecar')) {
+      // Don't show if user hid it with 't' key (persisted in config)
+      if (this.config.get('fixedSidecarVisible') !== false) {
+        await this.updateFixedSidecarPanel(item, thread);
+      }
+      return;
+    }
+
+    // Inline sidecar mode (original behavior)
     const container = $(item).parent();
 
     // Verify container still exists in DOM (React may have removed it)
@@ -758,6 +948,10 @@ export class ItemHandler extends Handler {
 
       case 'V':
         this.showReaderModeModal(item);
+        break;
+
+      case 't':
+        this.toggleFixedSidecarPanel(item);
         break;
 
       default:

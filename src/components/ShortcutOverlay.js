@@ -31,6 +31,7 @@ const SHORTCUTS = {
     { keys: ['c'], description: 'Screenshot to clipboard' },
     { keys: ['v'], description: 'Full-screen post view' },
     { keys: ['V'], description: 'Reader mode (thread)' },
+    { keys: ['t'], description: 'Toggle thread context' },
   ],
   'Feed Controls': [
     { keys: ['/'], description: 'Focus search' },

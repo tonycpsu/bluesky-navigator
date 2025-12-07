@@ -469,7 +469,10 @@ function getScreenFromElement(element) {
             ${config.get('replySelectionInactive')}
         }
 
-        /* Sidecar width configuration */
+        /* Sidecar width configuration - only apply when using inline sidecar */
+        ${
+          !config.get('fixedSidecar')
+            ? `
         @media only screen and (min-width: 801px) {
             .item {
                 flex: ${100 - (config.get('sidecarWidthPercent') || 30)} !important;
@@ -477,6 +480,9 @@ function getScreenFromElement(element) {
             .sidecar-replies {
                 flex: ${config.get('sidecarWidthPercent') || 30} !important;
             }
+        }
+        `
+            : ''
         }
 
         @media (prefers-color-scheme:light){

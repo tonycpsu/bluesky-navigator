@@ -10,6 +10,24 @@
   --transition-duration: 200ms;
   --animation-duration: 300ms;
   --bsky-nav-max-width: 600px;
+
+  /* Z-index hierarchy (ascending order)
+     Use these variables for consistent stacking:
+     - base: local stacking within components
+     - raised: slightly elevated elements
+     - toolbar: fixed toolbars, tabs, sticky headers
+     - dropdown: menus, dropdowns, nav buttons
+     - panel: floating panels (sidecar)
+     - modal: modals, overlays, config
+     - tooltip: tooltips (always on top)
+  */
+  --z-base: 1;
+  --z-raised: 10;
+  --z-toolbar: 100;
+  --z-dropdown: 1000;
+  --z-panel: 5000;
+  --z-modal: 10000;
+  --z-tooltip: 11000;
 }
 
 /* High Contrast Mode */
@@ -79,7 +97,7 @@ div#logContainer {
     color: #e0e0e0;
     font-family: monospace;
     font-size: 12px;
-    z-index: 10000;
+    z-index: var(--z-modal);
     padding: 10px;
     padding-top: 30px;
 }
@@ -121,7 +139,7 @@ div#bsky-navigator-toolbar {
     width: 100%;
     background-color: inherit;
     border-bottom: 1px solid rgb(192, 192, 192);
-    z-index: 100;
+    z-index: var(--z-toolbar);
     overflow: visible;
 }
 
@@ -234,7 +252,7 @@ div#itemTimestampStats {
     flex: 1;
     min-width: 0;
     margin: 0px 8px;
-    z-index: 10;
+    z-index: var(--z-raised);
     font: 14px "DejaVu Sans Mono", "Lucida Console", "Courier New", monospace;
 }
 
@@ -242,7 +260,7 @@ div#itemTimestampStats {
     position: absolute !important;
     background-color: white !important;
     border: 1px solid #ccc !important;
-    z-index: 1000 !important;
+    z-index: var(--z-dropdown) !important;
     max-height: 200px !important;
     overflow-y: auto !important;
     list-style-type: none !important;
@@ -271,7 +289,7 @@ div#itemTimestampStats {
         margin-left: auto;
         margin-right: auto;
         position: sticky;
-        z-index: 10;
+        z-index: var(--z-raised);
         align-items: center;
         background-color: #ffffff;
         bottom: 0;
@@ -295,7 +313,7 @@ div#itemTimestampStats {
         margin-left: auto;
         margin-right: auto;
         position: sticky;
-        z-index: 10;
+        z-index: var(--z-raised);
         align-items: center;
         background-color: #ffffff;
         bottom: 58px;
@@ -337,7 +355,7 @@ div#statusBarRight {
 }
 
 #prevButton {
-    z-index: 1000;
+    z-index: var(--z-dropdown);
     position: absolute;
     top: 30%;
     right: -10px;
@@ -351,7 +369,7 @@ div#statusBarRight {
 }
 
 #nextButton {
-    z-index: 1000;
+    z-index: var(--z-dropdown);
     position: absolute;
     bottom: 30%;
     right: -10px;
@@ -461,7 +479,7 @@ div:has(> div > .item.filtered) {
     background-color: #cccccc;
     cursor: pointer;
     justify-content: center;
-    z-index: 1000;
+    z-index: var(--z-dropdown);
 }
 
 .preferences-icon-overlay-sync-ready {
@@ -493,7 +511,7 @@ div.item-banner {
     left: 0;
     font-family: "Lucida Console", "Courier New", monospace;
     font-size: 0.7em;
-    z-index: 10;
+    z-index: var(--z-raised);
     color: black;
     text-shadow: 1px 1px rgba(255, 255, 255,0.8);
     background: rgba(128, 192, 192, 0.3);
@@ -536,7 +554,7 @@ div.item-banner {
     border-radius: 12px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     width: 400px;
-    z-index: 1000;
+    z-index: var(--z-dropdown);
 }
 
 /* Hide the reply connector line in threaded posts - only on desktop */
@@ -646,6 +664,129 @@ div.item-banner {
 @media only screen and (max-width: 800px) {
     .sidecar-replies {
         display: none;
+    }
+}
+
+/* ==========================================================================
+   Fixed Sidecar Panel
+   ========================================================================== */
+
+.fixed-sidecar-panel {
+    position: fixed;
+    top: 60px;
+    right: 16px; /* Default fallback, JS will override */
+    width: 350px;
+    max-height: calc(100vh - 120px);
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: var(--z-panel);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateX(20px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+}
+
+.fixed-sidecar-panel.visible {
+    opacity: 1 !important;
+    transform: translateX(0) !important;
+    pointer-events: auto !important;
+}
+
+.fixed-sidecar-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+    flex-shrink: 0;
+}
+
+.fixed-sidecar-panel-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1f2937;
+}
+
+.fixed-sidecar-panel-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: #6b7280;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fixed-sidecar-panel-close:hover {
+    background-color: #e5e7eb;
+    color: #1f2937;
+}
+
+.fixed-sidecar-panel-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+}
+
+.fixed-sidecar-panel-content .sidecar-replies {
+    display: flex !important;
+    max-height: none;
+    padding: 8px;
+}
+
+.fixed-sidecar-panel-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    color: #6b7280;
+    font-size: 13px;
+    text-align: center;
+}
+
+/* Hide fixed sidecar on mobile */
+@media only screen and (max-width: 800px) {
+    .fixed-sidecar-panel {
+        display: none;
+    }
+}
+
+/* Dark mode for fixed sidecar */
+@media (prefers-color-scheme: dark) {
+    .fixed-sidecar-panel {
+        background-color: #1f2937;
+        border-color: #374151;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .fixed-sidecar-panel-header {
+        background-color: #111827;
+        border-color: #374151;
+    }
+
+    .fixed-sidecar-panel-title {
+        color: #f9fafb;
+    }
+
+    .fixed-sidecar-panel-close {
+        color: #9ca3af;
+    }
+
+    .fixed-sidecar-panel-close:hover {
+        background-color: #374151;
+        color: #f9fafb;
+    }
+
+    .fixed-sidecar-panel-empty {
+        color: #9ca3af;
     }
 }
 
@@ -899,7 +1040,7 @@ div.item-banner {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  z-index: 9999;
+  z-index: var(--z-panel);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   animation: newPostsPillBounce var(--animation-duration, 500ms) ease-out;
   transition: transform var(--transition-duration, 200ms) ease,
@@ -1094,7 +1235,7 @@ div.item-banner {
 .shortcut-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1343,7 +1484,7 @@ div.item-banner {
 .post-view-modal {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1808,7 +1949,7 @@ div.item-banner {
 .scroll-segment-current {
   outline: 2px solid #3b82f6;
   outline-offset: -1px;
-  z-index: 1;
+  z-index: var(--z-base);
 }
 
 /* Filtered posts - grayed out in feed map */
@@ -2056,7 +2197,7 @@ div.item-banner {
   user-select: none;
   -webkit-user-select: none;
   position: relative;
-  z-index: 1;
+  z-index: var(--z-base);
 }
 
 /* Zoom indicator connector */
@@ -2132,7 +2273,7 @@ div.item-banner {
   background-color: transparent;
   pointer-events: none;
   box-sizing: border-box;
-  z-index: 10;
+  z-index: var(--z-raised);
 }
 
 /* Left bracket [ */
@@ -2174,7 +2315,7 @@ div.item-banner {
   background-color: var(--bsky-blue, #1185fe);
   opacity: 0;
   transition: opacity calc(var(--animation-duration, 300ms) * 0.5) ease-out;
-  z-index: 5;
+  z-index: var(--z-base);
   border-radius: 2px;
 }
 
@@ -2486,7 +2627,7 @@ div#statusBar.has-scroll-indicator {
 
 .feed-map-tooltip {
   position: fixed;
-  z-index: 10001;
+  z-index: var(--z-tooltip);
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
@@ -2745,7 +2886,7 @@ div#statusBar.has-scroll-indicator {
   flex: 0 0 auto;
   min-width: 150px;
   max-width: 300px;
-  z-index: 100;
+  z-index: var(--z-toolbar);
 }
 
 .saved-searches-btn,
@@ -2979,7 +3120,7 @@ div#statusBar.has-scroll-indicator {
   opacity: 0;
   transition: opacity var(--transition-duration, 200ms) ease,
               transform var(--transition-duration, 200ms) ease;
-  z-index: 10;
+  z-index: var(--z-raised);
   pointer-events: none;
 }
 
@@ -3021,7 +3162,7 @@ div#statusBar.has-scroll-indicator {
   position: fixed;
   inset: 0;
   background-color: rgba(0, 0, 0, 0);
-  z-index: 10000;
+  z-index: var(--z-modal);
   transition: background-color var(--transition-duration, 200ms) ease;
 }
 
@@ -3036,7 +3177,7 @@ div#statusBar.has-scroll-indicator {
   right: 0;
   background-color: white;
   border-radius: 16px 16px 0 0;
-  z-index: 10001;
+  z-index: calc(var(--z-modal) + 1);
   transform: translateY(100%);
   transition: transform var(--transition-duration, 200ms) ease;
   max-height: 80vh;
@@ -3182,7 +3323,7 @@ div#statusBar.has-scroll-indicator {
 .config-modal {
   position: fixed;
   inset: 0;
-  z-index: 10001;
+  z-index: calc(var(--z-modal) + 1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3474,7 +3615,7 @@ div#statusBar.has-scroll-indicator {
   padding: 4px 8px;
   border-radius: 4px;
   white-space: nowrap;
-  z-index: 100;
+  z-index: var(--z-toolbar);
   pointer-events: none;
 }
 

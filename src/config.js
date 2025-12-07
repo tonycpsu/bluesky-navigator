@@ -82,6 +82,17 @@ export const CONFIG_FIELDS = {
     type: 'select',
     options: ['Default', 'Oldest First', 'Newest First', 'Most Liked First', 'Most Reposted First'],
   },
+  fixedSidecar: {
+    label: 'Fixed Sidecar Panel',
+    title:
+      'If checked, the sidecar will be shown in a fixed panel on the right side of the screen instead of inline with each post.',
+    type: 'checkbox',
+    default: true,
+  },
+  fixedSidecarVisible: {
+    type: 'hidden',
+    default: true,
+  },
   hideRightSidebar: {
     label: 'Hide Right Sidebar',
     title:

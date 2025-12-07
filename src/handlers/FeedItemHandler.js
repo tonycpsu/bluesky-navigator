@@ -1040,22 +1040,75 @@ export class FeedItemHandler extends ItemHandler {
         styleEl.id = styleId;
         document.head.appendChild(styleEl);
       }
-      const extraWidth = contentWidth - 600;
-      const shiftRight = Math.floor(extraWidth / 2);
-      styleEl.textContent = `
-        main[role="main"] [style*="max-width: 600px"],
-        main[role="main"] [style*="max-width:600px"] {
-          max-width: ${contentWidth}px !important;
-          transform: translateX(${shiftRight}px) !important;
-        }
-        div[data-testid="homeScreenFeedTabs"] {
-          width: 100% !important;
-        }
-        #statusBar {
-          max-width: ${contentWidth}px !important;
-          transform: translateX(${shiftRight}px) !important;
-        }
-      `;
+      const compactLayout = this.config.get('compactLayout');
+
+      if (compactLayout) {
+        // Nav is 240px wide on desktop, ~80px when collapsed (<=1300px width)
+        const navWidthFull = 240;
+        const navWidthCollapsed = 80;
+        const gap = 20;
+        styleEl.textContent = `
+          /* Desktop: full nav width */
+          @media (min-width: 1301px) {
+            main[role="main"] [style*="max-width: 600px"],
+            main[role="main"] [style*="max-width:600px"] {
+              max-width: ${contentWidth}px !important;
+              margin-left: ${navWidthFull + gap}px !important;
+              margin-right: auto !important;
+              transform: none !important;
+            }
+            #statusBar {
+              max-width: ${contentWidth}px !important;
+              margin-left: ${navWidthFull + gap}px !important;
+              margin-right: auto !important;
+              transform: none !important;
+            }
+          }
+          /* Narrow: collapsed nav width */
+          @media (max-width: 1300px) {
+            main[role="main"] [style*="max-width: 600px"],
+            main[role="main"] [style*="max-width:600px"] {
+              max-width: ${contentWidth}px !important;
+              margin-left: ${navWidthCollapsed + gap}px !important;
+              margin-right: auto !important;
+              transform: none !important;
+            }
+            #statusBar {
+              max-width: ${contentWidth}px !important;
+              margin-left: ${navWidthCollapsed + gap}px !important;
+              margin-right: auto !important;
+              transform: none !important;
+            }
+          }
+          div[data-testid="homeScreenFeedTabs"] {
+            width: 100% !important;
+          }
+          /* Position nav from left edge instead of center-relative */
+          nav[role="navigation"] {
+            left: 0 !important;
+            transform: none !important;
+            padding-left: 20px !important;
+          }
+        `;
+      } else {
+        // Original centered layout with shift
+        const extraWidth = contentWidth - 600;
+        const shiftRight = Math.floor(extraWidth / 2);
+        styleEl.textContent = `
+          main[role="main"] [style*="max-width: 600px"],
+          main[role="main"] [style*="max-width:600px"] {
+            max-width: ${contentWidth}px !important;
+            transform: translateX(${shiftRight}px) !important;
+          }
+          div[data-testid="homeScreenFeedTabs"] {
+            width: 100% !important;
+          }
+          #statusBar {
+            max-width: ${contentWidth}px !important;
+            transform: translateX(${shiftRight}px) !important;
+          }
+        `;
+      }
     } else if (styleEl) {
       styleEl.textContent = '';
     }

@@ -57,6 +57,12 @@ const CONFIG_SCHEMA = {
         default: false,
         help: 'Hide the trending/who to follow sidebar',
       },
+      compactLayout: {
+        label: 'Compact layout',
+        type: 'checkbox',
+        default: false,
+        help: 'Remove whitespace next to the left navigation',
+      },
       hideLoadNewButton: {
         label: 'Hide "Load New" button',
         type: 'checkbox',

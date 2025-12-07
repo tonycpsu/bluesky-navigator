@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+435.3934442b
+// @version     1.0.31+436.3ad7ce1f
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47123,9 +47123,53 @@ div.item-banner {
     text-align: center;
 }
 
+/* Fixed sidecar toggle button */
+.fixed-sidecar-toggle {
+    position: fixed;
+    top: 110px;
+    right: 16px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: var(--background-color, white);
+    border: 1px solid var(--border-color, #e5e7eb);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-panel, 5000);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--animation-duration, 200ms) ease, visibility var(--animation-duration, 200ms) ease, transform 150ms ease;
+}
+
+.fixed-sidecar-toggle.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.fixed-sidecar-toggle:hover {
+    background-color: var(--hover-background, #f3f4f6);
+    transform: scale(1.1);
+}
+
+.fixed-sidecar-toggle:active {
+    transform: scale(0.95);
+}
+
+.fixed-sidecar-toggle svg {
+    color: var(--text-secondary, #6b7280);
+}
+
+.fixed-sidecar-toggle:hover svg {
+    color: var(--text-primary, #1f2937);
+}
+
 /* Hide fixed sidecar on mobile */
 @media only screen and (max-width: 800px) {
-    .fixed-sidecar-panel {
+    .fixed-sidecar-panel,
+    .fixed-sidecar-toggle {
         display: none;
     }
 }
@@ -47158,6 +47202,23 @@ div.item-banner {
 
     .fixed-sidecar-panel-empty {
         color: #9ca3af;
+    }
+
+    .fixed-sidecar-toggle {
+        background-color: #1f2937;
+        border-color: #374151;
+    }
+
+    .fixed-sidecar-toggle:hover {
+        background-color: #374151;
+    }
+
+    .fixed-sidecar-toggle svg {
+        color: #9ca3af;
+    }
+
+    .fixed-sidecar-toggle:hover svg {
+        color: #f9fafb;
     }
 }
 
@@ -66551,6 +66612,10 @@ div#statusBar.has-scroll-indicator {
         setTimeout(() => {
           this.ignoreMouseMovement = false;
           this.userInitiatedScroll = false;
+          if (this.config.get("fixedSidecar") && this.config.get("fixedSidecarVisible") === false && this.selectedItem && this.selectedItem.length) {
+            this.positionFixedSidecarToggle();
+            $("#fixed-sidecar-toggle").addClass("visible");
+          }
         }, 500);
       });
       super.activate();
@@ -66563,6 +66628,7 @@ div#statusBar.has-scroll-indicator {
       this.disableFooterObserver();
       if (this.hoverDebounceTimeout) clearTimeout(this.hoverDebounceTimeout);
       if (this.intersectionDebounceTimeout) clearTimeout(this.intersectionDebounceTimeout);
+      $("#fixed-sidecar-toggle").removeClass("visible");
       $(this.selector).off("mouseover mouseleave");
       $(document).off("scroll", this.onScroll);
       $(document).off("wheel", this.onWheel);
@@ -66576,12 +66642,14 @@ div#statusBar.has-scroll-indicator {
       this._replyIndex = null;
       this._threadIndex = null;
       this.postId = null;
+      $("#fixed-sidecar-toggle").removeClass("visible");
     }
     set index(value) {
       this._index = value;
       this._threadIndex = null;
       this.postId = this.postIdForItem(this.selectedItem);
       this.updateInfoIndicator();
+      $("#fixed-sidecar-toggle").removeClass("visible");
     }
     get index() {
       return this._index;
@@ -66824,6 +66892,7 @@ div#statusBar.has-scroll-indicator {
      */
     initFixedSidecarPanel() {
       $("#fixed-sidecar-panel").remove();
+      $("#fixed-sidecar-toggle").remove();
       this.fixedSidecarPanel = $(`
       <div id="fixed-sidecar-panel" class="fixed-sidecar-panel">
         <div class="fixed-sidecar-panel-header">
@@ -66839,13 +66908,38 @@ div#statusBar.has-scroll-indicator {
         </div>
       </div>
     `);
+      this.fixedSidecarToggle = $(`
+      <button id="fixed-sidecar-toggle" class="fixed-sidecar-toggle" aria-label="Show thread context" title="Show thread context (t)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          <line x1="9" y1="10" x2="15" y2="10"/>
+        </svg>
+      </button>
+    `);
       $("body").append(this.fixedSidecarPanel);
+      $("body").append(this.fixedSidecarToggle);
       this.fixedSidecarPanel.find(".fixed-sidecar-panel-close").on("click", () => {
+        this.config.set("fixedSidecarVisible", false);
+        this.config.save();
         this.hideFixedSidecarPanel();
+      });
+      this.fixedSidecarToggle.on("click", async () => {
+        await this.openFixedSidecarPanel();
       });
       $(window).on("resize.fixedSidecar", () => {
         if ($("#fixed-sidecar-panel").hasClass("visible")) {
           this.positionFixedSidecarPanel();
+        } else if ($("#fixed-sidecar-toggle").hasClass("visible")) {
+          this.positionFixedSidecarToggle();
+        }
+      });
+      let scrollTimeout;
+      $(window).on("scroll.fixedSidecar", () => {
+        if ($("#fixed-sidecar-toggle").hasClass("visible")) {
+          if (scrollTimeout) cancelAnimationFrame(scrollTimeout);
+          scrollTimeout = requestAnimationFrame(() => {
+            this.positionFixedSidecarToggle();
+          });
         }
       });
     }
@@ -66889,12 +66983,68 @@ div#statusBar.has-scroll-indicator {
     showFixedSidecarPanel() {
       this.positionFixedSidecarPanel();
       $("#fixed-sidecar-panel").addClass("visible");
+      $("#fixed-sidecar-toggle").removeClass("visible");
     }
     /**
      * Hide the fixed sidecar panel
      */
     hideFixedSidecarPanel() {
       $("#fixed-sidecar-panel").removeClass("visible");
+      this.positionFixedSidecarToggle();
+      $("#fixed-sidecar-toggle").addClass("visible");
+    }
+    /**
+     * Position the toggle button aligned with the top of the selected post
+     */
+    positionFixedSidecarToggle() {
+      const toggle = $("#fixed-sidecar-toggle");
+      if (!toggle.length) return;
+      const $item = this.selectedItem;
+      if (!$item || !$item.length) {
+        toggle.css({
+          left: "auto",
+          right: "16px",
+          top: "110px"
+        });
+        return;
+      }
+      const itemEl = $item[0];
+      const itemRect = itemEl.getBoundingClientRect();
+      const threadContainer = $item.closest(".thread")[0];
+      const containerRect = threadContainer ? threadContainer.getBoundingClientRect() : itemRect;
+      const tabBar = document.querySelector('[role="tablist"]') || document.querySelector('[data-testid="homeScreenFeedTabs"]') || document.querySelector('div[style*="position: sticky"]');
+      const tabBarRect = tabBar ? tabBar.getBoundingClientRect() : null;
+      const minTabBottom = tabBarRect ? tabBarRect.bottom : 200;
+      const gap = 16;
+      const left = containerRect.right + gap;
+      const minTop = Math.max(minTabBottom, 150);
+      const maxTop = window.innerHeight - 60;
+      const top = Math.max(minTop, Math.min(maxTop, itemRect.top));
+      if (window.innerWidth - left >= 48) {
+        toggle.css({
+          left: `${left}px`,
+          right: "auto",
+          top: `${top}px`
+        });
+      } else {
+        toggle.css({
+          left: "auto",
+          right: "16px",
+          top: `${top}px`
+        });
+      }
+    }
+    /**
+     * Open the fixed sidecar panel with current item's thread
+     */
+    async openFixedSidecarPanel() {
+      if (!this.selectedItem || !this.api) return;
+      this.config.set("fixedSidecarVisible", true);
+      this.config.save();
+      const thread = await this.getThreadForItem(this.selectedItem);
+      if (thread) {
+        await this.updateFixedSidecarPanel(this.selectedItem, thread);
+      }
     }
     /**
      * Toggle the fixed sidecar panel visibility
@@ -67109,6 +67259,9 @@ div#statusBar.has-scroll-indicator {
       if (this.config.get("fixedSidecar")) {
         if (this.config.get("fixedSidecarVisible") !== false) {
           await this.updateFixedSidecarPanel(item, thread);
+        } else {
+          this.positionFixedSidecarToggle();
+          $("#fixed-sidecar-toggle").addClass("visible");
         }
         return;
       }
@@ -67993,6 +68146,7 @@ div#statusBar.has-scroll-indicator {
         return;
       }
       this.ignoreMouseMovement = true;
+      $("#fixed-sidecar-toggle").removeClass("visible");
       if (!this.scrollTick) {
         requestAnimationFrame(() => {
           const currentScroll = $(window).scrollTop();

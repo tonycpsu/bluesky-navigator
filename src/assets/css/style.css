@@ -752,9 +752,53 @@ div.item-banner {
     text-align: center;
 }
 
+/* Fixed sidecar toggle button */
+.fixed-sidecar-toggle {
+    position: fixed;
+    top: 110px;
+    right: 16px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: var(--background-color, white);
+    border: 1px solid var(--border-color, #e5e7eb);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-panel, 5000);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--animation-duration, 200ms) ease, visibility var(--animation-duration, 200ms) ease, transform 150ms ease;
+}
+
+.fixed-sidecar-toggle.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.fixed-sidecar-toggle:hover {
+    background-color: var(--hover-background, #f3f4f6);
+    transform: scale(1.1);
+}
+
+.fixed-sidecar-toggle:active {
+    transform: scale(0.95);
+}
+
+.fixed-sidecar-toggle svg {
+    color: var(--text-secondary, #6b7280);
+}
+
+.fixed-sidecar-toggle:hover svg {
+    color: var(--text-primary, #1f2937);
+}
+
 /* Hide fixed sidecar on mobile */
 @media only screen and (max-width: 800px) {
-    .fixed-sidecar-panel {
+    .fixed-sidecar-panel,
+    .fixed-sidecar-toggle {
         display: none;
     }
 }
@@ -787,6 +831,23 @@ div.item-banner {
 
     .fixed-sidecar-panel-empty {
         color: #9ca3af;
+    }
+
+    .fixed-sidecar-toggle {
+        background-color: #1f2937;
+        border-color: #374151;
+    }
+
+    .fixed-sidecar-toggle:hover {
+        background-color: #374151;
+    }
+
+    .fixed-sidecar-toggle svg {
+        color: #9ca3af;
+    }
+
+    .fixed-sidecar-toggle:hover svg {
+        color: #f9fafb;
     }
 }
 

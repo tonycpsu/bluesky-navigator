@@ -112,6 +112,13 @@ export class ItemHandler extends Handler {
       setTimeout(() => {
         this.ignoreMouseMovement = false;
         this.userInitiatedScroll = false;
+        // Show sidecar toggle after scrolling stops (if sidecar is hidden and post is selected)
+        if (this.config.get('fixedSidecar') &&
+            this.config.get('fixedSidecarVisible') === false &&
+            this.selectedItem && this.selectedItem.length) {
+          this.positionFixedSidecarToggle();
+          $('#fixed-sidecar-toggle').addClass('visible');
+        }
       }, 500);
     });
 
@@ -128,6 +135,9 @@ export class ItemHandler extends Handler {
     if (this.hoverDebounceTimeout) clearTimeout(this.hoverDebounceTimeout);
     if (this.intersectionDebounceTimeout) clearTimeout(this.intersectionDebounceTimeout);
 
+    // Hide sidecar toggle when leaving feed
+    $('#fixed-sidecar-toggle').removeClass('visible');
+
     $(this.selector).off('mouseover mouseleave');
     $(document).off('scroll', this.onScroll);
     $(document).off('wheel', this.onWheel);
@@ -143,6 +153,8 @@ export class ItemHandler extends Handler {
     this._replyIndex = null;
     this._threadIndex = null;
     this.postId = null;
+    // Hide the sidecar toggle when selection is cleared
+    $('#fixed-sidecar-toggle').removeClass('visible');
   }
 
   set index(value) {
@@ -150,6 +162,8 @@ export class ItemHandler extends Handler {
     this._threadIndex = null;
     this.postId = this.postIdForItem(this.selectedItem);
     this.updateInfoIndicator();
+    // Hide toggle when changing posts (will reappear via showSidecar if needed)
+    $('#fixed-sidecar-toggle').removeClass('visible');
   }
 
   get index() {
@@ -436,8 +450,9 @@ export class ItemHandler extends Handler {
    * Initialize the fixed sidecar panel that displays thread context for the selected post
    */
   initFixedSidecarPanel() {
-    // Remove any existing panel
+    // Remove any existing panel and toggle button
     $('#fixed-sidecar-panel').remove();
+    $('#fixed-sidecar-toggle').remove();
 
     // Create the fixed panel
     this.fixedSidecarPanel = $(`
@@ -456,17 +471,48 @@ export class ItemHandler extends Handler {
       </div>
     `);
 
+    // Create the toggle button (shown when panel is hidden)
+    this.fixedSidecarToggle = $(`
+      <button id="fixed-sidecar-toggle" class="fixed-sidecar-toggle" aria-label="Show thread context" title="Show thread context (t)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          <line x1="9" y1="10" x2="15" y2="10"/>
+        </svg>
+      </button>
+    `);
+
     $('body').append(this.fixedSidecarPanel);
+    $('body').append(this.fixedSidecarToggle);
 
     // Close button handler
     this.fixedSidecarPanel.find('.fixed-sidecar-panel-close').on('click', () => {
+      this.config.set('fixedSidecarVisible', false);
+      this.config.save();
       this.hideFixedSidecarPanel();
+    });
+
+    // Toggle button handler
+    this.fixedSidecarToggle.on('click', async () => {
+      await this.openFixedSidecarPanel();
     });
 
     // Update position on resize
     $(window).on('resize.fixedSidecar', () => {
       if ($('#fixed-sidecar-panel').hasClass('visible')) {
         this.positionFixedSidecarPanel();
+      } else if ($('#fixed-sidecar-toggle').hasClass('visible')) {
+        this.positionFixedSidecarToggle();
+      }
+    });
+
+    // Update toggle position on scroll (throttled)
+    let scrollTimeout;
+    $(window).on('scroll.fixedSidecar', () => {
+      if ($('#fixed-sidecar-toggle').hasClass('visible')) {
+        if (scrollTimeout) cancelAnimationFrame(scrollTimeout);
+        scrollTimeout = requestAnimationFrame(() => {
+          this.positionFixedSidecarToggle();
+        });
       }
     });
   }
@@ -521,6 +567,7 @@ export class ItemHandler extends Handler {
   showFixedSidecarPanel() {
     this.positionFixedSidecarPanel();
     $('#fixed-sidecar-panel').addClass('visible');
+    $('#fixed-sidecar-toggle').removeClass('visible');
   }
 
   /**
@@ -528,6 +575,79 @@ export class ItemHandler extends Handler {
    */
   hideFixedSidecarPanel() {
     $('#fixed-sidecar-panel').removeClass('visible');
+    this.positionFixedSidecarToggle();
+    $('#fixed-sidecar-toggle').addClass('visible');
+  }
+
+  /**
+   * Position the toggle button aligned with the top of the selected post
+   */
+  positionFixedSidecarToggle() {
+    const toggle = $('#fixed-sidecar-toggle');
+    if (!toggle.length) return;
+
+    // Get the selected item's position (selectedItem is a jQuery object)
+    const $item = this.selectedItem;
+    if (!$item || !$item.length) {
+      // Fallback: position at a fixed location if no item selected
+      toggle.css({
+        left: 'auto',
+        right: '16px',
+        top: '110px'
+      });
+      return;
+    }
+
+    const itemEl = $item[0]; // Get DOM element from jQuery object
+    const itemRect = itemEl.getBoundingClientRect();
+    const threadContainer = $item.closest('.thread')[0];
+    const containerRect = threadContainer ? threadContainer.getBoundingClientRect() : itemRect;
+
+    // Find the tab bar to get the minimum top position (below tabs)
+    // Look for common tab container selectors
+    const tabBar = document.querySelector('[role="tablist"]') ||
+                   document.querySelector('[data-testid="homeScreenFeedTabs"]') ||
+                   document.querySelector('div[style*="position: sticky"]');
+    const tabBarRect = tabBar ? tabBar.getBoundingClientRect() : null;
+    const minTabBottom = tabBarRect ? tabBarRect.bottom : 200;
+
+    const gap = 16;
+    const left = containerRect.right + gap;
+
+    // Clamp top position: below tab bar, above viewport bottom
+    const minTop = Math.max(minTabBottom, 150); // Below tabs
+    const maxTop = window.innerHeight - 60;
+    const top = Math.max(minTop, Math.min(maxTop, itemRect.top));
+
+    // Check if there's enough space on the right
+    if (window.innerWidth - left >= 48) {
+      toggle.css({
+        left: `${left}px`,
+        right: 'auto',
+        top: `${top}px`
+      });
+    } else {
+      toggle.css({
+        left: 'auto',
+        right: '16px',
+        top: `${top}px`
+      });
+    }
+  }
+
+  /**
+   * Open the fixed sidecar panel with current item's thread
+   */
+  async openFixedSidecarPanel() {
+    if (!this.selectedItem || !this.api) return;
+
+    this.config.set('fixedSidecarVisible', true);
+    this.config.save();
+
+    const thread = await this.getThreadForItem(this.selectedItem);
+    if (thread) {
+      await this.updateFixedSidecarPanel(this.selectedItem, thread);
+    }
   }
 
   /**
@@ -801,6 +921,10 @@ export class ItemHandler extends Handler {
       // Don't show if user hid it with 't' key (persisted in config)
       if (this.config.get('fixedSidecarVisible') !== false) {
         await this.updateFixedSidecarPanel(item, thread);
+      } else {
+        // Show the toggle button when sidecar is hidden
+        this.positionFixedSidecarToggle();
+        $('#fixed-sidecar-toggle').addClass('visible');
       }
       return;
     }
@@ -1898,6 +2022,8 @@ export class ItemHandler extends Handler {
       return;
     }
     this.ignoreMouseMovement = true;
+    // Hide sidecar toggle while scrolling
+    $('#fixed-sidecar-toggle').removeClass('visible');
     if (!this.scrollTick) {
       requestAnimationFrame(() => {
         const currentScroll = $(window).scrollTop();

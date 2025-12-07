@@ -319,6 +319,57 @@ function getScreenFromElement(element) {
       // Remove width styles if sidebar not hidden or width is default
       styleEl.textContent = '';
     }
+
+    // Apply post max height setting
+    updatePostMaxHeight();
+  }
+
+  function updatePostMaxHeight() {
+    const postMaxHeight = config.get('postMaxHeight');
+    const styleId = 'bsky-nav-post-height-style';
+    let styleEl = document.getElementById(styleId);
+
+    if (postMaxHeight && postMaxHeight !== 'Off') {
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
+      }
+
+      // Collapse unfocused posts, expand when selected
+      styleEl.textContent = `
+        /* Collapse unfocused posts */
+        div[data-testid="contentHider-post"] {
+          max-height: ${postMaxHeight} !important;
+          overflow: hidden !important;
+          position: relative !important;
+        }
+        /* Fade overlay to indicate more content */
+        div[data-testid="contentHider-post"]::after {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 40px;
+          background: linear-gradient(transparent, var(--background-color, white));
+          pointer-events: none;
+        }
+        /* Expand when post is selected */
+        .item-selection-active div[data-testid="contentHider-post"],
+        .item-selection-child-focused div[data-testid="contentHider-post"] {
+          max-height: none !important;
+          overflow: visible !important;
+        }
+        .item-selection-active div[data-testid="contentHider-post"]::after,
+        .item-selection-child-focused div[data-testid="contentHider-post"]::after {
+          display: none;
+        }
+      `;
+    } else if (styleEl) {
+      // Remove height styles if disabled
+      styleEl.textContent = '';
+    }
   }
 
   function onStateInit() {

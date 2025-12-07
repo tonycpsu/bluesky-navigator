@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+438.17394c1b
+// @version     1.0.31+439.e9671d25
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44880,6 +44880,13 @@ if (cid) {
           max: 1200,
           help: "Maximum width of posts in the feed"
         },
+        postMaxHeight: {
+          label: "Collapse posts",
+          type: "select",
+          options: ["Off", "25vh", "50vh", "75vh"],
+          default: "Off",
+          help: "Collapse unfocused posts to max height; expands when selected"
+        },
         postActionButtonPosition: {
           label: "Action buttons",
           type: "select",
@@ -67239,7 +67246,10 @@ div#statusBar.has-scroll-indicator {
         return this.repliesTemplate({});
       }
       const post2 = thread.post;
-      const replies = thread.replies.filter((reply) => reply.post).map((reply) => reply?.post).sort((a2, b) => {
+      const replies = thread.replies.filter((reply) => reply.post).filter((reply) => {
+        const replyPostId = reply.post.uri?.split("/").slice(-1)[0];
+        return !replyPostId || !this.unrolledPostIds.has(replyPostId);
+      }).map((reply) => reply?.post).sort((a2, b) => {
         switch (this.config.get("sidecarReplySortOrder")) {
           case "Default":
             return 0;
@@ -71461,6 +71471,50 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         `;
         }
+      } else if (styleEl) {
+        styleEl.textContent = "";
+      }
+      updatePostMaxHeight();
+    }
+    function updatePostMaxHeight() {
+      const postMaxHeight = config.get("postMaxHeight");
+      const styleId = "bsky-nav-post-height-style";
+      let styleEl = document.getElementById(styleId);
+      if (postMaxHeight && postMaxHeight !== "Off") {
+        if (!styleEl) {
+          styleEl = document.createElement("style");
+          styleEl.id = styleId;
+          document.head.appendChild(styleEl);
+        }
+        styleEl.textContent = `
+        /* Collapse unfocused posts */
+        div[data-testid="contentHider-post"] {
+          max-height: ${postMaxHeight} !important;
+          overflow: hidden !important;
+          position: relative !important;
+        }
+        /* Fade overlay to indicate more content */
+        div[data-testid="contentHider-post"]::after {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 40px;
+          background: linear-gradient(transparent, var(--background-color, white));
+          pointer-events: none;
+        }
+        /* Expand when post is selected */
+        .item-selection-active div[data-testid="contentHider-post"],
+        .item-selection-child-focused div[data-testid="contentHider-post"] {
+          max-height: none !important;
+          overflow: visible !important;
+        }
+        .item-selection-active div[data-testid="contentHider-post"]::after,
+        .item-selection-child-focused div[data-testid="contentHider-post"]::after {
+          display: none;
+        }
+      `;
       } else if (styleEl) {
         styleEl.textContent = "";
       }

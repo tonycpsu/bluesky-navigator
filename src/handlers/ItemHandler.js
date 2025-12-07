@@ -889,6 +889,11 @@ export class ItemHandler extends Handler {
 
     const replies = thread.replies
       .filter((reply) => reply.post)
+      .filter((reply) => {
+        // Omit replies already shown in unrolled thread
+        const replyPostId = reply.post.uri?.split('/').slice(-1)[0];
+        return !replyPostId || !this.unrolledPostIds.has(replyPostId);
+      })
       .map((reply) => reply?.post)
       .sort((a, b) => {
         switch (this.config.get('sidecarReplySortOrder')) {

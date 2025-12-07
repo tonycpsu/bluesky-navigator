@@ -18,6 +18,13 @@ const CONFIG_SCHEMA = {
         max: 1200,
         help: 'Maximum width of posts in the feed',
       },
+      postMaxHeight: {
+        label: 'Collapse posts',
+        type: 'select',
+        options: ['Off', '25vh', '50vh', '75vh'],
+        default: 'Off',
+        help: 'Collapse unfocused posts to max height; expands when selected',
+      },
       postActionButtonPosition: {
         label: 'Action buttons',
         type: 'select',

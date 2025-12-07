@@ -111,7 +111,7 @@ export function extractLastTerm(input) {
 
 /**
  * Check if user prefers reduced motion.
- * @param {Object} config - GM_config instance (optional)
+ * @param {Object} config - Config instance (optional)
  * @returns {boolean}
  */
 export function prefersReducedMotion(config = null) {
@@ -125,7 +125,7 @@ export function prefersReducedMotion(config = null) {
 
 /**
  * Check if user prefers high contrast.
- * @param {Object} config - GM_config instance (optional)
+ * @param {Object} config - Config instance (optional)
  * @returns {boolean}
  */
 export function prefersHighContrast(config = null) {
@@ -136,7 +136,7 @@ export function prefersHighContrast(config = null) {
 /**
  * Get animation duration respecting reduced motion preference.
  * @param {number} defaultMs - Default duration in milliseconds
- * @param {Object} config - GM_config instance (optional)
+ * @param {Object} config - Config instance (optional)
  * @returns {number}
  */
 export function getAnimationDuration(defaultMs, config = null) {

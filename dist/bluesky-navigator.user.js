@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+437.72b041cf
+// @version     1.0.31+438.17394c1b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46157,7 +46157,7 @@ if (cid) {
       this.defaults = {};
       this.modal = null;
       this.buildDefaults();
-      this.migrateFromGMConfig();
+      this.migrateFromLegacyStorage();
       this.load();
       this.modal = null;
       setTimeout(() => {
@@ -46185,11 +46185,11 @@ if (cid) {
       });
     }
     /**
-     * Migrate settings from old GM_config storage format
-     * GM_config stored all values under the config ID key as JSON
+     * Migrate settings from legacy storage format
+     * Old versions stored values under 'GM_config' key
      * Migration only runs once - tracked via _migrationComplete flag
      */
-    migrateFromGMConfig() {
+    migrateFromLegacyStorage() {
       try {
         const existingNew = GM_getValue(STORAGE_KEY, null);
         let newValues = {};
@@ -46221,7 +46221,7 @@ if (cid) {
           GM_setValue(STORAGE_KEY, JSON.stringify(newValues));
           return;
         }
-        console.log("[ConfigWrapper] Migrating settings from old GM_config...");
+        console.log("[ConfigWrapper] Migrating settings from legacy storage...");
         console.log("[ConfigWrapper] Old settings:", Object.keys(oldValues));
         const merged = { ...newValues, ...oldValues, _migrationComplete: true };
         GM_setValue(STORAGE_KEY, JSON.stringify(merged));
@@ -46311,16 +46311,16 @@ if (cid) {
       console.log("[ConfigWrapper] Cleared new config storage. Refresh to test migration.");
     }
     /**
-     * Debug: show what's in both old and new storage
+     * Debug: show what's in storage
      * Usage: config.debugStorage()
      */
     debugStorage() {
       const oldData = GM_getValue(OLD_GM_CONFIG_KEY, null);
       const newData = GM_getValue(STORAGE_KEY, null);
-      console.log("[ConfigWrapper] Old GM_config key:", OLD_GM_CONFIG_KEY);
-      console.log("[ConfigWrapper] Old GM_config data:", oldData);
-      console.log("[ConfigWrapper] New config key:", STORAGE_KEY);
-      console.log("[ConfigWrapper] New config data:", newData);
+      console.log("[ConfigWrapper] Legacy storage key:", OLD_GM_CONFIG_KEY);
+      console.log("[ConfigWrapper] Legacy storage data:", oldData);
+      console.log("[ConfigWrapper] Current config key:", STORAGE_KEY);
+      console.log("[ConfigWrapper] Current config data:", newData);
       if (typeof GM_listValues === "function") {
         const allKeys = GM_listValues();
         console.log("[ConfigWrapper] All storage keys:", allKeys);
@@ -46328,17 +46328,17 @@ if (cid) {
           console.log(`[ConfigWrapper] Key "${key}":`, GM_getValue(key, null));
         });
       }
-      return { old: oldData, new: newData };
+      return { legacy: oldData, current: newData };
     }
     /**
-     * Force migration from old GM_config (can be called manually from console)
-     * Usage: config.forceMigrateFromGMConfig()
+     * Force migration from legacy storage (can be called manually from console)
+     * Usage: config.forceMigrateLegacy()
      */
-    forceMigrateFromGMConfig() {
+    forceMigrateLegacy() {
       try {
         const oldData = GM_getValue(OLD_GM_CONFIG_KEY, null);
         if (oldData === null) {
-          console.log("[ConfigWrapper] No old GM_config data found to migrate.");
+          console.log("[ConfigWrapper] No legacy data found to migrate.");
           return false;
         }
         let oldValues;
@@ -46347,15 +46347,15 @@ if (cid) {
         } else if (typeof oldData === "object") {
           oldValues = oldData;
         } else {
-          console.warn("[ConfigWrapper] Old config data is in unexpected format:", typeof oldData);
+          console.warn("[ConfigWrapper] Legacy data is in unexpected format:", typeof oldData);
           return false;
         }
         if (!oldValues || Object.keys(oldValues).length === 0) {
-          console.log("[ConfigWrapper] Old GM_config data is empty.");
+          console.log("[ConfigWrapper] Legacy data is empty.");
           return false;
         }
-        console.log("[ConfigWrapper] Force migrating old GM_config settings...");
-        console.log("[ConfigWrapper] Old settings:", oldValues);
+        console.log("[ConfigWrapper] Force migrating legacy settings...");
+        console.log("[ConfigWrapper] Legacy settings:", oldValues);
         this.values = { ...this.values, ...oldValues, _migrationComplete: true };
         this.save();
         console.log("[ConfigWrapper] Force migration complete! Refresh the page to see changes.");

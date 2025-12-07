@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+439.e9671d25
+// @version     1.0.31+440.d92ab96a
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -48634,6 +48634,12 @@ div.item-banner {
   opacity: 0.3;
 }
 
+/* Virtualized segments (item scrolled out of DOM) - style same as empty */
+.scroll-segment-virtualized {
+  background-color: transparent !important;
+  opacity: 0.3;
+}
+
 /* Wrapper for indicators with zoom */
 .scroll-indicator-wrapper {
   display: flex;
@@ -68663,7 +68669,7 @@ div#statusBar.has-scroll-indicator {
         if (!this.itemStats.newest || timestamp > this.itemStats.newest) {
           this.itemStats.newest = timestamp;
         }
-        if (!this.state.mobileView && this.config.get("showReplySidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
+        if (!this.state.mobileView && this.config.get("showReplySidecar") && !this.config.get("fixedSidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
           if (!$(item).parent().find(".sidecar-replies").length) {
             $(item).parent().append('<div class="sidecar-replies sidecar-replies-empty"></div>');
           }
@@ -69525,7 +69531,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
             const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
             const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
-            const allItems = $(".item").filter((i2, item) => $(item).parents(".item").length === 0).toArray();
+            const allItems = $(".item").filter((i2, item) => {
+              if ($(item).parents(".item").length > 0) return false;
+              const testId = $(item).attr("data-testid") || "";
+              if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-")) return false;
+              return true;
+            }).toArray();
             let displayItems = [];
             let displayIndices = [];
             allItems.forEach((item, i2) => {
@@ -70109,6 +70120,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       let displayIndices = [];
       allItems.forEach((item, i2) => {
         if (!$(item).hasClass("filtered")) {
+          const testId = $(item).attr("data-testid") || "";
+          if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-")) {
+            return;
+          }
           displayItems.push(item);
           displayIndices.push(i2);
         }
@@ -70197,7 +70212,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const $segment = $(segment);
         const item = displayItems[i2];
         const actualIndex = displayIndices[i2];
-        const isRead = item && $(item).hasClass("item-read");
+        if (!item || !document.contains(item)) {
+          $segment.addClass("scroll-segment-virtualized");
+          return;
+        }
+        $segment.removeClass("scroll-segment-virtualized");
+        const isRead = $(item).hasClass("item-read");
         const isCurrent = i2 === currentDisplayIndex;
         $segment.removeClass(
           "scroll-segment-read scroll-segment-current scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"

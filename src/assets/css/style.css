@@ -2250,6 +2250,12 @@ div.item-banner {
   opacity: 0.3;
 }
 
+/* Virtualized segments (item scrolled out of DOM) - style same as empty */
+.scroll-segment-virtualized {
+  background-color: transparent !important;
+  opacity: 0.3;
+}
+
 /* Wrapper for indicators with zoom */
 .scroll-indicator-wrapper {
   display: flex;

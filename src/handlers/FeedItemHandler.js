@@ -923,8 +923,15 @@ export class FeedItemHandler extends ItemHandler {
           const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
           const showHandles = isAdvancedStyle ? (this.config.get('scrollIndicatorHandles') !== false) : false;
 
-          // Get all items excluding filtered ones
-          const allItems = $('.item').filter((i, item) => $(item).parents('.item').length === 0).toArray();
+          // Get all items excluding filtered ones and non-post placeholders
+          const allItems = $('.item').filter((i, item) => {
+            // Exclude nested items
+            if ($(item).parents('.item').length > 0) return false;
+            // Exclude "View full thread" and other non-post elements
+            const testId = $(item).attr('data-testid') || '';
+            if (!testId.startsWith('feedItem-by-') && !testId.startsWith('postThreadItem-by-')) return false;
+            return true;
+          }).toArray();
 
           // Build display items (only non-filtered items)
           let displayItems = [];
@@ -1664,6 +1671,11 @@ export class FeedItemHandler extends ItemHandler {
     let displayIndices = [];
     allItems.forEach((item, i) => {
       if (!$(item).hasClass('filtered')) {
+        // Double-check: exclude "View full thread" placeholders that may have slipped through
+        const testId = $(item).attr('data-testid') || '';
+        if (!testId.startsWith('feedItem-by-') && !testId.startsWith('postThreadItem-by-')) {
+          return; // Skip non-post items
+        }
         displayItems.push(item);
         displayIndices.push(i);
       }
@@ -1785,7 +1797,15 @@ export class FeedItemHandler extends ItemHandler {
       const $segment = $(segment);
       const item = displayItems[i];
       const actualIndex = displayIndices[i]; // Map back to actual item index for engagementData
-      const isRead = item && $(item).hasClass('item-read');
+
+      // Skip if item doesn't exist or is no longer in DOM (virtualized away)
+      if (!item || !document.contains(item)) {
+        $segment.addClass('scroll-segment-virtualized');
+        return;
+      }
+      $segment.removeClass('scroll-segment-virtualized');
+
+      const isRead = $(item).hasClass('item-read');
       const isCurrent = i === currentDisplayIndex;
 
       // Remove all state classes

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+427.ec2b21e2
+// @version     1.0.31+428.2e8e1666
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -48211,15 +48211,15 @@ div.item-banner {
 /* Zoom indicator segments - larger for better visibility */
 .scroll-segment-zoom {
   flex: 1 1 0;
-  min-width: 20px;
+  min-width: calc(20px * var(--indicator-scale, 1));
   height: auto !important;
-  min-height: 24px;
+  min-height: calc(24px * var(--indicator-scale, 1));
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: 4px 0;
-  gap: 2px;
+  padding: calc(4px * var(--indicator-scale, 1)) 0;
+  gap: calc(2px * var(--indicator-scale, 1));
   overflow: hidden;
 }
 
@@ -48248,7 +48248,7 @@ div.item-banner {
 .scroll-segment-zoom .scroll-segment-icon {
   position: static;
   transform: none;
-  height: 16px;
+  height: calc(16px * var(--indicator-scale, 1));
   width: auto;
   order: -1; /* Icons appear first (top) */
   flex-shrink: 0;
@@ -48256,19 +48256,19 @@ div.item-banner {
 
 .scroll-segment-zoom .scroll-icon-stack {
   flex-direction: row;
-  height: 16px;
+  height: calc(16px * var(--indicator-scale, 1));
   gap: 0;
   flex-shrink: 0;
 }
 
 .scroll-segment-zoom .scroll-icon-stack img {
-  height: 16px;
+  height: calc(16px * var(--indicator-scale, 1));
   width: auto;
 }
 
 /* Relative time in zoom segments */
 .scroll-segment-time {
-  font-size: 8px;
+  font-size: calc(8px * var(--indicator-scale, 1));
   line-height: 1;
   color: rgba(0, 0, 0, 0.5);
   pointer-events: none;
@@ -48278,14 +48278,14 @@ div.item-banner {
 /* Handle in zoom segments */
 .scroll-segment-handle {
   font-family: ui-monospace, monospace;
-  font-size: 8px;
+  font-size: calc(8px * var(--indicator-scale, 1));
   line-height: 1.1;
   color: rgba(0, 0, 0, 0.6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
-  padding: 0 2px;
+  padding: 0 calc(2px * var(--indicator-scale, 1));
   flex-shrink: 0;
 }
 
@@ -48311,10 +48311,10 @@ div.item-banner {
 .scroll-indicator-connector {
   display: block;
   width: 100%;
-  height: 20px;
+  height: calc(20px * var(--indicator-scale, 1));
   position: relative;
   overflow: visible;
-  margin-top: -2px;
+  margin-top: calc(-2px * var(--indicator-scale, 1));
 }
 
 .scroll-indicator-connector-svg {
@@ -68108,16 +68108,41 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           tab,
           (attributeName, _oldValue, newValue, _target) => {
             if (attributeName == "class" && newValue.includes("r-13awgt0")) {
-              console.log("refresh");
-              this.refreshItems();
+              console.log("feed tab changed - resetting");
+              this.onFeedChange();
             }
           },
           false
         );
       });
+      waitForElement$1('div[data-testid="homeScreenFeedTabs"]', (feedTabs) => {
+        $(feedTabs).on("click", 'div[role="tab"]', () => {
+          console.log("feed tab clicked - scheduling reset");
+          setTimeout(() => this.onFeedChange(), 300);
+        });
+      });
       document.addEventListener("scrollIndicatorSettingChanged", (e2) => {
         this.handleScrollIndicatorSettingChange(e2.detail);
       });
+    }
+    /**
+     * Called when feed tab changes (e.g., Following -> Discover).
+     * Resets the scroll indicator and reloads items from DOM.
+     */
+    onFeedChange() {
+      const indicator = $("#scroll-position-indicator");
+      if (indicator.length) {
+        indicator.find(".scroll-segment").remove();
+        indicator.find(".scroll-viewport-indicator").remove();
+        indicator.find(".scroll-indicator-empty").remove();
+      }
+      if (this.scrollIndicatorZoom) {
+        this.scrollIndicatorZoom.find(".scroll-segment-zoom").remove();
+      }
+      setTimeout(() => {
+        this.loadItems();
+        this.updateScrollPosition(true);
+      }, 200);
     }
     /**
      * Fetch repost timestamps from AT Protocol API and cache them.
@@ -69253,9 +69278,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     updateScrollPosition(forceRebuild = false) {
       const indicator = $("#scroll-position-indicator");
       if (!indicator.length) return;
-      const allItems = $(".item").filter((i2, item) => {
-        return $(item).parents(".item").length === 0;
-      }).toArray();
+      const allItems = this.items.toArray ? this.items.toArray() : Array.from(this.items);
       let displayItems = [];
       let displayIndices = [];
       allItems.forEach((item, i2) => {

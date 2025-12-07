@@ -52,18 +52,52 @@ export class FeedItemHandler extends ItemHandler {
         tab,
         (attributeName, _oldValue, newValue, _target) => {
           if (attributeName == 'class' && newValue.includes('r-13awgt0')) {
-            console.log('refresh');
-            this.refreshItems();
+            console.log('feed tab changed - resetting');
+            this.onFeedChange();
           }
         },
         false
       );
     });
 
+    // Also watch for clicks on feed tab buttons as a backup
+    waitForElement('div[data-testid="homeScreenFeedTabs"]', (feedTabs) => {
+      $(feedTabs).on('click', 'div[role="tab"]', () => {
+        console.log('feed tab clicked - scheduling reset');
+        // Delay to let Bluesky load new feed content
+        setTimeout(() => this.onFeedChange(), 300);
+      });
+    });
+
     // Listen for dynamic scroll indicator setting changes
     document.addEventListener('scrollIndicatorSettingChanged', (e) => {
       this.handleScrollIndicatorSettingChange(e.detail);
     });
+  }
+
+  /**
+   * Called when feed tab changes (e.g., Following -> Discover).
+   * Resets the scroll indicator and reloads items from DOM.
+   */
+  onFeedChange() {
+    // Clear the scroll indicator segments to force rebuild
+    const indicator = $('#scroll-position-indicator');
+    if (indicator.length) {
+      indicator.find('.scroll-segment').remove();
+      indicator.find('.scroll-viewport-indicator').remove();
+      indicator.find('.scroll-indicator-empty').remove();
+    }
+
+    // Clear zoom indicator if present
+    if (this.scrollIndicatorZoom) {
+      this.scrollIndicatorZoom.find('.scroll-segment-zoom').remove();
+    }
+
+    // Delay to let Bluesky update the DOM with new feed items
+    setTimeout(() => {
+      this.loadItems();
+      this.updateScrollPosition(true);
+    }, 200);
   }
 
   /**
@@ -1558,11 +1592,9 @@ export class FeedItemHandler extends ItemHandler {
     const indicator = $('#scroll-position-indicator');
     if (!indicator.length) return;
 
-    // Get all items excluding filtered ones
-    const allItems = $('.item').filter((i, item) => {
-      // Filter out embedded posts (posts inside other posts) to match this.items logic
-      return $(item).parents('.item').length === 0;
-    }).toArray();
+    // Use this.items which is properly filtered by loadItems()
+    // This ensures we only show items from the current feed
+    const allItems = this.items.toArray ? this.items.toArray() : Array.from(this.items);
 
     // Build list of non-filtered items to display
     let displayItems = [];

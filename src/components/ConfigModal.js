@@ -272,10 +272,11 @@ const CONFIG_SCHEMA = {
         help: 'How to sort replies in the sidecar',
       },
       fixedSidecar: {
-        label: 'Fixed sidecar panel',
-        type: 'checkbox',
-        default: true,
-        help: 'Show sidecar in fixed panel instead of inline',
+        label: 'Sidecar panel style',
+        type: 'select',
+        options: ['Fixed', 'Inline'],
+        default: 'Fixed',
+        help: 'Fixed: separate panel. Inline: next to each post',
       },
       showReplyContext: {
         label: 'Show reply context',

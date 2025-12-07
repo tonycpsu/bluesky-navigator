@@ -113,7 +113,7 @@ export class ItemHandler extends Handler {
         this.ignoreMouseMovement = false;
         this.userInitiatedScroll = false;
         // Show sidecar toggle after scrolling stops (if sidecar is hidden and post is selected)
-        if (this.config.get('fixedSidecar') &&
+        if (this.isFixedSidecar() &&
             this.config.get('fixedSidecarVisible') === false &&
             this.selectedItem && this.selectedItem.length) {
           this.positionFixedSidecarToggle();
@@ -267,6 +267,16 @@ export class ItemHandler extends Handler {
     return $(this.selectedItem).find('.unrolled-reply');
   }
 
+  /**
+   * Check if fixed sidecar mode is enabled (vs inline)
+   * Handles both new string values ('Fixed'/'Inline') and legacy boolean (true/false)
+   */
+  isFixedSidecar() {
+    const value = this.config.get('fixedSidecar');
+    // Handle legacy boolean true or new 'Fixed' string
+    return value === true || value === 'Fixed';
+  }
+
   getPostForThreadIndex(index) {
     return index > 0
       ? this.unrolledReplies.eq(index - 1)
@@ -342,7 +352,7 @@ export class ItemHandler extends Handler {
    * Get the jQuery collection of sidecar replies, handling both inline and fixed sidecar modes
    */
   getSidecarReplies() {
-    if (this.config.get('fixedSidecar') && $('#fixed-sidecar-panel').hasClass('visible')) {
+    if (this.isFixedSidecar() && $('#fixed-sidecar-panel').hasClass('visible')) {
       return $('#fixed-sidecar-panel .fixed-sidecar-panel-content').find('div.sidecar-post');
     }
     return $(this.selectedItem).parent().find('div.sidecar-post');
@@ -352,7 +362,7 @@ export class ItemHandler extends Handler {
    * Get the sidecar container element for scrolling purposes
    */
   getSidecarContainer() {
-    if (this.config.get('fixedSidecar') && $('#fixed-sidecar-panel').hasClass('visible')) {
+    if (this.isFixedSidecar() && $('#fixed-sidecar-panel').hasClass('visible')) {
       return $('#fixed-sidecar-panel .fixed-sidecar-panel-content');
     }
     return $(this.selectedItem).parent().find('.sidecar-replies');
@@ -365,7 +375,7 @@ export class ItemHandler extends Handler {
     if (!this.config.get('showReplySidecar')) return false;
 
     // For fixed sidecar, check if panel is visible and has replies
-    if (this.config.get('fixedSidecar')) {
+    if (this.isFixedSidecar()) {
       const panel = $('#fixed-sidecar-panel');
       if (!panel.hasClass('visible')) return false;
     }
@@ -379,7 +389,7 @@ export class ItemHandler extends Handler {
    * Scroll to a reply within the sidecar, handling both inline and fixed sidecar modes
    */
   scrollSidecarToReply(replyElement) {
-    if (this.config.get('fixedSidecar') && $('#fixed-sidecar-panel').hasClass('visible')) {
+    if (this.isFixedSidecar() && $('#fixed-sidecar-panel').hasClass('visible')) {
       // For fixed sidecar, scroll within the panel container
       const container = $('#fixed-sidecar-panel .fixed-sidecar-panel-content')[0];
       if (container && replyElement) {
@@ -441,7 +451,7 @@ export class ItemHandler extends Handler {
     });
 
     // Initialize fixed sidecar panel if enabled
-    if (this.config.get('fixedSidecar') && this.config.get('showReplySidecar')) {
+    if (this.isFixedSidecar() && this.config.get('showReplySidecar')) {
       this.initFixedSidecarPanel();
     }
   }
@@ -922,7 +932,7 @@ export class ItemHandler extends Handler {
 
   async showSidecar(item, thread, action = null) {
     // If fixed sidecar is enabled, use the fixed panel instead of inline
-    if (this.config.get('fixedSidecar')) {
+    if (this.isFixedSidecar()) {
       // Don't show if user hid it with 't' key (persisted in config)
       if (this.config.get('fixedSidecarVisible') !== false) {
         await this.updateFixedSidecarPanel(item, thread);
@@ -2264,7 +2274,7 @@ export class ItemHandler extends Handler {
 
     // For fixed sidecar, the sidecar always corresponds to the currently selected item
     // For inline sidecar, we need to find the parent item
-    const isFixedSidecar = this.config.get('fixedSidecar') && $('#fixed-sidecar-panel').hasClass('visible');
+    const isFixedSidecar = this.isFixedSidecar() && $('#fixed-sidecar-panel').hasClass('visible');
 
     // Clear any pending debounce
     if (this.hoverDebounceTimeout) {
@@ -2692,7 +2702,7 @@ export class ItemHandler extends Handler {
         if (
           !this.state.mobileView &&
           this.config.get('showReplySidecar') &&
-          !this.config.get('fixedSidecar') &&
+          !this.isFixedSidecar() &&
           $(this.selectedItem).closest('.thread').outerWidth() >=
             this.config.get('showReplySidecarMinimumWidth')
         ) {

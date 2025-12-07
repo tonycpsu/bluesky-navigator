@@ -576,7 +576,7 @@ function getScreenFromElement(element) {
 
         /* Sidecar width configuration - only apply when using inline sidecar */
         ${
-          !config.get('fixedSidecar')
+          config.get('fixedSidecar') !== true && config.get('fixedSidecar') !== 'Fixed'
             ? `
         @media only screen and (min-width: 801px) {
             .item {

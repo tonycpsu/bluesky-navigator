@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+441.bffa8c3c
+// @version     1.0.31+442.86b606fc
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45134,10 +45134,11 @@ if (cid) {
           help: "How to sort replies in the sidecar"
         },
         fixedSidecar: {
-          label: "Fixed sidecar panel",
-          type: "checkbox",
-          default: true,
-          help: "Show sidecar in fixed panel instead of inline"
+          label: "Sidecar panel style",
+          type: "select",
+          options: ["Fixed", "Inline"],
+          default: "Fixed",
+          help: "Fixed: separate panel. Inline: next to each post"
         },
         showReplyContext: {
           label: "Show reply context",
@@ -66644,7 +66645,7 @@ div#statusBar.has-scroll-indicator {
         setTimeout(() => {
           this.ignoreMouseMovement = false;
           this.userInitiatedScroll = false;
-          if (this.config.get("fixedSidecar") && this.config.get("fixedSidecarVisible") === false && this.selectedItem && this.selectedItem.length) {
+          if (this.isFixedSidecar() && this.config.get("fixedSidecarVisible") === false && this.selectedItem && this.selectedItem.length) {
             this.positionFixedSidecarToggle();
             $("#fixed-sidecar-toggle").addClass("visible");
           }
@@ -66771,6 +66772,14 @@ div#statusBar.has-scroll-indicator {
     get unrolledReplies() {
       return $(this.selectedItem).find(".unrolled-reply");
     }
+    /**
+     * Check if fixed sidecar mode is enabled (vs inline)
+     * Handles both new string values ('Fixed'/'Inline') and legacy boolean (true/false)
+     */
+    isFixedSidecar() {
+      const value = this.config.get("fixedSidecar");
+      return value === true || value === "Fixed";
+    }
     getPostForThreadIndex(index) {
       return index > 0 ? this.unrolledReplies.eq(index - 1) : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
     }
@@ -66831,7 +66840,7 @@ div#statusBar.has-scroll-indicator {
      * Get the jQuery collection of sidecar replies, handling both inline and fixed sidecar modes
      */
     getSidecarReplies() {
-      if (this.config.get("fixedSidecar") && $("#fixed-sidecar-panel").hasClass("visible")) {
+      if (this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible")) {
         return $("#fixed-sidecar-panel .fixed-sidecar-panel-content").find("div.sidecar-post");
       }
       return $(this.selectedItem).parent().find("div.sidecar-post");
@@ -66840,7 +66849,7 @@ div#statusBar.has-scroll-indicator {
      * Get the sidecar container element for scrolling purposes
      */
     getSidecarContainer() {
-      if (this.config.get("fixedSidecar") && $("#fixed-sidecar-panel").hasClass("visible")) {
+      if (this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible")) {
         return $("#fixed-sidecar-panel .fixed-sidecar-panel-content");
       }
       return $(this.selectedItem).parent().find(".sidecar-replies");
@@ -66850,7 +66859,7 @@ div#statusBar.has-scroll-indicator {
      */
     isSidecarNavigationAvailable() {
       if (!this.config.get("showReplySidecar")) return false;
-      if (this.config.get("fixedSidecar")) {
+      if (this.isFixedSidecar()) {
         const panel = $("#fixed-sidecar-panel");
         if (!panel.hasClass("visible")) return false;
       }
@@ -66861,7 +66870,7 @@ div#statusBar.has-scroll-indicator {
      * Scroll to a reply within the sidecar, handling both inline and fixed sidecar modes
      */
     scrollSidecarToReply(replyElement) {
-      if (this.config.get("fixedSidecar") && $("#fixed-sidecar-panel").hasClass("visible")) {
+      if (this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible")) {
         const container = $("#fixed-sidecar-panel .fixed-sidecar-panel-content")[0];
         if (container && replyElement) {
           const containerRect = container.getBoundingClientRect();
@@ -66915,7 +66924,7 @@ div#statusBar.has-scroll-indicator {
       waitForElement$2("#sidecar-skeleton-template", () => {
         this.skeletonTemplate = Handlebars.compile($("#sidecar-skeleton-template").html());
       });
-      if (this.config.get("fixedSidecar") && this.config.get("showReplySidecar")) {
+      if (this.isFixedSidecar() && this.config.get("showReplySidecar")) {
         this.initFixedSidecarPanel();
       }
     }
@@ -67291,7 +67300,7 @@ div#statusBar.has-scroll-indicator {
       });
     }
     async showSidecar(item, thread, action = null) {
-      if (this.config.get("fixedSidecar")) {
+      if (this.isFixedSidecar()) {
         if (this.config.get("fixedSidecarVisible") !== false) {
           await this.updateFixedSidecarPanel(item, thread);
         } else {
@@ -68359,7 +68368,7 @@ div#statusBar.has-scroll-indicator {
       if (this.ignoreMouseMovement) return;
       const target2 = $(event.target).closest(".sidecar-post");
       const index = this.getSidecarIndexFromItem(target2);
-      const isFixedSidecar = this.config.get("fixedSidecar") && $("#fixed-sidecar-panel").hasClass("visible");
+      const isFixedSidecar = this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible");
       if (this.hoverDebounceTimeout) {
         clearTimeout(this.hoverDebounceTimeout);
       }
@@ -68685,7 +68694,7 @@ div#statusBar.has-scroll-indicator {
         if (!this.itemStats.newest || timestamp > this.itemStats.newest) {
           this.itemStats.newest = timestamp;
         }
-        if (!this.state.mobileView && this.config.get("showReplySidecar") && !this.config.get("fixedSidecar") && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
+        if (!this.state.mobileView && this.config.get("showReplySidecar") && !this.isFixedSidecar() && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
           if (!$(item).parent().find(".sidecar-replies").length) {
             $(item).parent().append('<div class="sidecar-replies sidecar-replies-empty"></div>');
           }
@@ -71712,7 +71721,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
 
         /* Sidecar width configuration - only apply when using inline sidecar */
-        ${!config.get("fixedSidecar") ? `
+        ${config.get("fixedSidecar") !== true && config.get("fixedSidecar") !== "Fixed" ? `
         @media only screen and (min-width: 801px) {
             .item {
                 flex: ${100 - (config.get("sidecarWidthPercent") || 30)} !important;

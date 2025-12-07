@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+434.48e90cd6
+// @version     1.0.31+435.3934442b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -66600,7 +66600,7 @@ div#statusBar.has-scroll-indicator {
     }
     set replyIndex(value) {
       const oldIndex = this._replyIndex;
-      const replies = $(this.selectedItem).parent().find("div.sidecar-post");
+      const replies = this.getSidecarReplies();
       if (value == oldIndex || value < 0 || value >= replies.length) {
         return;
       }
@@ -66618,7 +66618,7 @@ div#statusBar.has-scroll-indicator {
           $(this.selectedItem).addClass("item-selection-child-focused");
           $(this.selectedItem).removeClass("item-selection-active");
           selectedReply.addClass("reply-selection-active");
-          this.scrollToElement(selectedReply[0], "nearest");
+          this.scrollSidecarToReply(selectedReply[0]);
         }
       }
     }
@@ -66724,7 +66724,58 @@ div#statusBar.has-scroll-indicator {
       return $(this.items).index(item);
     }
     getSidecarIndexFromItem(item) {
-      return $(item).closest(".thread").find(".sidecar-post").filter(":visible").index(item);
+      const replies = this.getSidecarReplies();
+      return replies.filter(":visible").index(item);
+    }
+    /**
+     * Get the jQuery collection of sidecar replies, handling both inline and fixed sidecar modes
+     */
+    getSidecarReplies() {
+      if (this.config.get("fixedSidecar") && $("#fixed-sidecar-panel").hasClass("visible")) {
+        return $("#fixed-sidecar-panel .fixed-sidecar-panel-content").find("div.sidecar-post");
+      }
+      return $(this.selectedItem).parent().find("div.sidecar-post");
+    }
+    /**
+     * Get the sidecar container element for scrolling purposes
+     */
+    getSidecarContainer() {
+      if (this.config.get("fixedSidecar") && $("#fixed-sidecar-panel").hasClass("visible")) {
+        return $("#fixed-sidecar-panel .fixed-sidecar-panel-content");
+      }
+      return $(this.selectedItem).parent().find(".sidecar-replies");
+    }
+    /**
+     * Check if sidecar navigation is available (either inline or fixed sidecar with content)
+     */
+    isSidecarNavigationAvailable() {
+      if (!this.config.get("showReplySidecar")) return false;
+      if (this.config.get("fixedSidecar")) {
+        const panel = $("#fixed-sidecar-panel");
+        if (!panel.hasClass("visible")) return false;
+      }
+      const replies = this.getSidecarReplies();
+      return replies.length > 0;
+    }
+    /**
+     * Scroll to a reply within the sidecar, handling both inline and fixed sidecar modes
+     */
+    scrollSidecarToReply(replyElement) {
+      if (this.config.get("fixedSidecar") && $("#fixed-sidecar-panel").hasClass("visible")) {
+        const container = $("#fixed-sidecar-panel .fixed-sidecar-panel-content")[0];
+        if (container && replyElement) {
+          const containerRect = container.getBoundingClientRect();
+          const replyRect = replyElement.getBoundingClientRect();
+          if (replyRect.top < containerRect.top || replyRect.bottom > containerRect.bottom) {
+            replyElement.scrollIntoView({
+              behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
+              block: "nearest"
+            });
+          }
+        }
+      } else {
+        this.scrollToElement(replyElement, "nearest");
+      }
     }
     // ===========================================================================
     // Sidecar & Thread Unrolling
@@ -67237,9 +67288,10 @@ div#statusBar.has-scroll-indicator {
           movementKeys.push("PageDown", "PageUp", "Home", "End");
         }
         if (movementKeys.includes(event.key)) {
+          const sidecarFocused = this.isSidecarNavigationAvailable() && this.replyIndex != null;
           if (["j", "ArrowDown"].indexOf(event.key) != -1) {
             event.preventDefault();
-            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+            if (sidecarFocused) {
               this.replyIndex += 1;
             } else if (this.config.get("unrolledPostSelection")) {
               if (event.key == "j") {
@@ -67251,7 +67303,7 @@ div#statusBar.has-scroll-indicator {
             }
           } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
             event.preventDefault();
-            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+            if (sidecarFocused) {
               this.replyIndex -= 1;
             } else if (this.config.get("unrolledPostSelection")) {
               if (event.key == "k") {
@@ -67263,21 +67315,21 @@ div#statusBar.has-scroll-indicator {
             }
           } else if (event.key == "PageDown") {
             event.preventDefault();
-            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+            if (sidecarFocused) {
               moved = this.jumpSidecarByPage(1);
             } else {
               moved = this.jumpByPage(1);
             }
           } else if (event.key == "PageUp") {
             event.preventDefault();
-            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+            if (sidecarFocused) {
               moved = this.jumpSidecarByPage(-1);
             } else {
               moved = this.jumpByPage(-1);
             }
           } else if (event.key == "Home") {
             event.preventDefault();
-            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
+            if (sidecarFocused) {
               this.replyIndex = 0;
             } else {
               this.setIndex(0, false, true);
@@ -67285,8 +67337,8 @@ div#statusBar.has-scroll-indicator {
             moved = true;
           } else if (event.key == "End") {
             event.preventDefault();
-            if (this.config.get("showReplySidecar") && this.replyIndex != null) {
-              const replies = $(this.selectedItem).parent().find("div.sidecar-post");
+            if (sidecarFocused) {
+              const replies = this.getSidecarReplies();
               this.replyIndex = replies.length - 1;
             } else {
               this.setIndex(this.items.length - 1, false, true);
@@ -67301,13 +67353,13 @@ div#statusBar.has-scroll-indicator {
             }
           } else if (event.key == "ArrowLeft") {
             event.preventDefault();
-            if (!this.config.get("showReplySidecar") || this.replyIndex == null) {
+            if (!this.isSidecarNavigationAvailable() || this.replyIndex == null) {
               return;
             }
             this.toggleFocus();
           } else if (event.key == "ArrowRight") {
             event.preventDefault();
-            if (!this.config.get("showReplySidecar") || this.replyIndex != null) {
+            if (!this.isSidecarNavigationAvailable() || this.replyIndex != null) {
               return;
             }
             this.toggleFocus();
@@ -67440,9 +67492,9 @@ div#statusBar.has-scroll-indicator {
       return false;
     }
     jumpSidecarByPage(direction2) {
-      const replies = $(this.selectedItem).parent().find("div.sidecar-post");
+      const replies = this.getSidecarReplies();
       if (!replies.length) return false;
-      const sidecar = $(this.selectedItem).parent().find(".sidecar-replies");
+      const sidecar = this.getSidecarContainer();
       const sidecarHeight = sidecar.height() || window.innerHeight;
       const currentReply = replies.eq(this.replyIndex);
       const replyHeight = currentReply.outerHeight(true) || 100;
@@ -68115,15 +68167,18 @@ div#statusBar.has-scroll-indicator {
       if (this.ignoreMouseMovement) return;
       const target2 = $(event.target).closest(".sidecar-post");
       const index = this.getSidecarIndexFromItem(target2);
-      const parent = target2.closest(".thread").find(".item");
-      const parentIndex = this.getIndexFromItem(parent);
+      const isFixedSidecar = this.config.get("fixedSidecar") && $("#fixed-sidecar-panel").hasClass("visible");
       if (this.hoverDebounceTimeout) {
         clearTimeout(this.hoverDebounceTimeout);
       }
       this.hoverDebounceTimeout = setTimeout(() => {
         if (this.ignoreMouseMovement) return;
-        if (parentIndex !== this.index && parentIndex >= 0) {
-          this.setIndex(parentIndex, false, false, false);
+        if (!isFixedSidecar) {
+          const parent = target2.closest(".thread").find(".item");
+          const parentIndex = this.getIndexFromItem(parent);
+          if (parentIndex !== this.index && parentIndex >= 0) {
+            this.setIndex(parentIndex, false, false, false);
+          }
         }
         this.replyIndex = index;
       }, this.hoverDebounceDelay);

@@ -174,7 +174,7 @@ export class ItemHandler extends Handler {
 
   set replyIndex(value) {
     const oldIndex = this._replyIndex;
-    const replies = $(this.selectedItem).parent().find('div.sidecar-post');
+    const replies = this.getSidecarReplies();
     if (value == oldIndex || value < 0 || value >= replies.length) {
       return;
     }
@@ -192,7 +192,8 @@ export class ItemHandler extends Handler {
         $(this.selectedItem).addClass('item-selection-child-focused');
         $(this.selectedItem).removeClass('item-selection-active');
         selectedReply.addClass('reply-selection-active');
-        this.scrollToElement(selectedReply[0], 'nearest');
+        // Scroll within the appropriate container
+        this.scrollSidecarToReply(selectedReply[0]);
       }
     }
   }
@@ -319,7 +320,70 @@ export class ItemHandler extends Handler {
   }
 
   getSidecarIndexFromItem(item) {
-    return $(item).closest('.thread').find('.sidecar-post').filter(':visible').index(item);
+    const replies = this.getSidecarReplies();
+    return replies.filter(':visible').index(item);
+  }
+
+  /**
+   * Get the jQuery collection of sidecar replies, handling both inline and fixed sidecar modes
+   */
+  getSidecarReplies() {
+    if (this.config.get('fixedSidecar') && $('#fixed-sidecar-panel').hasClass('visible')) {
+      return $('#fixed-sidecar-panel .fixed-sidecar-panel-content').find('div.sidecar-post');
+    }
+    return $(this.selectedItem).parent().find('div.sidecar-post');
+  }
+
+  /**
+   * Get the sidecar container element for scrolling purposes
+   */
+  getSidecarContainer() {
+    if (this.config.get('fixedSidecar') && $('#fixed-sidecar-panel').hasClass('visible')) {
+      return $('#fixed-sidecar-panel .fixed-sidecar-panel-content');
+    }
+    return $(this.selectedItem).parent().find('.sidecar-replies');
+  }
+
+  /**
+   * Check if sidecar navigation is available (either inline or fixed sidecar with content)
+   */
+  isSidecarNavigationAvailable() {
+    if (!this.config.get('showReplySidecar')) return false;
+
+    // For fixed sidecar, check if panel is visible and has replies
+    if (this.config.get('fixedSidecar')) {
+      const panel = $('#fixed-sidecar-panel');
+      if (!panel.hasClass('visible')) return false;
+    }
+
+    // Check if there are any replies to navigate
+    const replies = this.getSidecarReplies();
+    return replies.length > 0;
+  }
+
+  /**
+   * Scroll to a reply within the sidecar, handling both inline and fixed sidecar modes
+   */
+  scrollSidecarToReply(replyElement) {
+    if (this.config.get('fixedSidecar') && $('#fixed-sidecar-panel').hasClass('visible')) {
+      // For fixed sidecar, scroll within the panel container
+      const container = $('#fixed-sidecar-panel .fixed-sidecar-panel-content')[0];
+      if (container && replyElement) {
+        const containerRect = container.getBoundingClientRect();
+        const replyRect = replyElement.getBoundingClientRect();
+
+        // Check if reply is outside visible area of container
+        if (replyRect.top < containerRect.top || replyRect.bottom > containerRect.bottom) {
+          replyElement.scrollIntoView({
+            behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+            block: 'nearest'
+          });
+        }
+      }
+    } else {
+      // For inline sidecar, scroll the main window
+      this.scrollToElement(replyElement, 'nearest');
+    }
   }
 
   // ===========================================================================
@@ -986,9 +1050,10 @@ export class ItemHandler extends Handler {
       }
 
       if (movementKeys.includes(event.key)) {
+        const sidecarFocused = this.isSidecarNavigationAvailable() && this.replyIndex != null;
         if (['j', 'ArrowDown'].indexOf(event.key) != -1) {
           event.preventDefault();
-          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
+          if (sidecarFocused) {
             this.replyIndex += 1;
           } else if (this.config.get('unrolledPostSelection')) {
             if (event.key == 'j') {
@@ -1000,7 +1065,7 @@ export class ItemHandler extends Handler {
           }
         } else if (['k', 'ArrowUp'].indexOf(event.key) != -1) {
           event.preventDefault();
-          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
+          if (sidecarFocused) {
             this.replyIndex -= 1;
           } else if (this.config.get('unrolledPostSelection')) {
             if (event.key == 'k') {
@@ -1012,21 +1077,21 @@ export class ItemHandler extends Handler {
           }
         } else if (event.key == 'PageDown') {
           event.preventDefault();
-          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
+          if (sidecarFocused) {
             moved = this.jumpSidecarByPage(1);
           } else {
             moved = this.jumpByPage(1);
           }
         } else if (event.key == 'PageUp') {
           event.preventDefault();
-          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
+          if (sidecarFocused) {
             moved = this.jumpSidecarByPage(-1);
           } else {
             moved = this.jumpByPage(-1);
           }
         } else if (event.key == 'Home') {
           event.preventDefault();
-          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
+          if (sidecarFocused) {
             this.replyIndex = 0;
           } else {
             this.setIndex(0, false, true);
@@ -1034,8 +1099,8 @@ export class ItemHandler extends Handler {
           moved = true;
         } else if (event.key == 'End') {
           event.preventDefault();
-          if (this.config.get('showReplySidecar') && this.replyIndex != null) {
-            const replies = $(this.selectedItem).parent().find('div.sidecar-post');
+          if (sidecarFocused) {
+            const replies = this.getSidecarReplies();
             this.replyIndex = replies.length - 1;
           } else {
             this.setIndex(this.items.length - 1, false, true);
@@ -1050,13 +1115,13 @@ export class ItemHandler extends Handler {
           }
         } else if (event.key == 'ArrowLeft') {
           event.preventDefault();
-          if (!this.config.get('showReplySidecar') || this.replyIndex == null) {
+          if (!this.isSidecarNavigationAvailable() || this.replyIndex == null) {
             return;
           }
           this.toggleFocus();
         } else if (event.key == 'ArrowRight') {
           event.preventDefault();
-          if (!this.config.get('showReplySidecar') || this.replyIndex != null) {
+          if (!this.isSidecarNavigationAvailable() || this.replyIndex != null) {
             return;
           }
           this.toggleFocus();
@@ -1209,11 +1274,11 @@ export class ItemHandler extends Handler {
   }
 
   jumpSidecarByPage(direction) {
-    const replies = $(this.selectedItem).parent().find('div.sidecar-post');
+    const replies = this.getSidecarReplies();
     if (!replies.length) return false;
 
     // Get the sidecar container height
-    const sidecar = $(this.selectedItem).parent().find('.sidecar-replies');
+    const sidecar = this.getSidecarContainer();
     const sidecarHeight = sidecar.height() || window.innerHeight;
 
     // Get the height of a reply item
@@ -2060,8 +2125,10 @@ export class ItemHandler extends Handler {
 
     const target = $(event.target).closest('.sidecar-post');
     const index = this.getSidecarIndexFromItem(target);
-    const parent = target.closest('.thread').find('.item');
-    const parentIndex = this.getIndexFromItem(parent);
+
+    // For fixed sidecar, the sidecar always corresponds to the currently selected item
+    // For inline sidecar, we need to find the parent item
+    const isFixedSidecar = this.config.get('fixedSidecar') && $('#fixed-sidecar-panel').hasClass('visible');
 
     // Clear any pending debounce
     if (this.hoverDebounceTimeout) {
@@ -2072,9 +2139,14 @@ export class ItemHandler extends Handler {
     this.hoverDebounceTimeout = setTimeout(() => {
       if (this.ignoreMouseMovement) return;
 
-      if (parentIndex !== this.index && parentIndex >= 0) {
-        // Hover opens sidecar (unlike scroll which skips it)
-        this.setIndex(parentIndex, false, false, false);
+      if (!isFixedSidecar) {
+        // For inline sidecar, check if we need to change parent item
+        const parent = target.closest('.thread').find('.item');
+        const parentIndex = this.getIndexFromItem(parent);
+        if (parentIndex !== this.index && parentIndex >= 0) {
+          // Hover opens sidecar (unlike scroll which skips it)
+          this.setIndex(parentIndex, false, false, false);
+        }
       }
       this.replyIndex = index;
     }, this.hoverDebounceDelay);

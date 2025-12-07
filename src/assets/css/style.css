@@ -426,8 +426,9 @@ div:has(> div > .item.filtered) {
     display: none !important;
 }
 
-/* But don't hide thread containers that have some visible items */
-.thread:has(.item:not(.filtered)) {
+/* But don't hide thread containers that have some visible direct child items */
+/* Use direct child selector to avoid matching nested quote posts */
+.thread:has(> div > .item:not(.filtered)) {
     display: block !important;
 }
 

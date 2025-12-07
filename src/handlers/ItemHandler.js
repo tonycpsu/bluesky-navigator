@@ -58,6 +58,7 @@ export class ItemHandler extends Handler {
     this.scrollTop = 0;
     this.scrollDirection = 0;
     this.selfThreadCache = {}; // Cache for API-detected self-threads (postId -> true)
+    this.unrolledPostIds = new Set(); // Track post IDs shown in unrolled threads
 
     // Hover debounce for mouse focus
     this.hoverDebounceTimeout = null;
@@ -449,9 +450,16 @@ export class ItemHandler extends Handler {
         parent.append(div);
       }
       const totalPosts = unrolledPosts.length;
+      // Track post IDs of unrolled replies to filter duplicates from main feed
+      const unrolledIds = [];
       unrolledPosts.slice(1).map((p, i) => {
         const postNum = i + 2;
+        const postId = p.uri.split('/').slice(-1)[0];
+        unrolledIds.push(postId);
+        this.unrolledPostIds.add(postId);
+
         const reply = $('<div class="unrolled-reply"/>');
+        reply.attr('data-unrolled-post-id', postId);
         reply.append($('<hr class="unrolled-divider"/>'));
         reply.append(
           $(
@@ -463,6 +471,15 @@ export class ItemHandler extends Handler {
         div.append(reply);
       });
       const threadIndex = $(item).closest('.thread').data('bsky-navigator-thread-index');
+
+      // Filter out feed items that are now shown as unrolled replies
+      this.items.each((i, feedItem) => {
+        const feedItemPostId = this.postIdForItem(feedItem);
+        if (feedItemPostId && unrolledIds.includes(feedItemPostId)) {
+          $(feedItem).addClass('filtered unrolled-duplicate');
+          $(feedItem).closest('.thread').addClass('has-unrolled-duplicate');
+        }
+      });
 
       function isRedundant(item, threadIndex) {
         return (
@@ -476,11 +493,12 @@ export class ItemHandler extends Handler {
           $(item).addClass('filtered');
         }
       });
-      console.log(this.items.length);
+      // Filter out both redundant items and unrolled duplicates
       this.items = this.items.filter((i, item) => {
-        return !isRedundant(item, threadIndex);
+        if (isRedundant(item, threadIndex)) return false;
+        if ($(item).hasClass('unrolled-duplicate')) return false;
+        return true;
       });
-      console.log(this.items.length);
       // Show focus on first post without scrolling (set directly to skip setter's scroll)
       this._threadIndex = 0;
       $(this.selectedItem).addClass('item-selection-child-focused');
@@ -528,21 +546,28 @@ export class ItemHandler extends Handler {
 
   async showSidecar(item, thread, action = null) {
     const container = $(item).parent();
-    const existingSidecar = $(container).find('.sidecar-replies')[0];
+
+    // Prevent duplicate sidecars - use data attribute as lock
+    const itemKey = this.postIdForItem(item) || Date.now();
+    if (container.data('sidecar-loading') === itemKey) {
+      return; // Already loading for this item
+    }
+    container.data('sidecar-loading', itemKey);
+
+    // Remove ALL existing sidecars first to prevent duplicates
+    container.find('.sidecar-replies').remove();
 
     // Show skeleton while loading
-    if (!existingSidecar) {
-      const skeletonContent = this.getSkeletonContent();
-      $(container).append(skeletonContent);
-    } else if (!thread) {
-      // Replace with skeleton if no thread data yet
-      $(existingSidecar).replaceWith($(this.getSkeletonContent()));
-    }
+    const skeletonContent = this.getSkeletonContent();
+    $(container).append(skeletonContent);
 
     // Load actual content
     const sidecarContent = await this.getSidecarContent(item, thread);
     console.log(sidecarContent);
-    container.find('.sidecar-replies').replaceWith($(sidecarContent));
+
+    // Remove skeleton and add actual content (in case multiple skeletons were added)
+    container.find('.sidecar-replies').remove();
+    container.append($(sidecarContent));
     container.find('.sidecar-post').each((i, post) => {
       $(post).on('mouseover', this.onSidecarItemMouseOver);
     });
@@ -578,6 +603,9 @@ export class ItemHandler extends Handler {
           : 'none';
     console.log(display);
     container.find('.sidecar-replies').css('display', display);
+
+    // Clear the loading lock
+    container.removeData('sidecar-loading');
   }
 
   // ===========================================================================
@@ -1433,25 +1461,19 @@ export class ItemHandler extends Handler {
   }
 
   setupLoadNewerObserver() {
-    this.loadNewerObserver = waitForElement(constants.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
-      this.loadNewerButton = $(button)[0];
-      $('a#loadNewerIndicatorLink').on('click', () => this.loadNewerItems());
+    // Use the simpler button selector instead of the complex indicator selector
+    this.loadNewerObserver = waitForElement(constants.LOAD_NEW_BUTTON_SELECTOR, (button, observer) => {
+      // Disconnect observer to prevent repeated firing
+      if (observer) observer.disconnect();
+
+      const btn = $(button)[0];
+      if (this.loadNewerButton === btn) return;
+
+      this.loadNewerButton = btn;
+      console.log('[bsky-navigator] Load newer button found:', btn);
 
       $('img#loadNewerIndicatorImage').addClass('image-highlight');
       $('img#loadNewerIndicatorImage').removeClass('toolbar-icon-pending');
-      if ($('#loadNewerAction').length == 0) {
-        $('#messageActions').append($('<div id="loadNewerAction"><a> Load newer posts</a></div>'));
-        $('#loadNewerAction > a').on('click', () => this.loadNewerItems());
-      }
-      this.loadNewerButton.addEventListener(
-        'click',
-        (event) => {
-          if (this.loadingNew) return;
-          event.stopImmediatePropagation();
-          setTimeout(() => this.loadNewerItems(), 0);
-        },
-        true
-      );
 
       // Show floating "New posts" pill
       this.showNewPostsPill();
@@ -2108,6 +2130,18 @@ export class ItemHandler extends Handler {
     // Exclude elements inside post-view-modal to avoid affecting the modal's sidecar
     $('.unrolled-replies').not('.post-view-modal *').remove();
     $('.sidecar-replies').not('.post-view-modal *').remove();
+    // Clear tracked unrolled post IDs when unrolled content is removed
+    this.unrolledPostIds.clear();
+    // Remove unrolled-duplicate class from items
+    $('.unrolled-duplicate').removeClass('unrolled-duplicate filtered');
+
+    // Clean up empty thread containers (threads with no visible items)
+    $('div.thread').each((i, thread) => {
+      const hasVisibleItems = $(thread).find(this.selector).filter(':visible').length > 0;
+      if (!hasVisibleItems) {
+        $(thread).remove();
+      }
+    });
 
     $(this.items).css('opacity', '0%');
     let itemIndex = 0;
@@ -2300,9 +2334,16 @@ ${
   }
 
   loadNewerItems() {
+    // Try to find the button if not already set
     if (!this.loadNewerButton) {
-      console.log('no button');
-      return;
+      const button = $(constants.LOAD_NEW_BUTTON_SELECTOR)[0];
+      if (button) {
+        this.loadNewerButton = button;
+        console.log('[bsky-navigator] Found load new button:', button);
+      } else {
+        console.log('[bsky-navigator] No load new button found');
+        return;
+      }
     }
     this.loadingNew = true;
     this.hideNewPostsPill();
@@ -2315,6 +2356,9 @@ ${
       $('img#loadNewerIndicatorImage').removeClass('toolbar-icon-pending');
       $('#loadNewerAction').remove();
       this.loadingNew = false;
+      // Clear button reference and restart observer to detect new buttons
+      this.loadNewerButton = null;
+      this.setupLoadNewerObserver();
     }, 1000);
   }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+430.1190b65e
+// @version     1.0.31+431.88afd09f
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -43,9 +43,6 @@
       return `${constants.FEED_TAB_SELECTOR} > div:first-child`;
     },
     LOAD_NEW_BUTTON_SELECTOR: "button[aria-label^='Load new']",
-    get LOAD_NEW_INDICATOR_SELECTOR() {
-      return `${constants.LOAD_NEW_BUTTON_SELECTOR} div[style*="border-color: rgb(197, 207, 217)"]`;
-    },
     get FEED_CONTAINER_SELECTOR() {
       return `${constants.HOME_SCREEN_SELECTOR} div[data-testid$="FeedPage"] div[style*="removed-body-scroll-bar-size"] > div`;
     },
@@ -46711,8 +46708,9 @@ div:has(> div > .item.filtered) {
     display: none !important;
 }
 
-/* But don't hide thread containers that have some visible items */
-.thread:has(.item:not(.filtered)) {
+/* But don't hide thread containers that have some visible direct child items */
+/* Use direct child selector to avoid matching nested quote posts */
+.thread:has(> div > .item:not(.filtered)) {
     display: block !important;
 }
 
@@ -66255,6 +66253,7 @@ div#statusBar.has-scroll-indicator {
       this.scrollTop = 0;
       this.scrollDirection = 0;
       this.selfThreadCache = {};
+      this.unrolledPostIds = /* @__PURE__ */ new Set();
       this.hoverDebounceTimeout = null;
       this.hoverDebounceDelay = 100;
       this.userInitiatedScroll = false;
@@ -66583,9 +66582,14 @@ div#statusBar.has-scroll-indicator {
           parent.append(div);
         }
         const totalPosts = unrolledPosts.length;
+        const unrolledIds = [];
         unrolledPosts.slice(1).map((p, i2) => {
           const postNum = i2 + 2;
+          const postId2 = p.uri.split("/").slice(-1)[0];
+          unrolledIds.push(postId2);
+          this.unrolledPostIds.add(postId2);
           const reply = $('<div class="unrolled-reply"/>');
+          reply.attr("data-unrolled-post-id", postId2);
           reply.append($('<hr class="unrolled-divider"/>'));
           reply.append(
             $(
@@ -66597,17 +66601,24 @@ div#statusBar.has-scroll-indicator {
           div.append(reply);
         });
         const threadIndex = $(item).closest(".thread").data("bsky-navigator-thread-index");
+        this.items.each((i2, feedItem) => {
+          const feedItemPostId = this.postIdForItem(feedItem);
+          if (feedItemPostId && unrolledIds.includes(feedItemPostId)) {
+            $(feedItem).addClass("filtered unrolled-duplicate");
+            $(feedItem).closest(".thread").addClass("has-unrolled-duplicate");
+          }
+        });
         this.items.each((i2, item2) => {
           if (isRedundant(item2, threadIndex)) {
             console.log("filtered", item2);
             $(item2).addClass("filtered");
           }
         });
-        console.log(this.items.length);
         this.items = this.items.filter((i2, item2) => {
-          return !isRedundant(item2, threadIndex);
+          if (isRedundant(item2, threadIndex)) return false;
+          if ($(item2).hasClass("unrolled-duplicate")) return false;
+          return true;
         });
-        console.log(this.items.length);
         this._threadIndex = 0;
         $(this.selectedItem).addClass("item-selection-child-focused");
         $(this.selectedItem).removeClass("item-selection-active");
@@ -66645,16 +66656,18 @@ div#statusBar.has-scroll-indicator {
     }
     async showSidecar(item, thread, action = null) {
       const container = $(item).parent();
-      const existingSidecar = $(container).find(".sidecar-replies")[0];
-      if (!existingSidecar) {
-        const skeletonContent = this.getSkeletonContent();
-        $(container).append(skeletonContent);
-      } else if (!thread) {
-        $(existingSidecar).replaceWith($(this.getSkeletonContent()));
+      const itemKey = this.postIdForItem(item) || Date.now();
+      if (container.data("sidecar-loading") === itemKey) {
+        return;
       }
+      container.data("sidecar-loading", itemKey);
+      container.find(".sidecar-replies").remove();
+      const skeletonContent = this.getSkeletonContent();
+      $(container).append(skeletonContent);
       const sidecarContent = await this.getSidecarContent(item, thread);
       console.log(sidecarContent);
-      container.find(".sidecar-replies").replaceWith($(sidecarContent));
+      container.find(".sidecar-replies").remove();
+      container.append($(sidecarContent));
       container.find(".sidecar-post").each((i2, post2) => {
         $(post2).on("mouseover", this.onSidecarItemMouseOver);
       });
@@ -66678,6 +66691,7 @@ div#statusBar.has-scroll-indicator {
       const display2 = action == null ? sidecar && $(sidecar).is(":visible") ? "none" : "flex" : action ? "flex" : "none";
       console.log(display2);
       container.find(".sidecar-replies").css("display", display2);
+      container.removeData("sidecar-loading");
     }
     // ===========================================================================
     // Keyboard Handling
@@ -67383,24 +67397,14 @@ div#statusBar.has-scroll-indicator {
       });
     }
     setupLoadNewerObserver() {
-      this.loadNewerObserver = waitForElement$2(constants.LOAD_NEW_INDICATOR_SELECTOR, (button) => {
-        this.loadNewerButton = $(button)[0];
-        $("a#loadNewerIndicatorLink").on("click", () => this.loadNewerItems());
+      this.loadNewerObserver = waitForElement$2(constants.LOAD_NEW_BUTTON_SELECTOR, (button, observer) => {
+        if (observer) observer.disconnect();
+        const btn = $(button)[0];
+        if (this.loadNewerButton === btn) return;
+        this.loadNewerButton = btn;
+        console.log("[bsky-navigator] Load newer button found:", btn);
         $("img#loadNewerIndicatorImage").addClass("image-highlight");
         $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
-        if ($("#loadNewerAction").length == 0) {
-          $("#messageActions").append($('<div id="loadNewerAction"><a> Load newer posts</a></div>'));
-          $("#loadNewerAction > a").on("click", () => this.loadNewerItems());
-        }
-        this.loadNewerButton.addEventListener(
-          "click",
-          (event) => {
-            if (this.loadingNew) return;
-            event.stopImmediatePropagation();
-            setTimeout(() => this.loadNewerItems(), 0);
-          },
-          true
-        );
         this.showNewPostsPill();
       });
     }
@@ -67920,6 +67924,14 @@ div#statusBar.has-scroll-indicator {
       const set = [];
       $(".unrolled-replies").not(".post-view-modal *").remove();
       $(".sidecar-replies").not(".post-view-modal *").remove();
+      this.unrolledPostIds.clear();
+      $(".unrolled-duplicate").removeClass("unrolled-duplicate filtered");
+      $("div.thread").each((i2, thread) => {
+        const hasVisibleItems = $(thread).find(this.selector).filter(":visible").length > 0;
+        if (!hasVisibleItems) {
+          $(thread).remove();
+        }
+      });
       $(this.items).css("opacity", "0%");
       let itemIndex = 0;
       let threadIndex = 0;
@@ -68049,8 +68061,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     loadNewerItems() {
       if (!this.loadNewerButton) {
-        console.log("no button");
-        return;
+        const button = $(constants.LOAD_NEW_BUTTON_SELECTOR)[0];
+        if (button) {
+          this.loadNewerButton = button;
+          console.log("[bsky-navigator] Found load new button:", button);
+        } else {
+          console.log("[bsky-navigator] No load new button found");
+          return;
+        }
       }
       this.loadingNew = true;
       this.hideNewPostsPill();
@@ -68063,6 +68081,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
         $("#loadNewerAction").remove();
         this.loadingNew = false;
+        this.loadNewerButton = null;
+        this.setupLoadNewerObserver();
       }, 1e3);
     }
     loadOlderItems() {
@@ -68852,6 +68872,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       $("img#loadOlderIndicatorImage").addClass("image-highlight");
       $("a#loadOlderIndicatorLink").on("click", () => this.loadOlderItems());
+      $("a#loadNewerIndicatorLink").on("click", () => this.loadNewerItems());
+      if (this.loadNewerButton) {
+        $("img#loadNewerIndicatorImage").addClass("image-highlight");
+      }
     }
     toggleHideRead() {
       this.state.stateManager.updateState({ feedHideRead: !this.state.feedHideRead });

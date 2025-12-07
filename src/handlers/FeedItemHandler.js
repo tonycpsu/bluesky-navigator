@@ -994,6 +994,12 @@ export class FeedItemHandler extends ItemHandler {
     });
     $('img#loadOlderIndicatorImage').addClass('image-highlight');
     $('a#loadOlderIndicatorLink').on('click', () => this.loadOlderItems());
+    $('a#loadNewerIndicatorLink').on('click', () => this.loadNewerItems());
+
+    // If loadNewerButton exists (Bluesky's native button was detected), highlight our indicator
+    if (this.loadNewerButton) {
+      $('img#loadNewerIndicatorImage').addClass('image-highlight');
+    }
   }
 
   toggleHideRead() {

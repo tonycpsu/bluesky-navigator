@@ -70,7 +70,6 @@ export class StateManager {
   setSyncStatus(status, title) {
     const overlay = $('.preferences-icon-overlay');
     if (!overlay) {
-      console.log('no overlay');
       return;
     }
     $(overlay).attr('title', `sync: ${status} ${title || ''}`);
@@ -155,10 +154,8 @@ export class StateManager {
           const remoteTime = remoteLastUpdated ? new Date(remoteLastUpdated).getTime() : 0;
 
           if (localTime > remoteTime) {
-            console.log(`Using local state (newer): ${localLastUpdated} > ${remoteLastUpdated}`);
             return { ...defaultState, ...savedState };
           } else {
-            console.log(`Using remote state (newer): ${remoteLastUpdated} >= ${localLastUpdated}`);
             // Preserve filter from local state - it's session-only and shouldn't be synced
             const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
             return { ...defaultState, ...remoteWithoutFilter, filter: savedState.filter || defaultState.filter || '' };
@@ -177,12 +174,10 @@ export class StateManager {
 
   async loadRemoteState() {
     try {
-      console.log('Loading remote state...');
       this.setSyncStatus('pending');
       const result = await this.executeRemoteQuery('SELECT * FROM state:current;');
       const stateObj = result || {};
       delete stateObj.id;
-      console.log('Remote state loaded successfully.');
       return stateObj;
     } catch (error) {
       console.error('Failed to load remote state:', error);
@@ -223,10 +218,8 @@ export class StateManager {
    * @returns {Promise<void>}
    */
   async saveLocalState() {
-    console.log('Saving local state...');
     this.cleanupState(); // Ensure state is pruned before saving
     GM_setValue(this.key, JSON.stringify(this.state));
-    console.log('Local state saved.');
     this.isLocalStateDirty = false; // Reset dirty flag
     this.notifyListeners();
   }
@@ -236,7 +229,6 @@ export class StateManager {
    */
   scheduleRemoteSync() {
     if (!this.config.stateSyncEnabled) {
-      console.log('sync disabled');
       return;
     }
 
@@ -253,11 +245,9 @@ export class StateManager {
     try {
       const lastUpdated = await this.getRemoteStateUpdated();
       if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
-        console.log('Not saving because remote state is newer.');
         return;
       }
 
-      console.log('Saving remote state...');
       this.setSyncStatus('pending');
       // Exclude session-only fields (filter) from remote sync
       const { filter, ...stateToSync } = this.state;
@@ -318,11 +308,7 @@ export class StateManager {
         },
         body: query,
         keepalive: true,
-      }).catch((error) => {
-        console.error('Failed to save remote state on unload:', error);
-      });
-
-      console.log('Remote state save initiated (keepalive)');
+      }).catch(() => {});
     } catch (error) {
       console.error('Error preparing remote state save:', error);
     }

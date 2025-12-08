@@ -137,20 +137,6 @@ export class PostViewModal {
     const postContainer = modal.querySelector('.post-view-modal-post');
     postContainer.appendChild(postClone);
 
-    // Debug: watch for changes to the post element
-    const postObserver = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        console.log('[PostViewModal] POST MUTATION:', mutation.type, mutation.target.className || mutation.target.tagName);
-        if (mutation.type === 'attributes') {
-          console.log('[PostViewModal] Post attribute changed:', mutation.attributeName, 'on', mutation.target.className || mutation.target.tagName);
-          if (mutation.attributeName === 'style') {
-            console.log('[PostViewModal] New style:', mutation.target.getAttribute('style'));
-          }
-        }
-      });
-    });
-    postObserver.observe(postClone, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-
     // Insert sidecar content
     const sidecarContainer = modal.querySelector('.post-view-modal-sidecar');
     if (sidecarHtml) {
@@ -171,34 +157,10 @@ export class PostViewModal {
    * @param {string} sidecarHtml - HTML content for the sidecar
    */
   updateSidecar(sidecarHtml) {
-    console.log('[PostViewModal] updateSidecar called, modalEl exists:', !!this.modalEl);
     if (!this.modalEl) return;
     const sidecarContainer = this.modalEl.querySelector('.post-view-modal-sidecar');
-    console.log('[PostViewModal] sidecarContainer found:', !!sidecarContainer);
     if (sidecarContainer) {
       sidecarContainer.innerHTML = sidecarHtml;
-      console.log('[PostViewModal] sidecar innerHTML set, length:', sidecarHtml?.length);
-
-      // Debug: watch for changes to this element
-      const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-          console.log('[PostViewModal] MUTATION detected:', mutation.type, mutation);
-          if (mutation.type === 'childList') {
-            console.log('[PostViewModal] Children changed, removed:', mutation.removedNodes.length, 'added:', mutation.addedNodes.length);
-          }
-          if (mutation.type === 'attributes') {
-            console.log('[PostViewModal] Attribute changed:', mutation.attributeName, 'to', mutation.target.getAttribute(mutation.attributeName));
-          }
-        });
-      });
-      observer.observe(sidecarContainer, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-
-      // Also observe the inner sidecar-replies
-      const sidecarReplies = sidecarContainer.querySelector('.sidecar-replies');
-      if (sidecarReplies) {
-        console.log('[PostViewModal] sidecar-replies found, observing it too');
-        observer.observe(sidecarReplies, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
-      }
     }
   }
 

@@ -84,7 +84,6 @@ let handlers;
           )) {
             // Check if this is intersecting (would trigger load)
             if (entry.isIntersecting) {
-              console.log('[bsky-navigator] Blocked infinite scroll trigger:', target);
               return false;
             }
           }
@@ -113,7 +112,6 @@ let handlers;
           // Always update - the most recent sentinel is likely the active one
           loadMoreSentinel = target;
           loadMoreCallback = this.callback;
-          console.log('[bsky-navigator] Captured feed load-more callback and sentinel:', target);
         }
       }
       this.realObserver.observe(target);
@@ -400,7 +398,6 @@ function getScreenFromElement(element) {
             $('#bluesky-popup').hide();
           });
 
-          console.log('Popup loaded successfully!');
         } catch (error) {
           console.error('Failed to load popup:', error);
         }
@@ -410,7 +407,6 @@ function getScreenFromElement(element) {
 
     // Initialize mobileView early so handlers can use it in their constructors
     state.mobileView = window.innerWidth <= 800;
-    console.log('Initial mobileView (by width):', state.mobileView, 'width:', window.innerWidth);
 
     // FIXME: ordering of these is important since posts can tbe in profiles
     handlers = {
@@ -691,7 +687,6 @@ function getScreenFromElement(element) {
         return;
       }
       context = ctx;
-      console.log(`context: ${context}`);
       for (const [name, handler] of Object.entries(handlers)) {
         //console.log(name, handler)
         handler.deactivate();
@@ -718,7 +713,6 @@ function getScreenFromElement(element) {
         return false;
       }
       const targetTagName = target.tagName.toLowerCase();
-      console.log(`onFocus: ${targetTagName}`);
       switch (targetTagName) {
         case 'input':
         case 'textarea':
@@ -749,8 +743,6 @@ function getScreenFromElement(element) {
         return false;
       }
       const targetTagName = target.tagName.toLowerCase();
-      console.log(`onBlur: ${targetTagName}`);
-      console.log(e.target);
       switch (targetTagName) {
         case 'input':
         case 'textarea':
@@ -784,12 +776,10 @@ function getScreenFromElement(element) {
     const viewportChangeObserver = waitForElement(
       `${constants.DRAWER_MENU_SELECTOR}, ${constants.LEFT_SIDEBAR_SELECTOR}`,
       (element) => {
-        console.log('viewport element found:', element);
         // Check both element type AND screen width for more reliable detection
         const isMobileByElement = $(element).is(constants.DRAWER_MENU_SELECTOR);
         const isMobileByWidth = window.innerWidth <= 800;
         state.mobileView = isMobileByElement || isMobileByWidth;
-        console.log('mobileView:', state.mobileView, '(byElement:', isMobileByElement, ', byWidth:', isMobileByWidth, ')');
         startMonitor();
         setContextFromUrl();
 
@@ -818,7 +808,6 @@ function getScreenFromElement(element) {
             rightSidebar = rightSidebar.parentElement;
           }
           if (rightSidebar) {
-            console.log('[bsky-nav] Hiding right sidebar');
             rightSidebar.style.display = 'none';
           }
         });
@@ -845,7 +834,6 @@ function getScreenFromElement(element) {
             let container = el.closest('div[style*="background-color: rgb(249, 250, 251)"]');
             if (container && !container.classList.contains('bsky-nav-suggested-hidden')) {
               container.classList.add('bsky-nav-suggested-hidden');
-              console.log('[bsky-nav] Hiding "Suggested for you" section');
             }
           }
         });

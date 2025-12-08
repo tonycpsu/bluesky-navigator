@@ -32,6 +32,14 @@ export class ItemHandler extends Handler {
   POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
   THREAD_PAGE_SELECTOR = 'main > div > div > div';
 
+  // 32 distinct colors for filter list handle coloring (high saturation, good contrast)
+  FILTER_LIST_COLORS = [
+    '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6',
+    '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3',
+    '#808000', '#ffd8b1', '#000075', '#808080', '#ff0000', '#00ff00', '#0000ff', '#ff00ff',
+    '#00ffff', '#ff8000', '#8000ff', '#0080ff', '#ff0080', '#80ff00', '#00ff80', '#ff8080',
+  ];
+
   FLOATING_BUTTON_IMAGES = {
     prev: ['https://www.svgrepo.com/show/238452/up-arrow.svg'],
     next: ['https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg'],
@@ -842,13 +850,6 @@ export class ItemHandler extends Handler {
   }
 
   async unrollThread(item, thread) {
-    console.log(
-      thread.parent,
-      thread.parent?.post,
-      thread.parent?.post?.author?.did,
-      thread.post?.author?.did
-    );
-
     if (
       thread.parent &&
       thread.parent.post &&
@@ -916,7 +917,6 @@ export class ItemHandler extends Handler {
       }
       this.items.each((i, item) => {
         if (isRedundant(item, threadIndex)) {
-          console.log('filtered', item);
           $(item).addClass('filtered');
         }
       });
@@ -1045,7 +1045,6 @@ export class ItemHandler extends Handler {
 
     // Load actual content
     const sidecarContent = await this.getSidecarContent(item, thread);
-    console.log(sidecarContent);
 
     // Verify container still exists after async operation
     if (!document.contains(container[0])) {
@@ -1095,7 +1094,6 @@ export class ItemHandler extends Handler {
         : action
           ? 'flex'
           : 'none';
-    console.log(display);
     container.find('.sidecar-replies').css('display', display);
 
     // Clear the loading lock
@@ -1450,7 +1448,6 @@ export class ItemHandler extends Handler {
           this.THREAD_PAGE_SELECTOR,
           this.handleNewThreadPage
         );
-        console.log(this.loadPageObserver);
         $(next).find('div').click();
       }
     }
@@ -1583,7 +1580,6 @@ export class ItemHandler extends Handler {
             url: url,
             responseType: 'blob',
             onload: (response) => {
-              console.log('[bsky-nav] GM_xmlhttpRequest loaded:', url, 'status:', response.status, 'size:', response.response?.size);
               if (response.status !== 200 || !response.response) {
                 console.error('[bsky-nav] Bad response for:', url);
                 resolve({ url, dataUrl: null });
@@ -1591,7 +1587,6 @@ export class ItemHandler extends Handler {
               }
               const reader = new FileReader();
               reader.onloadend = () => {
-                console.log('[bsky-nav] Converted to dataUrl:', url.substring(0, 50), 'length:', reader.result?.length);
                 resolve({ url, dataUrl: reader.result });
               };
               reader.onerror = (err) => {
@@ -1650,8 +1645,6 @@ export class ItemHandler extends Handler {
         }
       });
 
-      console.log('[bsky-nav] Screenshot: found', urlsToFetch.size, 'images to fetch:', Array.from(urlsToFetch));
-
       // Fetch all images as data URLs (with timeout)
       const fetchPromises = Array.from(urlsToFetch).map(url => fetchImageAsDataUrl(url));
       const results = await Promise.race([
@@ -1665,7 +1658,6 @@ export class ItemHandler extends Handler {
           imageUrls.set(url, dataUrl);
         }
       });
-      console.log('[bsky-nav] Screenshot: fetched', imageUrls.size, 'of', urlsToFetch.size, 'images');
 
       // Helper to find data URL for any URL variant
       const findDataUrl = (url) => {
@@ -1706,14 +1698,6 @@ export class ItemHandler extends Handler {
         }
       });
 
-      console.log('[bsky-nav] Modified', originalValues.length, 'elements in original DOM');
-
-      // Log the first data URL to verify it's valid
-      if (imageUrls.size > 0) {
-        const firstDataUrl = Array.from(imageUrls.values())[0];
-        console.log('[bsky-nav] Sample dataUrl prefix:', firstDataUrl?.substring(0, 50));
-      }
-
       // Wait for browser to process DOM changes
       await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -1733,7 +1717,6 @@ export class ItemHandler extends Handler {
           el.style.backgroundImage = value;
         }
       });
-      console.log('[bsky-nav] Restored original DOM');
 
       canvas.toBlob(async (blob) => {
         try {
@@ -1742,7 +1725,6 @@ export class ItemHandler extends Handler {
               'image/png': blob,
             }),
           ]);
-          console.log('Screenshot copied to clipboard!');
 
           const notification = $('<div>')
             .css({
@@ -1884,7 +1866,6 @@ export class ItemHandler extends Handler {
       return;
     }
     const markedRead = this.markPostRead(postId, isRead);
-    console.log(isRead, markedRead);
     if (this.unrolledReplies.length) {
       $(item).addClass(markedRead ? 'item-read' : 'item-unread');
       $(item).removeClass(markedRead ? 'item-unread' : 'item-read');
@@ -1949,7 +1930,6 @@ export class ItemHandler extends Handler {
 
   setupIntersectionObserver() {
     if (this.intersectionObserver) {
-      console.log('[bsky-nav] setupIntersectionObserver: observing', $(this.items).length, 'items');
       $(this.items).each((i, item) => {
         this.intersectionObserver.observe($(item)[0]);
       });
@@ -1974,7 +1954,6 @@ export class ItemHandler extends Handler {
       if (this.loadNewerButton === btn) return;
 
       this.loadNewerButton = btn;
-      console.log('[bsky-navigator] Load newer button found:', btn);
 
       $('img#loadNewerIndicatorImage').addClass('image-highlight');
       $('img#loadNewerIndicatorImage').removeClass('toolbar-icon-pending');
@@ -2020,11 +1999,9 @@ export class ItemHandler extends Handler {
   }
 
   setupFloatingButtons() {
-    console.log(this.state.mobileView);
     this.floatingButtonsObserver = waitForElement(
       this.state.mobileView ? constants.HOME_SCREEN_SELECTOR : constants.LEFT_SIDEBAR_SELECTOR,
       (container) => {
-        console.log(container);
         if (!this.prevButton) {
           this.prevButton = $(
             `<div id="prevButton" title="previous post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`
@@ -2551,6 +2528,12 @@ export class ItemHandler extends Handler {
     this.config.set('rulesConfig', rulesConfig);
     this.config.save();
 
+    // Also update state.rulesConfig so it syncs and doesn't overwrite on reload
+    this.state.rulesConfig = rulesConfig;
+    if (this.state.stateManager) {
+      this.state.stateManager.saveStateImmediately(true, true);
+    }
+
     // Re-parse rules and apply filter
     if (this.state && this.state.rules !== undefined) {
       this.state.rules = this.parseRulesForState(rulesConfig);
@@ -2597,6 +2580,32 @@ export class ItemHandler extends Handler {
       }
     }
     return rules;
+  }
+
+  /**
+   * Get the index of the first filter category that contains a handle.
+   * Returns -1 if handle is not in any filter list.
+   * @param {string} handle - The handle to search for (with or without @)
+   * @returns {number} Index of the category, or -1 if not found
+   */
+  getFilterCategoryIndexForHandle(handle) {
+    if (!handle || !this.state.rules) {
+      return -1;
+    }
+
+    // Normalize handle (ensure it has @)
+    const normalizedHandle = handle.startsWith('@') ? handle : `@${handle}`;
+
+    const categories = Object.keys(this.state.rules);
+    for (let i = 0; i < categories.length; i++) {
+      const rules = this.state.rules[categories[i]];
+      for (const rule of rules) {
+        if (rule.type === 'from' && rule.value.toLowerCase() === normalizedHandle.toLowerCase()) {
+          return i;
+        }
+      }
+    }
+    return -1;
   }
 
   /**
@@ -2780,7 +2789,6 @@ export class ItemHandler extends Handler {
   }
 
   handleNewThreadPage(_element) {
-    console.log(this.items.length);
     this.loadPageObserver.disconnect();
   }
 
@@ -3267,9 +3275,7 @@ ${
       const button = $(constants.LOAD_NEW_BUTTON_SELECTOR)[0];
       if (button) {
         this.loadNewerButton = button;
-        console.log('[bsky-navigator] Found load new button:', button);
       } else {
-        console.log('[bsky-navigator] No load new button found');
         return;
       }
     }
@@ -3316,16 +3322,13 @@ ${
     const loadMoreSentinel = unsafeWindow.__bskyNavGetLoadMoreSentinel?.();
 
     if (!loadMoreCallback) {
-      console.log('[bsky-navigator] No load-more callback available');
       return;
     }
 
     if (!loadMoreSentinel) {
-      console.log('[bsky-navigator] No load-more sentinel available');
       return;
     }
 
-    console.log('[bsky-navigator] Loading more posts via sentinel:', loadMoreSentinel);
     $('img#loadOlderIndicatorImage').removeClass('image-highlight');
     $('img#loadOlderIndicatorImage').addClass('toolbar-icon-pending');
     this.loading = true;
@@ -3357,7 +3360,6 @@ ${
     // This handles edge cases where new items aren't detected by the MutationObserver
     setTimeout(() => {
       if (this.loading) {
-        console.log('[bsky-navigator] Loading timeout - resetting state');
         this.loading = false;
         $('img#loadOlderIndicatorImage').addClass('image-highlight');
         $('img#loadOlderIndicatorImage').removeClass('toolbar-icon-pending');

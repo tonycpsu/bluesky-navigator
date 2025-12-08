@@ -16,8 +16,6 @@ const target = {
     StateManager.create(key, DEFAULT_STATE, config)
       .then((initializedStateManager) => {
         stateManager = initializedStateManager;
-        console.log('State initialized');
-        console.dir(stateManager.state);
         onSuccess();
       })
       .catch((error) => {
@@ -43,7 +41,6 @@ const state = new Proxy(target, {
     return undefined;
   },
   set(target, prop, value) {
-    console.log(`State Update: ${prop} = ${value}`);
     stateManager.state[prop] = value;
     return true;
   },

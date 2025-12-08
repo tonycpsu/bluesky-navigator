@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+450.a43d04f6
+// @version     1.0.31+451.3d9afe89
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -15,11 +15,11 @@
 // @connect     cdn.bsky.app
 // @grant       GM_setValue
 // @grant       GM_getValue
-// @grant       GM_listValues
 // @grant       GM_addStyle
 // @grant       GM_xmlhttpRequest
 // @grant       unsafeWindow
 // @grant       GM_info
+// @grant       GM_listValues
 // @grant       GM.getValue
 // @grant       GM.setValue
 // @grant       GM.xmlhttpRequest
@@ -150,7 +150,6 @@
     setSyncStatus(status, title) {
       const overlay = $(".preferences-icon-overlay");
       if (!overlay) {
-        console.log("no overlay");
         return;
       }
       $(overlay).attr("title", `sync: ${status} ${title || ""}`);
@@ -226,10 +225,8 @@
             const localTime = localLastUpdated ? new Date(localLastUpdated).getTime() : 0;
             const remoteTime = remoteLastUpdated ? new Date(remoteLastUpdated).getTime() : 0;
             if (localTime > remoteTime) {
-              console.log(`Using local state (newer): ${localLastUpdated} > ${remoteLastUpdated}`);
               return { ...defaultState, ...savedState };
             } else {
-              console.log(`Using remote state (newer): ${remoteLastUpdated} >= ${localLastUpdated}`);
               const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
               return { ...defaultState, ...remoteWithoutFilter, filter: savedState.filter || defaultState.filter || "" };
             }
@@ -246,12 +243,10 @@
     }
     async loadRemoteState() {
       try {
-        console.log("Loading remote state...");
         this.setSyncStatus("pending");
         const result = await this.executeRemoteQuery("SELECT * FROM state:current;");
         const stateObj = result || {};
         delete stateObj.id;
-        console.log("Remote state loaded successfully.");
         return stateObj;
       } catch (error) {
         console.error("Failed to load remote state:", error);
@@ -288,10 +283,8 @@
      * @returns {Promise<void>}
      */
     async saveLocalState() {
-      console.log("Saving local state...");
       this.cleanupState();
       GM_setValue(this.key, JSON.stringify(this.state));
-      console.log("Local state saved.");
       this.isLocalStateDirty = false;
       this.notifyListeners();
     }
@@ -300,7 +293,6 @@
      */
     scheduleRemoteSync() {
       if (!this.config.stateSyncEnabled) {
-        console.log("sync disabled");
         return;
       }
       clearTimeout(this.remoteSyncTimeout);
@@ -315,10 +307,8 @@
       try {
         const lastUpdated = await this.getRemoteStateUpdated();
         if (!since || !lastUpdated || new Date(since) < new Date(lastUpdated)) {
-          console.log("Not saving because remote state is newer.");
           return;
         }
-        console.log("Saving remote state...");
         this.setSyncStatus("pending");
         const { filter, ...stateToSync } = this.state;
         await this.executeRemoteQuery(
@@ -369,10 +359,8 @@
           },
           body: query,
           keepalive: true
-        }).catch((error) => {
-          console.error("Failed to save remote state on unload:", error);
+        }).catch(() => {
         });
-        console.log("Remote state save initiated (keepalive)");
       } catch (error) {
         console.error("Error preparing remote state save:", error);
       }
@@ -467,8 +455,6 @@
     init(key, config2, onSuccess) {
       StateManager.create(key, DEFAULT_STATE, config2).then((initializedStateManager) => {
         stateManager = initializedStateManager;
-        console.log("State initialized");
-        console.dir(stateManager.state);
         onSuccess();
       }).catch((error) => {
         console.error("Failed to initialize StateManager:", error);
@@ -488,7 +474,6 @@
       return void 0;
     },
     set(target2, prop, value) {
-      console.log(`State Update: ${prop} = ${value}`);
       stateManager.state[prop] = value;
       return true;
     }
@@ -45070,6 +45055,13 @@ if (cid) {
           help: "Show user handles in zoom indicator segments",
           showWhen: { scrollIndicatorStyle: "Advanced" }
         },
+        scrollIndicatorHandleColors: {
+          label: "Color handles by filter list",
+          type: "checkbox",
+          default: false,
+          help: "Color handles based on which filter list they belong to",
+          showWhen: { scrollIndicatorHandles: true }
+        },
         scrollIndicatorZoom: {
           label: "Zoom window size",
           type: "number",
@@ -46142,6 +46134,7 @@ if (cid) {
         case "scrollIndicatorAvatarScale":
         case "scrollIndicatorTimestamps":
         case "scrollIndicatorHandles":
+        case "scrollIndicatorHandleColors":
           document.dispatchEvent(new CustomEvent("scrollIndicatorSettingChanged", {
             detail: { setting: name, value }
           }));
@@ -46229,11 +46222,8 @@ if (cid) {
           GM_setValue(STORAGE_KEY, JSON.stringify(newValues));
           return;
         }
-        console.log("[ConfigWrapper] Migrating settings from legacy storage...");
-        console.log("[ConfigWrapper] Old settings:", Object.keys(oldValues));
         const merged = { ...newValues, ...oldValues, _migrationComplete: true };
         GM_setValue(STORAGE_KEY, JSON.stringify(merged));
-        console.log("[ConfigWrapper] Migration complete! Your settings have been preserved.");
       } catch (e2) {
         console.error("[ConfigWrapper] Failed to migrate old config:", e2);
       }
@@ -46316,7 +46306,6 @@ if (cid) {
      */
     clearNewConfig() {
       GM_setValue(STORAGE_KEY, null);
-      console.log("[ConfigWrapper] Cleared new config storage. Refresh to test migration.");
     }
     /**
      * Debug: show what's in storage
@@ -46325,17 +46314,6 @@ if (cid) {
     debugStorage() {
       const oldData = GM_getValue(OLD_GM_CONFIG_KEY, null);
       const newData = GM_getValue(STORAGE_KEY, null);
-      console.log("[ConfigWrapper] Legacy storage key:", OLD_GM_CONFIG_KEY);
-      console.log("[ConfigWrapper] Legacy storage data:", oldData);
-      console.log("[ConfigWrapper] Current config key:", STORAGE_KEY);
-      console.log("[ConfigWrapper] Current config data:", newData);
-      if (typeof GM_listValues === "function") {
-        const allKeys = GM_listValues();
-        console.log("[ConfigWrapper] All storage keys:", allKeys);
-        allKeys.forEach((key) => {
-          console.log(`[ConfigWrapper] Key "${key}":`, GM_getValue(key, null));
-        });
-      }
       return { legacy: oldData, current: newData };
     }
     /**
@@ -46346,7 +46324,6 @@ if (cid) {
       try {
         const oldData = GM_getValue(OLD_GM_CONFIG_KEY, null);
         if (oldData === null) {
-          console.log("[ConfigWrapper] No legacy data found to migrate.");
           return false;
         }
         let oldValues;
@@ -46355,18 +46332,13 @@ if (cid) {
         } else if (typeof oldData === "object") {
           oldValues = oldData;
         } else {
-          console.warn("[ConfigWrapper] Legacy data is in unexpected format:", typeof oldData);
           return false;
         }
         if (!oldValues || Object.keys(oldValues).length === 0) {
-          console.log("[ConfigWrapper] Legacy data is empty.");
           return false;
         }
-        console.log("[ConfigWrapper] Force migrating legacy settings...");
-        console.log("[ConfigWrapper] Legacy settings:", oldValues);
         this.values = { ...this.values, ...oldValues, _migrationComplete: true };
         this.save();
-        console.log("[ConfigWrapper] Force migration complete! Refresh the page to see changes.");
         return true;
       } catch (e2) {
         console.error("[ConfigWrapper] Failed to force migrate:", e2);
@@ -46380,7 +46352,6 @@ if (cid) {
     resetMigrationFlag() {
       delete this.values._migrationComplete;
       this.save();
-      console.log("[ConfigWrapper] Migration flag reset. Refresh to trigger migration again.");
     }
   }
   const style = `/* style.css */
@@ -66793,18 +66764,6 @@ div#statusBar.has-scroll-indicator {
     `;
       const postContainer = modal.querySelector(".post-view-modal-post");
       postContainer.appendChild(postClone);
-      const postObserver = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-          console.log("[PostViewModal] POST MUTATION:", mutation.type, mutation.target.className || mutation.target.tagName);
-          if (mutation.type === "attributes") {
-            console.log("[PostViewModal] Post attribute changed:", mutation.attributeName, "on", mutation.target.className || mutation.target.tagName);
-            if (mutation.attributeName === "style") {
-              console.log("[PostViewModal] New style:", mutation.target.getAttribute("style"));
-            }
-          }
-        });
-      });
-      postObserver.observe(postClone, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
       const sidecarContainer = modal.querySelector(".post-view-modal-sidecar");
       if (sidecarHtml) {
         sidecarContainer.innerHTML = sidecarHtml;
@@ -66820,30 +66779,10 @@ div#statusBar.has-scroll-indicator {
      * @param {string} sidecarHtml - HTML content for the sidecar
      */
     updateSidecar(sidecarHtml) {
-      console.log("[PostViewModal] updateSidecar called, modalEl exists:", !!this.modalEl);
       if (!this.modalEl) return;
       const sidecarContainer = this.modalEl.querySelector(".post-view-modal-sidecar");
-      console.log("[PostViewModal] sidecarContainer found:", !!sidecarContainer);
       if (sidecarContainer) {
         sidecarContainer.innerHTML = sidecarHtml;
-        console.log("[PostViewModal] sidecar innerHTML set, length:", sidecarHtml?.length);
-        const observer = new MutationObserver((mutations) => {
-          mutations.forEach((mutation) => {
-            console.log("[PostViewModal] MUTATION detected:", mutation.type, mutation);
-            if (mutation.type === "childList") {
-              console.log("[PostViewModal] Children changed, removed:", mutation.removedNodes.length, "added:", mutation.addedNodes.length);
-            }
-            if (mutation.type === "attributes") {
-              console.log("[PostViewModal] Attribute changed:", mutation.attributeName, "to", mutation.target.getAttribute(mutation.attributeName));
-            }
-          });
-        });
-        observer.observe(sidecarContainer, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
-        const sidecarReplies = sidecarContainer.querySelector(".sidecar-replies");
-        if (sidecarReplies) {
-          console.log("[PostViewModal] sidecar-replies found, observing it too");
-          observer.observe(sidecarReplies, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
-        }
       }
     }
     /**
@@ -66927,6 +66866,41 @@ div#statusBar.has-scroll-indicator {
   class ItemHandler extends Handler {
     POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
     THREAD_PAGE_SELECTOR = "main > div > div > div";
+    // 32 distinct colors for filter list handle coloring (high saturation, good contrast)
+    FILTER_LIST_COLORS = [
+      "#e6194b",
+      "#3cb44b",
+      "#ffe119",
+      "#4363d8",
+      "#f58231",
+      "#911eb4",
+      "#46f0f0",
+      "#f032e6",
+      "#bcf60c",
+      "#fabebe",
+      "#008080",
+      "#e6beff",
+      "#9a6324",
+      "#fffac8",
+      "#800000",
+      "#aaffc3",
+      "#808000",
+      "#ffd8b1",
+      "#000075",
+      "#808080",
+      "#ff0000",
+      "#00ff00",
+      "#0000ff",
+      "#ff00ff",
+      "#00ffff",
+      "#ff8000",
+      "#8000ff",
+      "#0080ff",
+      "#ff0080",
+      "#80ff00",
+      "#00ff80",
+      "#ff8080"
+    ];
     FLOATING_BUTTON_IMAGES = {
       prev: ["https://www.svgrepo.com/show/238452/up-arrow.svg"],
       next: ["https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg"]
@@ -67576,12 +67550,6 @@ div#statusBar.has-scroll-indicator {
       }
     }
     async unrollThread(item, thread) {
-      console.log(
-        thread.parent,
-        thread.parent?.post,
-        thread.parent?.post?.author?.did,
-        thread.post?.author?.did
-      );
       if (thread.parent && thread.parent.post && thread.parent.post.author.did == thread.post.author.did) {
         return;
       }
@@ -67635,7 +67603,6 @@ div#statusBar.has-scroll-indicator {
         });
         this.items.each((i2, item2) => {
           if (isRedundant(item2, threadIndex)) {
-            console.log("filtered", item2);
             $(item2).addClass("filtered");
           }
         });
@@ -67728,7 +67695,6 @@ div#statusBar.has-scroll-indicator {
       const skeletonContent = this.getSkeletonContent();
       $(container).append(skeletonContent);
       const sidecarContent = await this.getSidecarContent(item, thread);
-      console.log(sidecarContent);
       if (!document.contains(container[0])) {
         container.removeData("sidecar-loading");
         return;
@@ -67761,7 +67727,6 @@ div#statusBar.has-scroll-indicator {
       });
       const sidecar = container.find(".sidecar-replies")[0];
       const display2 = action == null ? sidecar && $(sidecar).is(":visible") ? "none" : "flex" : action ? "flex" : "none";
-      console.log(display2);
       container.find(".sidecar-replies").css("display", display2);
       container.removeData("sidecar-loading");
     }
@@ -68066,7 +68031,6 @@ div#statusBar.has-scroll-indicator {
             this.THREAD_PAGE_SELECTOR,
             this.handleNewThreadPage
           );
-          console.log(this.loadPageObserver);
           $(next).find("div").click();
         }
       }
@@ -68171,7 +68135,6 @@ div#statusBar.has-scroll-indicator {
               url,
               responseType: "blob",
               onload: (response) => {
-                console.log("[bsky-nav] GM_xmlhttpRequest loaded:", url, "status:", response.status, "size:", response.response?.size);
                 if (response.status !== 200 || !response.response) {
                   console.error("[bsky-nav] Bad response for:", url);
                   resolve({ url, dataUrl: null });
@@ -68179,7 +68142,6 @@ div#statusBar.has-scroll-indicator {
                 }
                 const reader = new FileReader();
                 reader.onloadend = () => {
-                  console.log("[bsky-nav] Converted to dataUrl:", url.substring(0, 50), "length:", reader.result?.length);
                   resolve({ url, dataUrl: reader.result });
                 };
                 reader.onerror = (err) => {
@@ -68228,7 +68190,6 @@ div#statusBar.has-scroll-indicator {
             }
           }
         });
-        console.log("[bsky-nav] Screenshot: found", urlsToFetch.size, "images to fetch:", Array.from(urlsToFetch));
         const fetchPromises = Array.from(urlsToFetch).map((url) => fetchImageAsDataUrl(url));
         const results = await Promise.race([
           Promise.all(fetchPromises),
@@ -68239,7 +68200,6 @@ div#statusBar.has-scroll-indicator {
             imageUrls.set(url, dataUrl);
           }
         });
-        console.log("[bsky-nav] Screenshot: fetched", imageUrls.size, "of", urlsToFetch.size, "images");
         const findDataUrl = (url) => {
           if (!url) return null;
           if (imageUrls.has(url)) return imageUrls.get(url);
@@ -68271,11 +68231,6 @@ div#statusBar.has-scroll-indicator {
             }
           }
         });
-        console.log("[bsky-nav] Modified", originalValues.length, "elements in original DOM");
-        if (imageUrls.size > 0) {
-          const firstDataUrl = Array.from(imageUrls.values())[0];
-          console.log("[bsky-nav] Sample dataUrl prefix:", firstDataUrl?.substring(0, 50));
-        }
         await new Promise((resolve) => setTimeout(resolve, 100));
         const canvas = await html2canvas(item, {
           backgroundColor: "#ffffff",
@@ -68291,7 +68246,6 @@ div#statusBar.has-scroll-indicator {
             el.style.backgroundImage = value;
           }
         });
-        console.log("[bsky-nav] Restored original DOM");
         canvas.toBlob(async (blob2) => {
           try {
             await navigator.clipboard.write([
@@ -68299,7 +68253,6 @@ div#statusBar.has-scroll-indicator {
                 "image/png": blob2
               })
             ]);
-            console.log("Screenshot copied to clipboard!");
             const notification2 = $("<div>").css({
               position: "fixed",
               top: "20px",
@@ -68411,7 +68364,6 @@ div#statusBar.has-scroll-indicator {
         return;
       }
       const markedRead = this.markPostRead(postId, isRead);
-      console.log(isRead, markedRead);
       if (this.unrolledReplies.length) {
         $(item).addClass(markedRead ? "item-read" : "item-unread");
         $(item).removeClass(markedRead ? "item-unread" : "item-read");
@@ -68464,7 +68416,6 @@ div#statusBar.has-scroll-indicator {
     }
     setupIntersectionObserver() {
       if (this.intersectionObserver) {
-        console.log("[bsky-nav] setupIntersectionObserver: observing", $(this.items).length, "items");
         $(this.items).each((i2, item) => {
           this.intersectionObserver.observe($(item)[0]);
         });
@@ -68483,7 +68434,6 @@ div#statusBar.has-scroll-indicator {
         const btn = $(button)[0];
         if (this.loadNewerButton === btn) return;
         this.loadNewerButton = btn;
-        console.log("[bsky-navigator] Load newer button found:", btn);
         $("img#loadNewerIndicatorImage").addClass("image-highlight");
         $("img#loadNewerIndicatorImage").removeClass("toolbar-icon-pending");
         if ($("#messageActions").length && $("#loadNewerAction").length === 0) {
@@ -68517,11 +68467,9 @@ div#statusBar.has-scroll-indicator {
       setTimeout(() => pill.remove(), 200);
     }
     setupFloatingButtons() {
-      console.log(this.state.mobileView);
       this.floatingButtonsObserver = waitForElement$2(
         this.state.mobileView ? constants.HOME_SCREEN_SELECTOR : constants.LEFT_SIDEBAR_SELECTOR,
         (container) => {
-          console.log(container);
           if (!this.prevButton) {
             this.prevButton = $(
               `<div id="prevButton" title="previous post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`
@@ -68932,6 +68880,10 @@ ${rule}`;
       }
       this.config.set("rulesConfig", rulesConfig);
       this.config.save();
+      this.state.rulesConfig = rulesConfig;
+      if (this.state.stateManager) {
+        this.state.stateManager.saveStateImmediately(true, true);
+      }
       if (this.state && this.state.rules !== void 0) {
         this.state.rules = this.parseRulesForState(rulesConfig);
       }
@@ -68969,6 +68921,28 @@ ${rule}`;
         }
       }
       return rules;
+    }
+    /**
+     * Get the index of the first filter category that contains a handle.
+     * Returns -1 if handle is not in any filter list.
+     * @param {string} handle - The handle to search for (with or without @)
+     * @returns {number} Index of the category, or -1 if not found
+     */
+    getFilterCategoryIndexForHandle(handle2) {
+      if (!handle2 || !this.state.rules) {
+        return -1;
+      }
+      const normalizedHandle = handle2.startsWith("@") ? handle2 : `@${handle2}`;
+      const categories = Object.keys(this.state.rules);
+      for (let i2 = 0; i2 < categories.length; i2++) {
+        const rules = this.state.rules[categories[i2]];
+        for (const rule of rules) {
+          if (rule.type === "from" && rule.value.toLowerCase() === normalizedHandle.toLowerCase()) {
+            return i2;
+          }
+        }
+      }
+      return -1;
     }
     /**
      * Show notification that rule was added
@@ -69104,7 +69078,6 @@ ${rule}`;
       }, 500);
     }
     handleNewThreadPage(_element) {
-      console.log(this.items.length);
       this.loadPageObserver.disconnect();
     }
     // ===========================================================================
@@ -69459,9 +69432,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const button = $(constants.LOAD_NEW_BUTTON_SELECTOR)[0];
         if (button) {
           this.loadNewerButton = button;
-          console.log("[bsky-navigator] Found load new button:", button);
         } else {
-          console.log("[bsky-navigator] No load new button found");
           return;
         }
       }
@@ -69495,14 +69466,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const loadMoreCallback = unsafeWindow.__bskyNavGetLoadMoreCallback?.();
       const loadMoreSentinel = unsafeWindow.__bskyNavGetLoadMoreSentinel?.();
       if (!loadMoreCallback) {
-        console.log("[bsky-navigator] No load-more callback available");
         return;
       }
       if (!loadMoreSentinel) {
-        console.log("[bsky-navigator] No load-more sentinel available");
         return;
       }
-      console.log("[bsky-navigator] Loading more posts via sentinel:", loadMoreSentinel);
       $("img#loadOlderIndicatorImage").removeClass("image-highlight");
       $("img#loadOlderIndicatorImage").addClass("toolbar-icon-pending");
       this.loading = true;
@@ -69527,7 +69495,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       ]);
       setTimeout(() => {
         if (this.loading) {
-          console.log("[bsky-navigator] Loading timeout - resetting state");
           this.loading = false;
           $("img#loadOlderIndicatorImage").addClass("image-highlight");
           $("img#loadOlderIndicatorImage").removeClass("toolbar-icon-pending");
@@ -69576,7 +69543,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           tab,
           (attributeName, _oldValue, newValue, _target) => {
             if (attributeName == "class" && newValue.includes("r-13awgt0")) {
-              console.log("feed tab changed - resetting");
               this.onFeedChange();
             }
           },
@@ -69585,7 +69551,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       waitForElement$1('div[data-testid="homeScreenFeedTabs"]', (feedTabs) => {
         $(feedTabs).on("click", 'div[role="tab"]', () => {
-          console.log("feed tab clicked - scheduling reset");
           setTimeout(() => this.onFeedChange(), 300);
         });
       });
@@ -70226,6 +70191,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
             const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
             const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
+            const showHandleColors = showHandles && this.config.get("scrollIndicatorHandleColors");
             const allItems = $(".item").filter((i2, item) => {
               if ($(item).parents(".item").length > 0) return false;
               const testId = $(item).attr("data-testid") || "";
@@ -70258,7 +70224,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const selectedElement = this.items[this.index];
             const currentDisplayIndex = displayItems.indexOf(selectedElement);
             if (isAdvancedStyle) {
-              this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, displayItems.length, displayItems, displayIndices);
+              this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showHandleColors, maxScore, displayItems.length, displayItems, displayIndices);
             } else {
               if (this.scrollIndicatorZoomContainer) this.scrollIndicatorZoomContainer.hide();
               if (this.scrollIndicatorConnector) this.scrollIndicatorConnector.hide();
@@ -70905,6 +70871,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
       const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
       const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
+      const showHandleColors = showHandles && this.config.get("scrollIndicatorHandleColors");
       let engagementData = [];
       let maxScore = 0;
       if (isAdvancedStyle && (heatmapMode !== "None" || showIcons || showAvatars || showHandles)) {
@@ -70969,7 +70936,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.updateViewportIndicator(indicator, total);
       if (this.scrollIndicatorZoom && isAdvancedStyle) {
-        this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, total, displayItems, displayIndices);
+        this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showHandleColors, maxScore, total, displayItems, displayIndices);
       }
       this.updateScrollIndicatorLabels();
       const position2 = currentDisplayIndex >= 0 ? currentDisplayIndex + 1 : 0;
@@ -71322,6 +71289,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
       const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
       const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
+      const showHandleColors = showHandles && this.config.get("scrollIndicatorHandleColors");
       let maxScore = 0;
       const windowEngagement = [];
       for (let i2 = 0; i2 < zoomWindowSize; i2++) {
@@ -71378,7 +71346,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const handle2 = engData.engagement.handle;
           const dotIndex = handle2.indexOf(".");
           const handleHtml = dotIndex > 0 ? `<b>${handle2.substring(0, dotIndex)}</b>${handle2.substring(dotIndex)}` : `<b>${handle2}</b>`;
-          $segment.append(`<span class="scroll-segment-handle">${handleHtml}</span>`);
+          let handleStyle = "";
+          if (showHandleColors) {
+            const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
+            if (categoryIndex >= 0) {
+              const color2 = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+              handleStyle = ` style="color: ${color2}"`;
+            }
+          }
+          $segment.append(`<span class="scroll-segment-handle"${handleStyle}>${handleHtml}</span>`);
         }
         if (showTimestamps) {
           const timestamp = this.getTimestampForItem(item);
@@ -71398,7 +71374,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     /**
      * Update the zoom indicator showing posts around the current selection
      */
-    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, displayTotal, displayItems, displayIndices) {
+    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showHandleColors, maxScore, displayTotal, displayItems, displayIndices) {
       const zoomIndicator = this.scrollIndicatorZoom;
       const zoomInner = this.scrollIndicatorZoomInner;
       if (!zoomIndicator || !zoomInner) return;
@@ -71526,7 +71502,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           } else {
             handleHtml = `<b>${handle2}</b>`;
           }
-          $segment.append(`<span class="scroll-segment-handle">${handleHtml}</span>`);
+          let handleStyle = "";
+          if (showHandleColors) {
+            const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
+            if (categoryIndex >= 0) {
+              const color2 = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+              handleStyle = ` style="color: ${color2}"`;
+            }
+          }
+          $segment.append(`<span class="scroll-segment-handle"${handleStyle}>${handleHtml}</span>`);
         }
         if (showTimestamps) {
           const timestamp = this.getTimestampForItem(item);
@@ -72023,7 +72007,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             (target2.matches('[data-testid="feedLoadMore"]') || target2.matches('[data-testid*="loader"]') || target2.matches('[data-testid*="Loader"]') || // Empty divs used as sentinels often have minimal height
             target2.tagName === "DIV" && target2.children.length === 0 && target2.offsetHeight < 50)) {
               if (entry.isIntersecting) {
-                console.log("[bsky-navigator] Blocked infinite scroll trigger:", target2);
                 return false;
               }
             }
@@ -72041,7 +72024,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (isFeedSentinel) {
             loadMoreSentinel = target2;
             loadMoreCallback = this.callback;
-            console.log("[bsky-navigator] Captured feed load-more callback and sentinel:", target2);
           }
         }
         this.realObserver.observe(target2);
@@ -72267,7 +72249,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             $(".close-btn").on("click", function() {
               $("#bluesky-popup").hide();
             });
-            console.log("Popup loaded successfully!");
           } catch (error) {
             console.error("Failed to load popup:", error);
           }
@@ -72275,7 +72256,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         loadSidecarTemplate("body", sidecarTemplatesHtml);
       }
       state.mobileView = window.innerWidth <= 800;
-      console.log("Initial mobileView (by width):", state.mobileView, "width:", window.innerWidth);
       handlers = {
         feed: new FeedItemHandler("feed", config, state, api, constants.FEED_ITEM_SELECTOR),
         post: new PostItemHandler("post", config, state, api, constants.POST_ITEM_SELECTOR),
@@ -72511,7 +72491,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           return;
         }
         context = ctx;
-        console.log(`context: ${context}`);
         for (const [name, handler] of Object.entries(handlers)) {
           handler.deactivate();
         }
@@ -72534,7 +72513,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           return false;
         }
         const targetTagName = target2.tagName.toLowerCase();
-        console.log(`onFocus: ${targetTagName}`);
         switch (targetTagName) {
           case "input":
           case "textarea":
@@ -72564,8 +72542,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           return false;
         }
         const targetTagName = target2.tagName.toLowerCase();
-        console.log(`onBlur: ${targetTagName}`);
-        console.log(e2.target);
         switch (targetTagName) {
           case "input":
           case "textarea":
@@ -72593,11 +72569,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       waitForElement(
         `${constants.DRAWER_MENU_SELECTOR}, ${constants.LEFT_SIDEBAR_SELECTOR}`,
         (element) => {
-          console.log("viewport element found:", element);
           const isMobileByElement = $(element).is(constants.DRAWER_MENU_SELECTOR);
           const isMobileByWidth = window.innerWidth <= 800;
           state.mobileView = isMobileByElement || isMobileByWidth;
-          console.log("mobileView:", state.mobileView, "(byElement:", isMobileByElement, ", byWidth:", isMobileByWidth, ")");
           startMonitor();
           setContextFromUrl();
           if (!state.mobileView) {
@@ -72615,7 +72589,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               rightSidebar = rightSidebar.parentElement;
             }
             if (rightSidebar) {
-              console.log("[bsky-nav] Hiding right sidebar");
               rightSidebar.style.display = "none";
             }
           });
@@ -72632,7 +72605,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               let container = el.closest('div[style*="background-color: rgb(249, 250, 251)"]');
               if (container && !container.classList.contains("bsky-nav-suggested-hidden")) {
                 container.classList.add("bsky-nav-suggested-hidden");
-                console.log('[bsky-nav] Hiding "Suggested for you" section');
               }
             }
           });

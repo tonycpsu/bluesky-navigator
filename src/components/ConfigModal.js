@@ -208,6 +208,13 @@ const CONFIG_SCHEMA = {
         help: 'Show user handles in zoom indicator segments',
         showWhen: { scrollIndicatorStyle: 'Advanced' },
       },
+      scrollIndicatorHandleColors: {
+        label: 'Color handles by filter list',
+        type: 'checkbox',
+        default: false,
+        help: 'Color handles based on which filter list they belong to',
+        showWhen: { scrollIndicatorHandles: true },
+      },
       scrollIndicatorZoom: {
         label: 'Zoom window size',
         type: 'number',
@@ -1454,6 +1461,7 @@ export class ConfigModal {
       case 'scrollIndicatorAvatarScale':
       case 'scrollIndicatorTimestamps':
       case 'scrollIndicatorHandles':
+      case 'scrollIndicatorHandleColors':
         // Dispatch event for handler to update indicator
         document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
           detail: { setting: name, value }

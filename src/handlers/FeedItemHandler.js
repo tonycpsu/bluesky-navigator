@@ -52,7 +52,6 @@ export class FeedItemHandler extends ItemHandler {
         tab,
         (attributeName, _oldValue, newValue, _target) => {
           if (attributeName == 'class' && newValue.includes('r-13awgt0')) {
-            console.log('feed tab changed - resetting');
             this.onFeedChange();
           }
         },
@@ -63,7 +62,6 @@ export class FeedItemHandler extends ItemHandler {
     // Also watch for clicks on feed tab buttons as a backup
     waitForElement('div[data-testid="homeScreenFeedTabs"]', (feedTabs) => {
       $(feedTabs).on('click', 'div[role="tab"]', () => {
-        console.log('feed tab clicked - scheduling reset');
         // Delay to let Bluesky load new feed content
         setTimeout(() => this.onFeedChange(), 300);
       });
@@ -922,6 +920,7 @@ export class FeedItemHandler extends ItemHandler {
           const avatarScale = this.config.get('scrollIndicatorAvatarScale') ?? 100;
           const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
           const showHandles = isAdvancedStyle ? (this.config.get('scrollIndicatorHandles') !== false) : false;
+          const showHandleColors = showHandles && this.config.get('scrollIndicatorHandleColors');
 
           // Get all items excluding filtered ones and non-post placeholders
           const allItems = $('.item').filter((i, item) => {
@@ -967,7 +966,7 @@ export class FeedItemHandler extends ItemHandler {
 
           // Only show zoom indicator in Advanced mode
           if (isAdvancedStyle) {
-            this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, displayItems.length, displayItems, displayIndices);
+            this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showHandleColors, maxScore, displayItems.length, displayItems, displayIndices);
           } else {
             // Hide zoom elements in Basic mode
             if (this.scrollIndicatorZoomContainer) this.scrollIndicatorZoomContainer.hide();
@@ -1795,6 +1794,7 @@ export class FeedItemHandler extends ItemHandler {
     const avatarScale = this.config.get('scrollIndicatorAvatarScale') ?? 100;
     const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
     const showHandles = isAdvancedStyle ? (this.config.get('scrollIndicatorHandles') !== false) : false;
+    const showHandleColors = showHandles && this.config.get('scrollIndicatorHandleColors');
 
     // Calculate engagement data for ALL items (indexed by actual item index for zoom indicator)
     let engagementData = [];
@@ -1892,7 +1892,7 @@ export class FeedItemHandler extends ItemHandler {
 
     // Update zoom indicator if present and in Advanced mode
     if (this.scrollIndicatorZoom && isAdvancedStyle) {
-      this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, total, displayItems, displayIndices);
+      this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showHandleColors, maxScore, total, displayItems, displayIndices);
     }
 
     // Update date labels
@@ -2387,6 +2387,7 @@ export class FeedItemHandler extends ItemHandler {
     const avatarScale = this.config.get('scrollIndicatorAvatarScale') ?? 100;
     const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
     const showHandles = isAdvancedStyle ? (this.config.get('scrollIndicatorHandles') !== false) : false;
+    const showHandleColors = showHandles && this.config.get('scrollIndicatorHandleColors');
 
     // Calculate engagement data for visible window
     let maxScore = 0;
@@ -2470,7 +2471,16 @@ export class FeedItemHandler extends ItemHandler {
         const handleHtml = dotIndex > 0
           ? `<b>${handle.substring(0, dotIndex)}</b>${handle.substring(dotIndex)}`
           : `<b>${handle}</b>`;
-        $segment.append(`<span class="scroll-segment-handle">${handleHtml}</span>`);
+        // Apply filter list color if enabled
+        let handleStyle = '';
+        if (showHandleColors) {
+          const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
+          if (categoryIndex >= 0) {
+            const color = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+            handleStyle = ` style="color: ${color}"`;
+          }
+        }
+        $segment.append(`<span class="scroll-segment-handle"${handleStyle}>${handleHtml}</span>`);
       }
 
       // Add timestamp
@@ -2499,7 +2509,7 @@ export class FeedItemHandler extends ItemHandler {
   /**
    * Update the zoom indicator showing posts around the current selection
    */
-  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, maxScore, displayTotal, displayItems, displayIndices) {
+  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showHandleColors, maxScore, displayTotal, displayItems, displayIndices) {
     const zoomIndicator = this.scrollIndicatorZoom;
     const zoomInner = this.scrollIndicatorZoomInner;
     if (!zoomIndicator || !zoomInner) return;
@@ -2688,7 +2698,16 @@ export class FeedItemHandler extends ItemHandler {
         } else {
           handleHtml = `<b>${handle}</b>`;
         }
-        $segment.append(`<span class="scroll-segment-handle">${handleHtml}</span>`);
+        // Apply filter list color if enabled
+        let handleStyle = '';
+        if (showHandleColors) {
+          const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
+          if (categoryIndex >= 0) {
+            const color = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+            handleStyle = ` style="color: ${color}"`;
+          }
+        }
+        $segment.append(`<span class="scroll-segment-handle"${handleStyle}>${handleHtml}</span>`);
       }
 
       // Add relative time in bottom right if enabled

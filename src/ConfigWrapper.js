@@ -107,14 +107,9 @@ export class ConfigWrapper {
         return;
       }
 
-      console.log('[ConfigWrapper] Migrating settings from legacy storage...');
-      console.log('[ConfigWrapper] Old settings:', Object.keys(oldValues));
-
       // Merge old values into new (old values take precedence for migration)
       const merged = { ...newValues, ...oldValues, _migrationComplete: true };
       GM_setValue(STORAGE_KEY, JSON.stringify(merged));
-
-      console.log('[ConfigWrapper] Migration complete! Your settings have been preserved.');
     } catch (e) {
       console.error('[ConfigWrapper] Failed to migrate old config:', e);
     }
@@ -206,7 +201,6 @@ export class ConfigWrapper {
    */
   clearNewConfig() {
     GM_setValue(STORAGE_KEY, null);
-    console.log('[ConfigWrapper] Cleared new config storage. Refresh to test migration.');
   }
 
   /**
@@ -216,21 +210,6 @@ export class ConfigWrapper {
   debugStorage() {
     const oldData = GM_getValue(OLD_GM_CONFIG_KEY, null);
     const newData = GM_getValue(STORAGE_KEY, null);
-
-    console.log('[ConfigWrapper] Legacy storage key:', OLD_GM_CONFIG_KEY);
-    console.log('[ConfigWrapper] Legacy storage data:', oldData);
-    console.log('[ConfigWrapper] Current config key:', STORAGE_KEY);
-    console.log('[ConfigWrapper] Current config data:', newData);
-
-    // Try to list all keys if GM_listValues is available
-    if (typeof GM_listValues === 'function') {
-      const allKeys = GM_listValues();
-      console.log('[ConfigWrapper] All storage keys:', allKeys);
-      allKeys.forEach(key => {
-        console.log(`[ConfigWrapper] Key "${key}":`, GM_getValue(key, null));
-      });
-    }
-
     return { legacy: oldData, current: newData };
   }
 
@@ -242,7 +221,6 @@ export class ConfigWrapper {
     try {
       const oldData = GM_getValue(OLD_GM_CONFIG_KEY, null);
       if (oldData === null) {
-        console.log('[ConfigWrapper] No legacy data found to migrate.');
         return false;
       }
 
@@ -252,23 +230,17 @@ export class ConfigWrapper {
       } else if (typeof oldData === 'object') {
         oldValues = oldData;
       } else {
-        console.warn('[ConfigWrapper] Legacy data is in unexpected format:', typeof oldData);
         return false;
       }
 
       if (!oldValues || Object.keys(oldValues).length === 0) {
-        console.log('[ConfigWrapper] Legacy data is empty.');
         return false;
       }
-
-      console.log('[ConfigWrapper] Force migrating legacy settings...');
-      console.log('[ConfigWrapper] Legacy settings:', oldValues);
 
       // Merge old values into current values and mark migration complete
       this.values = { ...this.values, ...oldValues, _migrationComplete: true };
       this.save();
 
-      console.log('[ConfigWrapper] Force migration complete! Refresh the page to see changes.');
       return true;
     } catch (e) {
       console.error('[ConfigWrapper] Failed to force migrate:', e);
@@ -283,6 +255,5 @@ export class ConfigWrapper {
   resetMigrationFlag() {
     delete this.values._migrationComplete;
     this.save();
-    console.log('[ConfigWrapper] Migration flag reset. Refresh to trigger migration again.');
   }
 }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+446.e163ea61
+// @version     1.0.31+447.31d28a2c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47142,8 +47142,8 @@ div.item-banner {
     position: fixed;
     top: 110px;
     right: 16px;
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     background-color: var(--background-color, white);
     border: 1px solid var(--border-color, #e5e7eb);
@@ -47191,6 +47191,25 @@ div.item-banner {
     border-radius: 50%;
     background-color: #3b82f6;
     border: 2px solid var(--background-color, white);
+}
+
+/* Reply count badge on toggle button */
+.fixed-sidecar-toggle-count {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+    color: white;
+    background-color: #3b82f6;
+    border-radius: 9px;
+    border: 2px solid var(--background-color, white);
+    display: none;
 }
 
 /* Hide fixed sidecar on mobile */
@@ -66979,6 +66998,7 @@ div#statusBar.has-scroll-indicator {
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           <line x1="9" y1="10" x2="15" y2="10"/>
         </svg>
+        <span class="fixed-sidecar-toggle-count"></span>
       </button>
     `);
       $("body").append(this.fixedSidecarPanel);
@@ -67103,7 +67123,20 @@ div#statusBar.has-scroll-indicator {
      * Open the fixed sidecar panel with current item's thread
      */
     async openFixedSidecarPanel() {
-      if (!this.selectedItem || !this.api) return;
+      if (!this.api) {
+        console.warn("[bsky-nav] openFixedSidecarPanel: API not initialized");
+        return;
+      }
+      if (!this.items?.length) {
+        await this.loadItems();
+      }
+      if (!this.selectedItem?.length && this.items?.length > 0) {
+        this.setIndex(0, true);
+      }
+      if (!this.selectedItem?.length) {
+        console.warn("[bsky-nav] openFixedSidecarPanel: no items available");
+        return;
+      }
       this.config.set("fixedSidecarVisible", true);
       this.config.save();
       const thread = await this.getThreadForItem(this.selectedItem);
@@ -67333,6 +67366,13 @@ div#statusBar.has-scroll-indicator {
           toggle.addClass("visible");
           const hasContext = thread && (thread.parent || thread.replies && thread.replies.length > 0);
           toggle.toggleClass("has-context", hasContext);
+          const replyCount = thread?.replies?.length || 0;
+          const countEl = toggle.find(".fixed-sidecar-toggle-count");
+          if (replyCount > 0) {
+            countEl.text(replyCount).show();
+          } else {
+            countEl.hide();
+          }
         }
         return;
       }

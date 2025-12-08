@@ -757,8 +757,8 @@ div.item-banner {
     position: fixed;
     top: 110px;
     right: 16px;
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     background-color: var(--background-color, white);
     border: 1px solid var(--border-color, #e5e7eb);
@@ -806,6 +806,25 @@ div.item-banner {
     border-radius: 50%;
     background-color: #3b82f6;
     border: 2px solid var(--background-color, white);
+}
+
+/* Reply count badge on toggle button */
+.fixed-sidecar-toggle-count {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+    color: white;
+    background-color: #3b82f6;
+    border-radius: 9px;
+    border: 2px solid var(--background-color, white);
+    display: none;
 }
 
 /* Hide fixed sidecar on mobile */

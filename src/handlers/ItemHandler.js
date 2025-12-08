@@ -488,6 +488,7 @@ export class ItemHandler extends Handler {
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           <line x1="9" y1="10" x2="15" y2="10"/>
         </svg>
+        <span class="fixed-sidecar-toggle-count"></span>
       </button>
     `);
 
@@ -649,7 +650,25 @@ export class ItemHandler extends Handler {
    * Open the fixed sidecar panel with current item's thread
    */
   async openFixedSidecarPanel() {
-    if (!this.selectedItem || !this.api) return;
+    if (!this.api) {
+      console.warn('[bsky-nav] openFixedSidecarPanel: API not initialized');
+      return;
+    }
+
+    // If no items loaded yet, trigger a load first
+    if (!this.items?.length) {
+      await this.loadItems();
+    }
+
+    // If no item is selected, select the first one
+    if (!this.selectedItem?.length && this.items?.length > 0) {
+      this.setIndex(0, true);
+    }
+
+    if (!this.selectedItem?.length) {
+      console.warn('[bsky-nav] openFixedSidecarPanel: no items available');
+      return;
+    }
 
     this.config.set('fixedSidecarVisible', true);
     this.config.save();
@@ -945,6 +964,15 @@ export class ItemHandler extends Handler {
         // Show indicator if thread has context (parent or replies)
         const hasContext = thread && (thread.parent || (thread.replies && thread.replies.length > 0));
         toggle.toggleClass('has-context', hasContext);
+
+        // Show reply count on toggle button
+        const replyCount = thread?.replies?.length || 0;
+        const countEl = toggle.find('.fixed-sidecar-toggle-count');
+        if (replyCount > 0) {
+          countEl.text(replyCount).show();
+        } else {
+          countEl.hide();
+        }
       }
       return;
     }

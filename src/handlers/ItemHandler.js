@@ -992,8 +992,12 @@ export class ItemHandler extends Handler {
         const hasContext = thread && (thread.parent || (thread.replies && thread.replies.length > 0));
         toggle.toggleClass('has-context', hasContext);
 
-        // Show reply count on toggle button
-        const replyCount = thread?.replies?.length || 0;
+        // Show reply count on toggle button (exclude self-replies when unrolling is enabled)
+        let replyCount = thread?.replies?.length || 0;
+        if (replyCount > 0 && this.shouldUnroll(item) && thread?.post?.author?.did) {
+          const authorDid = thread.post.author.did;
+          replyCount = thread.replies.filter((r) => r.post?.author?.did !== authorDid).length;
+        }
         const countEl = toggle.find('.fixed-sidecar-toggle-count');
         if (replyCount > 0) {
           countEl.text(replyCount).show();

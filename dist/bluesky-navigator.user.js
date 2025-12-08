@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+449.655d8700
+// @version     1.0.31+450.a43d04f6
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -67692,7 +67692,11 @@ div#statusBar.has-scroll-indicator {
           toggle.addClass("visible");
           const hasContext = thread && (thread.parent || thread.replies && thread.replies.length > 0);
           toggle.toggleClass("has-context", hasContext);
-          const replyCount = thread?.replies?.length || 0;
+          let replyCount = thread?.replies?.length || 0;
+          if (replyCount > 0 && this.shouldUnroll(item) && thread?.post?.author?.did) {
+            const authorDid = thread.post.author.did;
+            replyCount = thread.replies.filter((r) => r.post?.author?.did !== authorDid).length;
+          }
           const countEl = toggle.find(".fixed-sidecar-toggle-count");
           if (replyCount > 0) {
             countEl.text(replyCount).show();

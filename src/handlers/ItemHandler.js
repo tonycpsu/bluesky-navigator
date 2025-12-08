@@ -175,7 +175,7 @@ export class ItemHandler extends Handler {
   }
 
   getReplyForIndex(index) {
-    return this.selectedItem.closest('.thread').find('.sidecar-post').eq(index);
+    return this.getSidecarReplies().eq(index);
   }
 
   get selectedReply() {
@@ -1470,7 +1470,12 @@ export class ItemHandler extends Handler {
 
   async likePost(post) {
     try {
-      const uri = await this.api.getAtprotoUri(this.urlForItem(post));
+      const postUrl = this.urlForItem(post);
+      if (!postUrl) {
+        console.error('Failed to get post URL for like action', post);
+        return;
+      }
+      const uri = await this.api.getAtprotoUri(postUrl);
       const thread = await this.api.getThread(uri);
       const { likeCount, viewer, cid } = thread.post;
       const isLiked = !!viewer.like;
@@ -2371,7 +2376,10 @@ export class ItemHandler extends Handler {
   }
 
   urlForItem(item) {
-    return `https://bsky.app${$(item).find("a[href*='/post/']").attr('href')}`;
+    const href = $(item).find("a[href*='/post/']").attr('href');
+    if (!href) return null;
+    // Sidecar posts have full URLs, feed items have relative paths
+    return href.startsWith('https://') ? href : `https://bsky.app${href}`;
   }
 
   postIdForItem(item) {

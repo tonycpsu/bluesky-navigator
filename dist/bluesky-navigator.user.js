@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+445.e2cc87d1
+// @version     1.0.31+446.e163ea61
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -66715,7 +66715,7 @@ div#statusBar.has-scroll-indicator {
       return $(this.items[this.index]);
     }
     getReplyForIndex(index) {
-      return this.selectedItem.closest(".thread").find(".sidecar-post").eq(index);
+      return this.getSidecarReplies().eq(index);
     }
     get selectedReply() {
       return this.getReplyForIndex(this.replyIndex);
@@ -67757,7 +67757,12 @@ div#statusBar.has-scroll-indicator {
     // ===========================================================================
     async likePost(post2) {
       try {
-        const uri = await this.api.getAtprotoUri(this.urlForItem(post2));
+        const postUrl = this.urlForItem(post2);
+        if (!postUrl) {
+          console.error("Failed to get post URL for like action", post2);
+          return;
+        }
+        const uri = await this.api.getAtprotoUri(postUrl);
         const thread = await this.api.getThread(uri);
         const { likeCount, viewer, cid: cid2 } = thread.post;
         const isLiked = !!viewer.like;
@@ -68470,7 +68475,9 @@ div#statusBar.has-scroll-indicator {
       return window.location.href.split("/")[6];
     }
     urlForItem(item) {
-      return `https://bsky.app${$(item).find("a[href*='/post/']").attr("href")}`;
+      const href = $(item).find("a[href*='/post/']").attr("href");
+      if (!href) return null;
+      return href.startsWith("https://") ? href : `https://bsky.app${href}`;
     }
     postIdForItem(item) {
       try {

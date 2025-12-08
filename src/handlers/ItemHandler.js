@@ -85,6 +85,8 @@ export class ItemHandler extends Handler {
     this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
     this.getTimestampForItem = this.getTimestampForItem.bind(this);
     this.onWheel = this.onWheel.bind(this);
+    this.onProfileHoverCardAdd = this.onProfileHoverCardAdd.bind(this);
+    this.onProfileHoverCardRemove = this.onProfileHoverCardRemove.bind(this);
   }
 
   isActive() {
@@ -98,6 +100,30 @@ export class ItemHandler extends Handler {
       this.onPopupAdd,
       this.onPopupRemove
     );
+
+    // Watch for hover card portals (added as direct children of body)
+    // Using custom observer instead of waitForElement to avoid interfering with Bluesky's render
+    this.hoverCardObserver = new MutationObserver(() => {
+      // Debounce and defer processing to avoid interfering with Bluesky's render cycle
+      if (this.hoverCardDebounce) return;
+      this.hoverCardDebounce = requestAnimationFrame(() => {
+        this.hoverCardDebounce = null;
+        const hoverCardAvatar = document.querySelector(
+          'div[data-testid="userAvatarImage"][style*="width: 64px"]'
+        );
+        if (hoverCardAvatar && !this.currentHoverCard) {
+          this.onProfileHoverCardAdd(hoverCardAvatar);
+        } else if (!hoverCardAvatar && this.currentHoverCard) {
+          this.currentHoverCard = null;
+        }
+      });
+    });
+
+    // Watch body and subtree, but defer processing with requestAnimationFrame
+    this.hoverCardObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
 
     this.setupIntersectionObservers();
     this.setupItemObserver();
@@ -129,6 +155,7 @@ export class ItemHandler extends Handler {
     if (this.floatingButtonsObserver) this.floatingButtonsObserver.disconnect();
     if (this.observer) this.observer.disconnect();
     if (this.popupObserver) this.popupObserver.disconnect();
+    if (this.hoverCardObserver) this.hoverCardObserver.disconnect();
     if (this.intersectionObserver) this.intersectionObserver.disconnect();
     this.disableFooterObserver();
 
@@ -2243,6 +2270,364 @@ export class ItemHandler extends Handler {
 
   onPopupRemove() {
     this.isPopupVisible = false;
+  }
+
+  /**
+   * Called when a profile hover card appears in the DOM
+   */
+  onProfileHoverCardAdd(avatarElement) {
+    // Find the card container (parent with width: 300px)
+    let card = avatarElement.closest('div[style*="width: 300px"]');
+    if (!card) {
+      card = avatarElement.closest('div[style*="will-change: transform"]')?.querySelector('div[style*="width: 300px"]');
+    }
+    if (!card) return;
+
+    // Set currentHoverCard to prevent re-processing
+    this.currentHoverCard = card;
+
+    // Don't add button if already present
+    if (card.querySelector('.bsky-nav-add-to-rules-btn')) return;
+
+    // Extract handle from profile link
+    const profileLink = card.querySelector('a[href^="/profile/"]');
+    if (!profileLink) return;
+
+    const href = profileLink.getAttribute('href');
+    const handle = href.replace('/profile/', '').split('/')[0];
+
+    // Find the follow button to position our button near it
+    const followButton = card.querySelector('button[aria-label="Following"], button[aria-label="Follow"]');
+    if (!followButton) return;
+
+    // Create the "Add to Rules" button
+    const addButton = document.createElement('button');
+    addButton.className = 'bsky-nav-add-to-rules-btn';
+    addButton.setAttribute('aria-label', 'Add to filter rules');
+    addButton.setAttribute('title', 'Add to filter rules');
+    addButton.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+    `;
+
+    // Insert button before follow button
+    followButton.parentNode.insertBefore(addButton, followButton);
+
+    // Handle click
+    addButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = addButton.getBoundingClientRect();
+      this.showAddToRulesDropdown(rect, handle);
+    });
+  }
+
+  /**
+   * Called when a profile hover card is removed from the DOM
+   */
+  onProfileHoverCardRemove() {
+    // Dropdown cleanup is handled by its own click-outside listener
+  }
+
+  /**
+   * Show dropdown to select which rule category to add the author to
+   * @param {DOMRect} buttonRect - The bounding rect of the button (captured before hover card disappears)
+   * @param {string} handle - The user handle to add to rules
+   */
+  showAddToRulesDropdown(buttonRect, handle) {
+    // Remove any existing dropdown
+    $('.bsky-nav-rules-dropdown').remove();
+
+    // Get rule categories from config
+    const rulesConfig = this.config.get('rulesConfig') || '';
+    const categories = this.parseRuleCategories(rulesConfig);
+
+    // Check if a rule filter is currently active (e.g., "$politics")
+    const activeFilter = this.state.filter || '';
+    const activeRuleMatch = activeFilter.match(/\$(\S+)/);
+    const activeCategory = activeRuleMatch ? activeRuleMatch[1] : null;
+
+    // Create dropdown
+    const dropdown = $(`
+      <div class="bsky-nav-rules-dropdown">
+        <div class="bsky-nav-rules-dropdown-header">Add @${handle} to:</div>
+        <div class="bsky-nav-rules-dropdown-actions">
+          <button class="bsky-nav-rules-action-btn bsky-nav-rules-allow" data-action="allow">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 6L9 17l-5-5"/>
+            </svg>
+            Allow
+          </button>
+          <button class="bsky-nav-rules-action-btn bsky-nav-rules-deny" data-action="deny">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+            Deny
+          </button>
+        </div>
+        <div class="bsky-nav-rules-dropdown-categories">
+          ${categories.length > 0
+            ? categories.map(cat => `
+                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? ' selected' : ''}" data-category="${cat}">
+                  ${cat}
+                </button>
+              `).join('')
+            : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings → Rules.</div>'
+          }
+        </div>
+        ${categories.length > 0 ? `
+          <div class="bsky-nav-rules-dropdown-footer">
+            <input type="text" class="bsky-nav-rules-new-category" placeholder="New category name...">
+            <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
+          </div>
+        ` : `
+          <div class="bsky-nav-rules-dropdown-footer">
+            <input type="text" class="bsky-nav-rules-new-category" placeholder="Create first category...">
+            <button class="bsky-nav-rules-create-btn" title="Create category">+</button>
+          </div>
+        `}
+      </div>
+    `);
+
+    // Position dropdown near where button was
+    dropdown.css({
+      position: 'fixed',
+      top: buttonRect.bottom + 4 + 'px',
+      left: buttonRect.left + 'px',
+      zIndex: 10001
+    });
+
+    $('body').append(dropdown);
+
+    // Track selected action (default to allow)
+    let selectedAction = 'allow';
+    dropdown.find('.bsky-nav-rules-allow').addClass('selected');
+
+    // Action button handlers
+    dropdown.find('.bsky-nav-rules-action-btn').on('click', function() {
+      dropdown.find('.bsky-nav-rules-action-btn').removeClass('selected');
+      $(this).addClass('selected');
+      selectedAction = $(this).data('action');
+    });
+
+    // Category button handlers
+    dropdown.find('.bsky-nav-rules-category-btn').on('click', (e) => {
+      const category = $(e.target).data('category');
+      this.addAuthorToRules(handle, category, selectedAction);
+      dropdown.remove();
+    });
+
+    // Create new category handler
+    dropdown.find('.bsky-nav-rules-create-btn').on('click', () => {
+      const input = dropdown.find('.bsky-nav-rules-new-category');
+      const newCategory = input.val().trim();
+      if (newCategory) {
+        this.addAuthorToRules(handle, newCategory, selectedAction);
+        dropdown.remove();
+      }
+    });
+
+    // Enter key in input creates category
+    dropdown.find('.bsky-nav-rules-new-category').on('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const newCategory = $(e.target).val().trim();
+        if (newCategory) {
+          this.addAuthorToRules(handle, newCategory, selectedAction);
+          dropdown.remove();
+        }
+      }
+    });
+
+    // Prevent dropdown from triggering hover card close
+    dropdown.on('mousedown mouseup click', (e) => {
+      e.stopPropagation();
+    });
+
+    // Close dropdown when clicking outside
+    const closeHandler = (e) => {
+      if (!$(e.target).closest('.bsky-nav-rules-dropdown').length &&
+          !$(e.target).closest('.bsky-nav-add-to-rules-btn').length) {
+        dropdown.remove();
+        $(document).off('mousedown', closeHandler);
+      }
+    };
+    setTimeout(() => {
+      $(document).on('mousedown', closeHandler);
+    }, 100);
+  }
+
+  /**
+   * Parse rule categories from config text
+   */
+  parseRuleCategories(configText) {
+    const categories = [];
+    const lines = configText.split('\n');
+    for (const line of lines) {
+      const match = line.trim().match(/^\[(.+)\]$/);
+      if (match) {
+        categories.push(match[1]);
+      }
+    }
+    return categories;
+  }
+
+  /**
+   * Add an author to the rules config
+   */
+  addAuthorToRules(handle, category, action) {
+    let rulesConfig = this.config.get('rulesConfig') || '';
+
+    // Format the rule
+    const rule = `${action} from @${handle}`;
+
+    // Check if this exact rule already exists anywhere in config
+    if (rulesConfig.includes(rule)) {
+      this.showRuleAddedNotification(`@${handle} already has this rule`);
+      return;
+    }
+
+    // Check if author already has a rule in this category (with different action)
+    const oppositeAction = action === 'allow' ? 'deny' : 'allow';
+    const oppositeRule = `${oppositeAction} from @${handle}`;
+
+    // Check if category exists
+    const categoryHeader = `[${category}]`;
+    let replacedOpposite = false;
+
+    if (rulesConfig.includes(categoryHeader)) {
+      // Add rule under existing category
+      const lines = rulesConfig.split('\n');
+      const newLines = [];
+      let inCategory = false;
+      let ruleAdded = false;
+
+      for (const line of lines) {
+        // Check if this line is the opposite rule in this category - replace it
+        if (inCategory && line.trim() === oppositeRule) {
+          newLines.push(rule);
+          ruleAdded = true;
+          replacedOpposite = true;
+          continue;
+        }
+
+        newLines.push(line);
+        if (line.trim() === categoryHeader) {
+          inCategory = true;
+        } else if (line.trim().startsWith('[')) {
+          // Hit next category
+          if (inCategory && !ruleAdded) {
+            // Add rule before this category header
+            newLines.splice(newLines.length - 1, 0, rule);
+            ruleAdded = true;
+          }
+          inCategory = false;
+        }
+      }
+
+      // If still in category at end, add rule
+      if (inCategory && !ruleAdded) {
+        newLines.push(rule);
+      }
+
+      rulesConfig = newLines.join('\n');
+
+      if (replacedOpposite) {
+        this.showRuleAddedNotification(`Updated @${handle} to ${action} in ${category}`);
+      }
+    } else {
+      // Create new category with rule
+      if (rulesConfig && !rulesConfig.endsWith('\n')) {
+        rulesConfig += '\n';
+      }
+      rulesConfig += `\n${categoryHeader}\n${rule}`;
+    }
+
+    // Save config
+    this.config.set('rulesConfig', rulesConfig);
+    this.config.save();
+
+    // Re-parse rules and apply filter
+    if (this.state && this.state.rules !== undefined) {
+      this.state.rules = this.parseRulesForState(rulesConfig);
+    }
+
+    // Show confirmation (unless we already showed an "Updated" message)
+    if (!replacedOpposite) {
+      this.showRuleAddedNotification(handle, category, action);
+    }
+  }
+
+  /**
+   * Parse rules config into state format (simplified version of main.js parseRulesConfig)
+   */
+  parseRulesForState(configText) {
+    const lines = configText.split('\n');
+    const rules = {};
+    let rulesName = null;
+
+    for (let line of lines) {
+      line = line.trim();
+      if (!line || line.startsWith(';') || line.startsWith('#')) continue;
+
+      const sectionMatch = line.match(/^\[(.+)\]$/);
+      if (sectionMatch) {
+        rulesName = sectionMatch[1];
+        rules[rulesName] = [];
+        continue;
+      }
+
+      if (!rulesName) continue;
+
+      const ruleMatch = line.match(/(allow|deny) (all|from|content) "?([^"]+)"?/);
+      if (ruleMatch) {
+        const [_, action, type, value] = ruleMatch;
+        rules[rulesName].push({ action, type, value });
+        continue;
+      }
+
+      if (line.startsWith('@')) {
+        rules[rulesName].push({ action: 'allow', type: 'from', value: line });
+      } else {
+        rules[rulesName].push({ action: 'allow', type: 'content', value: line });
+      }
+    }
+    return rules;
+  }
+
+  /**
+   * Show notification that rule was added
+   * Can be called with (message) or (handle, category, action)
+   */
+  showRuleAddedNotification(handleOrMessage, category, action) {
+    let message, icon;
+    if (category === undefined) {
+      // Called with single message string
+      message = handleOrMessage;
+      icon = 'ℹ';
+    } else {
+      // Called with handle, category, action
+      message = `@${handleOrMessage} added to "${category}" (${action})`;
+      icon = action === 'allow' ? '✓' : '✗';
+    }
+
+    const notification = $(`
+      <div class="bsky-nav-rule-notification">
+        <span class="bsky-nav-rule-notification-icon">${icon}</span>
+        <span>${message}</span>
+      </div>
+    `);
+
+    $('body').append(notification);
+
+    // Animate in
+    setTimeout(() => notification.addClass('visible'), 10);
+
+    // Remove after delay
+    setTimeout(() => {
+      notification.removeClass('visible');
+      setTimeout(() => notification.remove(), 300);
+    }, 3000);
   }
 
   onFooterIntersection(entries) {

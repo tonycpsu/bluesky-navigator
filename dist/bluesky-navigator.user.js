@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+448.85b7e3ff
+// @version     1.0.31+449.655d8700
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -50706,6 +50706,311 @@ div#statusBar.has-scroll-indicator {
   border-left: none !important;
   border-right: none !important;
 }
+
+/* =============================================================================
+   Add to Rules Button (Profile Hover Card)
+   ============================================================================= */
+
+.bsky-nav-add-to-rules-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: #eff2f6;
+  color: #405168;
+  cursor: pointer;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.bsky-nav-add-to-rules-btn:hover {
+  background-color: #dce2eb;
+  transform: scale(1.05);
+}
+
+.bsky-nav-add-to-rules-btn:active {
+  transform: scale(0.95);
+}
+
+.bsky-nav-add-to-rules-btn svg {
+  pointer-events: none;
+}
+
+/* Rules Dropdown */
+.bsky-nav-rules-dropdown {
+  background: white;
+  border: 1px solid #dce2ea;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  max-width: 280px;
+  overflow: hidden;
+  font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.bsky-nav-rules-dropdown-header {
+  padding: 12px 14px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  border-bottom: 1px solid #e5e7eb;
+  word-break: break-all;
+}
+
+.bsky-nav-rules-dropdown-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.bsky-nav-rules-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  font-size: 12px;
+  font-weight: 500;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.bsky-nav-rules-action-btn:hover {
+  background: #f3f4f6;
+}
+
+.bsky-nav-rules-action-btn.selected {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.bsky-nav-rules-allow.selected {
+  border-color: #22c55e;
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.bsky-nav-rules-deny.selected {
+  border-color: #ef4444;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.bsky-nav-rules-dropdown-categories {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.bsky-nav-rules-category-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  color: #374151;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.bsky-nav-rules-category-btn:last-child {
+  margin-bottom: 0;
+}
+
+.bsky-nav-rules-category-btn:hover {
+  background: #f3f4f6;
+}
+
+.bsky-nav-rules-category-btn.selected {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 500;
+}
+
+.bsky-nav-rules-no-categories {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.bsky-nav-rules-dropdown-footer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.bsky-nav-rules-new-category {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  outline: none;
+}
+
+.bsky-nav-rules-new-category:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.bsky-nav-rules-create-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: #3b82f6;
+  color: white;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.bsky-nav-rules-create-btn:hover {
+  background: #2563eb;
+}
+
+/* Rule Added Notification */
+.bsky-nav-rule-notification {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: #1f2937;
+  color: white;
+  border-radius: 8px;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  transition: opacity 300ms ease, transform 300ms ease;
+  z-index: 10001;
+}
+
+.bsky-nav-rule-notification.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.bsky-nav-rule-notification-icon {
+  font-size: 18px;
+}
+
+/* Dark mode for rules dropdown */
+@media (prefers-color-scheme: dark) {
+  .bsky-nav-add-to-rules-btn {
+    background-color: #374151;
+    color: #d1d5db;
+  }
+
+  .bsky-nav-add-to-rules-btn:hover {
+    background-color: #4b5563;
+  }
+
+  .bsky-nav-rules-dropdown {
+    background: #1f2937;
+    border-color: #374151;
+  }
+
+  .bsky-nav-rules-dropdown-header {
+    color: #f3f4f6;
+    border-bottom-color: #374151;
+  }
+
+  .bsky-nav-rules-dropdown-actions {
+    border-bottom-color: #374151;
+  }
+
+  .bsky-nav-rules-action-btn {
+    background: #374151;
+    border-color: #4b5563;
+    color: #d1d5db;
+  }
+
+  .bsky-nav-rules-action-btn:hover {
+    background: #4b5563;
+  }
+
+  .bsky-nav-rules-action-btn.selected {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: #3b82f6;
+    color: #60a5fa;
+  }
+
+  .bsky-nav-rules-allow.selected {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: #22c55e;
+    color: #4ade80;
+  }
+
+  .bsky-nav-rules-deny.selected {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+    color: #f87171;
+  }
+
+  .bsky-nav-rules-category-btn {
+    color: #d1d5db;
+  }
+
+  .bsky-nav-rules-category-btn:hover {
+    background: #374151;
+  }
+
+  .bsky-nav-rules-category-btn.selected {
+    background: #1e3a5f;
+    color: #60a5fa;
+  }
+
+  .bsky-nav-rules-no-categories {
+    color: #9ca3af;
+  }
+
+  .bsky-nav-rules-dropdown-footer {
+    background: #111827;
+    border-top-color: #374151;
+  }
+
+  .bsky-nav-rules-new-category {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f3f4f6;
+  }
+
+  .bsky-nav-rules-new-category:focus {
+    border-color: #3b82f6;
+  }
+
+  .bsky-nav-rule-notification {
+    background: #374151;
+  }
+}
 `;
   const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-section sidecar-parent-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Parent</span>\n    </button>\n    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">\n      <div class="sidecar-parent">\n        <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n        {{> postTemplate parent}}\n      </div>\n    </div>\n  </div>\n  {{/if}}\n  {{#if replies.length}}\n  <div class="sidecar-section sidecar-replies-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Replies ({{replies.length}})</span>\n    </button>\n    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">\n      {{#each replies}}\n      {{> postTemplate this}}\n      {{/each}}\n    </div>\n  </div>\n  {{/if}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this}}\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title="{{alt}}"></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">\n  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">\n      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>\n      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{{text}}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images" style="margin-top: 8px;">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a href="{{uri}}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">\n  <div class="sidecar-embed-external" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; margin-top: 8px; overflow: hidden;">\n    {{#if thumb}}\n    <div class="sidecar-external-thumb" style="width: 100%; max-height: 200px; overflow: hidden;">\n      <img src="{{thumb}}" alt="{{title}}" style="width: 100%; object-fit: cover;" loading="lazy">\n    </div>\n    {{/if}}\n    <div class="sidecar-external-info" style="padding: 12px;">\n      <div class="sidecar-external-domain" style="font-size: 12px; color: rgb(112, 127, 140); margin-bottom: 4px;">{{domain}}</div>\n      <div class="sidecar-external-title" style="font-weight: 600; margin-bottom: 4px;">{{title}}</div>\n      {{#if description}}\n      <div class="sidecar-external-description" style="font-size: 14px; color: rgb(66, 87, 108); line-height: 1.3;">{{description}}</div>\n      {{/if}}\n    </div>\n  </div>\n</a>\n<\/script>\n\n<script id="sidecar-skeleton-template" type="text/x-handlebars-template">\n<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <span class="sr-only">Loading replies...</span>\n</div>\n<\/script>\n';
   const SHORTCUTS = {
@@ -66665,6 +66970,8 @@ div#statusBar.has-scroll-indicator {
       this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
       this.getTimestampForItem = this.getTimestampForItem.bind(this);
       this.onWheel = this.onWheel.bind(this);
+      this.onProfileHoverCardAdd = this.onProfileHoverCardAdd.bind(this);
+      this.onProfileHoverCardRemove = this.onProfileHoverCardRemove.bind(this);
     }
     isActive() {
       return false;
@@ -66676,6 +66983,24 @@ div#statusBar.has-scroll-indicator {
         this.onPopupAdd,
         this.onPopupRemove
       );
+      this.hoverCardObserver = new MutationObserver(() => {
+        if (this.hoverCardDebounce) return;
+        this.hoverCardDebounce = requestAnimationFrame(() => {
+          this.hoverCardDebounce = null;
+          const hoverCardAvatar = document.querySelector(
+            'div[data-testid="userAvatarImage"][style*="width: 64px"]'
+          );
+          if (hoverCardAvatar && !this.currentHoverCard) {
+            this.onProfileHoverCardAdd(hoverCardAvatar);
+          } else if (!hoverCardAvatar && this.currentHoverCard) {
+            this.currentHoverCard = null;
+          }
+        });
+      });
+      this.hoverCardObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
       this.setupIntersectionObservers();
       this.setupItemObserver();
       this.setupLoadNewerObserver();
@@ -66700,6 +67025,7 @@ div#statusBar.has-scroll-indicator {
       if (this.floatingButtonsObserver) this.floatingButtonsObserver.disconnect();
       if (this.observer) this.observer.disconnect();
       if (this.popupObserver) this.popupObserver.disconnect();
+      if (this.hoverCardObserver) this.hoverCardObserver.disconnect();
       if (this.intersectionObserver) this.intersectionObserver.disconnect();
       this.disableFooterObserver();
       if (this.hoverDebounceTimeout) clearTimeout(this.hoverDebounceTimeout);
@@ -68396,6 +68722,275 @@ div#statusBar.has-scroll-indicator {
     }
     onPopupRemove() {
       this.isPopupVisible = false;
+    }
+    /**
+     * Called when a profile hover card appears in the DOM
+     */
+    onProfileHoverCardAdd(avatarElement) {
+      let card = avatarElement.closest('div[style*="width: 300px"]');
+      if (!card) {
+        card = avatarElement.closest('div[style*="will-change: transform"]')?.querySelector('div[style*="width: 300px"]');
+      }
+      if (!card) return;
+      this.currentHoverCard = card;
+      if (card.querySelector(".bsky-nav-add-to-rules-btn")) return;
+      const profileLink = card.querySelector('a[href^="/profile/"]');
+      if (!profileLink) return;
+      const href = profileLink.getAttribute("href");
+      const handle2 = href.replace("/profile/", "").split("/")[0];
+      const followButton = card.querySelector('button[aria-label="Following"], button[aria-label="Follow"]');
+      if (!followButton) return;
+      const addButton = document.createElement("button");
+      addButton.className = "bsky-nav-add-to-rules-btn";
+      addButton.setAttribute("aria-label", "Add to filter rules");
+      addButton.setAttribute("title", "Add to filter rules");
+      addButton.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+    `;
+      followButton.parentNode.insertBefore(addButton, followButton);
+      addButton.addEventListener("click", (e2) => {
+        e2.preventDefault();
+        e2.stopPropagation();
+        const rect = addButton.getBoundingClientRect();
+        this.showAddToRulesDropdown(rect, handle2);
+      });
+    }
+    /**
+     * Called when a profile hover card is removed from the DOM
+     */
+    onProfileHoverCardRemove() {
+    }
+    /**
+     * Show dropdown to select which rule category to add the author to
+     * @param {DOMRect} buttonRect - The bounding rect of the button (captured before hover card disappears)
+     * @param {string} handle - The user handle to add to rules
+     */
+    showAddToRulesDropdown(buttonRect, handle2) {
+      $(".bsky-nav-rules-dropdown").remove();
+      const rulesConfig = this.config.get("rulesConfig") || "";
+      const categories = this.parseRuleCategories(rulesConfig);
+      const activeFilter = this.state.filter || "";
+      const activeRuleMatch = activeFilter.match(/\$(\S+)/);
+      const activeCategory = activeRuleMatch ? activeRuleMatch[1] : null;
+      const dropdown = $(`
+      <div class="bsky-nav-rules-dropdown">
+        <div class="bsky-nav-rules-dropdown-header">Add @${handle2} to:</div>
+        <div class="bsky-nav-rules-dropdown-actions">
+          <button class="bsky-nav-rules-action-btn bsky-nav-rules-allow" data-action="allow">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 6L9 17l-5-5"/>
+            </svg>
+            Allow
+          </button>
+          <button class="bsky-nav-rules-action-btn bsky-nav-rules-deny" data-action="deny">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+            Deny
+          </button>
+        </div>
+        <div class="bsky-nav-rules-dropdown-categories">
+          ${categories.length > 0 ? categories.map((cat) => `
+                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? " selected" : ""}" data-category="${cat}">
+                  ${cat}
+                </button>
+              `).join("") : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings \u2192 Rules.</div>'}
+        </div>
+        ${categories.length > 0 ? `
+          <div class="bsky-nav-rules-dropdown-footer">
+            <input type="text" class="bsky-nav-rules-new-category" placeholder="New category name...">
+            <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
+          </div>
+        ` : `
+          <div class="bsky-nav-rules-dropdown-footer">
+            <input type="text" class="bsky-nav-rules-new-category" placeholder="Create first category...">
+            <button class="bsky-nav-rules-create-btn" title="Create category">+</button>
+          </div>
+        `}
+      </div>
+    `);
+      dropdown.css({
+        position: "fixed",
+        top: buttonRect.bottom + 4 + "px",
+        left: buttonRect.left + "px",
+        zIndex: 10001
+      });
+      $("body").append(dropdown);
+      let selectedAction = "allow";
+      dropdown.find(".bsky-nav-rules-allow").addClass("selected");
+      dropdown.find(".bsky-nav-rules-action-btn").on("click", function() {
+        dropdown.find(".bsky-nav-rules-action-btn").removeClass("selected");
+        $(this).addClass("selected");
+        selectedAction = $(this).data("action");
+      });
+      dropdown.find(".bsky-nav-rules-category-btn").on("click", (e2) => {
+        const category = $(e2.target).data("category");
+        this.addAuthorToRules(handle2, category, selectedAction);
+        dropdown.remove();
+      });
+      dropdown.find(".bsky-nav-rules-create-btn").on("click", () => {
+        const input = dropdown.find(".bsky-nav-rules-new-category");
+        const newCategory = input.val().trim();
+        if (newCategory) {
+          this.addAuthorToRules(handle2, newCategory, selectedAction);
+          dropdown.remove();
+        }
+      });
+      dropdown.find(".bsky-nav-rules-new-category").on("keypress", (e2) => {
+        if (e2.key === "Enter") {
+          const newCategory = $(e2.target).val().trim();
+          if (newCategory) {
+            this.addAuthorToRules(handle2, newCategory, selectedAction);
+            dropdown.remove();
+          }
+        }
+      });
+      dropdown.on("mousedown mouseup click", (e2) => {
+        e2.stopPropagation();
+      });
+      const closeHandler = (e2) => {
+        if (!$(e2.target).closest(".bsky-nav-rules-dropdown").length && !$(e2.target).closest(".bsky-nav-add-to-rules-btn").length) {
+          dropdown.remove();
+          $(document).off("mousedown", closeHandler);
+        }
+      };
+      setTimeout(() => {
+        $(document).on("mousedown", closeHandler);
+      }, 100);
+    }
+    /**
+     * Parse rule categories from config text
+     */
+    parseRuleCategories(configText) {
+      const categories = [];
+      const lines = configText.split("\n");
+      for (const line of lines) {
+        const match2 = line.trim().match(/^\[(.+)\]$/);
+        if (match2) {
+          categories.push(match2[1]);
+        }
+      }
+      return categories;
+    }
+    /**
+     * Add an author to the rules config
+     */
+    addAuthorToRules(handle2, category, action) {
+      let rulesConfig = this.config.get("rulesConfig") || "";
+      const rule = `${action} from @${handle2}`;
+      if (rulesConfig.includes(rule)) {
+        this.showRuleAddedNotification(`@${handle2} already has this rule`);
+        return;
+      }
+      const oppositeAction = action === "allow" ? "deny" : "allow";
+      const oppositeRule = `${oppositeAction} from @${handle2}`;
+      const categoryHeader = `[${category}]`;
+      let replacedOpposite = false;
+      if (rulesConfig.includes(categoryHeader)) {
+        const lines = rulesConfig.split("\n");
+        const newLines = [];
+        let inCategory = false;
+        let ruleAdded = false;
+        for (const line of lines) {
+          if (inCategory && line.trim() === oppositeRule) {
+            newLines.push(rule);
+            ruleAdded = true;
+            replacedOpposite = true;
+            continue;
+          }
+          newLines.push(line);
+          if (line.trim() === categoryHeader) {
+            inCategory = true;
+          } else if (line.trim().startsWith("[")) {
+            if (inCategory && !ruleAdded) {
+              newLines.splice(newLines.length - 1, 0, rule);
+              ruleAdded = true;
+            }
+            inCategory = false;
+          }
+        }
+        if (inCategory && !ruleAdded) {
+          newLines.push(rule);
+        }
+        rulesConfig = newLines.join("\n");
+        if (replacedOpposite) {
+          this.showRuleAddedNotification(`Updated @${handle2} to ${action} in ${category}`);
+        }
+      } else {
+        if (rulesConfig && !rulesConfig.endsWith("\n")) {
+          rulesConfig += "\n";
+        }
+        rulesConfig += `
+${categoryHeader}
+${rule}`;
+      }
+      this.config.set("rulesConfig", rulesConfig);
+      this.config.save();
+      if (this.state && this.state.rules !== void 0) {
+        this.state.rules = this.parseRulesForState(rulesConfig);
+      }
+      if (!replacedOpposite) {
+        this.showRuleAddedNotification(handle2, category, action);
+      }
+    }
+    /**
+     * Parse rules config into state format (simplified version of main.js parseRulesConfig)
+     */
+    parseRulesForState(configText) {
+      const lines = configText.split("\n");
+      const rules = {};
+      let rulesName = null;
+      for (let line of lines) {
+        line = line.trim();
+        if (!line || line.startsWith(";") || line.startsWith("#")) continue;
+        const sectionMatch = line.match(/^\[(.+)\]$/);
+        if (sectionMatch) {
+          rulesName = sectionMatch[1];
+          rules[rulesName] = [];
+          continue;
+        }
+        if (!rulesName) continue;
+        const ruleMatch = line.match(/(allow|deny) (all|from|content) "?([^"]+)"?/);
+        if (ruleMatch) {
+          const [_, action, type, value] = ruleMatch;
+          rules[rulesName].push({ action, type, value });
+          continue;
+        }
+        if (line.startsWith("@")) {
+          rules[rulesName].push({ action: "allow", type: "from", value: line });
+        } else {
+          rules[rulesName].push({ action: "allow", type: "content", value: line });
+        }
+      }
+      return rules;
+    }
+    /**
+     * Show notification that rule was added
+     * Can be called with (message) or (handle, category, action)
+     */
+    showRuleAddedNotification(handleOrMessage, category, action) {
+      let message2, icon;
+      if (category === void 0) {
+        message2 = handleOrMessage;
+        icon = "\u2139";
+      } else {
+        message2 = `@${handleOrMessage} added to "${category}" (${action})`;
+        icon = action === "allow" ? "\u2713" : "\u2717";
+      }
+      const notification2 = $(`
+      <div class="bsky-nav-rule-notification">
+        <span class="bsky-nav-rule-notification-icon">${icon}</span>
+        <span>${message2}</span>
+      </div>
+    `);
+      $("body").append(notification2);
+      setTimeout(() => notification2.addClass("visible"), 10);
+      setTimeout(() => {
+        notification2.removeClass("visible");
+        setTimeout(() => notification2.remove(), 300);
+      }, 3e3);
     }
     onFooterIntersection(entries) {
       entries.forEach((entry) => {

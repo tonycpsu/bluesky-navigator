@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+447.31d28a2c
+// @version     1.0.31+448.85b7e3ff
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -70134,6 +70134,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       this.refreshItems();
       this.updateInfoIndicator();
+      this.items = $(this.selector).filter(":visible").filter((i2, item) => {
+        if ($(item).parents(this.selector).length > 0) return false;
+        const testId = $(item).attr("data-testid") || "";
+        if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-")) return false;
+        return true;
+      });
+      this.updateScrollPosition(true);
       if (hideRead && $(this.selectedItem).hasClass("item-read")) {
         this.jumpToNextUnseenItem();
       }

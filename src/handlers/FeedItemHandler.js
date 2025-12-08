@@ -1557,6 +1557,17 @@ export class FeedItemHandler extends ItemHandler {
     this.refreshItems();
     // Update info indicator to reflect filtered counts
     this.updateInfoIndicator();
+
+    // Rebuild this.items to include newly visible items (after filter cleared)
+    this.items = $(this.selector).filter(':visible').filter((i, item) => {
+      if ($(item).parents(this.selector).length > 0) return false;
+      const testId = $(item).attr('data-testid') || '';
+      if (!testId.startsWith('feedItem-by-') && !testId.startsWith('postThreadItem-by-')) return false;
+      return true;
+    });
+
+    // Force rebuild feed map to reflect filter changes
+    this.updateScrollPosition(true);
     if (hideRead && $(this.selectedItem).hasClass('item-read')) {
       this.jumpToNextUnseenItem();
     }

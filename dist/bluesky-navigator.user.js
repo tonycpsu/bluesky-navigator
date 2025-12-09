@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+451.3d9afe89
+// @version     1.0.31+452.c23f6ed2
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45056,11 +45056,11 @@ if (cid) {
           showWhen: { scrollIndicatorStyle: "Advanced" }
         },
         scrollIndicatorHandleColors: {
-          label: "Color handles by filter list",
+          label: "Color-code rule matches",
           type: "checkbox",
           default: false,
-          help: "Color handles based on which filter list they belong to",
-          showWhen: { scrollIndicatorHandles: true }
+          help: "Color handles by author rules, timestamps by content rules",
+          showWhen: { scrollIndicatorStyle: "Advanced" }
         },
         scrollIndicatorZoom: {
           label: "Zoom window size",
@@ -50793,10 +50793,17 @@ div#statusBar.has-scroll-indicator {
   border-radius: 6px;
   background: transparent;
   font-size: 13px;
+  font-weight: 600;
   text-align: left;
   color: #374151;
   cursor: pointer;
   transition: background-color 150ms ease;
+  text-shadow:
+    -1px -1px 0 rgba(255, 255, 255, 0.8),
+    1px -1px 0 rgba(255, 255, 255, 0.8),
+    -1px 1px 0 rgba(255, 255, 255, 0.8),
+    1px 1px 0 rgba(255, 255, 255, 0.8),
+    0 0 3px rgba(255, 255, 255, 0.9);
 }
 
 .bsky-nav-rules-category-btn:last-child {
@@ -50809,8 +50816,7 @@ div#statusBar.has-scroll-indicator {
 
 .bsky-nav-rules-category-btn.selected {
   background: #dbeafe;
-  color: #1d4ed8;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .bsky-nav-rules-no-categories {
@@ -50947,7 +50953,12 @@ div#statusBar.has-scroll-indicator {
   }
 
   .bsky-nav-rules-category-btn {
-    color: #d1d5db;
+    text-shadow:
+      -1px -1px 0 rgba(0, 0, 0, 0.7),
+      1px -1px 0 rgba(0, 0, 0, 0.7),
+      -1px 1px 0 rgba(0, 0, 0, 0.7),
+      1px 1px 0 rgba(0, 0, 0, 0.7),
+      0 0 3px rgba(0, 0, 0, 0.8);
   }
 
   .bsky-nav-rules-category-btn:hover {
@@ -50956,7 +50967,6 @@ div#statusBar.has-scroll-indicator {
 
   .bsky-nav-rules-category-btn.selected {
     background: #1e3a5f;
-    color: #60a5fa;
   }
 
   .bsky-nav-rules-no-categories {
@@ -68744,8 +68754,8 @@ div#statusBar.has-scroll-indicator {
           </button>
         </div>
         <div class="bsky-nav-rules-dropdown-categories">
-          ${categories.length > 0 ? categories.map((cat) => `
-                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? " selected" : ""}" data-category="${cat}">
+          ${categories.length > 0 ? categories.map((cat, index) => `
+                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? " selected" : ""}" data-category="${cat}" style="color: ${this.FILTER_LIST_COLORS[index % this.FILTER_LIST_COLORS.length]}">
                   ${cat}
                 </button>
               `).join("") : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings \u2192 Rules.</div>'}
@@ -68939,6 +68949,35 @@ ${rule}`;
         for (const rule of rules) {
           if (rule.type === "from" && rule.value.toLowerCase() === normalizedHandle.toLowerCase()) {
             return i2;
+          }
+        }
+      }
+      return -1;
+    }
+    /**
+     * Get the index of the first filter category that matches post content.
+     * Returns -1 if content doesn't match any filter list.
+     * @param {HTMLElement} item - The post item element
+     * @returns {number} Index of the category, or -1 if not found
+     */
+    getFilterCategoryIndexForContent(item) {
+      if (!item || !this.state.rules) {
+        return -1;
+      }
+      const content2 = $(item).find('div[data-testid="postText"]').text();
+      if (!content2) return -1;
+      const categories = Object.keys(this.state.rules);
+      for (let i2 = 0; i2 < categories.length; i2++) {
+        const rules = this.state.rules[categories[i2]];
+        for (const rule of rules) {
+          if (rule.type === "content") {
+            try {
+              const pattern = new RegExp(rule.value, "i");
+              if (pattern.test(content2)) {
+                return i2;
+              }
+            } catch (e2) {
+            }
           }
         }
       }
@@ -70191,7 +70230,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
             const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
             const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
-            const showHandleColors = showHandles && this.config.get("scrollIndicatorHandleColors");
+            const showRuleColors = isAdvancedStyle && this.config.get("scrollIndicatorHandleColors");
             const allItems = $(".item").filter((i2, item) => {
               if ($(item).parents(".item").length > 0) return false;
               const testId = $(item).attr("data-testid") || "";
@@ -70224,7 +70263,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const selectedElement = this.items[this.index];
             const currentDisplayIndex = displayItems.indexOf(selectedElement);
             if (isAdvancedStyle) {
-              this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showHandleColors, maxScore, displayItems.length, displayItems, displayIndices);
+              this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayItems.length, displayItems, displayIndices);
             } else {
               if (this.scrollIndicatorZoomContainer) this.scrollIndicatorZoomContainer.hide();
               if (this.scrollIndicatorConnector) this.scrollIndicatorConnector.hide();
@@ -70871,7 +70910,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
       const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
       const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
-      const showHandleColors = showHandles && this.config.get("scrollIndicatorHandleColors");
+      const showRuleColors = isAdvancedStyle && this.config.get("scrollIndicatorHandleColors");
       let engagementData = [];
       let maxScore = 0;
       if (isAdvancedStyle && (heatmapMode !== "None" || showIcons || showAvatars || showHandles)) {
@@ -70936,7 +70975,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.updateViewportIndicator(indicator, total);
       if (this.scrollIndicatorZoom && isAdvancedStyle) {
-        this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showHandleColors, maxScore, total, displayItems, displayIndices);
+        this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, total, displayItems, displayIndices);
       }
       this.updateScrollIndicatorLabels();
       const position2 = currentDisplayIndex >= 0 ? currentDisplayIndex + 1 : 0;
@@ -71289,7 +71328,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
       const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
       const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
-      const showHandleColors = showHandles && this.config.get("scrollIndicatorHandleColors");
+      const showRuleColors = isAdvancedStyle && this.config.get("scrollIndicatorHandleColors");
       let maxScore = 0;
       const windowEngagement = [];
       for (let i2 = 0; i2 < zoomWindowSize; i2++) {
@@ -71347,7 +71386,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const dotIndex = handle2.indexOf(".");
           const handleHtml = dotIndex > 0 ? `<b>${handle2.substring(0, dotIndex)}</b>${handle2.substring(dotIndex)}` : `<b>${handle2}</b>`;
           let handleStyle = "";
-          if (showHandleColors) {
+          if (showRuleColors) {
             const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
             if (categoryIndex >= 0) {
               const color2 = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
@@ -71360,7 +71399,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const timestamp = this.getTimestampForItem(item);
           if (timestamp) {
             const relativeTime = this.formatRelativeTime(timestamp);
-            $segment.append(`<span class="scroll-segment-time">${relativeTime}</span>`);
+            let timeStyle = "";
+            if (showRuleColors) {
+              const categoryIndex = this.getFilterCategoryIndexForContent(item);
+              if (categoryIndex >= 0) {
+                const color2 = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+                timeStyle = ` style="color: ${color2}"`;
+              }
+            }
+            $segment.append(`<span class="scroll-segment-time"${timeStyle}>${relativeTime}</span>`);
           }
         }
       });
@@ -71374,7 +71421,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     /**
      * Update the zoom indicator showing posts around the current selection
      */
-    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showHandleColors, maxScore, displayTotal, displayItems, displayIndices) {
+    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayTotal, displayItems, displayIndices) {
       const zoomIndicator = this.scrollIndicatorZoom;
       const zoomInner = this.scrollIndicatorZoomInner;
       if (!zoomIndicator || !zoomInner) return;
@@ -71503,7 +71550,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             handleHtml = `<b>${handle2}</b>`;
           }
           let handleStyle = "";
-          if (showHandleColors) {
+          if (showRuleColors) {
             const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
             if (categoryIndex >= 0) {
               const color2 = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
@@ -71516,7 +71563,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const timestamp = this.getTimestampForItem(item);
           if (timestamp) {
             const relativeTime = this.formatRelativeTime(timestamp);
-            $segment.append(`<span class="scroll-segment-time">${relativeTime}</span>`);
+            let timeStyle = "";
+            if (showRuleColors) {
+              const categoryIndex = this.getFilterCategoryIndexForContent(item);
+              if (categoryIndex >= 0) {
+                const color2 = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+                timeStyle = ` style="color: ${color2}"`;
+              }
+            }
+            $segment.append(`<span class="scroll-segment-time"${timeStyle}>${relativeTime}</span>`);
           }
         }
       });

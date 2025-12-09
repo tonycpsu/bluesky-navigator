@@ -2349,8 +2349,8 @@ export class ItemHandler extends Handler {
         </div>
         <div class="bsky-nav-rules-dropdown-categories">
           ${categories.length > 0
-            ? categories.map(cat => `
-                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? ' selected' : ''}" data-category="${cat}">
+            ? categories.map((cat, index) => `
+                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? ' selected' : ''}" data-category="${cat}" style="color: ${this.FILTER_LIST_COLORS[index % this.FILTER_LIST_COLORS.length]}">
                   ${cat}
                 </button>
               `).join('')
@@ -2602,6 +2602,39 @@ export class ItemHandler extends Handler {
       for (const rule of rules) {
         if (rule.type === 'from' && rule.value.toLowerCase() === normalizedHandle.toLowerCase()) {
           return i;
+        }
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Get the index of the first filter category that matches post content.
+   * Returns -1 if content doesn't match any filter list.
+   * @param {HTMLElement} item - The post item element
+   * @returns {number} Index of the category, or -1 if not found
+   */
+  getFilterCategoryIndexForContent(item) {
+    if (!item || !this.state.rules) {
+      return -1;
+    }
+
+    const content = $(item).find('div[data-testid="postText"]').text();
+    if (!content) return -1;
+
+    const categories = Object.keys(this.state.rules);
+    for (let i = 0; i < categories.length; i++) {
+      const rules = this.state.rules[categories[i]];
+      for (const rule of rules) {
+        if (rule.type === 'content') {
+          try {
+            const pattern = new RegExp(rule.value, 'i');
+            if (pattern.test(content)) {
+              return i;
+            }
+          } catch (e) {
+            // Invalid regex, skip this rule
+          }
         }
       }
     }

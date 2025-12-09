@@ -209,11 +209,11 @@ const CONFIG_SCHEMA = {
         showWhen: { scrollIndicatorStyle: 'Advanced' },
       },
       scrollIndicatorHandleColors: {
-        label: 'Color handles by filter list',
+        label: 'Color-code rule matches',
         type: 'checkbox',
         default: false,
-        help: 'Color handles based on which filter list they belong to',
-        showWhen: { scrollIndicatorHandles: true },
+        help: 'Color handles by author rules, timestamps by content rules',
+        showWhen: { scrollIndicatorStyle: 'Advanced' },
       },
       scrollIndicatorZoom: {
         label: 'Zoom window size',

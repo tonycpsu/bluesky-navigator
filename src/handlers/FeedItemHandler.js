@@ -1393,13 +1393,25 @@ export class FeedItemHandler extends ItemHandler {
 
   /**
    * Evaluates a named rule set against an item.
+   * @param {HTMLElement} item - The item to evaluate
+   * @param {string} ruleName - The category name to evaluate
+   * @param {Set} [visited] - Set of already visited categories (for circular dependency detection)
    * @private
    */
-  evaluateNamedRule(item, ruleName) {
+  evaluateNamedRule(item, ruleName, visited = new Set()) {
+    // Circular dependency check
+    if (visited.has(ruleName)) {
+      console.warn(`[Rules] Circular dependency detected: ${ruleName} already visited in chain: ${[...visited].join(' -> ')}`);
+      return null;
+    }
+
     const rules = this.state.rules?.[ruleName];
     if (!rules) {
       return null;
     }
+
+    // Add current category to visited set
+    visited.add(ruleName);
 
     let allowed = null;
     for (const rule of rules) {
@@ -1409,6 +1421,13 @@ export class FeedItemHandler extends ItemHandler {
         allowed = rule.action === 'allow';
       } else if (rule.type === 'content' && this.filterContent(item, rule.value)) {
         allowed = rule.action === 'allow';
+      } else if (rule.type === 'include') {
+        // Recursively evaluate included category
+        const includedResult = this.evaluateNamedRule(item, rule.value, visited);
+        if (includedResult !== null) {
+          // Apply the action (allow/deny) to the included result
+          allowed = rule.action === 'allow' ? includedResult : !includedResult;
+        }
       }
     }
     return allowed;

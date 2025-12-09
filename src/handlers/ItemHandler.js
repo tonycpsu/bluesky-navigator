@@ -2344,11 +2344,17 @@ export class ItemHandler extends Handler {
         </div>
         <div class="bsky-nav-rules-dropdown-categories">
           ${categories.length > 0
-            ? categories.map((cat, index) => `
-                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? ' selected' : ''}" data-category="${cat}" style="color: ${this.getColorForCategory(cat, index)}">
+            ? categories.map((cat, index) => {
+                const color = this.getColorForCategory(cat, index);
+                const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                const sc = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
+                const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+                return `
+                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? ' selected' : ''}" data-category="${cat}" style="color: ${color}; text-shadow: ${shadow}">
                   ${cat}
                 </button>
-              `).join('')
+              `;
+              }).join('')
             : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings → Rules.</div>'
           }
         </div>
@@ -2561,20 +2567,53 @@ export class ItemHandler extends Handler {
 
       if (!rulesName) continue;
 
-      const ruleMatch = line.match(/(allow|deny) (all|from|content) "?([^"]+)"?/);
+      const ruleMatch = line.match(/(allow|deny) (all|from|content|include) "?([^"]+)"?/);
       if (ruleMatch) {
         const [_, action, type, value] = ruleMatch;
         rules[rulesName].push({ action, type, value });
         continue;
       }
 
-      if (line.startsWith('@')) {
+      if (line.startsWith('$')) {
+        rules[rulesName].push({ action: 'allow', type: 'include', value: line.substring(1) });
+      } else if (line.startsWith('@')) {
         rules[rulesName].push({ action: 'allow', type: 'from', value: line });
       } else {
         rules[rulesName].push({ action: 'allow', type: 'content', value: line });
       }
     }
     return rules;
+  }
+
+  /**
+   * Check if a handle matches any rule in a category (including via includes).
+   * @param {string} normalizedHandle - The handle to check (with @)
+   * @param {string} categoryName - The category to check
+   * @param {Set} [visited] - Set of visited categories for circular dependency detection
+   * @returns {boolean} True if handle matches any rule in the category
+   * @private
+   */
+  handleMatchesCategory(normalizedHandle, categoryName, visited = new Set()) {
+    if (visited.has(categoryName)) {
+      return false; // Circular dependency - stop recursion
+    }
+
+    const rules = this.state.rules?.[categoryName];
+    if (!rules) return false;
+
+    visited.add(categoryName);
+
+    for (const rule of rules) {
+      if (rule.type === 'from' && rule.value.toLowerCase() === normalizedHandle.toLowerCase()) {
+        return true;
+      }
+      if (rule.type === 'include') {
+        if (this.handleMatchesCategory(normalizedHandle, rule.value, visited)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**
@@ -2593,14 +2632,109 @@ export class ItemHandler extends Handler {
 
     const categories = Object.keys(this.state.rules);
     for (let i = 0; i < categories.length; i++) {
-      const rules = this.state.rules[categories[i]];
-      for (const rule of rules) {
-        if (rule.type === 'from' && rule.value.toLowerCase() === normalizedHandle.toLowerCase()) {
-          return i;
-        }
+      if (this.handleMatchesCategory(normalizedHandle, categories[i])) {
+        return i;
       }
     }
     return -1;
+  }
+
+  /**
+   * Check if content matches any rule in a category (including via includes).
+   * @param {string} content - The content to check
+   * @param {string} categoryName - The category to check
+   * @param {Set} [visited] - Set of visited categories for circular dependency detection
+   * @returns {boolean} True if content matches any rule in the category
+   * @private
+   */
+  contentMatchesCategory(content, categoryName, visited = new Set()) {
+    if (visited.has(categoryName)) {
+      return false; // Circular dependency - stop recursion
+    }
+
+    const rules = this.state.rules?.[categoryName];
+    if (!rules) return false;
+
+    visited.add(categoryName);
+
+    for (const rule of rules) {
+      if (rule.type === 'content') {
+        try {
+          const pattern = new RegExp(rule.value, 'i');
+          if (pattern.test(content)) {
+            return true;
+          }
+        } catch (e) {
+          // Invalid regex, skip this rule
+        }
+      }
+      if (rule.type === 'include') {
+        if (this.contentMatchesCategory(content, rule.value, visited)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Get the matching content rule pattern for an item.
+   * @param {HTMLElement} item - The post item element
+   * @returns {{pattern: RegExp, categoryIndex: number}|null} The matching pattern and category index, or null
+   */
+  getMatchingContentRule(item) {
+    if (!item || !this.state.rules) {
+      return null;
+    }
+
+    const content = $(item).find('div[data-testid="postText"]').text();
+    if (!content) return null;
+
+    const categories = Object.keys(this.state.rules);
+    for (let i = 0; i < categories.length; i++) {
+      const result = this.findMatchingContentPattern(content, categories[i]);
+      if (result) {
+        return { pattern: result, categoryIndex: i };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find the first matching content pattern in a category (including via includes).
+   * @param {string} content - The content to check
+   * @param {string} categoryName - The category to check
+   * @param {Set} [visited] - Set of visited categories for circular dependency detection
+   * @returns {RegExp|null} The matching pattern, or null
+   * @private
+   */
+  findMatchingContentPattern(content, categoryName, visited = new Set()) {
+    if (visited.has(categoryName)) {
+      return null;
+    }
+
+    const rules = this.state.rules?.[categoryName];
+    if (!rules) return null;
+
+    visited.add(categoryName);
+
+    for (const rule of rules) {
+      if (rule.type === 'content') {
+        try {
+          const pattern = new RegExp(rule.value, 'gi');
+          if (pattern.test(content)) {
+            return new RegExp(rule.value, 'gi'); // Return fresh regex
+          }
+        } catch (e) {
+          // Invalid regex, skip
+        }
+      }
+      if (rule.type === 'include') {
+        const result = this.findMatchingContentPattern(content, rule.value, visited);
+        if (result) return result;
+      }
+    }
+    return null;
   }
 
   /**
@@ -2619,18 +2753,8 @@ export class ItemHandler extends Handler {
 
     const categories = Object.keys(this.state.rules);
     for (let i = 0; i < categories.length; i++) {
-      const rules = this.state.rules[categories[i]];
-      for (const rule of rules) {
-        if (rule.type === 'content') {
-          try {
-            const pattern = new RegExp(rule.value, 'i');
-            if (pattern.test(content)) {
-              return i;
-            }
-          } catch (e) {
-            // Invalid regex, skip this rule
-          }
-        }
+      if (this.contentMatchesCategory(content, categories[i])) {
+        return i;
       }
     }
     return -1;
@@ -3044,7 +3168,7 @@ export class ItemHandler extends Handler {
     const $el = $(element);
     const profileLink = $el.find(constants.PROFILE_SELECTOR).first();
     const avatar = $el.find('div[data-testid="userAvatarImage"]').first();
-    const timestampLink = $el.find('a[href^="/profile/"][data-tooltip*=" at "]').first();
+    const postText = $el.find('div[data-testid="postText"]').first();
 
     // Get handle - try handleFromItem first, fallback to data-testid
     let handle = this.handleFromItem(element);
@@ -3057,7 +3181,6 @@ export class ItemHandler extends Handler {
     }
 
     const authorCategoryIndex = handle ? this.getFilterCategoryIndexForHandle(handle) : -1;
-    const contentCategoryIndex = this.getFilterCategoryIndexForContent(element);
 
     // Check if color-coding is enabled
     if (!this.config.get('ruleColorCoding')) {
@@ -3066,9 +3189,10 @@ export class ItemHandler extends Handler {
         profileLink.css({ 'background-color': '', 'border-radius': '', 'padding': '' });
       }
       if (avatar.length) avatar.css('box-shadow', '');
-      if (timestampLink.length) {
-        timestampLink.css({ 'background-color': '', 'border-radius': '', 'padding': '' });
-      }
+      // Clear content highlights
+      postText.find('.rule-content-highlight').each(function() {
+        $(this).replaceWith($(this).text());
+      });
       return;
     }
 
@@ -3096,21 +3220,80 @@ export class ItemHandler extends Handler {
       if (avatar.length) avatar.css('box-shadow', '');
     }
 
-    // Color timestamp by content rules
-    if (contentCategoryIndex >= 0) {
-      const color = this.getColorForCategoryIndex(contentCategoryIndex);
+    // Highlight matching content phrases by content rules
+    // Clear any previous content highlights
+    postText.find('.rule-content-highlight').each(function() {
+      $(this).replaceWith($(this).text());
+    });
 
-      if (timestampLink.length) {
-        timestampLink[0].style.setProperty('background-color', `${color}33`, 'important');
-        timestampLink[0].style.setProperty('border-radius', '3px', 'important');
-        timestampLink[0].style.setProperty('padding', '0 3px', 'important');
-      }
-    } else {
-      // No content match - clear timestamp styles
-      if (timestampLink.length) {
-        timestampLink.css({ 'background-color': '', 'border-radius': '', 'padding': '' });
-      }
+    const matchResult = this.getMatchingContentRule(element);
+    if (matchResult) {
+      const { pattern, categoryIndex } = matchResult;
+      const color = this.getColorForCategoryIndex(categoryIndex);
+
+      // Highlight matching text in the post
+      this.highlightMatchingText(postText, pattern, color);
     }
+  }
+
+  /**
+   * Highlight matching text within an element by wrapping matches in styled spans.
+   * @param {jQuery} $container - The container element
+   * @param {RegExp} pattern - The pattern to match
+   * @param {string} color - The highlight color
+   */
+  highlightMatchingText($container, pattern, color) {
+    if (!$container.length) return;
+
+    const highlightStyle = `background-color: ${color}33; border-radius: 3px; padding: 0 2px;`;
+
+    // Process text nodes recursively
+    const processNode = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent;
+        if (!text || !pattern.test(text)) return;
+
+        // Reset regex lastIndex
+        pattern.lastIndex = 0;
+
+        const fragment = document.createDocumentFragment();
+        let lastIndex = 0;
+        let match;
+
+        while ((match = pattern.exec(text)) !== null) {
+          // Add text before match
+          if (match.index > lastIndex) {
+            fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+          }
+
+          // Add highlighted match
+          const span = document.createElement('span');
+          span.className = 'rule-content-highlight';
+          span.style.cssText = highlightStyle;
+          span.textContent = match[0];
+          fragment.appendChild(span);
+
+          lastIndex = pattern.lastIndex;
+        }
+
+        // Add remaining text
+        if (lastIndex < text.length) {
+          fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+        }
+
+        // Replace the text node with the fragment
+        if (fragment.childNodes.length > 0) {
+          node.parentNode.replaceChild(fragment, node);
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE && !$(node).hasClass('rule-content-highlight')) {
+        // Process child nodes (make a copy since we're modifying)
+        Array.from(node.childNodes).forEach(processNode);
+      }
+    };
+
+    $container.each(function() {
+      Array.from(this.childNodes).forEach(processNode);
+    });
   }
 
   applyBlockStatus(element) {

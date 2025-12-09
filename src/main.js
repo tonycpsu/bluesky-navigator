@@ -184,8 +184,8 @@ function getScreenFromElement(element) {
 
       if (!rulesName) continue;
 
-      // Match explicit allow/deny rules
-      const ruleMatch = line.match(/(allow|deny) (all|from|content) "?([^"]+)"?/);
+      // Match explicit allow/deny rules (including include type)
+      const ruleMatch = line.match(/(allow|deny) (all|from|content|include) "?([^"]+)"?/);
       if (ruleMatch) {
         const [_, action, type, value] = ruleMatch;
         rules[rulesName].push({ action, type, value });
@@ -193,7 +193,10 @@ function getScreenFromElement(element) {
       }
 
       // **Shortcut Parsing**
-      if (line.startsWith('@')) {
+      if (line.startsWith('$')) {
+        // Interpret "$category" as "allow include category"
+        rules[rulesName].push({ action: 'allow', type: 'include', value: line.substring(1) });
+      } else if (line.startsWith('@')) {
         // Interpret "@foo" as "allow author 'foo'"
         rules[rulesName].push({ action: 'allow', type: 'from', value: line });
       } else {

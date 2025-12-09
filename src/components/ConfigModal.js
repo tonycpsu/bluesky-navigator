@@ -972,8 +972,8 @@ export class ConfigModal {
 
       if (!currentCategory) continue;
 
-      // Match explicit allow/deny rules
-      const ruleMatch = line.match(/^(allow|deny)\s+(all|from|content)\s*"?([^"]*)"?$/i);
+      // Match explicit allow/deny rules (including include type)
+      const ruleMatch = line.match(/^(allow|deny)\s+(all|from|content|include)\s*"?([^"]*)"?$/i);
       if (ruleMatch) {
         const [, action, type, value] = ruleMatch;
         currentCategory.rules.push({
@@ -981,6 +981,12 @@ export class ConfigModal {
           type: type.toLowerCase(),
           value: value || ''
         });
+        continue;
+      }
+
+      // Shortcut: $category = allow include category
+      if (line.startsWith('$')) {
+        currentCategory.rules.push({ action: 'allow', type: 'include', value: line.substring(1) });
         continue;
       }
 
@@ -1013,6 +1019,9 @@ export class ConfigModal {
         } else if (rule.action === 'deny') {
           // Always use explicit format for deny
           lines.push(`${rule.action} ${rule.type} ${rule.value}`);
+        } else if (rule.type === 'include' && rule.action === 'allow') {
+          // Shortcut for allow include category
+          lines.push(`$${rule.value}`);
         } else if (rule.type === 'from' && rule.value.startsWith('@')) {
           // Shortcut for allow from @handle
           lines.push(rule.value);
@@ -1127,25 +1136,52 @@ export class ConfigModal {
       return `<div class="rules-empty-category">No rules in this category.</div>`;
     }
 
-    return rules.map((rule, ruleIndex) => `
-      <div class="rules-row" data-category="${catIndex}" data-rule="${ruleIndex}">
-        <select class="rules-action" data-category="${catIndex}" data-rule="${ruleIndex}">
-          <option value="allow" ${rule.action === 'allow' ? 'selected' : ''}>Allow</option>
-          <option value="deny" ${rule.action === 'deny' ? 'selected' : ''}>Deny</option>
-        </select>
-        <select class="rules-type" data-category="${catIndex}" data-rule="${ruleIndex}">
-          <option value="from" ${rule.type === 'from' ? 'selected' : ''}>From (author)</option>
-          <option value="content" ${rule.type === 'content' ? 'selected' : ''}>Content (text)</option>
-          <option value="all" ${rule.type === 'all' ? 'selected' : ''}>All</option>
-        </select>
-        <input type="text" class="rules-value" value="${this.escapeHtml(rule.value)}"
-               placeholder="${rule.type === 'from' ? '@handle or regex' : rule.type === 'content' ? 'keyword or regex' : ''}"
-               ${rule.type === 'all' ? 'disabled' : ''}
-               data-category="${catIndex}" data-rule="${ruleIndex}">
-        <button type="button" class="rules-delete-rule" data-category="${catIndex}" data-rule="${ruleIndex}"
-                title="Delete rule">🗑</button>
-      </div>
-    `).join('');
+    // Get category names for include dropdown (excluding current category)
+    const currentCategoryName = this.parsedRules[catIndex]?.name;
+    const otherCategories = this.parsedRules
+      .map(c => c.name)
+      .filter(name => name !== currentCategoryName);
+
+    return rules.map((rule, ruleIndex) => {
+      // Build the value input or dropdown based on type
+      let valueHtml;
+      if (rule.type === 'include') {
+        valueHtml = `
+          <select class="rules-value rules-include-select" data-category="${catIndex}" data-rule="${ruleIndex}">
+            <option value="">Select category...</option>
+            ${otherCategories.map(name => `
+              <option value="${this.escapeHtml(name)}" ${rule.value === name ? 'selected' : ''}>${this.escapeHtml(name)}</option>
+            `).join('')}
+          </select>
+        `;
+      } else if (rule.type === 'all') {
+        valueHtml = `<input type="text" class="rules-value" value="" disabled data-category="${catIndex}" data-rule="${ruleIndex}">`;
+      } else {
+        valueHtml = `
+          <input type="text" class="rules-value" value="${this.escapeHtml(rule.value)}"
+                 placeholder="${rule.type === 'from' ? '@handle or regex' : 'keyword or regex'}"
+                 data-category="${catIndex}" data-rule="${ruleIndex}">
+        `;
+      }
+
+      return `
+        <div class="rules-row" data-category="${catIndex}" data-rule="${ruleIndex}">
+          <select class="rules-action" data-category="${catIndex}" data-rule="${ruleIndex}">
+            <option value="allow" ${rule.action === 'allow' ? 'selected' : ''}>Allow</option>
+            <option value="deny" ${rule.action === 'deny' ? 'selected' : ''}>Deny</option>
+          </select>
+          <select class="rules-type" data-category="${catIndex}" data-rule="${ruleIndex}">
+            <option value="from" ${rule.type === 'from' ? 'selected' : ''}>From (author)</option>
+            <option value="content" ${rule.type === 'content' ? 'selected' : ''}>Content (text)</option>
+            <option value="include" ${rule.type === 'include' ? 'selected' : ''}>Include (category)</option>
+            <option value="all" ${rule.type === 'all' ? 'selected' : ''}>All</option>
+          </select>
+          ${valueHtml}
+          <button type="button" class="rules-delete-rule" data-category="${catIndex}" data-rule="${ruleIndex}"
+                  title="Delete rule">🗑</button>
+        </div>
+      `;
+    }).join('');
   }
 
   /**

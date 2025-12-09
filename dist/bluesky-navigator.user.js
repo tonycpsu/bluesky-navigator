@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+454.3bdca43c
+// @version     1.0.31+455.5a2e7a1d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45775,7 +45775,7 @@ if (cid) {
           continue;
         }
         if (!currentCategory) continue;
-        const ruleMatch = line.match(/^(allow|deny)\s+(all|from|content)\s*"?([^"]*)"?$/i);
+        const ruleMatch = line.match(/^(allow|deny)\s+(all|from|content|include)\s*"?([^"]*)"?$/i);
         if (ruleMatch) {
           const [, action, type, value] = ruleMatch;
           currentCategory.rules.push({
@@ -45783,6 +45783,10 @@ if (cid) {
             type: type.toLowerCase(),
             value: value || ""
           });
+          continue;
+        }
+        if (line.startsWith("$")) {
+          currentCategory.rules.push({ action: "allow", type: "include", value: line.substring(1) });
           continue;
         }
         if (line.startsWith("@")) {
@@ -45806,6 +45810,8 @@ if (cid) {
             lines.push(`${rule.action} all`);
           } else if (rule.action === "deny") {
             lines.push(`${rule.action} ${rule.type} ${rule.value}`);
+          } else if (rule.type === "include" && rule.action === "allow") {
+            lines.push(`$${rule.value}`);
           } else if (rule.type === "from" && rule.value.startsWith("@")) {
             lines.push(rule.value);
           } else if (rule.type === "content") {
@@ -45908,25 +45914,46 @@ if (cid) {
       if (rules.length === 0) {
         return `<div class="rules-empty-category">No rules in this category.</div>`;
       }
-      return rules.map((rule, ruleIndex) => `
-      <div class="rules-row" data-category="${catIndex}" data-rule="${ruleIndex}">
-        <select class="rules-action" data-category="${catIndex}" data-rule="${ruleIndex}">
-          <option value="allow" ${rule.action === "allow" ? "selected" : ""}>Allow</option>
-          <option value="deny" ${rule.action === "deny" ? "selected" : ""}>Deny</option>
-        </select>
-        <select class="rules-type" data-category="${catIndex}" data-rule="${ruleIndex}">
-          <option value="from" ${rule.type === "from" ? "selected" : ""}>From (author)</option>
-          <option value="content" ${rule.type === "content" ? "selected" : ""}>Content (text)</option>
-          <option value="all" ${rule.type === "all" ? "selected" : ""}>All</option>
-        </select>
-        <input type="text" class="rules-value" value="${this.escapeHtml(rule.value)}"
-               placeholder="${rule.type === "from" ? "@handle or regex" : rule.type === "content" ? "keyword or regex" : ""}"
-               ${rule.type === "all" ? "disabled" : ""}
-               data-category="${catIndex}" data-rule="${ruleIndex}">
-        <button type="button" class="rules-delete-rule" data-category="${catIndex}" data-rule="${ruleIndex}"
-                title="Delete rule">\u{1F5D1}</button>
-      </div>
-    `).join("");
+      const currentCategoryName = this.parsedRules[catIndex]?.name;
+      const otherCategories = this.parsedRules.map((c) => c.name).filter((name) => name !== currentCategoryName);
+      return rules.map((rule, ruleIndex) => {
+        let valueHtml;
+        if (rule.type === "include") {
+          valueHtml = `
+          <select class="rules-value rules-include-select" data-category="${catIndex}" data-rule="${ruleIndex}">
+            <option value="">Select category...</option>
+            ${otherCategories.map((name) => `
+              <option value="${this.escapeHtml(name)}" ${rule.value === name ? "selected" : ""}>${this.escapeHtml(name)}</option>
+            `).join("")}
+          </select>
+        `;
+        } else if (rule.type === "all") {
+          valueHtml = `<input type="text" class="rules-value" value="" disabled data-category="${catIndex}" data-rule="${ruleIndex}">`;
+        } else {
+          valueHtml = `
+          <input type="text" class="rules-value" value="${this.escapeHtml(rule.value)}"
+                 placeholder="${rule.type === "from" ? "@handle or regex" : "keyword or regex"}"
+                 data-category="${catIndex}" data-rule="${ruleIndex}">
+        `;
+        }
+        return `
+        <div class="rules-row" data-category="${catIndex}" data-rule="${ruleIndex}">
+          <select class="rules-action" data-category="${catIndex}" data-rule="${ruleIndex}">
+            <option value="allow" ${rule.action === "allow" ? "selected" : ""}>Allow</option>
+            <option value="deny" ${rule.action === "deny" ? "selected" : ""}>Deny</option>
+          </select>
+          <select class="rules-type" data-category="${catIndex}" data-rule="${ruleIndex}">
+            <option value="from" ${rule.type === "from" ? "selected" : ""}>From (author)</option>
+            <option value="content" ${rule.type === "content" ? "selected" : ""}>Content (text)</option>
+            <option value="include" ${rule.type === "include" ? "selected" : ""}>Include (category)</option>
+            <option value="all" ${rule.type === "all" ? "selected" : ""}>All</option>
+          </select>
+          ${valueHtml}
+          <button type="button" class="rules-delete-rule" data-category="${catIndex}" data-rule="${ruleIndex}"
+                  title="Delete rule">\u{1F5D1}</button>
+        </div>
+      `;
+      }).join("");
     }
     /**
      * Update raw textarea from parsed rules
@@ -68927,11 +68954,17 @@ div#statusBar.has-feed-map {
           </button>
         </div>
         <div class="bsky-nav-rules-dropdown-categories">
-          ${categories.length > 0 ? categories.map((cat, index) => `
-                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? " selected" : ""}" data-category="${cat}" style="color: ${this.getColorForCategory(cat, index)}">
+          ${categories.length > 0 ? categories.map((cat, index) => {
+        const color2 = this.getColorForCategory(cat, index);
+        const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const sc = isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.9)";
+        const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+        return `
+                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? " selected" : ""}" data-category="${cat}" style="color: ${color2}; text-shadow: ${shadow}">
                   ${cat}
                 </button>
-              `).join("") : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings \u2192 Rules.</div>'}
+              `;
+      }).join("") : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings \u2192 Rules.</div>'}
         </div>
         ${categories.length > 0 ? `
           <div class="bsky-nav-rules-dropdown-footer">
@@ -69091,19 +69124,48 @@ ${rule}`;
           continue;
         }
         if (!rulesName) continue;
-        const ruleMatch = line.match(/(allow|deny) (all|from|content) "?([^"]+)"?/);
+        const ruleMatch = line.match(/(allow|deny) (all|from|content|include) "?([^"]+)"?/);
         if (ruleMatch) {
           const [_, action, type, value] = ruleMatch;
           rules[rulesName].push({ action, type, value });
           continue;
         }
-        if (line.startsWith("@")) {
+        if (line.startsWith("$")) {
+          rules[rulesName].push({ action: "allow", type: "include", value: line.substring(1) });
+        } else if (line.startsWith("@")) {
           rules[rulesName].push({ action: "allow", type: "from", value: line });
         } else {
           rules[rulesName].push({ action: "allow", type: "content", value: line });
         }
       }
       return rules;
+    }
+    /**
+     * Check if a handle matches any rule in a category (including via includes).
+     * @param {string} normalizedHandle - The handle to check (with @)
+     * @param {string} categoryName - The category to check
+     * @param {Set} [visited] - Set of visited categories for circular dependency detection
+     * @returns {boolean} True if handle matches any rule in the category
+     * @private
+     */
+    handleMatchesCategory(normalizedHandle, categoryName, visited = /* @__PURE__ */ new Set()) {
+      if (visited.has(categoryName)) {
+        return false;
+      }
+      const rules = this.state.rules?.[categoryName];
+      if (!rules) return false;
+      visited.add(categoryName);
+      for (const rule of rules) {
+        if (rule.type === "from" && rule.value.toLowerCase() === normalizedHandle.toLowerCase()) {
+          return true;
+        }
+        if (rule.type === "include") {
+          if (this.handleMatchesCategory(normalizedHandle, rule.value, visited)) {
+            return true;
+          }
+        }
+      }
+      return false;
     }
     /**
      * Get the index of the first filter category that contains a handle.
@@ -69118,14 +69180,96 @@ ${rule}`;
       const normalizedHandle = handle2.startsWith("@") ? handle2 : `@${handle2}`;
       const categories = Object.keys(this.state.rules);
       for (let i2 = 0; i2 < categories.length; i2++) {
-        const rules = this.state.rules[categories[i2]];
-        for (const rule of rules) {
-          if (rule.type === "from" && rule.value.toLowerCase() === normalizedHandle.toLowerCase()) {
-            return i2;
-          }
+        if (this.handleMatchesCategory(normalizedHandle, categories[i2])) {
+          return i2;
         }
       }
       return -1;
+    }
+    /**
+     * Check if content matches any rule in a category (including via includes).
+     * @param {string} content - The content to check
+     * @param {string} categoryName - The category to check
+     * @param {Set} [visited] - Set of visited categories for circular dependency detection
+     * @returns {boolean} True if content matches any rule in the category
+     * @private
+     */
+    contentMatchesCategory(content2, categoryName, visited = /* @__PURE__ */ new Set()) {
+      if (visited.has(categoryName)) {
+        return false;
+      }
+      const rules = this.state.rules?.[categoryName];
+      if (!rules) return false;
+      visited.add(categoryName);
+      for (const rule of rules) {
+        if (rule.type === "content") {
+          try {
+            const pattern = new RegExp(rule.value, "i");
+            if (pattern.test(content2)) {
+              return true;
+            }
+          } catch (e2) {
+          }
+        }
+        if (rule.type === "include") {
+          if (this.contentMatchesCategory(content2, rule.value, visited)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    /**
+     * Get the matching content rule pattern for an item.
+     * @param {HTMLElement} item - The post item element
+     * @returns {{pattern: RegExp, categoryIndex: number}|null} The matching pattern and category index, or null
+     */
+    getMatchingContentRule(item) {
+      if (!item || !this.state.rules) {
+        return null;
+      }
+      const content2 = $(item).find('div[data-testid="postText"]').text();
+      if (!content2) return null;
+      const categories = Object.keys(this.state.rules);
+      for (let i2 = 0; i2 < categories.length; i2++) {
+        const result = this.findMatchingContentPattern(content2, categories[i2]);
+        if (result) {
+          return { pattern: result, categoryIndex: i2 };
+        }
+      }
+      return null;
+    }
+    /**
+     * Find the first matching content pattern in a category (including via includes).
+     * @param {string} content - The content to check
+     * @param {string} categoryName - The category to check
+     * @param {Set} [visited] - Set of visited categories for circular dependency detection
+     * @returns {RegExp|null} The matching pattern, or null
+     * @private
+     */
+    findMatchingContentPattern(content2, categoryName, visited = /* @__PURE__ */ new Set()) {
+      if (visited.has(categoryName)) {
+        return null;
+      }
+      const rules = this.state.rules?.[categoryName];
+      if (!rules) return null;
+      visited.add(categoryName);
+      for (const rule of rules) {
+        if (rule.type === "content") {
+          try {
+            const pattern = new RegExp(rule.value, "gi");
+            if (pattern.test(content2)) {
+              return new RegExp(rule.value, "gi");
+            }
+          } catch (e2) {
+          }
+        }
+        if (rule.type === "include") {
+          const result = this.findMatchingContentPattern(content2, rule.value, visited);
+          if (result) return result;
+        }
+      }
+      return null;
     }
     /**
      * Get the index of the first filter category that matches post content.
@@ -69141,17 +69285,8 @@ ${rule}`;
       if (!content2) return -1;
       const categories = Object.keys(this.state.rules);
       for (let i2 = 0; i2 < categories.length; i2++) {
-        const rules = this.state.rules[categories[i2]];
-        for (const rule of rules) {
-          if (rule.type === "content") {
-            try {
-              const pattern = new RegExp(rule.value, "i");
-              if (pattern.test(content2)) {
-                return i2;
-              }
-            } catch (e2) {
-            }
-          }
+        if (this.contentMatchesCategory(content2, categories[i2])) {
+          return i2;
         }
       }
       return -1;
@@ -69473,7 +69608,7 @@ ${rule}`;
       const $el = $(element);
       const profileLink = $el.find(constants.PROFILE_SELECTOR).first();
       const avatar = $el.find('div[data-testid="userAvatarImage"]').first();
-      const timestampLink = $el.find('a[href^="/profile/"][data-tooltip*=" at "]').first();
+      const postText = $el.find('div[data-testid="postText"]').first();
       let handle2 = this.handleFromItem(element);
       if (!handle2) {
         const testId = $el.attr("data-testid") || "";
@@ -69483,15 +69618,14 @@ ${rule}`;
         }
       }
       const authorCategoryIndex = handle2 ? this.getFilterCategoryIndexForHandle(handle2) : -1;
-      const contentCategoryIndex = this.getFilterCategoryIndexForContent(element);
       if (!this.config.get("ruleColorCoding")) {
         if (profileLink.length) {
           profileLink.css({ "background-color": "", "border-radius": "", "padding": "" });
         }
         if (avatar.length) avatar.css("box-shadow", "");
-        if (timestampLink.length) {
-          timestampLink.css({ "background-color": "", "border-radius": "", "padding": "" });
-        }
+        postText.find(".rule-content-highlight").each(function() {
+          $(this).replaceWith($(this).text());
+        });
         return;
       }
       if (authorCategoryIndex >= 0) {
@@ -69513,18 +69647,57 @@ ${rule}`;
         }
         if (avatar.length) avatar.css("box-shadow", "");
       }
-      if (contentCategoryIndex >= 0) {
-        const color2 = this.getColorForCategoryIndex(contentCategoryIndex);
-        if (timestampLink.length) {
-          timestampLink[0].style.setProperty("background-color", `${color2}33`, "important");
-          timestampLink[0].style.setProperty("border-radius", "3px", "important");
-          timestampLink[0].style.setProperty("padding", "0 3px", "important");
-        }
-      } else {
-        if (timestampLink.length) {
-          timestampLink.css({ "background-color": "", "border-radius": "", "padding": "" });
-        }
+      postText.find(".rule-content-highlight").each(function() {
+        $(this).replaceWith($(this).text());
+      });
+      const matchResult = this.getMatchingContentRule(element);
+      if (matchResult) {
+        const { pattern, categoryIndex } = matchResult;
+        const color2 = this.getColorForCategoryIndex(categoryIndex);
+        this.highlightMatchingText(postText, pattern, color2);
       }
+    }
+    /**
+     * Highlight matching text within an element by wrapping matches in styled spans.
+     * @param {jQuery} $container - The container element
+     * @param {RegExp} pattern - The pattern to match
+     * @param {string} color - The highlight color
+     */
+    highlightMatchingText($container, pattern, color2) {
+      if (!$container.length) return;
+      const highlightStyle = `background-color: ${color2}33; border-radius: 3px; padding: 0 2px;`;
+      const processNode = (node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const text = node.textContent;
+          if (!text || !pattern.test(text)) return;
+          pattern.lastIndex = 0;
+          const fragment = document.createDocumentFragment();
+          let lastIndex = 0;
+          let match2;
+          while ((match2 = pattern.exec(text)) !== null) {
+            if (match2.index > lastIndex) {
+              fragment.appendChild(document.createTextNode(text.slice(lastIndex, match2.index)));
+            }
+            const span = document.createElement("span");
+            span.className = "rule-content-highlight";
+            span.style.cssText = highlightStyle;
+            span.textContent = match2[0];
+            fragment.appendChild(span);
+            lastIndex = pattern.lastIndex;
+          }
+          if (lastIndex < text.length) {
+            fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+          }
+          if (fragment.childNodes.length > 0) {
+            node.parentNode.replaceChild(fragment, node);
+          }
+        } else if (node.nodeType === Node.ELEMENT_NODE && !$(node).hasClass("rule-content-highlight")) {
+          Array.from(node.childNodes).forEach(processNode);
+        }
+      };
+      $container.each(function() {
+        Array.from(this.childNodes).forEach(processNode);
+      });
     }
     applyBlockStatus(element) {
       const handle2 = this.handleFromItem(element);
@@ -70879,13 +71052,21 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     /**
      * Evaluates a named rule set against an item.
+     * @param {HTMLElement} item - The item to evaluate
+     * @param {string} ruleName - The category name to evaluate
+     * @param {Set} [visited] - Set of already visited categories (for circular dependency detection)
      * @private
      */
-    evaluateNamedRule(item, ruleName) {
+    evaluateNamedRule(item, ruleName, visited = /* @__PURE__ */ new Set()) {
+      if (visited.has(ruleName)) {
+        console.warn(`[Rules] Circular dependency detected: ${ruleName} already visited in chain: ${[...visited].join(" -> ")}`);
+        return null;
+      }
       const rules = this.state.rules?.[ruleName];
       if (!rules) {
         return null;
       }
+      visited.add(ruleName);
       let allowed = null;
       for (const rule of rules) {
         if (rule.type === "all") {
@@ -70894,6 +71075,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           allowed = rule.action === "allow";
         } else if (rule.type === "content" && this.filterContent(item, rule.value)) {
           allowed = rule.action === "allow";
+        } else if (rule.type === "include") {
+          const includedResult = this.evaluateNamedRule(item, rule.value, visited);
+          if (includedResult !== null) {
+            allowed = rule.action === "allow" ? includedResult : !includedResult;
+          }
         }
       }
       return allowed;
@@ -72406,13 +72592,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           continue;
         }
         if (!rulesName) continue;
-        const ruleMatch = line.match(/(allow|deny) (all|from|content) "?([^"]+)"?/);
+        const ruleMatch = line.match(/(allow|deny) (all|from|content|include) "?([^"]+)"?/);
         if (ruleMatch) {
           const [_, action, type, value] = ruleMatch;
           rules[rulesName].push({ action, type, value });
           continue;
         }
-        if (line.startsWith("@")) {
+        if (line.startsWith("$")) {
+          rules[rulesName].push({ action: "allow", type: "include", value: line.substring(1) });
+        } else if (line.startsWith("@")) {
           rules[rulesName].push({ action: "allow", type: "from", value: line });
         } else {
           rules[rulesName].push({ action: "allow", type: "content", value: line });

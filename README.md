@@ -27,24 +27,33 @@ Features
     - **Feed Map**: visual overview of all posts in feed showing read/unread status,
       engagement heatmap, content type icons, and more (see below)
     - configurable override of main content width
+    - **compact layout** option to remove whitespace next to left navigation
     - optionally reverse sorting of feeds to browse them in chronological order
       (currently only works on "Following" feed)
     - optionally show only unread posts
     - optionally move position of like/reply/repost buttons
     - configurable formatting of post timestamps
     - optionally hide right sidebar
+    - repost timestamps showing when content was reposted
 - Additional functionality (`(*)` = requires AT protocol agent, see below):
     - automatic "unrolling" of threads (*)
-    - show replies in a "sidecar" next to each post (*)
+    - show replies in a "sidecar" next to each post (*) - inline or fixed panel mode
+    - **fixed sidecar panel**: persistent side panel with keyboard/hover navigation,
+      reply count badge, and toggle button to reopen when closed
     - navigate within unrolled threads using j/k keys
     - full-screen post view with sidecar (`v`) and reader mode (`V`)
     - capture post screenshots to clipboard (`c`)
     - dynamically filter posts by authors, keywords, etc. using configurable
       rules (with visual rule builder UI)
+    - **rule color coding**: highlight matching authors and content phrases with
+      customizable category colors
+    - **include rules**: rules can reference other rule categories for reuse
+    - **Add to Rules button**: quickly add authors to rules from profile hover cards
     - optionally disable embedded video previews
     - sync read/unread state between multiple browsers via cloud service(s)
     - optionally disable built-in behavior of loading more items when scrolling
       (can still load more using toolbar button or keyboard shortcut)
+    - configurable scroll-to-focus and hover-to-focus behavior
 - Mobile/Touch:
     - swipe gestures for navigation (configurable)
 - Accessibility:
@@ -164,12 +173,23 @@ allow content "Pearl Jam"
 [news]
 @cnn.com
 weather forecast
+
+[favorites]
+$music
+$news
+@friend.bsky.social
 ```
 
 With this configuration, you can type `$music` to show posts from `@thecure.com`
 or that contain the phrase `Pearl Jam`, or `$news` to match posts from
-`@cnn.com` or that contain the phrase "weather forecast". This matching is not
-case sensitive.
+`@cnn.com` or that contain the phrase "weather forecast". The `$favorites`
+category uses **include rules** (prefixed with `$`) to combine the music and
+news categories plus an additional author. This matching is not case sensitive.
+
+**Rule color coding**: When enabled, posts matching rules are visually
+highlighted - author names get a colored background when matching `from` rules,
+and matching phrases in post content are highlighted when matching `content`
+rules. Each category can have its own custom color.
 
 You can also quickly activate rules using `Alt+1` through `Alt+9` to apply rules
 by their order, `Alt+Shift+1-9` to negate them, or `Alt+0` to clear the filter.
@@ -196,8 +216,36 @@ be positioned at the top toolbar or bottom status bar (or hidden).
   with multiple calculation modes
 - **Content icons**: Visual indicators for post type (post, reply, repost,
   thread) and media (image, video, embed)
+- **Avatars**: Show user avatars in zoom segments (configurable scale)
+- **Handles**: Show user handles with domain highlighting
+- **Timestamps**: Show relative timestamps in zoom segments
 - **Zoom window**: Shows a magnified view of posts around your current selection
   with smooth scroll animation
+  - Enable/disable via checkbox, size adjustable via slider (3-20 posts)
+  - **Zoom gestures**: Ctrl+wheel or pinch to change zoom window size
+  - **Pan gestures**: Scroll wheel to pan through the feed
+  - Visual indicators when reaching start/end of feed
+- **Rule color coding**: Highlight handles matching author rules and timestamps
+  matching content rules with customizable category colors
+
+
+Fixed Sidecar Panel
+-------------------
+
+The sidecar (replies panel) can be displayed in two modes:
+
+- **Inline**: Replies appear next to each post as you navigate (traditional mode)
+- **Fixed**: A persistent panel on the right side of the screen
+
+**Fixed panel features:**
+- Stays visible as you navigate through posts
+- Keyboard navigation within the panel (arrow keys when focused)
+- Hover navigation support
+- Reply count badge shows number of replies
+- Toggle button to reopen when panel is closed
+- Context indicator on minimized panel
+
+Configure in Settings → Threads & Sidecar → Sidecar panel.
 
 
 AT Protocol Agent (beta)

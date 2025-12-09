@@ -125,21 +125,21 @@ const CONFIG_SCHEMA = {
   'Feed Map': {
     icon: '🗺️',
     fields: {
-      scrollIndicatorPosition: {
+      feedMapPosition: {
         label: 'Position',
         type: 'select',
         options: ['Top toolbar', 'Bottom status bar', 'Hidden'],
         default: 'Bottom status bar',
         help: 'Where to show the feed map',
       },
-      scrollIndicatorStyle: {
+      feedMapStyle: {
         label: 'Style',
         type: 'select',
         options: ['Basic', 'Advanced'],
         default: 'Basic',
         help: 'Basic: simple read/unread segments. Advanced: heatmap, icons, and zoom options',
       },
-      scrollIndicatorScale: {
+      feedMapScale: {
         label: 'Scale (%)',
         type: 'range',
         default: 100,
@@ -148,43 +148,43 @@ const CONFIG_SCHEMA = {
         step: 25,
         help: 'Scale the feed map size (50-400%)',
       },
-      scrollIndicatorTheme: {
+      feedMapTheme: {
         label: 'Color theme',
         type: 'select',
         options: ['Ocean', 'Campfire', 'Forest', 'Monochrome'],
         default: 'Ocean',
         help: 'Color scheme for the feed map',
       },
-      scrollIndicatorTooltip: {
+      feedMapTooltip: {
         label: 'Tooltip delay',
         type: 'select',
         options: ['Instant', 'Delayed'],
         default: 'Instant',
         help: 'Show post preview on hover instantly or after a short delay',
       },
-      scrollIndicatorHeatmap: {
+      feedMapHeatmap: {
         label: 'Heatmap mode',
         type: 'select',
         options: ['None', 'Engagement Rate', 'Raw Engagement', 'Weighted Engagement'],
         default: 'None',
         help: 'Color intensity based on post engagement metrics',
-        showWhen: { scrollIndicatorStyle: 'Advanced' },
+        showWhen: { feedMapStyle: 'Advanced' },
       },
-      scrollIndicatorIcons: {
+      feedMapIcons: {
         label: 'Content icons',
         type: 'checkbox',
         default: true,
         help: 'Show icons for media, replies, and reposts in feed map',
-        showWhen: { scrollIndicatorStyle: 'Advanced' },
+        showWhen: { feedMapStyle: 'Advanced' },
       },
-      scrollIndicatorAvatars: {
+      feedMapAvatars: {
         label: 'Show avatars',
         type: 'checkbox',
         default: true,
         help: 'Show author avatars in zoom indicator segments',
-        showWhen: { scrollIndicatorStyle: 'Advanced' },
+        showWhen: { feedMapStyle: 'Advanced' },
       },
-      scrollIndicatorAvatarScale: {
+      feedMapAvatarScale: {
         label: 'Avatar scale',
         type: 'range',
         default: 100,
@@ -192,37 +192,30 @@ const CONFIG_SCHEMA = {
         max: 200,
         step: 5,
         help: 'Avatar size as percentage (base 32px)',
-        showWhen: { scrollIndicatorAvatars: true },
+        showWhen: { feedMapAvatars: true },
       },
-      scrollIndicatorTimestamps: {
+      feedMapTimestamps: {
         label: 'Show timestamps',
         type: 'checkbox',
         default: true,
         help: 'Show relative timestamps in zoom indicator segments',
-        showWhen: { scrollIndicatorStyle: 'Advanced' },
+        showWhen: { feedMapStyle: 'Advanced' },
       },
-      scrollIndicatorHandles: {
+      feedMapHandles: {
         label: 'Show handles',
         type: 'checkbox',
         default: true,
         help: 'Show user handles in zoom indicator segments',
-        showWhen: { scrollIndicatorStyle: 'Advanced' },
+        showWhen: { feedMapStyle: 'Advanced' },
       },
-      scrollIndicatorHandleColors: {
-        label: 'Color-code rule matches',
-        type: 'checkbox',
-        default: false,
-        help: 'Color handles by author rules, timestamps by content rules',
-        showWhen: { scrollIndicatorStyle: 'Advanced' },
-      },
-      scrollIndicatorZoom: {
+      feedMapZoom: {
         label: 'Zoom window size',
         type: 'number',
         default: 0,
         help: 'Show zoomed view of N posts around selection (0 to disable)',
-        showWhen: { scrollIndicatorStyle: 'Advanced' },
+        showWhen: { feedMapStyle: 'Advanced' },
       },
-      scrollIndicatorAnimationSpeed: {
+      feedMapAnimationSpeed: {
         label: 'Animation interval',
         type: 'range',
         default: 100,
@@ -230,7 +223,7 @@ const CONFIG_SCHEMA = {
         max: 1000,
         step: 50,
         help: 'Zoom scroll animation duration (0=instant, 100=normal)',
-        showWhen: { scrollIndicatorStyle: 'Advanced' },
+        showWhen: { feedMapStyle: 'Advanced' },
       },
     },
   },
@@ -474,6 +467,12 @@ const CONFIG_SCHEMA = {
         placeholder: 'Enter filter rules...',
         help: 'Content filtering rules by category',
       },
+      ruleColorCoding: {
+        label: 'Color-code rule matches',
+        type: 'checkbox',
+        default: false,
+        help: 'Color handles/avatars in feed and feed map by author rules',
+      },
     },
   },
   Advanced: {
@@ -546,6 +545,7 @@ const CONFIG_SCHEMA = {
 // Hidden fields that need to be preserved but not shown in UI
 const HIDDEN_FIELDS = {
   savedSearches: { default: '[]' },
+  rulesetColors: { default: '{}' }, // Maps category name to color index
 };
 
 let instance = null;
@@ -1036,8 +1036,17 @@ export class ConfigModal {
     const rulesConfig = this.config.get('rulesConfig') ?? '';
     this.parsedRules = this.parseRules(rulesConfig);
 
+    const ruleColorCoding = this.config.get('ruleColorCoding') ?? false;
+
     return `
       <div class="rules-panel">
+        <div class="rules-options rules-options-top">
+          <label class="config-checkbox-label">
+            <input type="checkbox" name="ruleColorCoding" ${ruleColorCoding ? 'checked' : ''}>
+            <span>Color-code rule matches</span>
+            <span class="config-field-help">Color handles/avatars in feed and feed map by author rules</span>
+          </label>
+        </div>
         <div class="rules-subtabs">
           <button class="rules-subtab ${this.rulesSubTab === 'visual' ? 'active' : ''}"
                   data-subtab="visual">Visual</button>
@@ -1072,6 +1081,8 @@ export class ConfigModal {
 
     const categoriesHtml = this.parsedRules.map((category, catIndex) => {
       const isCollapsed = this.collapsedCategories[catIndex];
+      const colorIndex = this.getColorIndexForCategory(category.name, catIndex);
+      const color = constants.FILTER_LIST_COLORS[colorIndex];
       return `
         <div class="rules-category" data-category="${catIndex}">
           <div class="rules-category-header">
@@ -1079,6 +1090,16 @@ export class ConfigModal {
                     data-category="${catIndex}">
               <span class="rules-toggle-icon">${isCollapsed ? '▶' : '▼'}</span>
             </button>
+            <div class="rules-color-picker" data-category="${catIndex}">
+              <button type="button" class="rules-color-swatch" style="background-color: ${color}"
+                      title="Click to change color" data-category="${catIndex}"></button>
+              <div class="rules-color-dropdown">
+                ${constants.FILTER_LIST_COLORS.map((c, i) => `
+                  <button type="button" class="rules-color-option ${i === colorIndex ? 'selected' : ''}"
+                          style="background-color: ${c}" data-color-index="${i}" data-category="${catIndex}"></button>
+                `).join('')}
+              </div>
+            </div>
             <input type="text" class="rules-category-name" value="${this.escapeHtml(category.name)}"
                    data-category="${catIndex}">
             <button type="button" class="rules-category-delete" data-category="${catIndex}"
@@ -1151,6 +1172,43 @@ export class ConfigModal {
   }
 
   /**
+   * Get the color index for a category (custom or default)
+   * @param {string} categoryName - The category name
+   * @param {number} defaultIndex - The default index to use if no custom color
+   * @returns {number} The color index
+   */
+  getColorIndexForCategory(categoryName, defaultIndex) {
+    try {
+      const rulesetColors = JSON.parse(this.config.get('rulesetColors') || '{}');
+      if (categoryName in rulesetColors) {
+        return rulesetColors[categoryName] % constants.FILTER_LIST_COLORS.length;
+      }
+    } catch (e) {
+      // Invalid JSON, use default
+    }
+    return defaultIndex % constants.FILTER_LIST_COLORS.length;
+  }
+
+  /**
+   * Set the color index for a category
+   * @param {string} categoryName - The category name
+   * @param {number} colorIndex - The color index
+   */
+  setColorForCategory(categoryName, colorIndex) {
+    try {
+      const rulesetColors = JSON.parse(this.config.get('rulesetColors') || '{}');
+      rulesetColors[categoryName] = colorIndex;
+      this.config.set('rulesetColors', JSON.stringify(rulesetColors));
+      this.pendingChanges['rulesetColors'] = JSON.stringify(rulesetColors);
+    } catch (e) {
+      // Invalid JSON, create new
+      const rulesetColors = { [categoryName]: colorIndex };
+      this.config.set('rulesetColors', JSON.stringify(rulesetColors));
+      this.pendingChanges['rulesetColors'] = JSON.stringify(rulesetColors);
+    }
+  }
+
+  /**
    * Attach event listeners for the rules panel
    */
   attachRulesEventListeners(modal = null) {
@@ -1193,6 +1251,38 @@ export class ConfigModal {
         this.refreshVisualEditor();
       });
     });
+
+    // Color swatch click (toggle dropdown)
+    panel.querySelectorAll('.rules-color-swatch').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const picker = e.target.closest('.rules-color-picker');
+        const dropdown = picker.querySelector('.rules-color-dropdown');
+        // Close other dropdowns
+        panel.querySelectorAll('.rules-color-dropdown.open').forEach(d => {
+          if (d !== dropdown) d.classList.remove('open');
+        });
+        dropdown.classList.toggle('open');
+      });
+    });
+
+    // Color option click
+    panel.querySelectorAll('.rules-color-option').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        const colorIndex = parseInt(e.target.dataset.colorIndex);
+        const categoryName = this.parsedRules[catIndex].name;
+        this.setColorForCategory(categoryName, colorIndex);
+        this.refreshVisualEditor();
+      });
+    });
+
+    // Close color dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.rules-color-picker')) {
+        panel.querySelectorAll('.rules-color-dropdown.open').forEach(d => d.classList.remove('open'));
+      }
+    }, { once: true });
 
     // Category name change
     panel.querySelectorAll('.rules-category-name').forEach(input => {
@@ -1320,9 +1410,9 @@ export class ConfigModal {
       if (valueDisplay) valueDisplay.textContent = value;
     }
 
-    // Dynamic preview for scroll indicator settings
-    if (name.startsWith('scrollIndicator')) {
-      this.updateScrollIndicatorPreview(name, newValue);
+    // Dynamic preview for feed map settings
+    if (name.startsWith('feedMap')) {
+      this.updateFeedMapPreview(name, newValue);
     }
 
     // Show/hide reset button based on whether value differs from default
@@ -1401,15 +1491,15 @@ export class ConfigModal {
   }
 
   /**
-   * Update scroll indicator preview dynamically when settings change
+   * Update feed map preview dynamically when settings change
    */
-  updateScrollIndicatorPreview(name, value) {
-    const wrapper = document.querySelector('.scroll-indicator-wrapper');
-    const container = document.querySelector('.scroll-indicator-container');
+  updateFeedMapPreview(name, value) {
+    const wrapper = document.querySelector('.feed-map-wrapper');
+    const container = document.querySelector('.feed-map-container');
     const target = wrapper || container;
 
     switch (name) {
-      case 'scrollIndicatorScale': {
+      case 'feedMapScale': {
         const scaleValue = parseInt(value, 10) / 100;
         if (target) {
           // Set CSS variable - heights are calculated in CSS using calc()
@@ -1418,59 +1508,59 @@ export class ConfigModal {
         break;
       }
 
-      case 'scrollIndicatorStyle': {
+      case 'feedMapStyle': {
         // Toggle class on wrapper - CSS handles visibility of zoom elements
-        const wrapper = document.querySelector('.scroll-indicator-wrapper');
+        const wrapper = document.querySelector('.feed-map-wrapper');
         if (wrapper) {
-          wrapper.classList.remove('scroll-indicator-basic', 'scroll-indicator-advanced');
-          wrapper.classList.add(value === 'Advanced' ? 'scroll-indicator-advanced' : 'scroll-indicator-basic');
+          wrapper.classList.remove('feed-map-basic', 'feed-map-advanced');
+          wrapper.classList.add(value === 'Advanced' ? 'feed-map-advanced' : 'feed-map-basic');
         }
         // Dispatch event for handler to update indicator
-        document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
+        document.dispatchEvent(new CustomEvent('feedMapSettingChanged', {
           detail: { setting: name, value }
         }));
         break;
       }
 
-      case 'scrollIndicatorTheme': {
+      case 'feedMapTheme': {
         // Toggle theme class on wrapper
-        const wrapper = document.querySelector('.scroll-indicator-wrapper');
+        const wrapper = document.querySelector('.feed-map-wrapper');
         if (wrapper) {
           // Remove all theme classes
-          wrapper.classList.remove('scroll-indicator-theme-ocean', 'scroll-indicator-theme-campfire',
-            'scroll-indicator-theme-forest', 'scroll-indicator-theme-monochrome');
-          wrapper.classList.add(`scroll-indicator-theme-${value.toLowerCase()}`);
+          wrapper.classList.remove('feed-map-theme-ocean', 'feed-map-theme-campfire',
+            'feed-map-theme-forest', 'feed-map-theme-monochrome');
+          wrapper.classList.add(`feed-map-theme-${value.toLowerCase()}`);
         }
         // Dispatch event for handler to update indicator
-        document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
+        document.dispatchEvent(new CustomEvent('feedMapSettingChanged', {
           detail: { setting: name, value }
         }));
         break;
       }
 
-      case 'scrollIndicatorHeatmap':
-      case 'scrollIndicatorZoom':
+      case 'feedMapHeatmap':
+      case 'feedMapZoom':
         // Dispatch event for handler to update indicator
-        document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
+        document.dispatchEvent(new CustomEvent('feedMapSettingChanged', {
           detail: { setting: name, value }
         }));
         break;
 
-      case 'scrollIndicatorIcons':
-      case 'scrollIndicatorAvatars':
-      case 'scrollIndicatorAvatarScale':
-      case 'scrollIndicatorTimestamps':
-      case 'scrollIndicatorHandles':
-      case 'scrollIndicatorHandleColors':
+      case 'feedMapIcons':
+      case 'feedMapAvatars':
+      case 'feedMapAvatarScale':
+      case 'feedMapTimestamps':
+      case 'feedMapHandles':
+      case 'ruleColorCoding':
         // Dispatch event for handler to update indicator
-        document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
+        document.dispatchEvent(new CustomEvent('feedMapSettingChanged', {
           detail: { setting: name, value }
         }));
         break;
 
-      case 'scrollIndicatorPosition':
+      case 'feedMapPosition':
         // Move indicator to new position dynamically
-        document.dispatchEvent(new CustomEvent('scrollIndicatorSettingChanged', {
+        document.dispatchEvent(new CustomEvent('feedMapSettingChanged', {
           detail: { setting: name, value }
         }));
         break;

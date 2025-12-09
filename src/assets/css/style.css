@@ -299,7 +299,7 @@ div#itemTimestampStats {
         overflow: clip;
     }
 
-    div#statusBar.has-scroll-indicator {
+    div#statusBar.has-feed-map {
         overflow: visible;
     }
 }
@@ -322,7 +322,7 @@ div#itemTimestampStats {
         overflow: clip;
     }
 
-    div#statusBar.has-scroll-indicator {
+    div#statusBar.has-feed-map {
         overflow: visible;
     }
 }
@@ -1913,7 +1913,7 @@ div.item-banner {
    Scroll Position Indicator
    ========================================================================== */
 
-.scroll-position-indicator {
+.feed-map-position-indicator {
   width: calc(100% + 2px);
   height: 6px;
   background-color: #e5e7eb;
@@ -1929,31 +1929,31 @@ div.item-banner {
   -webkit-tap-highlight-color: transparent;
 }
 
-.scroll-position-indicator:focus,
-.scroll-position-indicator:focus-visible,
-.scroll-position-indicator:active,
-.scroll-position-indicator:focus-within {
+.feed-map-position-indicator:focus,
+.feed-map-position-indicator:focus-visible,
+.feed-map-position-indicator:active,
+.feed-map-position-indicator:focus-within {
   outline: none !important;
   box-shadow: none !important;
 }
 
-.scroll-segment:focus,
-.scroll-segment:focus-visible,
-.scroll-segment:active {
+.feed-map-segment:focus,
+.feed-map-segment:focus-visible,
+.feed-map-segment:active {
   outline: none !important;
   box-shadow: none !important;
 }
 
 /* Prevent text selection highlight on feed map */
-.scroll-indicator-wrapper,
-.scroll-indicator-wrapper * {
+.feed-map-wrapper,
+.feed-map-wrapper * {
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
 /* Empty state when no results match filter */
-.scroll-indicator-empty {
+.feed-map-empty {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1972,24 +1972,24 @@ div.item-banner {
 }
 
 /* Allow indicator to expand for empty state */
-.scroll-position-indicator:has(.scroll-indicator-empty) {
+.feed-map-position-indicator:has(.feed-map-empty) {
   height: auto !important;
   min-height: 20px;
   overflow: visible;
 }
 
 /* Basic style - simple thin indicator */
-.scroll-indicator-basic .scroll-position-indicator {
+.feed-map-basic .feed-map-position-indicator {
   height: calc(8px * var(--indicator-scale, 1));
 }
 
 /* Advanced style - main indicator is compact overview */
-.scroll-indicator-advanced .scroll-position-indicator {
+.feed-map-advanced .feed-map-position-indicator {
   height: calc(12px * var(--indicator-scale, 1));
 }
 
 /* Advanced style - zoom indicator auto-scales to fit content */
-.scroll-position-indicator-zoom {
+.feed-map-position-indicator-zoom {
   height: auto;
   min-height: calc(12px * var(--indicator-scale, 1));
   padding: 2px 0;
@@ -1999,13 +1999,13 @@ div.item-banner {
 }
 
 /* Toolbar position: place at bottom of toolbar */
-.scroll-position-indicator-toolbar {
+.feed-map-position-indicator-toolbar {
   order: 999;
   margin: 0 -1px -1px -1px;
 }
 
 /* Individual post segment */
-.scroll-segment {
+.feed-map-segment {
   height: 100%;
   flex: 1;
   background-color: transparent;
@@ -2016,37 +2016,37 @@ div.item-banner {
 
 /* Basic mode needs visible segment colors for read/unread to work.
    Default uses gray background with brightness filter. Themes override unread color. */
-.scroll-indicator-basic .scroll-segment {
+.feed-map-basic .feed-map-segment {
   background-color: #9ca3af; /* Default unread: medium gray */
 }
 
-.scroll-indicator-basic .scroll-segment-read {
+.feed-map-basic .feed-map-segment-read {
   filter: brightness(0.6);
 }
 
 /* Basic mode theme colors - unread segments use theme's light color */
-.scroll-indicator-basic.scroll-indicator-theme-ocean .scroll-segment { background-color: #7dd3fc; } /* sky-300 */
-.scroll-indicator-basic.scroll-indicator-theme-campfire .scroll-segment { background-color: #fcd34d; } /* amber-300 */
-.scroll-indicator-basic.scroll-indicator-theme-forest .scroll-segment { background-color: #86efac; } /* green-300 */
-.scroll-indicator-basic.scroll-indicator-theme-monochrome .scroll-segment { background-color: #d1d5db; } /* gray-300 */
+.feed-map-basic.feed-map-theme-ocean .feed-map-segment { background-color: #7dd3fc; } /* sky-300 */
+.feed-map-basic.feed-map-theme-campfire .feed-map-segment { background-color: #fcd34d; } /* amber-300 */
+.feed-map-basic.feed-map-theme-forest .feed-map-segment { background-color: #86efac; } /* green-300 */
+.feed-map-basic.feed-map-theme-monochrome .feed-map-segment { background-color: #d1d5db; } /* gray-300 */
 
-.scroll-segment:last-child {
+.feed-map-segment:last-child {
   border-right: none;
 }
 
 /* Segment states */
-.scroll-segment-read {
+.feed-map-segment-read {
   filter: brightness(0.6);
 }
 
-.scroll-segment-current {
+.feed-map-segment-current {
   outline: 2px solid #3b82f6;
   outline-offset: -1px;
   z-index: var(--z-base);
 }
 
 /* Filtered posts - grayed out in feed map */
-.scroll-segment-filtered {
+.feed-map-segment-filtered {
   opacity: 0.25;
   filter: grayscale(1);
 }
@@ -2056,83 +2056,83 @@ div.item-banner {
    ======================================== */
 
 /* Ratioed posts - distinctive styling for posts with more replies than likes */
-.scroll-segment-ratioed {
+.feed-map-segment-ratioed {
   background-color: #ef4444 !important; /* Default red */
 }
 
 /* === CAMPFIRE THEME (amber/orange) === */
 /* Unread: light amber, Read: dimmed (via filter), Current: orange outline */
-.scroll-indicator-theme-campfire .scroll-position-indicator { background-color: #fffbeb; }
-.scroll-indicator-theme-campfire .scroll-segment-current { outline-color: #f59e0b !important; }
-.scroll-indicator-theme-campfire .scroll-segment-ratioed { background-color: #ef4444 !important; }
+.feed-map-theme-campfire .feed-map-position-indicator { background-color: #fffbeb; }
+.feed-map-theme-campfire .feed-map-segment-current { outline-color: #f59e0b !important; }
+.feed-map-theme-campfire .feed-map-segment-ratioed { background-color: #ef4444 !important; }
 
 /* Heatmap intensity levels (engagement-based) - Default theme */
-.scroll-segment-heat-1 { background-color: #fef3c7; } /* lightest - low engagement */
-.scroll-segment-heat-2 { background-color: #fde68a; }
-.scroll-segment-heat-3 { background-color: #fcd34d; }
-.scroll-segment-heat-4 { background-color: #fbbf24; }
-.scroll-segment-heat-5 { background-color: #f59e0b; }
-.scroll-segment-heat-6 { background-color: #d97706; }
-.scroll-segment-heat-7 { background-color: #b45309; }
-.scroll-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
+.feed-map-segment-heat-1 { background-color: #fef3c7; } /* lightest - low engagement */
+.feed-map-segment-heat-2 { background-color: #fde68a; }
+.feed-map-segment-heat-3 { background-color: #fcd34d; }
+.feed-map-segment-heat-4 { background-color: #fbbf24; }
+.feed-map-segment-heat-5 { background-color: #f59e0b; }
+.feed-map-segment-heat-6 { background-color: #d97706; }
+.feed-map-segment-heat-7 { background-color: #b45309; }
+.feed-map-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
 
 /* === OCEAN THEME (blue/teal) === */
 /* Unread: light sky, Read: dimmed (via filter), Current: yellow outline (contrasts with blue) */
-.scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #e0f2fe; }
-.scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #eab308 !important; }
-.scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #f97316 !important; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #e0f2fe; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-2 { background-color: #bae6fd; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-3 { background-color: #7dd3fc; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-4 { background-color: #38bdf8; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-5 { background-color: #0ea5e9; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-6 { background-color: #0284c7; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-7 { background-color: #0369a1; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-8 { background-color: #075985; }
+.feed-map-theme-ocean .feed-map-position-indicator { background-color: #e0f2fe; }
+.feed-map-theme-ocean .feed-map-segment-current { outline-color: #eab308 !important; }
+.feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #f97316 !important; }
+.feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #e0f2fe; }
+.feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #bae6fd; }
+.feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #7dd3fc; }
+.feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #38bdf8; }
+.feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #0ea5e9; }
+.feed-map-theme-ocean .feed-map-segment-heat-6 { background-color: #0284c7; }
+.feed-map-theme-ocean .feed-map-segment-heat-7 { background-color: #0369a1; }
+.feed-map-theme-ocean .feed-map-segment-heat-8 { background-color: #075985; }
 
 /* === FOREST THEME (green) === */
 /* Unread: light green, Read: dimmed (via filter), Current: lime outline */
-.scroll-indicator-theme-forest .scroll-position-indicator { background-color: #dcfce7; }
-.scroll-indicator-theme-forest .scroll-segment-current { outline-color: #84cc16 !important; }
-.scroll-indicator-theme-forest .scroll-segment-ratioed { background-color: #ea580c !important; }
-.scroll-indicator-theme-forest .scroll-segment-heat-1 { background-color: #dcfce7; }
-.scroll-indicator-theme-forest .scroll-segment-heat-2 { background-color: #bbf7d0; }
-.scroll-indicator-theme-forest .scroll-segment-heat-3 { background-color: #86efac; }
-.scroll-indicator-theme-forest .scroll-segment-heat-4 { background-color: #4ade80; }
-.scroll-indicator-theme-forest .scroll-segment-heat-5 { background-color: #22c55e; }
-.scroll-indicator-theme-forest .scroll-segment-heat-6 { background-color: #16a34a; }
-.scroll-indicator-theme-forest .scroll-segment-heat-7 { background-color: #15803d; }
-.scroll-indicator-theme-forest .scroll-segment-heat-8 { background-color: #166534; }
+.feed-map-theme-forest .feed-map-position-indicator { background-color: #dcfce7; }
+.feed-map-theme-forest .feed-map-segment-current { outline-color: #84cc16 !important; }
+.feed-map-theme-forest .feed-map-segment-ratioed { background-color: #ea580c !important; }
+.feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #dcfce7; }
+.feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #bbf7d0; }
+.feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #86efac; }
+.feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #4ade80; }
+.feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #22c55e; }
+.feed-map-theme-forest .feed-map-segment-heat-6 { background-color: #16a34a; }
+.feed-map-theme-forest .feed-map-segment-heat-7 { background-color: #15803d; }
+.feed-map-theme-forest .feed-map-segment-heat-8 { background-color: #166534; }
 
 /* === MONOCHROME THEME (grayscale) === */
 /* Unread: light gray, Read: dimmed (via filter), Current: dark outline */
-.scroll-indicator-theme-monochrome .scroll-position-indicator { background-color: #e5e7eb; }
-.scroll-indicator-theme-monochrome .scroll-segment-current { outline-color: #1f2937 !important; }
-.scroll-indicator-theme-monochrome .scroll-segment-ratioed { background-color: #dc2626 !important; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-1 { background-color: #f3f4f6; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-2 { background-color: #e5e7eb; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-3 { background-color: #d1d5db; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-4 { background-color: #9ca3af; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-5 { background-color: #6b7280; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-6 { background-color: #4b5563; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-7 { background-color: #374151; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-8 { background-color: #1f2937; }
+.feed-map-theme-monochrome .feed-map-position-indicator { background-color: #e5e7eb; }
+.feed-map-theme-monochrome .feed-map-segment-current { outline-color: #1f2937 !important; }
+.feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #dc2626 !important; }
+.feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #f3f4f6; }
+.feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #e5e7eb; }
+.feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #d1d5db; }
+.feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #9ca3af; }
+.feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #6b7280; }
+.feed-map-theme-monochrome .feed-map-segment-heat-6 { background-color: #4b5563; }
+.feed-map-theme-monochrome .feed-map-segment-heat-7 { background-color: #374151; }
+.feed-map-theme-monochrome .feed-map-segment-heat-8 { background-color: #1f2937; }
 
 /* Content type icons in segments */
-.scroll-segment-icon {
+.feed-map-segment-icon {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  display: var(--scroll-icon-display, flex);
+  display: var(--feed-map-icon-display, flex);
   align-items: center;
   justify-content: center;
   height: 100%;
   width: 100%;
 }
 
-.scroll-icon-stack {
+.feed-map-icon-stack {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2141,7 +2141,7 @@ div.item-banner {
   height: 100%;
 }
 
-.scroll-icon-stack img {
+.feed-map-icon-stack img {
   height: 45%;
   width: auto;
   max-width: 90%;
@@ -2151,51 +2151,51 @@ div.item-banner {
 }
 
 /* Content type icon colors with outline for visibility */
-.scroll-icon-stack img[alt="text"] {
+.feed-map-icon-stack img[alt="text"] {
   /* Blue with white outline */
   filter: brightness(0) saturate(100%) invert(40%) sepia(98%) saturate(1000%) hue-rotate(200deg) brightness(95%)
     drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
 }
 
-.scroll-icon-stack img[alt="image"] {
+.feed-map-icon-stack img[alt="image"] {
   /* Green with white outline */
   filter: brightness(0) saturate(100%) invert(55%) sepia(75%) saturate(500%) hue-rotate(80deg) brightness(95%)
     drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
 }
 
-.scroll-icon-stack img[alt="video"] {
+.feed-map-icon-stack img[alt="video"] {
   /* Red with white outline */
   filter: brightness(0) saturate(100%) invert(30%) sepia(100%) saturate(2000%) hue-rotate(350deg) brightness(95%)
     drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
 }
 
-.scroll-icon-stack img[alt="embed"] {
+.feed-map-icon-stack img[alt="embed"] {
   /* Purple with white outline */
   filter: brightness(0) saturate(100%) invert(35%) sepia(80%) saturate(800%) hue-rotate(250deg) brightness(90%)
     drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
 }
 
 /* Post type icons - grayscale with white outline */
-.scroll-icon-stack img[alt="post"],
-.scroll-icon-stack img[alt="reply"],
-.scroll-icon-stack img[alt="repost"],
-.scroll-icon-stack img[alt="thread"] {
+.feed-map-icon-stack img[alt="post"],
+.feed-map-icon-stack img[alt="reply"],
+.feed-map-icon-stack img[alt="repost"],
+.feed-map-icon-stack img[alt="thread"] {
   filter: brightness(0) invert(0.3) drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
   opacity: 0.9;
 }
 
 /* Thread icon is taller SVG - constrain to match others */
-.scroll-icon-stack img[alt="thread"] {
+.feed-map-icon-stack img[alt="thread"] {
   height: 40%;
 }
 
-.scroll-segment {
+.feed-map-segment {
   position: relative;
   overflow: hidden;
 }
 
 /* Zoom indicator segments - larger for better visibility */
-.scroll-segment-zoom {
+.feed-map-segment-zoom {
   flex: 1 1 0;
   min-width: calc(20px * var(--indicator-scale, 1));
   height: auto !important;
@@ -2209,18 +2209,18 @@ div.item-banner {
   overflow: hidden;
 }
 
-.scroll-segment-zoom .scroll-icon-stack {
+.feed-map-segment-zoom .feed-map-icon-stack {
   flex-direction: row;
   gap: 2px;
 }
 
-.scroll-segment-zoom .scroll-icon-stack img {
+.feed-map-segment-zoom .feed-map-icon-stack img {
   height: 60%;
   width: auto;
 }
 
 /* Avatar in zoom segments */
-.scroll-segment-avatar {
+.feed-map-segment-avatar {
   aspect-ratio: 1;
   border-radius: 50%;
   object-fit: cover;
@@ -2231,7 +2231,7 @@ div.item-banner {
 
 
 /* Icons in zoom segments - always at top */
-.scroll-segment-zoom .scroll-segment-icon {
+.feed-map-segment-zoom .feed-map-segment-icon {
   position: static;
   transform: none;
   height: calc(16px * var(--indicator-scale, 1));
@@ -2240,20 +2240,20 @@ div.item-banner {
   flex-shrink: 0;
 }
 
-.scroll-segment-zoom .scroll-icon-stack {
+.feed-map-segment-zoom .feed-map-icon-stack {
   flex-direction: row;
   height: calc(16px * var(--indicator-scale, 1));
   gap: 0;
   flex-shrink: 0;
 }
 
-.scroll-segment-zoom .scroll-icon-stack img {
+.feed-map-segment-zoom .feed-map-icon-stack img {
   height: calc(16px * var(--indicator-scale, 1));
   width: auto;
 }
 
 /* Relative time in zoom segments */
-.scroll-segment-time {
+.feed-map-segment-time {
   font-size: calc(8px * var(--indicator-scale, 1));
   line-height: 1;
   color: rgba(0, 0, 0, 0.5);
@@ -2263,7 +2263,7 @@ div.item-banner {
 }
 
 /* Handle in zoom segments */
-.scroll-segment-handle {
+.feed-map-segment-handle {
   font-family: ui-monospace, monospace;
   font-size: calc(8px * var(--indicator-scale, 1));
   line-height: 1.1;
@@ -2279,19 +2279,19 @@ div.item-banner {
 
 
 /* Empty segments (no corresponding item) */
-.scroll-segment-empty {
+.feed-map-segment-empty {
   background-color: transparent !important;
   opacity: 0.3;
 }
 
 /* Virtualized segments (item scrolled out of DOM) - style same as empty */
-.scroll-segment-virtualized {
+.feed-map-segment-virtualized {
   background-color: transparent !important;
   opacity: 0.3;
 }
 
 /* Wrapper for indicators with zoom */
-.scroll-indicator-wrapper {
+.feed-map-wrapper {
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -2302,7 +2302,7 @@ div.item-banner {
 }
 
 /* Zoom indicator connector */
-.scroll-indicator-connector {
+.feed-map-connector {
   display: block;
   width: 100%;
   height: calc(20px * var(--indicator-scale, 1));
@@ -2311,7 +2311,7 @@ div.item-banner {
   margin-top: calc(-2px * var(--indicator-scale, 1));
 }
 
-.scroll-indicator-connector-svg {
+.feed-map-connector-svg {
   position: absolute;
   top: 0;
   left: 0;
@@ -2319,25 +2319,25 @@ div.item-banner {
   height: 100%;
 }
 
-.scroll-indicator-connector-path {
+.feed-map-connector-path {
   stroke: rgba(80, 80, 80, 0.8);
   stroke-width: 3;
   fill: none;
 }
 
 @media (prefers-color-scheme: dark) {
-  .scroll-indicator-connector-path {
+  .feed-map-connector-path {
     stroke: rgba(200, 200, 200, 0.8);
   }
 }
 
-/* Zoom indicator container - inherits from .scroll-indicator-container */
-.scroll-indicator-zoom-container {
+/* Zoom indicator container - inherits from .feed-map-container */
+.feed-map-zoom-container {
   margin-top: 0;
   overflow-y: visible;
 }
 
-.scroll-position-indicator-zoom {
+.feed-map-position-indicator-zoom {
   border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 3px;
   overflow-x: hidden;
@@ -2347,7 +2347,7 @@ div.item-banner {
 }
 
 /* Inner wrapper for smooth scroll animation */
-.scroll-zoom-inner {
+.feed-map-zoom-inner {
   display: flex;
   width: 100%;
   height: auto;
@@ -2356,18 +2356,18 @@ div.item-banner {
   align-items: stretch;
 }
 
-.scroll-zoom-inner.scroll-zoom-animating {
+.feed-map-zoom-inner.feed-map-zoom-animating {
   transition: transform calc(var(--animation-duration, 300ms) * var(--zoom-animation-speed, 1)) ease-out;
 }
 
 /* When zoom is enabled, allow brackets to overflow */
-.scroll-indicator-wrapper .scroll-position-indicator:first-child,
-.scroll-indicator-wrapper .scroll-indicator-container:first-child .scroll-position-indicator {
+.feed-map-wrapper .feed-map-position-indicator:first-child,
+.feed-map-wrapper .feed-map-container:first-child .feed-map-position-indicator {
   overflow: visible;
 }
 
 /* Zoom highlight on main indicator showing zoomed region - bracket style */
-.scroll-position-zoom-highlight {
+.feed-map-position-zoom-highlight {
   position: absolute;
   top: -4px;
   height: calc(100% + 8px);
@@ -2378,7 +2378,7 @@ div.item-banner {
 }
 
 /* Left bracket [ */
-.scroll-position-zoom-highlight::before {
+.feed-map-position-zoom-highlight::before {
   content: '';
   position: absolute;
   left: 0;
@@ -2392,7 +2392,7 @@ div.item-banner {
 }
 
 /* Right bracket ] */
-.scroll-position-zoom-highlight::after {
+.feed-map-position-zoom-highlight::after {
   content: '';
   position: absolute;
   right: 0;
@@ -2406,8 +2406,8 @@ div.item-banner {
 }
 
 /* Zoom row end indicators - show when scrolled to start/end */
-.scroll-position-indicator-zoom::before,
-.scroll-position-indicator-zoom::after {
+.feed-map-position-indicator-zoom::before,
+.feed-map-position-indicator-zoom::after {
   content: '';
   position: absolute;
   top: 0;
@@ -2420,65 +2420,65 @@ div.item-banner {
   border-radius: 2px;
 }
 
-.scroll-position-indicator-zoom::before {
+.feed-map-position-indicator-zoom::before {
   left: 0;
 }
 
-.scroll-position-indicator-zoom::after {
+.feed-map-position-indicator-zoom::after {
   right: 0;
 }
 
-.scroll-position-indicator-zoom.scroll-zoom-at-start::before {
+.feed-map-position-indicator-zoom.feed-map-zoom-at-start::before {
   opacity: 0.8;
 }
 
-.scroll-position-indicator-zoom.scroll-zoom-at-end::after {
+.feed-map-position-indicator-zoom.feed-map-zoom-at-end::after {
   opacity: 0.8;
 }
 
 @media (prefers-color-scheme: dark) {
   /* Dark mode: use dark outline instead of white, keep colors but brighten */
-  .scroll-icon-stack img[alt="text"] {
+  .feed-map-icon-stack img[alt="text"] {
     filter: brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(800%) hue-rotate(200deg) brightness(110%)
       drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
   }
 
-  .scroll-icon-stack img[alt="image"] {
+  .feed-map-icon-stack img[alt="image"] {
     filter: brightness(0) saturate(100%) invert(70%) sepia(60%) saturate(500%) hue-rotate(80deg) brightness(110%)
       drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
   }
 
-  .scroll-icon-stack img[alt="video"] {
+  .feed-map-icon-stack img[alt="video"] {
     filter: brightness(0) saturate(100%) invert(50%) sepia(100%) saturate(1500%) hue-rotate(350deg) brightness(110%)
       drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
   }
 
-  .scroll-icon-stack img[alt="embed"] {
+  .feed-map-icon-stack img[alt="embed"] {
     filter: brightness(0) saturate(100%) invert(55%) sepia(80%) saturate(600%) hue-rotate(250deg) brightness(110%)
       drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
   }
 
 
   /* Post type icons */
-  .scroll-icon-stack img[alt="post"],
-  .scroll-icon-stack img[alt="reply"],
-  .scroll-icon-stack img[alt="repost"],
-  .scroll-icon-stack img[alt="thread"] {
+  .feed-map-icon-stack img[alt="post"],
+  .feed-map-icon-stack img[alt="reply"],
+  .feed-map-icon-stack img[alt="repost"],
+  .feed-map-icon-stack img[alt="thread"] {
     filter: invert(1) drop-shadow(0 0 1px rgba(0,0,0,0.8));
     opacity: 0.8;
   }
 
-  .scroll-position-indicator-zoom {
+  .feed-map-position-indicator-zoom {
     border-color: rgba(255, 255, 255, 0.2);
   }
 
-  .scroll-position-zoom-highlight::before {
+  .feed-map-position-zoom-highlight::before {
     border-left-color: rgba(255, 255, 255, 0.8);
     border-top-color: rgba(255, 255, 255, 0.8);
     border-bottom-color: rgba(255, 255, 255, 0.8);
   }
 
-  .scroll-position-zoom-highlight::after {
+  .feed-map-position-zoom-highlight::after {
     border-right-color: rgba(255, 255, 255, 0.8);
     border-top-color: rgba(255, 255, 255, 0.8);
     border-bottom-color: rgba(255, 255, 255, 0.8);
@@ -2486,7 +2486,7 @@ div.item-banner {
 }
 
 /* Viewport indicator overlay */
-.scroll-viewport-indicator {
+.feed-map-viewport-indicator {
   position: absolute;
   top: -1px;
   height: calc(100% + 2px);
@@ -2500,12 +2500,12 @@ div.item-banner {
 }
 
 /* Legacy fill element (hidden when using segments) */
-.scroll-position-fill {
+.feed-map-position-fill {
   display: none;
 }
 
 /* Date/time labels for scroll indicator */
-.scroll-indicator-container {
+.feed-map-container {
   display: flex;
   align-items: center;
   width: calc(100% + 2px);
@@ -2514,18 +2514,18 @@ div.item-banner {
   order: -1;
 }
 
-.scroll-indicator-container-toolbar {
+.feed-map-container-toolbar {
   margin: 0 -1px -1px -1px;
 }
 
 /* Toolbar position: place at bottom of toolbar */
-.scroll-indicator-wrapper {
+.feed-map-wrapper {
   order: 999;
 }
 
 /* Status bar position: place at top, full width row */
-.scroll-indicator-wrapper.scroll-indicator-wrapper-statusbar,
-.scroll-indicator-container.scroll-indicator-container-statusbar {
+.feed-map-wrapper.feed-map-wrapper-statusbar,
+.feed-map-container.feed-map-container-statusbar {
   width: 100% !important;
   flex: 0 0 100% !important;
   background: transparent;
@@ -2534,26 +2534,26 @@ div.item-banner {
 }
 
 /* Reset the indicator width inside status bar */
-.scroll-indicator-container-statusbar .scroll-position-indicator {
+.feed-map-container-statusbar .feed-map-position-indicator {
   width: 100% !important;
   margin: 0 !important;
 }
 
 /* Allow status bar to expand when scroll indicator is present */
-div#statusBar.has-scroll-indicator {
+div#statusBar.has-feed-map {
   overflow: visible;
 }
 
 /* Reset order for containers inside the wrapper to maintain DOM order */
-.scroll-indicator-wrapper > .scroll-indicator-container {
+.feed-map-wrapper > .feed-map-container {
   order: 0;
 }
 
-.scroll-indicator-wrapper > .scroll-indicator-connector {
+.feed-map-wrapper > .feed-map-connector {
   order: 0;
 }
 
-.scroll-indicator-label {
+.feed-map-label {
   font-size: 10px;
   color: #6b7280;
   white-space: nowrap;
@@ -2564,31 +2564,31 @@ div#statusBar.has-scroll-indicator {
 }
 
 /* Basic style - hide date labels, zoom highlight, zoom indicator, and connector */
-.scroll-indicator-basic .scroll-indicator-label {
+.feed-map-basic .feed-map-label {
   display: none;
 }
 
-.scroll-indicator-basic .scroll-position-zoom-highlight {
+.feed-map-basic .feed-map-position-zoom-highlight {
   display: none;
 }
 
-.scroll-indicator-basic .scroll-indicator-zoom-container {
+.feed-map-basic .feed-map-zoom-container {
   display: none;
 }
 
-.scroll-indicator-basic .scroll-indicator-connector {
+.feed-map-basic .feed-map-connector {
   display: none;
 }
 
-.scroll-indicator-label-start {
+.feed-map-label-start {
   text-align: left;
 }
 
-.scroll-indicator-label-end {
+.feed-map-label-end {
   text-align: right;
 }
 
-.scroll-indicator-container .scroll-position-indicator {
+.feed-map-container .feed-map-position-indicator {
   flex: 1;
   width: auto;
   margin: 0;
@@ -2597,11 +2597,11 @@ div#statusBar.has-scroll-indicator {
 }
 
 @media (prefers-color-scheme: dark) {
-  .scroll-position-indicator {
+  .feed-map-position-indicator {
     background-color: #374151;
   }
 
-  .scroll-indicator-empty {
+  .feed-map-empty {
     color: #6b7280;
     background: repeating-linear-gradient(
       -45deg,
@@ -2612,113 +2612,113 @@ div#statusBar.has-scroll-indicator {
     );
   }
 
-  .scroll-segment {
+  .feed-map-segment {
     border-right-color: #374151;
   }
 
-  .scroll-segment-read {
+  .feed-map-segment-read {
     filter: brightness(0.5);
   }
 
-  .scroll-segment-time {
+  .feed-map-segment-time {
     color: rgba(255, 255, 255, 0.5);
     text-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.8);
   }
 
-  .scroll-segment-handle {
+  .feed-map-segment-handle {
     color: rgba(255, 255, 255, 0.6);
     text-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.8);
   }
 
   /* Basic mode dark: theme colors with brightness filter for read */
-  .scroll-indicator-basic .scroll-segment { background-color: #4b5563; }
-  .scroll-indicator-basic.scroll-indicator-theme-ocean .scroll-segment { background-color: #0e7490; } /* cyan-700 */
-  .scroll-indicator-basic.scroll-indicator-theme-campfire .scroll-segment { background-color: #b45309; } /* amber-700 */
-  .scroll-indicator-basic.scroll-indicator-theme-forest .scroll-segment { background-color: #15803d; } /* green-700 */
-  .scroll-indicator-basic.scroll-indicator-theme-monochrome .scroll-segment { background-color: #6b7280; } /* gray-500 */
+  .feed-map-basic .feed-map-segment { background-color: #4b5563; }
+  .feed-map-basic.feed-map-theme-ocean .feed-map-segment { background-color: #0e7490; } /* cyan-700 */
+  .feed-map-basic.feed-map-theme-campfire .feed-map-segment { background-color: #b45309; } /* amber-700 */
+  .feed-map-basic.feed-map-theme-forest .feed-map-segment { background-color: #15803d; } /* green-700 */
+  .feed-map-basic.feed-map-theme-monochrome .feed-map-segment { background-color: #6b7280; } /* gray-500 */
 
-  .scroll-segment-current {
+  .feed-map-segment-current {
     outline-color: #60a5fa;
   }
 
-  .scroll-viewport-indicator {
+  .feed-map-viewport-indicator {
     background-color: rgba(0, 0, 0, 0.2);
     border-color: rgba(255, 255, 255, 0.7);
   }
 
-  .scroll-indicator-label {
+  .feed-map-label {
     color: #9ca3af;
   }
 
   /* Dark mode ratioed - brighter for visibility */
-  .scroll-segment-ratioed {
+  .feed-map-segment-ratioed {
     background-color: #f87171 !important; /* red-400 */
   }
 
   /* === DARK MODE: CAMPFIRE THEME === */
-  .scroll-indicator-theme-campfire .scroll-position-indicator { background-color: #451a03; }
-  .scroll-indicator-theme-campfire .scroll-segment-current { outline-color: #fbbf24 !important; }
-  .scroll-indicator-theme-campfire .scroll-segment-ratioed { background-color: #f87171 !important; }
-  .scroll-segment-heat-1 { background-color: #1e3a5f; }
-  .scroll-segment-heat-2 { background-color: #1e4976; }
-  .scroll-segment-heat-3 { background-color: #1d5a8d; }
-  .scroll-segment-heat-4 { background-color: #1c6ba4; }
-  .scroll-segment-heat-5 { background-color: #1b7cbb; }
-  .scroll-segment-heat-6 { background-color: #1a8dd2; }
-  .scroll-segment-heat-7 { background-color: #199ee9; }
-  .scroll-segment-heat-8 { background-color: #18afff; }
+  .feed-map-theme-campfire .feed-map-position-indicator { background-color: #451a03; }
+  .feed-map-theme-campfire .feed-map-segment-current { outline-color: #fbbf24 !important; }
+  .feed-map-theme-campfire .feed-map-segment-ratioed { background-color: #f87171 !important; }
+  .feed-map-segment-heat-1 { background-color: #1e3a5f; }
+  .feed-map-segment-heat-2 { background-color: #1e4976; }
+  .feed-map-segment-heat-3 { background-color: #1d5a8d; }
+  .feed-map-segment-heat-4 { background-color: #1c6ba4; }
+  .feed-map-segment-heat-5 { background-color: #1b7cbb; }
+  .feed-map-segment-heat-6 { background-color: #1a8dd2; }
+  .feed-map-segment-heat-7 { background-color: #199ee9; }
+  .feed-map-segment-heat-8 { background-color: #18afff; }
 
   /* === DARK MODE: OCEAN THEME === */
-  .scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #164e63; }
-  .scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #facc15 !important; }
-  .scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #fb923c !important; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #164e63; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-2 { background-color: #155e75; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-3 { background-color: #0e7490; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-4 { background-color: #0891b2; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-5 { background-color: #06b6d4; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-6 { background-color: #22d3ee; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-7 { background-color: #67e8f9; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-8 { background-color: #a5f3fc; }
+  .feed-map-theme-ocean .feed-map-position-indicator { background-color: #164e63; }
+  .feed-map-theme-ocean .feed-map-segment-current { outline-color: #facc15 !important; }
+  .feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #fb923c !important; }
+  .feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #164e63; }
+  .feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #155e75; }
+  .feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #0e7490; }
+  .feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #0891b2; }
+  .feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #06b6d4; }
+  .feed-map-theme-ocean .feed-map-segment-heat-6 { background-color: #22d3ee; }
+  .feed-map-theme-ocean .feed-map-segment-heat-7 { background-color: #67e8f9; }
+  .feed-map-theme-ocean .feed-map-segment-heat-8 { background-color: #a5f3fc; }
 
   /* === DARK MODE: FOREST THEME === */
-  .scroll-indicator-theme-forest .scroll-position-indicator { background-color: #14532d; }
-  .scroll-indicator-theme-forest .scroll-segment-current { outline-color: #a3e635 !important; }
-  .scroll-indicator-theme-forest .scroll-segment-ratioed { background-color: #fb923c !important; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-1 { background-color: #14532d; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-2 { background-color: #166534; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-3 { background-color: #15803d; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-4 { background-color: #16a34a; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-5 { background-color: #22c55e; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-6 { background-color: #4ade80; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-7 { background-color: #86efac; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-8 { background-color: #bbf7d0; }
+  .feed-map-theme-forest .feed-map-position-indicator { background-color: #14532d; }
+  .feed-map-theme-forest .feed-map-segment-current { outline-color: #a3e635 !important; }
+  .feed-map-theme-forest .feed-map-segment-ratioed { background-color: #fb923c !important; }
+  .feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #14532d; }
+  .feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #166534; }
+  .feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #15803d; }
+  .feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #16a34a; }
+  .feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #22c55e; }
+  .feed-map-theme-forest .feed-map-segment-heat-6 { background-color: #4ade80; }
+  .feed-map-theme-forest .feed-map-segment-heat-7 { background-color: #86efac; }
+  .feed-map-theme-forest .feed-map-segment-heat-8 { background-color: #bbf7d0; }
 
   /* === DARK MODE: MONOCHROME THEME === */
-  .scroll-indicator-theme-monochrome .scroll-position-indicator { background-color: #374151; }
-  .scroll-indicator-theme-monochrome .scroll-segment-current { outline-color: #f9fafb !important; }
-  .scroll-indicator-theme-monochrome .scroll-segment-ratioed { background-color: #ef4444 !important; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-1 { background-color: #1f2937; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-2 { background-color: #374151; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-3 { background-color: #4b5563; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-4 { background-color: #6b7280; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-5 { background-color: #9ca3af; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-6 { background-color: #d1d5db; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-7 { background-color: #e5e7eb; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-8 { background-color: #f3f4f6; }
+  .feed-map-theme-monochrome .feed-map-position-indicator { background-color: #374151; }
+  .feed-map-theme-monochrome .feed-map-segment-current { outline-color: #f9fafb !important; }
+  .feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #ef4444 !important; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #1f2937; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #374151; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #4b5563; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #6b7280; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #9ca3af; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-6 { background-color: #d1d5db; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-7 { background-color: #e5e7eb; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-8 { background-color: #f3f4f6; }
 }
 
 @media (prefers-contrast: more) {
-  .scroll-position-indicator {
+  .feed-map-position-indicator {
     height: 4px;
     background-color: #9ca3af;
   }
 
-  .scroll-segment-read {
+  .feed-map-segment-read {
     filter: brightness(0.4);
   }
 
-  .scroll-segment-current {
+  .feed-map-segment-current {
     outline: 3px solid #1d4ed8;
     outline-offset: -1px;
   }
@@ -4020,21 +4020,44 @@ div#statusBar.has-scroll-indicator {
   resize: vertical;
 }
 
+.rules-options {
+  padding: 12px;
+}
+
+.rules-options-top {
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 12px;
+}
+
+.rules-options .config-checkbox-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.rules-options .config-checkbox-label span:first-of-type {
+  font-weight: 500;
+}
+
+.rules-options .config-field-help {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: #6b7280;
+  margin-left: 24px;
+}
+
 /* Category accordion */
 .rules-category {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  margin-bottom: 8px;
-  overflow: hidden;
+  margin-bottom: 4px;
 }
 
 .rules-category-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  gap: 4px;
+  padding: 4px 0;
 }
 
 .rules-category-toggle {
@@ -4049,6 +4072,63 @@ div#statusBar.has-scroll-indicator {
 .rules-toggle-icon {
   display: inline-block;
   transition: transform 0.15s ease;
+}
+
+.rules-color-picker {
+  position: relative;
+}
+
+.rules-color-swatch {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.rules-color-swatch:hover {
+  border-color: #9ca3af;
+}
+
+.rules-color-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 6px;
+  margin-top: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 180px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.rules-color-dropdown.open {
+  display: flex;
+}
+
+.rules-color-option {
+  width: 20px;
+  height: 20px;
+  border: 2px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.rules-color-option:hover {
+  border-color: #6b7280;
+  transform: scale(1.1);
+}
+
+.rules-color-option.selected {
+  border-color: #1f2937;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #3b82f6;
 }
 
 .rules-category-name {
@@ -4087,7 +4167,7 @@ div#statusBar.has-scroll-indicator {
 }
 
 .rules-category-body {
-  padding: 12px;
+  padding: 4px 0 4px 24px;
 }
 
 .rules-category-body.collapsed {
@@ -4098,12 +4178,8 @@ div#statusBar.has-scroll-indicator {
 .rules-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding: 8px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
 .rules-action,
@@ -4227,17 +4303,38 @@ div#statusBar.has-scroll-indicator {
     color: #f9fafb;
   }
 
-  .rules-category {
-    border-color: #4b5563;
+  .rules-options-top {
+    border-bottom-color: #4b5563;
+  }
+
+  .rules-options .config-field-help {
+    color: #9ca3af;
   }
 
   .rules-category-header {
-    background: #374151;
-    border-bottom-color: #4b5563;
+    /* no special dark mode styling needed */
   }
 
   .rules-category-toggle {
     color: #9ca3af;
+  }
+
+  .rules-color-swatch {
+    border-color: #4b5563;
+  }
+
+  .rules-color-swatch:hover {
+    border-color: #6b7280;
+  }
+
+  .rules-color-dropdown {
+    background: #1f2937;
+    border-color: #4b5563;
+  }
+
+  .rules-color-option.selected {
+    border-color: #f9fafb;
+    box-shadow: 0 0 0 2px #1f2937, 0 0 0 4px #3b82f6;
   }
 
   .rules-category-name {
@@ -4258,12 +4355,7 @@ div#statusBar.has-scroll-indicator {
   }
 
   .rules-category-body {
-    background: #1f2937;
-  }
-
-  .rules-row {
-    background: #374151;
-    border-color: #4b5563;
+    /* no special dark mode styling needed */
   }
 
   .rules-action,

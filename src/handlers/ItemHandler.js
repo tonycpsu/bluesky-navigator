@@ -32,13 +32,8 @@ export class ItemHandler extends Handler {
   POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
   THREAD_PAGE_SELECTOR = 'main > div > div > div';
 
-  // 32 distinct colors for filter list handle coloring (high saturation, good contrast)
-  FILTER_LIST_COLORS = [
-    '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6',
-    '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3',
-    '#808000', '#ffd8b1', '#000075', '#808080', '#ff0000', '#00ff00', '#0000ff', '#ff00ff',
-    '#00ffff', '#ff8000', '#8000ff', '#0080ff', '#ff0080', '#80ff00', '#00ff80', '#ff8080',
-  ];
+  // Use shared color palette from constants
+  FILTER_LIST_COLORS = constants.FILTER_LIST_COLORS;
 
   FLOATING_BUTTON_IMAGES = {
     prev: ['https://www.svgrepo.com/show/238452/up-arrow.svg'],
@@ -2238,7 +2233,7 @@ export class ItemHandler extends Handler {
    * Get the height of the status bar at the bottom
    */
   getStatusBarHeight() {
-    const statusBar = $('#scroll-indicator-container');
+    const statusBar = $('#feed-map-container');
     if (statusBar.length && statusBar.is(':visible')) {
       return statusBar.outerHeight() || 0;
     }
@@ -2350,7 +2345,7 @@ export class ItemHandler extends Handler {
         <div class="bsky-nav-rules-dropdown-categories">
           ${categories.length > 0
             ? categories.map((cat, index) => `
-                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? ' selected' : ''}" data-category="${cat}" style="color: ${this.FILTER_LIST_COLORS[index % this.FILTER_LIST_COLORS.length]}">
+                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? ' selected' : ''}" data-category="${cat}" style="color: ${this.getColorForCategory(cat, index)}">
                   ${cat}
                 </button>
               `).join('')
@@ -2642,6 +2637,42 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Get the color for a category by name, using custom color if set
+   * @param {string} categoryName - The category name
+   * @param {number} defaultIndex - The default index to use if no custom color
+   * @returns {string} The color hex code
+   */
+  getColorForCategory(categoryName, defaultIndex) {
+    try {
+      const rulesetColors = JSON.parse(this.config.get('rulesetColors') || '{}');
+      if (categoryName in rulesetColors) {
+        const colorIndex = rulesetColors[categoryName] % this.FILTER_LIST_COLORS.length;
+        return this.FILTER_LIST_COLORS[colorIndex];
+      }
+    } catch (e) {
+      // Invalid JSON, use default
+    }
+    return this.FILTER_LIST_COLORS[defaultIndex % this.FILTER_LIST_COLORS.length];
+  }
+
+  /**
+   * Get the color for a category by index, using custom color if set
+   * @param {number} categoryIndex - The category index
+   * @returns {string} The color hex code
+   */
+  getColorForCategoryIndex(categoryIndex) {
+    if (!this.state.rules || categoryIndex < 0) {
+      return this.FILTER_LIST_COLORS[0];
+    }
+    const categories = Object.keys(this.state.rules);
+    if (categoryIndex < categories.length) {
+      const categoryName = categories[categoryIndex];
+      return this.getColorForCategory(categoryName, categoryIndex);
+    }
+    return this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+  }
+
+  /**
    * Show notification that rule was added
    * Can be called with (message) or (handle, category, action)
    */
@@ -2925,6 +2956,7 @@ export class ItemHandler extends Handler {
     this.applySelectionStyling(element, selected);
     this.applyReadStatus(element);
     this.applyBlockStatus(element);
+    this.applyRuleColorStyling(element);
   }
 
   applyTimestampFormat(element) {
@@ -3005,6 +3037,45 @@ export class ItemHandler extends Handler {
     } else {
       $(element).addClass('item-unread');
       $(element).removeClass('item-read');
+    }
+  }
+
+  applyRuleColorStyling(element) {
+    const profileLink = $(element).find(constants.PROFILE_SELECTOR).first();
+    const avatar = $(element).find('div[data-testid="userAvatarImage"]').first();
+
+    // Check if color-coding is enabled
+    if (!this.config.get('ruleColorCoding')) {
+      // Clear any existing styles
+      if (profileLink.length) profileLink.css('color', '');
+      if (avatar.length) avatar.css('box-shadow', '');
+      return;
+    }
+
+    const handle = this.handleFromItem(element);
+    if (!handle) return;
+
+    const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
+    if (categoryIndex < 0) {
+      // No match - clear styles
+      if (profileLink.length) profileLink.css('color', '');
+      if (avatar.length) avatar.css('box-shadow', '');
+      return;
+    }
+
+    const color = this.getColorForCategoryIndex(categoryIndex);
+
+    // Color the handle/display name text
+    if (profileLink.length) {
+      profileLink.css('color', color);
+    }
+
+    // Add colored ring to avatar
+    if (avatar.length) {
+      avatar.css({
+        'box-shadow': `0 0 0 3px ${color}`,
+        'border-radius': '50%'
+      });
     }
   }
 

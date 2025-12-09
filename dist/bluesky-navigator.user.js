@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+452.c23f6ed2
+// @version     1.0.31+453.0fa83f42
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -28,6 +28,41 @@
 (function() {
   "use strict";
   const constants = {
+    // 32 distinct colors for ruleset/filter list coloring (high saturation, good contrast)
+    FILTER_LIST_COLORS: [
+      "#e6194b",
+      "#3cb44b",
+      "#ffe119",
+      "#4363d8",
+      "#f58231",
+      "#911eb4",
+      "#46f0f0",
+      "#f032e6",
+      "#bcf60c",
+      "#fabebe",
+      "#008080",
+      "#e6beff",
+      "#9a6324",
+      "#fffac8",
+      "#800000",
+      "#aaffc3",
+      "#808000",
+      "#ffd8b1",
+      "#000075",
+      "#808080",
+      "#ff0000",
+      "#00ff00",
+      "#0000ff",
+      "#ff00ff",
+      "#00ffff",
+      "#ff8000",
+      "#8000ff",
+      "#0080ff",
+      "#ff0080",
+      "#80ff00",
+      "#00ff80",
+      "#ff8080"
+    ],
     // Timing constants
     DEFAULT_STATE_SAVE_TIMEOUT: 5e3,
     URL_MONITOR_INTERVAL: 500,
@@ -44972,21 +45007,21 @@ if (cid) {
     "Feed Map": {
       icon: "\u{1F5FA}\uFE0F",
       fields: {
-        scrollIndicatorPosition: {
+        feedMapPosition: {
           label: "Position",
           type: "select",
           options: ["Top toolbar", "Bottom status bar", "Hidden"],
           default: "Bottom status bar",
           help: "Where to show the feed map"
         },
-        scrollIndicatorStyle: {
+        feedMapStyle: {
           label: "Style",
           type: "select",
           options: ["Basic", "Advanced"],
           default: "Basic",
           help: "Basic: simple read/unread segments. Advanced: heatmap, icons, and zoom options"
         },
-        scrollIndicatorScale: {
+        feedMapScale: {
           label: "Scale (%)",
           type: "range",
           default: 100,
@@ -44995,43 +45030,43 @@ if (cid) {
           step: 25,
           help: "Scale the feed map size (50-400%)"
         },
-        scrollIndicatorTheme: {
+        feedMapTheme: {
           label: "Color theme",
           type: "select",
           options: ["Ocean", "Campfire", "Forest", "Monochrome"],
           default: "Ocean",
           help: "Color scheme for the feed map"
         },
-        scrollIndicatorTooltip: {
+        feedMapTooltip: {
           label: "Tooltip delay",
           type: "select",
           options: ["Instant", "Delayed"],
           default: "Instant",
           help: "Show post preview on hover instantly or after a short delay"
         },
-        scrollIndicatorHeatmap: {
+        feedMapHeatmap: {
           label: "Heatmap mode",
           type: "select",
           options: ["None", "Engagement Rate", "Raw Engagement", "Weighted Engagement"],
           default: "None",
           help: "Color intensity based on post engagement metrics",
-          showWhen: { scrollIndicatorStyle: "Advanced" }
+          showWhen: { feedMapStyle: "Advanced" }
         },
-        scrollIndicatorIcons: {
+        feedMapIcons: {
           label: "Content icons",
           type: "checkbox",
           default: true,
           help: "Show icons for media, replies, and reposts in feed map",
-          showWhen: { scrollIndicatorStyle: "Advanced" }
+          showWhen: { feedMapStyle: "Advanced" }
         },
-        scrollIndicatorAvatars: {
+        feedMapAvatars: {
           label: "Show avatars",
           type: "checkbox",
           default: true,
           help: "Show author avatars in zoom indicator segments",
-          showWhen: { scrollIndicatorStyle: "Advanced" }
+          showWhen: { feedMapStyle: "Advanced" }
         },
-        scrollIndicatorAvatarScale: {
+        feedMapAvatarScale: {
           label: "Avatar scale",
           type: "range",
           default: 100,
@@ -45039,37 +45074,30 @@ if (cid) {
           max: 200,
           step: 5,
           help: "Avatar size as percentage (base 32px)",
-          showWhen: { scrollIndicatorAvatars: true }
+          showWhen: { feedMapAvatars: true }
         },
-        scrollIndicatorTimestamps: {
+        feedMapTimestamps: {
           label: "Show timestamps",
           type: "checkbox",
           default: true,
           help: "Show relative timestamps in zoom indicator segments",
-          showWhen: { scrollIndicatorStyle: "Advanced" }
+          showWhen: { feedMapStyle: "Advanced" }
         },
-        scrollIndicatorHandles: {
+        feedMapHandles: {
           label: "Show handles",
           type: "checkbox",
           default: true,
           help: "Show user handles in zoom indicator segments",
-          showWhen: { scrollIndicatorStyle: "Advanced" }
+          showWhen: { feedMapStyle: "Advanced" }
         },
-        scrollIndicatorHandleColors: {
-          label: "Color-code rule matches",
-          type: "checkbox",
-          default: false,
-          help: "Color handles by author rules, timestamps by content rules",
-          showWhen: { scrollIndicatorStyle: "Advanced" }
-        },
-        scrollIndicatorZoom: {
+        feedMapZoom: {
           label: "Zoom window size",
           type: "number",
           default: 0,
           help: "Show zoomed view of N posts around selection (0 to disable)",
-          showWhen: { scrollIndicatorStyle: "Advanced" }
+          showWhen: { feedMapStyle: "Advanced" }
         },
-        scrollIndicatorAnimationSpeed: {
+        feedMapAnimationSpeed: {
           label: "Animation interval",
           type: "range",
           default: 100,
@@ -45077,7 +45105,7 @@ if (cid) {
           max: 1e3,
           step: 50,
           help: "Zoom scroll animation duration (0=instant, 100=normal)",
-          showWhen: { scrollIndicatorStyle: "Advanced" }
+          showWhen: { feedMapStyle: "Advanced" }
         }
       }
     },
@@ -45320,6 +45348,12 @@ if (cid) {
           rows: 6,
           placeholder: "Enter filter rules...",
           help: "Content filtering rules by category"
+        },
+        ruleColorCoding: {
+          label: "Color-code rule matches",
+          type: "checkbox",
+          default: false,
+          help: "Color handles/avatars in feed and feed map by author rules"
         }
       }
     },
@@ -45390,7 +45424,9 @@ if (cid) {
     }
   };
   const HIDDEN_FIELDS = {
-    savedSearches: { default: "[]" }
+    savedSearches: { default: "[]" },
+    rulesetColors: { default: "{}" }
+    // Maps category name to color index
   };
   let instance$2 = null;
   class ConfigModal {
@@ -45787,8 +45823,16 @@ if (cid) {
     renderRulesPanel() {
       const rulesConfig = this.config.get("rulesConfig") ?? "";
       this.parsedRules = this.parseRules(rulesConfig);
+      const ruleColorCoding = this.config.get("ruleColorCoding") ?? false;
       return `
       <div class="rules-panel">
+        <div class="rules-options rules-options-top">
+          <label class="config-checkbox-label">
+            <input type="checkbox" name="ruleColorCoding" ${ruleColorCoding ? "checked" : ""}>
+            <span>Color-code rule matches</span>
+            <span class="config-field-help">Color handles/avatars in feed and feed map by author rules</span>
+          </label>
+        </div>
         <div class="rules-subtabs">
           <button class="rules-subtab ${this.rulesSubTab === "visual" ? "active" : ""}"
                   data-subtab="visual">Visual</button>
@@ -45821,6 +45865,8 @@ if (cid) {
       }
       const categoriesHtml = this.parsedRules.map((category, catIndex) => {
         const isCollapsed = this.collapsedCategories[catIndex];
+        const colorIndex = this.getColorIndexForCategory(category.name, catIndex);
+        const color2 = constants.FILTER_LIST_COLORS[colorIndex];
         return `
         <div class="rules-category" data-category="${catIndex}">
           <div class="rules-category-header">
@@ -45828,6 +45874,16 @@ if (cid) {
                     data-category="${catIndex}">
               <span class="rules-toggle-icon">${isCollapsed ? "\u25B6" : "\u25BC"}</span>
             </button>
+            <div class="rules-color-picker" data-category="${catIndex}">
+              <button type="button" class="rules-color-swatch" style="background-color: ${color2}"
+                      title="Click to change color" data-category="${catIndex}"></button>
+              <div class="rules-color-dropdown">
+                ${constants.FILTER_LIST_COLORS.map((c, i2) => `
+                  <button type="button" class="rules-color-option ${i2 === colorIndex ? "selected" : ""}"
+                          style="background-color: ${c}" data-color-index="${i2}" data-category="${catIndex}"></button>
+                `).join("")}
+              </div>
+            </div>
             <input type="text" class="rules-category-name" value="${this.escapeHtml(category.name)}"
                    data-category="${catIndex}">
             <button type="button" class="rules-category-delete" data-category="${catIndex}"
@@ -45894,6 +45950,39 @@ if (cid) {
       }
     }
     /**
+     * Get the color index for a category (custom or default)
+     * @param {string} categoryName - The category name
+     * @param {number} defaultIndex - The default index to use if no custom color
+     * @returns {number} The color index
+     */
+    getColorIndexForCategory(categoryName, defaultIndex) {
+      try {
+        const rulesetColors = JSON.parse(this.config.get("rulesetColors") || "{}");
+        if (categoryName in rulesetColors) {
+          return rulesetColors[categoryName] % constants.FILTER_LIST_COLORS.length;
+        }
+      } catch (e2) {
+      }
+      return defaultIndex % constants.FILTER_LIST_COLORS.length;
+    }
+    /**
+     * Set the color index for a category
+     * @param {string} categoryName - The category name
+     * @param {number} colorIndex - The color index
+     */
+    setColorForCategory(categoryName, colorIndex) {
+      try {
+        const rulesetColors = JSON.parse(this.config.get("rulesetColors") || "{}");
+        rulesetColors[categoryName] = colorIndex;
+        this.config.set("rulesetColors", JSON.stringify(rulesetColors));
+        this.pendingChanges["rulesetColors"] = JSON.stringify(rulesetColors);
+      } catch (e2) {
+        const rulesetColors = { [categoryName]: colorIndex };
+        this.config.set("rulesetColors", JSON.stringify(rulesetColors));
+        this.pendingChanges["rulesetColors"] = JSON.stringify(rulesetColors);
+      }
+    }
+    /**
      * Attach event listeners for the rules panel
      */
     attachRulesEventListeners(modal = null) {
@@ -45925,6 +46014,31 @@ if (cid) {
           this.refreshVisualEditor();
         });
       });
+      panel.querySelectorAll(".rules-color-swatch").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          e2.stopPropagation();
+          const picker = e2.target.closest(".rules-color-picker");
+          const dropdown = picker.querySelector(".rules-color-dropdown");
+          panel.querySelectorAll(".rules-color-dropdown.open").forEach((d) => {
+            if (d !== dropdown) d.classList.remove("open");
+          });
+          dropdown.classList.toggle("open");
+        });
+      });
+      panel.querySelectorAll(".rules-color-option").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          const colorIndex = parseInt(e2.target.dataset.colorIndex);
+          const categoryName = this.parsedRules[catIndex].name;
+          this.setColorForCategory(categoryName, colorIndex);
+          this.refreshVisualEditor();
+        });
+      });
+      document.addEventListener("click", (e2) => {
+        if (!e2.target.closest(".rules-color-picker")) {
+          panel.querySelectorAll(".rules-color-dropdown.open").forEach((d) => d.classList.remove("open"));
+        }
+      }, { once: true });
       panel.querySelectorAll(".rules-category-name").forEach((input) => {
         input.addEventListener("change", (e2) => {
           const catIndex = parseInt(e2.target.dataset.category);
@@ -46025,8 +46139,8 @@ if (cid) {
         const valueDisplay = e2.target.parentElement.querySelector(".config-range-value");
         if (valueDisplay) valueDisplay.textContent = value;
       }
-      if (name.startsWith("scrollIndicator")) {
-        this.updateScrollIndicatorPreview(name, newValue);
+      if (name.startsWith("feedMap")) {
+        this.updateFeedMapPreview(name, newValue);
       }
       const field = this.getFieldSchema(name);
       if (field) {
@@ -46082,65 +46196,65 @@ if (cid) {
       return div.innerHTML;
     }
     /**
-     * Update scroll indicator preview dynamically when settings change
+     * Update feed map preview dynamically when settings change
      */
-    updateScrollIndicatorPreview(name, value) {
-      const wrapper = document.querySelector(".scroll-indicator-wrapper");
-      const container = document.querySelector(".scroll-indicator-container");
+    updateFeedMapPreview(name, value) {
+      const wrapper = document.querySelector(".feed-map-wrapper");
+      const container = document.querySelector(".feed-map-container");
       const target2 = wrapper || container;
       switch (name) {
-        case "scrollIndicatorScale": {
+        case "feedMapScale": {
           const scaleValue = parseInt(value, 10) / 100;
           if (target2) {
             target2.style.setProperty("--indicator-scale", scaleValue);
           }
           break;
         }
-        case "scrollIndicatorStyle": {
-          const wrapper2 = document.querySelector(".scroll-indicator-wrapper");
+        case "feedMapStyle": {
+          const wrapper2 = document.querySelector(".feed-map-wrapper");
           if (wrapper2) {
-            wrapper2.classList.remove("scroll-indicator-basic", "scroll-indicator-advanced");
-            wrapper2.classList.add(value === "Advanced" ? "scroll-indicator-advanced" : "scroll-indicator-basic");
+            wrapper2.classList.remove("feed-map-basic", "feed-map-advanced");
+            wrapper2.classList.add(value === "Advanced" ? "feed-map-advanced" : "feed-map-basic");
           }
-          document.dispatchEvent(new CustomEvent("scrollIndicatorSettingChanged", {
+          document.dispatchEvent(new CustomEvent("feedMapSettingChanged", {
             detail: { setting: name, value }
           }));
           break;
         }
-        case "scrollIndicatorTheme": {
-          const wrapper2 = document.querySelector(".scroll-indicator-wrapper");
+        case "feedMapTheme": {
+          const wrapper2 = document.querySelector(".feed-map-wrapper");
           if (wrapper2) {
             wrapper2.classList.remove(
-              "scroll-indicator-theme-ocean",
-              "scroll-indicator-theme-campfire",
-              "scroll-indicator-theme-forest",
-              "scroll-indicator-theme-monochrome"
+              "feed-map-theme-ocean",
+              "feed-map-theme-campfire",
+              "feed-map-theme-forest",
+              "feed-map-theme-monochrome"
             );
-            wrapper2.classList.add(`scroll-indicator-theme-${value.toLowerCase()}`);
+            wrapper2.classList.add(`feed-map-theme-${value.toLowerCase()}`);
           }
-          document.dispatchEvent(new CustomEvent("scrollIndicatorSettingChanged", {
+          document.dispatchEvent(new CustomEvent("feedMapSettingChanged", {
             detail: { setting: name, value }
           }));
           break;
         }
-        case "scrollIndicatorHeatmap":
-        case "scrollIndicatorZoom":
-          document.dispatchEvent(new CustomEvent("scrollIndicatorSettingChanged", {
+        case "feedMapHeatmap":
+        case "feedMapZoom":
+          document.dispatchEvent(new CustomEvent("feedMapSettingChanged", {
             detail: { setting: name, value }
           }));
           break;
-        case "scrollIndicatorIcons":
-        case "scrollIndicatorAvatars":
-        case "scrollIndicatorAvatarScale":
-        case "scrollIndicatorTimestamps":
-        case "scrollIndicatorHandles":
-        case "scrollIndicatorHandleColors":
-          document.dispatchEvent(new CustomEvent("scrollIndicatorSettingChanged", {
+        case "feedMapIcons":
+        case "feedMapAvatars":
+        case "feedMapAvatarScale":
+        case "feedMapTimestamps":
+        case "feedMapHandles":
+        case "ruleColorCoding":
+          document.dispatchEvent(new CustomEvent("feedMapSettingChanged", {
             detail: { setting: name, value }
           }));
           break;
-        case "scrollIndicatorPosition":
-          document.dispatchEvent(new CustomEvent("scrollIndicatorSettingChanged", {
+        case "feedMapPosition":
+          document.dispatchEvent(new CustomEvent("feedMapSettingChanged", {
             detail: { setting: name, value }
           }));
           break;
@@ -46655,7 +46769,7 @@ div#itemTimestampStats {
         overflow: clip;
     }
 
-    div#statusBar.has-scroll-indicator {
+    div#statusBar.has-feed-map {
         overflow: visible;
     }
 }
@@ -46678,7 +46792,7 @@ div#itemTimestampStats {
         overflow: clip;
     }
 
-    div#statusBar.has-scroll-indicator {
+    div#statusBar.has-feed-map {
         overflow: visible;
     }
 }
@@ -48269,7 +48383,7 @@ div.item-banner {
    Scroll Position Indicator
    ========================================================================== */
 
-.scroll-position-indicator {
+.feed-map-position-indicator {
   width: calc(100% + 2px);
   height: 6px;
   background-color: #e5e7eb;
@@ -48285,31 +48399,31 @@ div.item-banner {
   -webkit-tap-highlight-color: transparent;
 }
 
-.scroll-position-indicator:focus,
-.scroll-position-indicator:focus-visible,
-.scroll-position-indicator:active,
-.scroll-position-indicator:focus-within {
+.feed-map-position-indicator:focus,
+.feed-map-position-indicator:focus-visible,
+.feed-map-position-indicator:active,
+.feed-map-position-indicator:focus-within {
   outline: none !important;
   box-shadow: none !important;
 }
 
-.scroll-segment:focus,
-.scroll-segment:focus-visible,
-.scroll-segment:active {
+.feed-map-segment:focus,
+.feed-map-segment:focus-visible,
+.feed-map-segment:active {
   outline: none !important;
   box-shadow: none !important;
 }
 
 /* Prevent text selection highlight on feed map */
-.scroll-indicator-wrapper,
-.scroll-indicator-wrapper * {
+.feed-map-wrapper,
+.feed-map-wrapper * {
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
 /* Empty state when no results match filter */
-.scroll-indicator-empty {
+.feed-map-empty {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -48328,24 +48442,24 @@ div.item-banner {
 }
 
 /* Allow indicator to expand for empty state */
-.scroll-position-indicator:has(.scroll-indicator-empty) {
+.feed-map-position-indicator:has(.feed-map-empty) {
   height: auto !important;
   min-height: 20px;
   overflow: visible;
 }
 
 /* Basic style - simple thin indicator */
-.scroll-indicator-basic .scroll-position-indicator {
+.feed-map-basic .feed-map-position-indicator {
   height: calc(8px * var(--indicator-scale, 1));
 }
 
 /* Advanced style - main indicator is compact overview */
-.scroll-indicator-advanced .scroll-position-indicator {
+.feed-map-advanced .feed-map-position-indicator {
   height: calc(12px * var(--indicator-scale, 1));
 }
 
 /* Advanced style - zoom indicator auto-scales to fit content */
-.scroll-position-indicator-zoom {
+.feed-map-position-indicator-zoom {
   height: auto;
   min-height: calc(12px * var(--indicator-scale, 1));
   padding: 2px 0;
@@ -48355,13 +48469,13 @@ div.item-banner {
 }
 
 /* Toolbar position: place at bottom of toolbar */
-.scroll-position-indicator-toolbar {
+.feed-map-position-indicator-toolbar {
   order: 999;
   margin: 0 -1px -1px -1px;
 }
 
 /* Individual post segment */
-.scroll-segment {
+.feed-map-segment {
   height: 100%;
   flex: 1;
   background-color: transparent;
@@ -48372,37 +48486,37 @@ div.item-banner {
 
 /* Basic mode needs visible segment colors for read/unread to work.
    Default uses gray background with brightness filter. Themes override unread color. */
-.scroll-indicator-basic .scroll-segment {
+.feed-map-basic .feed-map-segment {
   background-color: #9ca3af; /* Default unread: medium gray */
 }
 
-.scroll-indicator-basic .scroll-segment-read {
+.feed-map-basic .feed-map-segment-read {
   filter: brightness(0.6);
 }
 
 /* Basic mode theme colors - unread segments use theme's light color */
-.scroll-indicator-basic.scroll-indicator-theme-ocean .scroll-segment { background-color: #7dd3fc; } /* sky-300 */
-.scroll-indicator-basic.scroll-indicator-theme-campfire .scroll-segment { background-color: #fcd34d; } /* amber-300 */
-.scroll-indicator-basic.scroll-indicator-theme-forest .scroll-segment { background-color: #86efac; } /* green-300 */
-.scroll-indicator-basic.scroll-indicator-theme-monochrome .scroll-segment { background-color: #d1d5db; } /* gray-300 */
+.feed-map-basic.feed-map-theme-ocean .feed-map-segment { background-color: #7dd3fc; } /* sky-300 */
+.feed-map-basic.feed-map-theme-campfire .feed-map-segment { background-color: #fcd34d; } /* amber-300 */
+.feed-map-basic.feed-map-theme-forest .feed-map-segment { background-color: #86efac; } /* green-300 */
+.feed-map-basic.feed-map-theme-monochrome .feed-map-segment { background-color: #d1d5db; } /* gray-300 */
 
-.scroll-segment:last-child {
+.feed-map-segment:last-child {
   border-right: none;
 }
 
 /* Segment states */
-.scroll-segment-read {
+.feed-map-segment-read {
   filter: brightness(0.6);
 }
 
-.scroll-segment-current {
+.feed-map-segment-current {
   outline: 2px solid #3b82f6;
   outline-offset: -1px;
   z-index: var(--z-base);
 }
 
 /* Filtered posts - grayed out in feed map */
-.scroll-segment-filtered {
+.feed-map-segment-filtered {
   opacity: 0.25;
   filter: grayscale(1);
 }
@@ -48412,83 +48526,83 @@ div.item-banner {
    ======================================== */
 
 /* Ratioed posts - distinctive styling for posts with more replies than likes */
-.scroll-segment-ratioed {
+.feed-map-segment-ratioed {
   background-color: #ef4444 !important; /* Default red */
 }
 
 /* === CAMPFIRE THEME (amber/orange) === */
 /* Unread: light amber, Read: dimmed (via filter), Current: orange outline */
-.scroll-indicator-theme-campfire .scroll-position-indicator { background-color: #fffbeb; }
-.scroll-indicator-theme-campfire .scroll-segment-current { outline-color: #f59e0b !important; }
-.scroll-indicator-theme-campfire .scroll-segment-ratioed { background-color: #ef4444 !important; }
+.feed-map-theme-campfire .feed-map-position-indicator { background-color: #fffbeb; }
+.feed-map-theme-campfire .feed-map-segment-current { outline-color: #f59e0b !important; }
+.feed-map-theme-campfire .feed-map-segment-ratioed { background-color: #ef4444 !important; }
 
 /* Heatmap intensity levels (engagement-based) - Default theme */
-.scroll-segment-heat-1 { background-color: #fef3c7; } /* lightest - low engagement */
-.scroll-segment-heat-2 { background-color: #fde68a; }
-.scroll-segment-heat-3 { background-color: #fcd34d; }
-.scroll-segment-heat-4 { background-color: #fbbf24; }
-.scroll-segment-heat-5 { background-color: #f59e0b; }
-.scroll-segment-heat-6 { background-color: #d97706; }
-.scroll-segment-heat-7 { background-color: #b45309; }
-.scroll-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
+.feed-map-segment-heat-1 { background-color: #fef3c7; } /* lightest - low engagement */
+.feed-map-segment-heat-2 { background-color: #fde68a; }
+.feed-map-segment-heat-3 { background-color: #fcd34d; }
+.feed-map-segment-heat-4 { background-color: #fbbf24; }
+.feed-map-segment-heat-5 { background-color: #f59e0b; }
+.feed-map-segment-heat-6 { background-color: #d97706; }
+.feed-map-segment-heat-7 { background-color: #b45309; }
+.feed-map-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
 
 /* === OCEAN THEME (blue/teal) === */
 /* Unread: light sky, Read: dimmed (via filter), Current: yellow outline (contrasts with blue) */
-.scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #e0f2fe; }
-.scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #eab308 !important; }
-.scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #f97316 !important; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #e0f2fe; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-2 { background-color: #bae6fd; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-3 { background-color: #7dd3fc; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-4 { background-color: #38bdf8; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-5 { background-color: #0ea5e9; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-6 { background-color: #0284c7; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-7 { background-color: #0369a1; }
-.scroll-indicator-theme-ocean .scroll-segment-heat-8 { background-color: #075985; }
+.feed-map-theme-ocean .feed-map-position-indicator { background-color: #e0f2fe; }
+.feed-map-theme-ocean .feed-map-segment-current { outline-color: #eab308 !important; }
+.feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #f97316 !important; }
+.feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #e0f2fe; }
+.feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #bae6fd; }
+.feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #7dd3fc; }
+.feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #38bdf8; }
+.feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #0ea5e9; }
+.feed-map-theme-ocean .feed-map-segment-heat-6 { background-color: #0284c7; }
+.feed-map-theme-ocean .feed-map-segment-heat-7 { background-color: #0369a1; }
+.feed-map-theme-ocean .feed-map-segment-heat-8 { background-color: #075985; }
 
 /* === FOREST THEME (green) === */
 /* Unread: light green, Read: dimmed (via filter), Current: lime outline */
-.scroll-indicator-theme-forest .scroll-position-indicator { background-color: #dcfce7; }
-.scroll-indicator-theme-forest .scroll-segment-current { outline-color: #84cc16 !important; }
-.scroll-indicator-theme-forest .scroll-segment-ratioed { background-color: #ea580c !important; }
-.scroll-indicator-theme-forest .scroll-segment-heat-1 { background-color: #dcfce7; }
-.scroll-indicator-theme-forest .scroll-segment-heat-2 { background-color: #bbf7d0; }
-.scroll-indicator-theme-forest .scroll-segment-heat-3 { background-color: #86efac; }
-.scroll-indicator-theme-forest .scroll-segment-heat-4 { background-color: #4ade80; }
-.scroll-indicator-theme-forest .scroll-segment-heat-5 { background-color: #22c55e; }
-.scroll-indicator-theme-forest .scroll-segment-heat-6 { background-color: #16a34a; }
-.scroll-indicator-theme-forest .scroll-segment-heat-7 { background-color: #15803d; }
-.scroll-indicator-theme-forest .scroll-segment-heat-8 { background-color: #166534; }
+.feed-map-theme-forest .feed-map-position-indicator { background-color: #dcfce7; }
+.feed-map-theme-forest .feed-map-segment-current { outline-color: #84cc16 !important; }
+.feed-map-theme-forest .feed-map-segment-ratioed { background-color: #ea580c !important; }
+.feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #dcfce7; }
+.feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #bbf7d0; }
+.feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #86efac; }
+.feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #4ade80; }
+.feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #22c55e; }
+.feed-map-theme-forest .feed-map-segment-heat-6 { background-color: #16a34a; }
+.feed-map-theme-forest .feed-map-segment-heat-7 { background-color: #15803d; }
+.feed-map-theme-forest .feed-map-segment-heat-8 { background-color: #166534; }
 
 /* === MONOCHROME THEME (grayscale) === */
 /* Unread: light gray, Read: dimmed (via filter), Current: dark outline */
-.scroll-indicator-theme-monochrome .scroll-position-indicator { background-color: #e5e7eb; }
-.scroll-indicator-theme-monochrome .scroll-segment-current { outline-color: #1f2937 !important; }
-.scroll-indicator-theme-monochrome .scroll-segment-ratioed { background-color: #dc2626 !important; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-1 { background-color: #f3f4f6; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-2 { background-color: #e5e7eb; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-3 { background-color: #d1d5db; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-4 { background-color: #9ca3af; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-5 { background-color: #6b7280; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-6 { background-color: #4b5563; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-7 { background-color: #374151; }
-.scroll-indicator-theme-monochrome .scroll-segment-heat-8 { background-color: #1f2937; }
+.feed-map-theme-monochrome .feed-map-position-indicator { background-color: #e5e7eb; }
+.feed-map-theme-monochrome .feed-map-segment-current { outline-color: #1f2937 !important; }
+.feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #dc2626 !important; }
+.feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #f3f4f6; }
+.feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #e5e7eb; }
+.feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #d1d5db; }
+.feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #9ca3af; }
+.feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #6b7280; }
+.feed-map-theme-monochrome .feed-map-segment-heat-6 { background-color: #4b5563; }
+.feed-map-theme-monochrome .feed-map-segment-heat-7 { background-color: #374151; }
+.feed-map-theme-monochrome .feed-map-segment-heat-8 { background-color: #1f2937; }
 
 /* Content type icons in segments */
-.scroll-segment-icon {
+.feed-map-segment-icon {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  display: var(--scroll-icon-display, flex);
+  display: var(--feed-map-icon-display, flex);
   align-items: center;
   justify-content: center;
   height: 100%;
   width: 100%;
 }
 
-.scroll-icon-stack {
+.feed-map-icon-stack {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -48497,7 +48611,7 @@ div.item-banner {
   height: 100%;
 }
 
-.scroll-icon-stack img {
+.feed-map-icon-stack img {
   height: 45%;
   width: auto;
   max-width: 90%;
@@ -48507,51 +48621,51 @@ div.item-banner {
 }
 
 /* Content type icon colors with outline for visibility */
-.scroll-icon-stack img[alt="text"] {
+.feed-map-icon-stack img[alt="text"] {
   /* Blue with white outline */
   filter: brightness(0) saturate(100%) invert(40%) sepia(98%) saturate(1000%) hue-rotate(200deg) brightness(95%)
     drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
 }
 
-.scroll-icon-stack img[alt="image"] {
+.feed-map-icon-stack img[alt="image"] {
   /* Green with white outline */
   filter: brightness(0) saturate(100%) invert(55%) sepia(75%) saturate(500%) hue-rotate(80deg) brightness(95%)
     drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
 }
 
-.scroll-icon-stack img[alt="video"] {
+.feed-map-icon-stack img[alt="video"] {
   /* Red with white outline */
   filter: brightness(0) saturate(100%) invert(30%) sepia(100%) saturate(2000%) hue-rotate(350deg) brightness(95%)
     drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
 }
 
-.scroll-icon-stack img[alt="embed"] {
+.feed-map-icon-stack img[alt="embed"] {
   /* Purple with white outline */
   filter: brightness(0) saturate(100%) invert(35%) sepia(80%) saturate(800%) hue-rotate(250deg) brightness(90%)
     drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
 }
 
 /* Post type icons - grayscale with white outline */
-.scroll-icon-stack img[alt="post"],
-.scroll-icon-stack img[alt="reply"],
-.scroll-icon-stack img[alt="repost"],
-.scroll-icon-stack img[alt="thread"] {
+.feed-map-icon-stack img[alt="post"],
+.feed-map-icon-stack img[alt="reply"],
+.feed-map-icon-stack img[alt="repost"],
+.feed-map-icon-stack img[alt="thread"] {
   filter: brightness(0) invert(0.3) drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);
   opacity: 0.9;
 }
 
 /* Thread icon is taller SVG - constrain to match others */
-.scroll-icon-stack img[alt="thread"] {
+.feed-map-icon-stack img[alt="thread"] {
   height: 40%;
 }
 
-.scroll-segment {
+.feed-map-segment {
   position: relative;
   overflow: hidden;
 }
 
 /* Zoom indicator segments - larger for better visibility */
-.scroll-segment-zoom {
+.feed-map-segment-zoom {
   flex: 1 1 0;
   min-width: calc(20px * var(--indicator-scale, 1));
   height: auto !important;
@@ -48565,18 +48679,18 @@ div.item-banner {
   overflow: hidden;
 }
 
-.scroll-segment-zoom .scroll-icon-stack {
+.feed-map-segment-zoom .feed-map-icon-stack {
   flex-direction: row;
   gap: 2px;
 }
 
-.scroll-segment-zoom .scroll-icon-stack img {
+.feed-map-segment-zoom .feed-map-icon-stack img {
   height: 60%;
   width: auto;
 }
 
 /* Avatar in zoom segments */
-.scroll-segment-avatar {
+.feed-map-segment-avatar {
   aspect-ratio: 1;
   border-radius: 50%;
   object-fit: cover;
@@ -48587,7 +48701,7 @@ div.item-banner {
 
 
 /* Icons in zoom segments - always at top */
-.scroll-segment-zoom .scroll-segment-icon {
+.feed-map-segment-zoom .feed-map-segment-icon {
   position: static;
   transform: none;
   height: calc(16px * var(--indicator-scale, 1));
@@ -48596,20 +48710,20 @@ div.item-banner {
   flex-shrink: 0;
 }
 
-.scroll-segment-zoom .scroll-icon-stack {
+.feed-map-segment-zoom .feed-map-icon-stack {
   flex-direction: row;
   height: calc(16px * var(--indicator-scale, 1));
   gap: 0;
   flex-shrink: 0;
 }
 
-.scroll-segment-zoom .scroll-icon-stack img {
+.feed-map-segment-zoom .feed-map-icon-stack img {
   height: calc(16px * var(--indicator-scale, 1));
   width: auto;
 }
 
 /* Relative time in zoom segments */
-.scroll-segment-time {
+.feed-map-segment-time {
   font-size: calc(8px * var(--indicator-scale, 1));
   line-height: 1;
   color: rgba(0, 0, 0, 0.5);
@@ -48619,7 +48733,7 @@ div.item-banner {
 }
 
 /* Handle in zoom segments */
-.scroll-segment-handle {
+.feed-map-segment-handle {
   font-family: ui-monospace, monospace;
   font-size: calc(8px * var(--indicator-scale, 1));
   line-height: 1.1;
@@ -48635,19 +48749,19 @@ div.item-banner {
 
 
 /* Empty segments (no corresponding item) */
-.scroll-segment-empty {
+.feed-map-segment-empty {
   background-color: transparent !important;
   opacity: 0.3;
 }
 
 /* Virtualized segments (item scrolled out of DOM) - style same as empty */
-.scroll-segment-virtualized {
+.feed-map-segment-virtualized {
   background-color: transparent !important;
   opacity: 0.3;
 }
 
 /* Wrapper for indicators with zoom */
-.scroll-indicator-wrapper {
+.feed-map-wrapper {
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -48658,7 +48772,7 @@ div.item-banner {
 }
 
 /* Zoom indicator connector */
-.scroll-indicator-connector {
+.feed-map-connector {
   display: block;
   width: 100%;
   height: calc(20px * var(--indicator-scale, 1));
@@ -48667,7 +48781,7 @@ div.item-banner {
   margin-top: calc(-2px * var(--indicator-scale, 1));
 }
 
-.scroll-indicator-connector-svg {
+.feed-map-connector-svg {
   position: absolute;
   top: 0;
   left: 0;
@@ -48675,25 +48789,25 @@ div.item-banner {
   height: 100%;
 }
 
-.scroll-indicator-connector-path {
+.feed-map-connector-path {
   stroke: rgba(80, 80, 80, 0.8);
   stroke-width: 3;
   fill: none;
 }
 
 @media (prefers-color-scheme: dark) {
-  .scroll-indicator-connector-path {
+  .feed-map-connector-path {
     stroke: rgba(200, 200, 200, 0.8);
   }
 }
 
-/* Zoom indicator container - inherits from .scroll-indicator-container */
-.scroll-indicator-zoom-container {
+/* Zoom indicator container - inherits from .feed-map-container */
+.feed-map-zoom-container {
   margin-top: 0;
   overflow-y: visible;
 }
 
-.scroll-position-indicator-zoom {
+.feed-map-position-indicator-zoom {
   border: 1px solid rgba(0, 0, 0, 0.2);
   border-radius: 3px;
   overflow-x: hidden;
@@ -48703,7 +48817,7 @@ div.item-banner {
 }
 
 /* Inner wrapper for smooth scroll animation */
-.scroll-zoom-inner {
+.feed-map-zoom-inner {
   display: flex;
   width: 100%;
   height: auto;
@@ -48712,18 +48826,18 @@ div.item-banner {
   align-items: stretch;
 }
 
-.scroll-zoom-inner.scroll-zoom-animating {
+.feed-map-zoom-inner.feed-map-zoom-animating {
   transition: transform calc(var(--animation-duration, 300ms) * var(--zoom-animation-speed, 1)) ease-out;
 }
 
 /* When zoom is enabled, allow brackets to overflow */
-.scroll-indicator-wrapper .scroll-position-indicator:first-child,
-.scroll-indicator-wrapper .scroll-indicator-container:first-child .scroll-position-indicator {
+.feed-map-wrapper .feed-map-position-indicator:first-child,
+.feed-map-wrapper .feed-map-container:first-child .feed-map-position-indicator {
   overflow: visible;
 }
 
 /* Zoom highlight on main indicator showing zoomed region - bracket style */
-.scroll-position-zoom-highlight {
+.feed-map-position-zoom-highlight {
   position: absolute;
   top: -4px;
   height: calc(100% + 8px);
@@ -48734,7 +48848,7 @@ div.item-banner {
 }
 
 /* Left bracket [ */
-.scroll-position-zoom-highlight::before {
+.feed-map-position-zoom-highlight::before {
   content: '';
   position: absolute;
   left: 0;
@@ -48748,7 +48862,7 @@ div.item-banner {
 }
 
 /* Right bracket ] */
-.scroll-position-zoom-highlight::after {
+.feed-map-position-zoom-highlight::after {
   content: '';
   position: absolute;
   right: 0;
@@ -48762,8 +48876,8 @@ div.item-banner {
 }
 
 /* Zoom row end indicators - show when scrolled to start/end */
-.scroll-position-indicator-zoom::before,
-.scroll-position-indicator-zoom::after {
+.feed-map-position-indicator-zoom::before,
+.feed-map-position-indicator-zoom::after {
   content: '';
   position: absolute;
   top: 0;
@@ -48776,65 +48890,65 @@ div.item-banner {
   border-radius: 2px;
 }
 
-.scroll-position-indicator-zoom::before {
+.feed-map-position-indicator-zoom::before {
   left: 0;
 }
 
-.scroll-position-indicator-zoom::after {
+.feed-map-position-indicator-zoom::after {
   right: 0;
 }
 
-.scroll-position-indicator-zoom.scroll-zoom-at-start::before {
+.feed-map-position-indicator-zoom.feed-map-zoom-at-start::before {
   opacity: 0.8;
 }
 
-.scroll-position-indicator-zoom.scroll-zoom-at-end::after {
+.feed-map-position-indicator-zoom.feed-map-zoom-at-end::after {
   opacity: 0.8;
 }
 
 @media (prefers-color-scheme: dark) {
   /* Dark mode: use dark outline instead of white, keep colors but brighten */
-  .scroll-icon-stack img[alt="text"] {
+  .feed-map-icon-stack img[alt="text"] {
     filter: brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(800%) hue-rotate(200deg) brightness(110%)
       drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
   }
 
-  .scroll-icon-stack img[alt="image"] {
+  .feed-map-icon-stack img[alt="image"] {
     filter: brightness(0) saturate(100%) invert(70%) sepia(60%) saturate(500%) hue-rotate(80deg) brightness(110%)
       drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
   }
 
-  .scroll-icon-stack img[alt="video"] {
+  .feed-map-icon-stack img[alt="video"] {
     filter: brightness(0) saturate(100%) invert(50%) sepia(100%) saturate(1500%) hue-rotate(350deg) brightness(110%)
       drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
   }
 
-  .scroll-icon-stack img[alt="embed"] {
+  .feed-map-icon-stack img[alt="embed"] {
     filter: brightness(0) saturate(100%) invert(55%) sepia(80%) saturate(600%) hue-rotate(250deg) brightness(110%)
       drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
   }
 
 
   /* Post type icons */
-  .scroll-icon-stack img[alt="post"],
-  .scroll-icon-stack img[alt="reply"],
-  .scroll-icon-stack img[alt="repost"],
-  .scroll-icon-stack img[alt="thread"] {
+  .feed-map-icon-stack img[alt="post"],
+  .feed-map-icon-stack img[alt="reply"],
+  .feed-map-icon-stack img[alt="repost"],
+  .feed-map-icon-stack img[alt="thread"] {
     filter: invert(1) drop-shadow(0 0 1px rgba(0,0,0,0.8));
     opacity: 0.8;
   }
 
-  .scroll-position-indicator-zoom {
+  .feed-map-position-indicator-zoom {
     border-color: rgba(255, 255, 255, 0.2);
   }
 
-  .scroll-position-zoom-highlight::before {
+  .feed-map-position-zoom-highlight::before {
     border-left-color: rgba(255, 255, 255, 0.8);
     border-top-color: rgba(255, 255, 255, 0.8);
     border-bottom-color: rgba(255, 255, 255, 0.8);
   }
 
-  .scroll-position-zoom-highlight::after {
+  .feed-map-position-zoom-highlight::after {
     border-right-color: rgba(255, 255, 255, 0.8);
     border-top-color: rgba(255, 255, 255, 0.8);
     border-bottom-color: rgba(255, 255, 255, 0.8);
@@ -48842,7 +48956,7 @@ div.item-banner {
 }
 
 /* Viewport indicator overlay */
-.scroll-viewport-indicator {
+.feed-map-viewport-indicator {
   position: absolute;
   top: -1px;
   height: calc(100% + 2px);
@@ -48856,12 +48970,12 @@ div.item-banner {
 }
 
 /* Legacy fill element (hidden when using segments) */
-.scroll-position-fill {
+.feed-map-position-fill {
   display: none;
 }
 
 /* Date/time labels for scroll indicator */
-.scroll-indicator-container {
+.feed-map-container {
   display: flex;
   align-items: center;
   width: calc(100% + 2px);
@@ -48870,18 +48984,18 @@ div.item-banner {
   order: -1;
 }
 
-.scroll-indicator-container-toolbar {
+.feed-map-container-toolbar {
   margin: 0 -1px -1px -1px;
 }
 
 /* Toolbar position: place at bottom of toolbar */
-.scroll-indicator-wrapper {
+.feed-map-wrapper {
   order: 999;
 }
 
 /* Status bar position: place at top, full width row */
-.scroll-indicator-wrapper.scroll-indicator-wrapper-statusbar,
-.scroll-indicator-container.scroll-indicator-container-statusbar {
+.feed-map-wrapper.feed-map-wrapper-statusbar,
+.feed-map-container.feed-map-container-statusbar {
   width: 100% !important;
   flex: 0 0 100% !important;
   background: transparent;
@@ -48890,26 +49004,26 @@ div.item-banner {
 }
 
 /* Reset the indicator width inside status bar */
-.scroll-indicator-container-statusbar .scroll-position-indicator {
+.feed-map-container-statusbar .feed-map-position-indicator {
   width: 100% !important;
   margin: 0 !important;
 }
 
 /* Allow status bar to expand when scroll indicator is present */
-div#statusBar.has-scroll-indicator {
+div#statusBar.has-feed-map {
   overflow: visible;
 }
 
 /* Reset order for containers inside the wrapper to maintain DOM order */
-.scroll-indicator-wrapper > .scroll-indicator-container {
+.feed-map-wrapper > .feed-map-container {
   order: 0;
 }
 
-.scroll-indicator-wrapper > .scroll-indicator-connector {
+.feed-map-wrapper > .feed-map-connector {
   order: 0;
 }
 
-.scroll-indicator-label {
+.feed-map-label {
   font-size: 10px;
   color: #6b7280;
   white-space: nowrap;
@@ -48920,31 +49034,31 @@ div#statusBar.has-scroll-indicator {
 }
 
 /* Basic style - hide date labels, zoom highlight, zoom indicator, and connector */
-.scroll-indicator-basic .scroll-indicator-label {
+.feed-map-basic .feed-map-label {
   display: none;
 }
 
-.scroll-indicator-basic .scroll-position-zoom-highlight {
+.feed-map-basic .feed-map-position-zoom-highlight {
   display: none;
 }
 
-.scroll-indicator-basic .scroll-indicator-zoom-container {
+.feed-map-basic .feed-map-zoom-container {
   display: none;
 }
 
-.scroll-indicator-basic .scroll-indicator-connector {
+.feed-map-basic .feed-map-connector {
   display: none;
 }
 
-.scroll-indicator-label-start {
+.feed-map-label-start {
   text-align: left;
 }
 
-.scroll-indicator-label-end {
+.feed-map-label-end {
   text-align: right;
 }
 
-.scroll-indicator-container .scroll-position-indicator {
+.feed-map-container .feed-map-position-indicator {
   flex: 1;
   width: auto;
   margin: 0;
@@ -48953,11 +49067,11 @@ div#statusBar.has-scroll-indicator {
 }
 
 @media (prefers-color-scheme: dark) {
-  .scroll-position-indicator {
+  .feed-map-position-indicator {
     background-color: #374151;
   }
 
-  .scroll-indicator-empty {
+  .feed-map-empty {
     color: #6b7280;
     background: repeating-linear-gradient(
       -45deg,
@@ -48968,113 +49082,113 @@ div#statusBar.has-scroll-indicator {
     );
   }
 
-  .scroll-segment {
+  .feed-map-segment {
     border-right-color: #374151;
   }
 
-  .scroll-segment-read {
+  .feed-map-segment-read {
     filter: brightness(0.5);
   }
 
-  .scroll-segment-time {
+  .feed-map-segment-time {
     color: rgba(255, 255, 255, 0.5);
     text-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.8);
   }
 
-  .scroll-segment-handle {
+  .feed-map-segment-handle {
     color: rgba(255, 255, 255, 0.6);
     text-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.8);
   }
 
   /* Basic mode dark: theme colors with brightness filter for read */
-  .scroll-indicator-basic .scroll-segment { background-color: #4b5563; }
-  .scroll-indicator-basic.scroll-indicator-theme-ocean .scroll-segment { background-color: #0e7490; } /* cyan-700 */
-  .scroll-indicator-basic.scroll-indicator-theme-campfire .scroll-segment { background-color: #b45309; } /* amber-700 */
-  .scroll-indicator-basic.scroll-indicator-theme-forest .scroll-segment { background-color: #15803d; } /* green-700 */
-  .scroll-indicator-basic.scroll-indicator-theme-monochrome .scroll-segment { background-color: #6b7280; } /* gray-500 */
+  .feed-map-basic .feed-map-segment { background-color: #4b5563; }
+  .feed-map-basic.feed-map-theme-ocean .feed-map-segment { background-color: #0e7490; } /* cyan-700 */
+  .feed-map-basic.feed-map-theme-campfire .feed-map-segment { background-color: #b45309; } /* amber-700 */
+  .feed-map-basic.feed-map-theme-forest .feed-map-segment { background-color: #15803d; } /* green-700 */
+  .feed-map-basic.feed-map-theme-monochrome .feed-map-segment { background-color: #6b7280; } /* gray-500 */
 
-  .scroll-segment-current {
+  .feed-map-segment-current {
     outline-color: #60a5fa;
   }
 
-  .scroll-viewport-indicator {
+  .feed-map-viewport-indicator {
     background-color: rgba(0, 0, 0, 0.2);
     border-color: rgba(255, 255, 255, 0.7);
   }
 
-  .scroll-indicator-label {
+  .feed-map-label {
     color: #9ca3af;
   }
 
   /* Dark mode ratioed - brighter for visibility */
-  .scroll-segment-ratioed {
+  .feed-map-segment-ratioed {
     background-color: #f87171 !important; /* red-400 */
   }
 
   /* === DARK MODE: CAMPFIRE THEME === */
-  .scroll-indicator-theme-campfire .scroll-position-indicator { background-color: #451a03; }
-  .scroll-indicator-theme-campfire .scroll-segment-current { outline-color: #fbbf24 !important; }
-  .scroll-indicator-theme-campfire .scroll-segment-ratioed { background-color: #f87171 !important; }
-  .scroll-segment-heat-1 { background-color: #1e3a5f; }
-  .scroll-segment-heat-2 { background-color: #1e4976; }
-  .scroll-segment-heat-3 { background-color: #1d5a8d; }
-  .scroll-segment-heat-4 { background-color: #1c6ba4; }
-  .scroll-segment-heat-5 { background-color: #1b7cbb; }
-  .scroll-segment-heat-6 { background-color: #1a8dd2; }
-  .scroll-segment-heat-7 { background-color: #199ee9; }
-  .scroll-segment-heat-8 { background-color: #18afff; }
+  .feed-map-theme-campfire .feed-map-position-indicator { background-color: #451a03; }
+  .feed-map-theme-campfire .feed-map-segment-current { outline-color: #fbbf24 !important; }
+  .feed-map-theme-campfire .feed-map-segment-ratioed { background-color: #f87171 !important; }
+  .feed-map-segment-heat-1 { background-color: #1e3a5f; }
+  .feed-map-segment-heat-2 { background-color: #1e4976; }
+  .feed-map-segment-heat-3 { background-color: #1d5a8d; }
+  .feed-map-segment-heat-4 { background-color: #1c6ba4; }
+  .feed-map-segment-heat-5 { background-color: #1b7cbb; }
+  .feed-map-segment-heat-6 { background-color: #1a8dd2; }
+  .feed-map-segment-heat-7 { background-color: #199ee9; }
+  .feed-map-segment-heat-8 { background-color: #18afff; }
 
   /* === DARK MODE: OCEAN THEME === */
-  .scroll-indicator-theme-ocean .scroll-position-indicator { background-color: #164e63; }
-  .scroll-indicator-theme-ocean .scroll-segment-current { outline-color: #facc15 !important; }
-  .scroll-indicator-theme-ocean .scroll-segment-ratioed { background-color: #fb923c !important; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-1 { background-color: #164e63; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-2 { background-color: #155e75; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-3 { background-color: #0e7490; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-4 { background-color: #0891b2; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-5 { background-color: #06b6d4; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-6 { background-color: #22d3ee; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-7 { background-color: #67e8f9; }
-  .scroll-indicator-theme-ocean .scroll-segment-heat-8 { background-color: #a5f3fc; }
+  .feed-map-theme-ocean .feed-map-position-indicator { background-color: #164e63; }
+  .feed-map-theme-ocean .feed-map-segment-current { outline-color: #facc15 !important; }
+  .feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #fb923c !important; }
+  .feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #164e63; }
+  .feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #155e75; }
+  .feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #0e7490; }
+  .feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #0891b2; }
+  .feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #06b6d4; }
+  .feed-map-theme-ocean .feed-map-segment-heat-6 { background-color: #22d3ee; }
+  .feed-map-theme-ocean .feed-map-segment-heat-7 { background-color: #67e8f9; }
+  .feed-map-theme-ocean .feed-map-segment-heat-8 { background-color: #a5f3fc; }
 
   /* === DARK MODE: FOREST THEME === */
-  .scroll-indicator-theme-forest .scroll-position-indicator { background-color: #14532d; }
-  .scroll-indicator-theme-forest .scroll-segment-current { outline-color: #a3e635 !important; }
-  .scroll-indicator-theme-forest .scroll-segment-ratioed { background-color: #fb923c !important; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-1 { background-color: #14532d; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-2 { background-color: #166534; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-3 { background-color: #15803d; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-4 { background-color: #16a34a; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-5 { background-color: #22c55e; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-6 { background-color: #4ade80; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-7 { background-color: #86efac; }
-  .scroll-indicator-theme-forest .scroll-segment-heat-8 { background-color: #bbf7d0; }
+  .feed-map-theme-forest .feed-map-position-indicator { background-color: #14532d; }
+  .feed-map-theme-forest .feed-map-segment-current { outline-color: #a3e635 !important; }
+  .feed-map-theme-forest .feed-map-segment-ratioed { background-color: #fb923c !important; }
+  .feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #14532d; }
+  .feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #166534; }
+  .feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #15803d; }
+  .feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #16a34a; }
+  .feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #22c55e; }
+  .feed-map-theme-forest .feed-map-segment-heat-6 { background-color: #4ade80; }
+  .feed-map-theme-forest .feed-map-segment-heat-7 { background-color: #86efac; }
+  .feed-map-theme-forest .feed-map-segment-heat-8 { background-color: #bbf7d0; }
 
   /* === DARK MODE: MONOCHROME THEME === */
-  .scroll-indicator-theme-monochrome .scroll-position-indicator { background-color: #374151; }
-  .scroll-indicator-theme-monochrome .scroll-segment-current { outline-color: #f9fafb !important; }
-  .scroll-indicator-theme-monochrome .scroll-segment-ratioed { background-color: #ef4444 !important; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-1 { background-color: #1f2937; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-2 { background-color: #374151; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-3 { background-color: #4b5563; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-4 { background-color: #6b7280; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-5 { background-color: #9ca3af; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-6 { background-color: #d1d5db; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-7 { background-color: #e5e7eb; }
-  .scroll-indicator-theme-monochrome .scroll-segment-heat-8 { background-color: #f3f4f6; }
+  .feed-map-theme-monochrome .feed-map-position-indicator { background-color: #374151; }
+  .feed-map-theme-monochrome .feed-map-segment-current { outline-color: #f9fafb !important; }
+  .feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #ef4444 !important; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #1f2937; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #374151; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #4b5563; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #6b7280; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #9ca3af; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-6 { background-color: #d1d5db; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-7 { background-color: #e5e7eb; }
+  .feed-map-theme-monochrome .feed-map-segment-heat-8 { background-color: #f3f4f6; }
 }
 
 @media (prefers-contrast: more) {
-  .scroll-position-indicator {
+  .feed-map-position-indicator {
     height: 4px;
     background-color: #9ca3af;
   }
 
-  .scroll-segment-read {
+  .feed-map-segment-read {
     filter: brightness(0.4);
   }
 
-  .scroll-segment-current {
+  .feed-map-segment-current {
     outline: 3px solid #1d4ed8;
     outline-offset: -1px;
   }
@@ -50376,21 +50490,44 @@ div#statusBar.has-scroll-indicator {
   resize: vertical;
 }
 
+.rules-options {
+  padding: 12px;
+}
+
+.rules-options-top {
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 12px;
+}
+
+.rules-options .config-checkbox-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.rules-options .config-checkbox-label span:first-of-type {
+  font-weight: 500;
+}
+
+.rules-options .config-field-help {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: #6b7280;
+  margin-left: 24px;
+}
+
 /* Category accordion */
 .rules-category {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  margin-bottom: 8px;
-  overflow: hidden;
+  margin-bottom: 4px;
 }
 
 .rules-category-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  gap: 4px;
+  padding: 4px 0;
 }
 
 .rules-category-toggle {
@@ -50405,6 +50542,63 @@ div#statusBar.has-scroll-indicator {
 .rules-toggle-icon {
   display: inline-block;
   transition: transform 0.15s ease;
+}
+
+.rules-color-picker {
+  position: relative;
+}
+
+.rules-color-swatch {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.rules-color-swatch:hover {
+  border-color: #9ca3af;
+}
+
+.rules-color-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 6px;
+  margin-top: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  width: 180px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.rules-color-dropdown.open {
+  display: flex;
+}
+
+.rules-color-option {
+  width: 20px;
+  height: 20px;
+  border: 2px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.rules-color-option:hover {
+  border-color: #6b7280;
+  transform: scale(1.1);
+}
+
+.rules-color-option.selected {
+  border-color: #1f2937;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #3b82f6;
 }
 
 .rules-category-name {
@@ -50443,7 +50637,7 @@ div#statusBar.has-scroll-indicator {
 }
 
 .rules-category-body {
-  padding: 12px;
+  padding: 4px 0 4px 24px;
 }
 
 .rules-category-body.collapsed {
@@ -50454,12 +50648,8 @@ div#statusBar.has-scroll-indicator {
 .rules-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding: 8px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
 .rules-action,
@@ -50583,17 +50773,38 @@ div#statusBar.has-scroll-indicator {
     color: #f9fafb;
   }
 
-  .rules-category {
-    border-color: #4b5563;
+  .rules-options-top {
+    border-bottom-color: #4b5563;
+  }
+
+  .rules-options .config-field-help {
+    color: #9ca3af;
   }
 
   .rules-category-header {
-    background: #374151;
-    border-bottom-color: #4b5563;
+    /* no special dark mode styling needed */
   }
 
   .rules-category-toggle {
     color: #9ca3af;
+  }
+
+  .rules-color-swatch {
+    border-color: #4b5563;
+  }
+
+  .rules-color-swatch:hover {
+    border-color: #6b7280;
+  }
+
+  .rules-color-dropdown {
+    background: #1f2937;
+    border-color: #4b5563;
+  }
+
+  .rules-color-option.selected {
+    border-color: #f9fafb;
+    box-shadow: 0 0 0 2px #1f2937, 0 0 0 4px #3b82f6;
   }
 
   .rules-category-name {
@@ -50614,12 +50825,7 @@ div#statusBar.has-scroll-indicator {
   }
 
   .rules-category-body {
-    background: #1f2937;
-  }
-
-  .rules-row {
-    background: #374151;
-    border-color: #4b5563;
+    /* no special dark mode styling needed */
   }
 
   .rules-action,
@@ -66876,41 +67082,8 @@ div#statusBar.has-scroll-indicator {
   class ItemHandler extends Handler {
     POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
     THREAD_PAGE_SELECTOR = "main > div > div > div";
-    // 32 distinct colors for filter list handle coloring (high saturation, good contrast)
-    FILTER_LIST_COLORS = [
-      "#e6194b",
-      "#3cb44b",
-      "#ffe119",
-      "#4363d8",
-      "#f58231",
-      "#911eb4",
-      "#46f0f0",
-      "#f032e6",
-      "#bcf60c",
-      "#fabebe",
-      "#008080",
-      "#e6beff",
-      "#9a6324",
-      "#fffac8",
-      "#800000",
-      "#aaffc3",
-      "#808000",
-      "#ffd8b1",
-      "#000075",
-      "#808080",
-      "#ff0000",
-      "#00ff00",
-      "#0000ff",
-      "#ff00ff",
-      "#00ffff",
-      "#ff8000",
-      "#8000ff",
-      "#0080ff",
-      "#ff0080",
-      "#80ff00",
-      "#00ff80",
-      "#ff8080"
-    ];
+    // Use shared color palette from constants
+    FILTER_LIST_COLORS = constants.FILTER_LIST_COLORS;
     FLOATING_BUTTON_IMAGES = {
       prev: ["https://www.svgrepo.com/show/238452/up-arrow.svg"],
       next: ["https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg"]
@@ -68673,7 +68846,7 @@ div#statusBar.has-scroll-indicator {
      * Get the height of the status bar at the bottom
      */
     getStatusBarHeight() {
-      const statusBar = $("#scroll-indicator-container");
+      const statusBar = $("#feed-map-container");
       if (statusBar.length && statusBar.is(":visible")) {
         return statusBar.outerHeight() || 0;
       }
@@ -68755,7 +68928,7 @@ div#statusBar.has-scroll-indicator {
         </div>
         <div class="bsky-nav-rules-dropdown-categories">
           ${categories.length > 0 ? categories.map((cat, index) => `
-                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? " selected" : ""}" data-category="${cat}" style="color: ${this.FILTER_LIST_COLORS[index % this.FILTER_LIST_COLORS.length]}">
+                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? " selected" : ""}" data-category="${cat}" style="color: ${this.getColorForCategory(cat, index)}">
                   ${cat}
                 </button>
               `).join("") : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings \u2192 Rules.</div>'}
@@ -68984,6 +69157,39 @@ ${rule}`;
       return -1;
     }
     /**
+     * Get the color for a category by name, using custom color if set
+     * @param {string} categoryName - The category name
+     * @param {number} defaultIndex - The default index to use if no custom color
+     * @returns {string} The color hex code
+     */
+    getColorForCategory(categoryName, defaultIndex) {
+      try {
+        const rulesetColors = JSON.parse(this.config.get("rulesetColors") || "{}");
+        if (categoryName in rulesetColors) {
+          const colorIndex = rulesetColors[categoryName] % this.FILTER_LIST_COLORS.length;
+          return this.FILTER_LIST_COLORS[colorIndex];
+        }
+      } catch (e2) {
+      }
+      return this.FILTER_LIST_COLORS[defaultIndex % this.FILTER_LIST_COLORS.length];
+    }
+    /**
+     * Get the color for a category by index, using custom color if set
+     * @param {number} categoryIndex - The category index
+     * @returns {string} The color hex code
+     */
+    getColorForCategoryIndex(categoryIndex) {
+      if (!this.state.rules || categoryIndex < 0) {
+        return this.FILTER_LIST_COLORS[0];
+      }
+      const categories = Object.keys(this.state.rules);
+      if (categoryIndex < categories.length) {
+        const categoryName = categories[categoryIndex];
+        return this.getColorForCategory(categoryName, categoryIndex);
+      }
+      return this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+    }
+    /**
      * Show notification that rule was added
      * Can be called with (message) or (handle, category, action)
      */
@@ -69191,6 +69397,7 @@ ${rule}`;
       this.applySelectionStyling(element, selected);
       this.applyReadStatus(element);
       this.applyBlockStatus(element);
+      this.applyRuleColorStyling(element);
     }
     applyTimestampFormat(element) {
       const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
@@ -69260,6 +69467,33 @@ ${rule}`;
       } else {
         $(element).addClass("item-unread");
         $(element).removeClass("item-read");
+      }
+    }
+    applyRuleColorStyling(element) {
+      const profileLink = $(element).find(constants.PROFILE_SELECTOR).first();
+      const avatar = $(element).find('div[data-testid="userAvatarImage"]').first();
+      if (!this.config.get("ruleColorCoding")) {
+        if (profileLink.length) profileLink.css("color", "");
+        if (avatar.length) avatar.css("box-shadow", "");
+        return;
+      }
+      const handle2 = this.handleFromItem(element);
+      if (!handle2) return;
+      const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
+      if (categoryIndex < 0) {
+        if (profileLink.length) profileLink.css("color", "");
+        if (avatar.length) avatar.css("box-shadow", "");
+        return;
+      }
+      const color2 = this.getColorForCategoryIndex(categoryIndex);
+      if (profileLink.length) {
+        profileLink.css("color", color2);
+      }
+      if (avatar.length) {
+        avatar.css({
+          "box-shadow": `0 0 0 3px ${color2}`,
+          "border-radius": "50%"
+        });
       }
     }
     applyBlockStatus(element) {
@@ -69560,7 +69794,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         "https://www.svgrepo.com/show/522235/preferences.svg",
         "https://www.svgrepo.com/show/522236/preferences.svg"
       ],
-      // Scroll indicator content type icons
+      // Feed map content type icons
       contentVideo: "https://www.svgrepo.com/show/333765/camera-movie.svg",
       contentImage: "https://www.svgrepo.com/show/334014/image-alt.svg",
       contentEmbed: "https://www.svgrepo.com/show/334050/link-external.svg",
@@ -69593,23 +69827,23 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           setTimeout(() => this.onFeedChange(), 300);
         });
       });
-      document.addEventListener("scrollIndicatorSettingChanged", (e2) => {
-        this.handleScrollIndicatorSettingChange(e2.detail);
+      document.addEventListener("feedMapSettingChanged", (e2) => {
+        this.handleFeedMapSettingChange(e2.detail);
       });
     }
     /**
      * Called when feed tab changes (e.g., Following -> Discover).
-     * Resets the scroll indicator and reloads items from DOM.
+     * Resets the feed map and reloads items from DOM.
      */
     onFeedChange() {
-      const indicator = $("#scroll-position-indicator");
+      const indicator = $("#feed-map-position-indicator");
       if (indicator.length) {
-        indicator.find(".scroll-segment").remove();
-        indicator.find(".scroll-viewport-indicator").remove();
-        indicator.find(".scroll-indicator-empty").remove();
+        indicator.find(".feed-map-segment").remove();
+        indicator.find(".feed-map-viewport-indicator").remove();
+        indicator.find(".feed-map-empty").remove();
       }
-      if (this.scrollIndicatorZoom) {
-        this.scrollIndicatorZoom.find(".scroll-segment-zoom").remove();
+      if (this.feedMapZoom) {
+        this.feedMapZoom.find(".feed-map-segment-zoom").remove();
       }
       setTimeout(() => {
         this.loadItems();
@@ -69705,47 +69939,47 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
     /**
-     * Handle dynamic scroll indicator setting changes from config modal
+     * Handle dynamic feed map setting changes from config modal
      */
-    handleScrollIndicatorSettingChange(detail) {
+    handleFeedMapSettingChange(detail) {
       const { setting, value } = detail;
       this.config.set(setting, value);
-      if (setting === "scrollIndicatorPosition") {
+      if (setting === "feedMapPosition") {
         this.moveScrollIndicator(value);
         return;
       }
       this.updateScrollPosition();
     }
     /**
-     * Move the scroll indicator to a new position dynamically
+     * Move the feed map to a new position dynamically
      */
     moveScrollIndicator(newPosition) {
-      const indicator = this.scrollIndicatorWrapper || this.scrollIndicatorContainer;
+      const indicator = this.feedMapWrapper || this.feedMapContainer;
       if (!indicator) return;
       indicator.detach();
       if (newPosition === "Hidden") {
         return;
       }
-      if (this.scrollIndicatorContainer) {
-        this.scrollIndicatorContainer.removeClass("scroll-indicator-container-toolbar scroll-indicator-container-statusbar");
+      if (this.feedMapContainer) {
+        this.feedMapContainer.removeClass("feed-map-container-toolbar feed-map-container-statusbar");
         if (newPosition === "Top toolbar") {
-          this.scrollIndicatorContainer.addClass("scroll-indicator-container-toolbar");
+          this.feedMapContainer.addClass("feed-map-container-toolbar");
         } else if (newPosition === "Bottom status bar") {
-          this.scrollIndicatorContainer.addClass("scroll-indicator-container-statusbar");
+          this.feedMapContainer.addClass("feed-map-container-statusbar");
         }
       }
-      if (this.scrollIndicatorWrapper) {
-        this.scrollIndicatorWrapper.removeClass("scroll-indicator-wrapper-statusbar");
+      if (this.feedMapWrapper) {
+        this.feedMapWrapper.removeClass("feed-map-wrapper-statusbar");
         if (newPosition === "Bottom status bar") {
-          this.scrollIndicatorWrapper.addClass("scroll-indicator-wrapper-statusbar");
+          this.feedMapWrapper.addClass("feed-map-wrapper-statusbar");
         }
       }
       if (newPosition === "Top toolbar" && this.toolbarDiv) {
         $(this.toolbarDiv).append(indicator);
-        $(this.statusBar).removeClass("has-scroll-indicator");
+        $(this.statusBar).removeClass("has-feed-map");
       } else if (newPosition === "Bottom status bar" && this.statusBar) {
         $(this.statusBar).prepend(indicator);
-        $(this.statusBar).addClass("has-scroll-indicator");
+        $(this.statusBar).addClass("has-feed-map");
       }
       this.updateScrollPosition();
     }
@@ -69809,46 +70043,46 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     addToolbar(beforeDiv) {
       this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
       $(beforeDiv).before(this.toolbarDiv);
-      const indicatorPosition = this.config.get("scrollIndicatorPosition");
-      const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
+      const indicatorPosition = this.config.get("feedMapPosition");
+      const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
       const isAdvancedStyle = indicatorStyle === "Advanced";
-      isAdvancedStyle ? parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0 : 0;
-      const styleClass = isAdvancedStyle ? "scroll-indicator-advanced" : "scroll-indicator-basic";
-      const indicatorTheme = this.config.get("scrollIndicatorTheme") || "Default";
-      const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
-      const indicatorScale = parseInt(this.config.get("scrollIndicatorScale"), 10) || 100;
+      isAdvancedStyle ? parseInt(this.config.get("feedMapZoom"), 10) || 0 : 0;
+      const styleClass = isAdvancedStyle ? "feed-map-advanced" : "feed-map-basic";
+      const indicatorTheme = this.config.get("feedMapTheme") || "Default";
+      const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
+      const indicatorScale = parseInt(this.config.get("feedMapScale"), 10) || 100;
       const scaleValue = indicatorScale / 100;
-      const animationInterval = parseInt(this.config.get("scrollIndicatorAnimationSpeed"), 10);
+      const animationInterval = parseInt(this.config.get("feedMapAnimationSpeed"), 10);
       const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
       const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
       if (indicatorPosition === "Top toolbar") {
-        this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar"></div>`);
-        this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
-        this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
-        this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
-        this.scrollIndicatorContainer.append(this.scrollIndicator);
-        this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
-        this.scrollIndicatorZoomHighlight = this.scrollIndicator.find(".scroll-position-zoom-highlight");
-        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
-        this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
-        <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
-          <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
-          <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
+        this.feedMapContainer = $(`<div class="feed-map-container feed-map-container-toolbar"></div>`);
+        this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+        this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+        this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
+        this.feedMapContainer.append(this.feedMapLabelStart);
+        this.feedMapContainer.append(this.feedMap);
+        this.feedMapContainer.append(this.feedMapLabelEnd);
+        this.feedMapZoomHighlight = this.feedMap.find(".feed-map-position-zoom-highlight");
+        this.feedMapWrapper = $(`<div class="feed-map-wrapper ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
+        this.feedMapWrapper.append(this.feedMapContainer);
+        this.feedMapConnector = $(`<div class="feed-map-connector">
+        <svg class="feed-map-connector-svg" preserveAspectRatio="none">
+          <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
+          <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
         </svg>
       </div>`);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
-        this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar scroll-indicator-zoom-container"></div>`);
-        this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
-        this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
-        this.scrollIndicatorZoomInner = $(`<div class="scroll-zoom-inner"></div>`);
-        this.scrollIndicatorZoom.append(this.scrollIndicatorZoomInner);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
+        this.feedMapWrapper.append(this.feedMapConnector);
+        this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-container-toolbar feed-map-zoom-container"></div>`);
+        this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+        this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+        this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
+        this.feedMapZoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
+        this.feedMapZoom.append(this.feedMapZoomInner);
+        this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
+        this.feedMapZoomContainer.append(this.feedMapZoom);
+        this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
+        this.feedMapWrapper.append(this.feedMapZoomContainer);
         this.zoomWindowStart = null;
       }
       this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1"/>`);
@@ -70033,13 +70267,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           this.adjustContentWidth(50);
         });
       }
-      if (indicatorPosition === "Top toolbar" && this.scrollIndicatorWrapper) {
-        $(this.toolbarDiv).append(this.scrollIndicatorWrapper);
+      if (indicatorPosition === "Top toolbar" && this.feedMapWrapper) {
+        $(this.toolbarDiv).append(this.feedMapWrapper);
         this.setupScrollIndicatorZoomClick();
         this.setupScrollIndicatorClick();
         this.setupScrollIndicatorScroll();
-        this.setupFeedMapTooltipHandlers(this.scrollIndicator);
-        this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
+        this.setupFeedMapTooltipHandlers(this.feedMap);
+        this.setupFeedMapTooltipHandlers(this.feedMapZoom);
       }
       waitForElement$1("#bsky-navigator-toolbar", null, (_div) => {
         this.addToolbar(beforeDiv);
@@ -70117,51 +70351,51 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
       this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
       this.statusBarRight = $(`<div id="statusBarRight"></div>`);
-      const indicatorPosition = this.config.get("scrollIndicatorPosition");
-      const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
+      const indicatorPosition = this.config.get("feedMapPosition");
+      const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
       const isAdvancedStyle = indicatorStyle === "Advanced";
-      isAdvancedStyle ? parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0 : 0;
-      const styleClass = isAdvancedStyle ? "scroll-indicator-advanced" : "scroll-indicator-basic";
-      const indicatorTheme = this.config.get("scrollIndicatorTheme") || "Default";
-      const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
-      const indicatorScale = parseInt(this.config.get("scrollIndicatorScale"), 10) || 100;
+      isAdvancedStyle ? parseInt(this.config.get("feedMapZoom"), 10) || 0 : 0;
+      const styleClass = isAdvancedStyle ? "feed-map-advanced" : "feed-map-basic";
+      const indicatorTheme = this.config.get("feedMapTheme") || "Default";
+      const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
+      const indicatorScale = parseInt(this.config.get("feedMapScale"), 10) || 100;
       const scaleValue = indicatorScale / 100;
-      const animationInterval = parseInt(this.config.get("scrollIndicatorAnimationSpeed"), 10);
+      const animationInterval = parseInt(this.config.get("feedMapAnimationSpeed"), 10);
       const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
       const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
       if (indicatorPosition === "Bottom status bar") {
-        this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container"></div>`);
-        this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
-        this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
-        this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
-        this.scrollIndicatorContainer.append(this.scrollIndicator);
-        this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
-        this.scrollIndicatorZoomHighlight = this.scrollIndicator.find(".scroll-position-zoom-highlight");
-        this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
-        this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
-        <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
-          <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
-          <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
+        this.feedMapContainer = $(`<div class="feed-map-container"></div>`);
+        this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+        this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+        this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
+        this.feedMapContainer.append(this.feedMapLabelStart);
+        this.feedMapContainer.append(this.feedMap);
+        this.feedMapContainer.append(this.feedMapLabelEnd);
+        this.feedMapZoomHighlight = this.feedMap.find(".feed-map-position-zoom-highlight");
+        this.feedMapWrapper = $(`<div class="feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
+        this.feedMapWrapper.append(this.feedMapContainer);
+        this.feedMapConnector = $(`<div class="feed-map-connector">
+        <svg class="feed-map-connector-svg" preserveAspectRatio="none">
+          <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
+          <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
         </svg>
       </div>`);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
-        this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-zoom-container"></div>`);
-        this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
-        this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-        this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
-        this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
-        this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
-        $(this.statusBar).append(this.scrollIndicatorWrapper);
+        this.feedMapWrapper.append(this.feedMapConnector);
+        this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
+        this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+        this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+        this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
+        this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
+        this.feedMapZoomContainer.append(this.feedMapZoom);
+        this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
+        this.feedMapWrapper.append(this.feedMapZoomContainer);
+        $(this.statusBar).append(this.feedMapWrapper);
         this.setupScrollIndicatorZoomClick();
         this.setupScrollIndicatorClick();
         this.setupScrollIndicatorScroll();
-        this.setupFeedMapTooltipHandlers(this.scrollIndicator);
-        this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
-        $(this.statusBar).addClass("has-scroll-indicator");
+        this.setupFeedMapTooltipHandlers(this.feedMap);
+        this.setupFeedMapTooltipHandlers(this.feedMapZoom);
+        $(this.statusBar).addClass("has-feed-map");
       }
       $(this.statusBar).append(this.statusBarLeft);
       $(this.statusBar).append(this.statusBarCenter);
@@ -70218,19 +70452,19 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this._scrollUpdatePending) return;
       this._scrollUpdatePending = true;
       requestAnimationFrame(() => {
-        const indicator = $("#scroll-position-indicator");
+        const indicator = $("#feed-map-position-indicator");
         if (indicator.length && this.items.length) {
           this.updateViewportIndicator(indicator, this.items.length);
-          if (this.scrollIndicatorZoom) {
-            const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
+          if (this.feedMapZoom) {
+            const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
             const isAdvancedStyle = indicatorStyle === "Advanced";
-            const heatmapMode = isAdvancedStyle ? this.config.get("scrollIndicatorHeatmap") || "None" : "None";
-            const showIcons = isAdvancedStyle ? this.config.get("scrollIndicatorIcons") !== false : false;
-            const showAvatars = isAdvancedStyle ? this.config.get("scrollIndicatorAvatars") !== false : false;
-            const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
-            const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
-            const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
-            const showRuleColors = isAdvancedStyle && this.config.get("scrollIndicatorHandleColors");
+            const heatmapMode = isAdvancedStyle ? this.config.get("feedMapHeatmap") || "None" : "None";
+            const showIcons = isAdvancedStyle ? this.config.get("feedMapIcons") !== false : false;
+            const showAvatars = isAdvancedStyle ? this.config.get("feedMapAvatars") !== false : false;
+            const avatarScale = this.config.get("feedMapAvatarScale") ?? 100;
+            const showTimestamps = isAdvancedStyle ? this.config.get("feedMapTimestamps") !== false : false;
+            const showHandles = isAdvancedStyle ? this.config.get("feedMapHandles") !== false : false;
+            const showRuleColors = isAdvancedStyle && this.config.get("ruleColorCoding");
             const allItems = $(".item").filter((i2, item) => {
               if ($(item).parents(".item").length > 0) return false;
               const testId = $(item).attr("data-testid") || "";
@@ -70263,11 +70497,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const selectedElement = this.items[this.index];
             const currentDisplayIndex = displayItems.indexOf(selectedElement);
             if (isAdvancedStyle) {
-              this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayItems.length, displayItems, displayIndices);
+              this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayItems.length, displayItems, displayIndices);
             } else {
-              if (this.scrollIndicatorZoomContainer) this.scrollIndicatorZoomContainer.hide();
-              if (this.scrollIndicatorConnector) this.scrollIndicatorConnector.hide();
-              if (this.scrollIndicatorZoomHighlight) this.scrollIndicatorZoomHighlight.hide();
+              if (this.feedMapZoomContainer) this.feedMapZoomContainer.hide();
+              if (this.feedMapConnector) this.feedMapConnector.hide();
+              if (this.feedMapZoomHighlight) this.feedMapZoomHighlight.hide();
             }
           }
         }
@@ -70825,7 +71059,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return div.innerHTML;
     }
     updateScrollPosition(forceRebuild = false) {
-      const indicator = $("#scroll-position-indicator");
+      const indicator = $("#feed-map-position-indicator");
       if (!indicator.length) return;
       const allItems = this.items.toArray ? this.items.toArray() : Array.from(this.items);
       let displayItems = [];
@@ -70841,76 +71075,76 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       });
       if (!displayItems.length) {
-        indicator.find(".scroll-segment").remove();
-        indicator.find(".scroll-viewport-indicator").remove();
-        if (!indicator.find(".scroll-indicator-empty").length) {
-          indicator.append('<div class="scroll-indicator-empty">No results</div>');
+        indicator.find(".feed-map-segment").remove();
+        indicator.find(".feed-map-viewport-indicator").remove();
+        if (!indicator.find(".feed-map-empty").length) {
+          indicator.append('<div class="feed-map-empty">No results</div>');
         }
-        if (this.scrollIndicatorContainer) {
-          this.scrollIndicatorContainer.show();
+        if (this.feedMapContainer) {
+          this.feedMapContainer.show();
         }
-        if (this.scrollIndicatorZoomContainer) {
-          this.scrollIndicatorZoomContainer.hide();
+        if (this.feedMapZoomContainer) {
+          this.feedMapZoomContainer.hide();
         }
-        if (this.scrollIndicatorConnector) {
-          this.scrollIndicatorConnector.hide();
+        if (this.feedMapConnector) {
+          this.feedMapConnector.hide();
         }
-        if (this.scrollIndicatorZoomHighlight) {
-          this.scrollIndicatorZoomHighlight.hide();
+        if (this.feedMapZoomHighlight) {
+          this.feedMapZoomHighlight.hide();
         }
         return;
       }
-      indicator.find(".scroll-indicator-empty").remove();
-      const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
+      indicator.find(".feed-map-empty").remove();
+      const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
       const isAdvancedStyle = indicatorStyle === "Advanced";
       if (isAdvancedStyle) {
-        if (this.scrollIndicatorZoomContainer) {
-          this.scrollIndicatorZoomContainer.show();
+        if (this.feedMapZoomContainer) {
+          this.feedMapZoomContainer.show();
         }
-        if (this.scrollIndicatorConnector) {
-          this.scrollIndicatorConnector.show();
+        if (this.feedMapConnector) {
+          this.feedMapConnector.show();
         }
-        if (this.scrollIndicatorZoomHighlight) {
-          this.scrollIndicatorZoomHighlight.show();
+        if (this.feedMapZoomHighlight) {
+          this.feedMapZoomHighlight.show();
         }
       } else {
-        if (this.scrollIndicatorZoomContainer) {
-          this.scrollIndicatorZoomContainer.hide();
+        if (this.feedMapZoomContainer) {
+          this.feedMapZoomContainer.hide();
         }
-        if (this.scrollIndicatorConnector) {
-          this.scrollIndicatorConnector.hide();
+        if (this.feedMapConnector) {
+          this.feedMapConnector.hide();
         }
-        if (this.scrollIndicatorZoomHighlight) {
-          this.scrollIndicatorZoomHighlight.hide();
+        if (this.feedMapZoomHighlight) {
+          this.feedMapZoomHighlight.hide();
         }
       }
       this._displayItems = displayItems;
       const total = displayItems.length;
       const selectedElement = this.items[this.index];
       const currentDisplayIndex = displayItems.indexOf(selectedElement);
-      let segments = indicator.find(".scroll-segment");
+      let segments = indicator.find(".feed-map-segment");
       if (segments.length !== total) {
         if (!forceRebuild && (this.loading || this.loadingNew)) {
           return;
         }
-        indicator.find(".scroll-segment").remove();
-        indicator.find(".scroll-viewport-indicator").remove();
+        indicator.find(".feed-map-segment").remove();
+        indicator.find(".feed-map-viewport-indicator").remove();
         for (let i2 = 0; i2 < total; i2++) {
-          const segment = $('<div class="scroll-segment"></div>');
+          const segment = $('<div class="feed-map-segment"></div>');
           segment.attr("data-index", displayIndices[i2]);
           indicator.append(segment);
         }
-        indicator.append('<div class="scroll-viewport-indicator"></div>');
-        segments = indicator.find(".scroll-segment");
+        indicator.append('<div class="feed-map-viewport-indicator"></div>');
+        segments = indicator.find(".feed-map-segment");
       }
-      const heatmapMode = isAdvancedStyle ? this.config.get("scrollIndicatorHeatmap") || "None" : "None";
-      const iconsValue = this.config.get("scrollIndicatorIcons");
+      const heatmapMode = isAdvancedStyle ? this.config.get("feedMapHeatmap") || "None" : "None";
+      const iconsValue = this.config.get("feedMapIcons");
       const showIcons = isAdvancedStyle ? iconsValue === true || iconsValue === "true" || iconsValue === void 0 : false;
-      const showAvatars = isAdvancedStyle ? this.config.get("scrollIndicatorAvatars") !== false : false;
-      const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
-      const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
-      const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
-      const showRuleColors = isAdvancedStyle && this.config.get("scrollIndicatorHandleColors");
+      const showAvatars = isAdvancedStyle ? this.config.get("feedMapAvatars") !== false : false;
+      const avatarScale = this.config.get("feedMapAvatarScale") ?? 100;
+      const showTimestamps = isAdvancedStyle ? this.config.get("feedMapTimestamps") !== false : false;
+      const showHandles = isAdvancedStyle ? this.config.get("feedMapHandles") !== false : false;
+      const showRuleColors = isAdvancedStyle && this.config.get("ruleColorCoding");
       let engagementData = [];
       let maxScore = 0;
       if (isAdvancedStyle && (heatmapMode !== "None" || showIcons || showAvatars || showHandles)) {
@@ -70931,34 +71165,34 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const item = displayItems[i2];
         const actualIndex = displayIndices[i2];
         if (!item || !document.contains(item)) {
-          $segment.addClass("scroll-segment-virtualized");
+          $segment.addClass("feed-map-segment-virtualized");
           return;
         }
-        $segment.removeClass("scroll-segment-virtualized");
+        $segment.removeClass("feed-map-segment-virtualized");
         const isRead = $(item).hasClass("item-read");
         const isCurrent = i2 === currentDisplayIndex;
         $segment.removeClass(
-          "scroll-segment-read scroll-segment-current scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+          "feed-map-segment-read feed-map-segment-current feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8"
         );
-        $segment.find(".scroll-segment-icon").remove();
+        $segment.find(".feed-map-segment-icon").remove();
         if (isRead) {
-          $segment.addClass("scroll-segment-read");
+          $segment.addClass("feed-map-segment-read");
         }
         if (isCurrent) {
-          $segment.addClass("scroll-segment-current");
+          $segment.addClass("feed-map-segment-current");
         }
         if (engagementData[actualIndex]?.engagement?.isRatioed) {
-          $segment.addClass("scroll-segment-ratioed");
+          $segment.addClass("feed-map-segment-ratioed");
         } else if (heatmapMode !== "None" && engagementData[actualIndex]) {
           const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
           if (heatLevel > 0) {
-            $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+            $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
           }
         }
         if (showIcons && engagementData[actualIndex]?.engagement) {
           const icon = this.getContentIcon(engagementData[actualIndex].engagement);
           if (icon) {
-            $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+            $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
           }
         }
       });
@@ -70967,24 +71201,24 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (indicatorWidth > 0) {
           const segmentWidth = indicatorWidth / total;
           if (segmentWidth < 16) {
-            indicator.css("--scroll-icon-display", "none");
+            indicator.css("--feed-map-icon-display", "none");
           } else {
-            indicator.css("--scroll-icon-display", "flex");
+            indicator.css("--feed-map-icon-display", "flex");
           }
         }
       }
       this.updateViewportIndicator(indicator, total);
-      if (this.scrollIndicatorZoom && isAdvancedStyle) {
-        this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, total, displayItems, displayIndices);
+      if (this.feedMapZoom && isAdvancedStyle) {
+        this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, total, displayItems, displayIndices);
       }
-      this.updateScrollIndicatorLabels();
+      this.updateFeedMapLabels();
       const position2 = currentDisplayIndex >= 0 ? currentDisplayIndex + 1 : 0;
       const percentage = total > 0 ? Math.round(position2 / total * 100) : 0;
       indicator.attr("aria-valuenow", percentage);
       indicator.attr("title", `${position2} of ${total} items (${percentage}%)`);
     }
-    updateScrollIndicatorLabels() {
-      if (!this.scrollIndicatorLabelStart || !this.scrollIndicatorLabelEnd) return;
+    updateFeedMapLabels() {
+      if (!this.feedMapLabelStart || !this.feedMapLabelEnd) return;
       if (!this.items.length) return;
       const firstItem = this.items[0];
       const lastItem = this.items[this.items.length - 1];
@@ -71010,8 +71244,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           return format(date, "M/d/yy h:mma").toLowerCase();
         }
       };
-      this.scrollIndicatorLabelStart.text(formatCompact(firstTimestamp));
-      this.scrollIndicatorLabelEnd.text(formatCompact(lastTimestamp));
+      this.feedMapLabelStart.text(formatCompact(firstTimestamp));
+      this.feedMapLabelEnd.text(formatCompact(lastTimestamp));
     }
     /**
      * Extract engagement metrics from a post element
@@ -71201,18 +71435,18 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       } else {
         mediaIcon = `<img src="${this.INDICATOR_IMAGES.contentText}" alt="text">`;
       }
-      return `<span class="scroll-icon-stack">${postTypeIcon}${mediaIcon}</span>`;
+      return `<span class="feed-map-icon-stack">${postTypeIcon}${mediaIcon}</span>`;
     }
     /**
-     * Set up click handler for scroll indicator to jump to posts
+     * Set up click handler for feed map to jump to posts
      */
     setupScrollIndicatorClick() {
-      if (!this.scrollIndicator) return;
-      this.scrollIndicator.css("cursor", "pointer");
-      this.scrollIndicator.on("mousedown", (event) => {
+      if (!this.feedMap) return;
+      this.feedMap.css("cursor", "pointer");
+      this.feedMap.on("mousedown", (event) => {
         event.preventDefault();
       });
-      this.scrollIndicator.on("click", (event) => {
+      this.feedMap.on("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
         const indicator = $(event.currentTarget);
@@ -71236,16 +71470,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
     }
     /**
-     * Set up click handler for zoom indicator to jump to posts
+     * Set up click handler for feed map zoom to jump to posts
      */
     setupScrollIndicatorZoomClick() {
-      if (!this.scrollIndicatorZoom) return;
-      this.scrollIndicatorZoom.css("cursor", "pointer");
-      this.scrollIndicatorZoom.on("click", (event) => {
+      if (!this.feedMapZoom) return;
+      this.feedMapZoom.css("cursor", "pointer");
+      this.feedMapZoom.on("click", (event) => {
         const zoomIndicator = $(event.currentTarget);
         const indicatorWidth = zoomIndicator.width();
         const clickX = event.pageX - zoomIndicator.offset().left;
-        const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
+        const zoomWindowSize = parseInt(this.config.get("feedMapZoom"), 10) || 0;
         if (zoomWindowSize === 0) return;
         const displayItems = this._displayItems || [];
         const total = displayItems.length || this.items.length;
@@ -71278,7 +71512,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const displayItems = this._displayItems || [];
         const total = displayItems.length || this.items.length;
         if (total === 0) return;
-        const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
+        const zoomWindowSize = parseInt(this.config.get("feedMapZoom"), 10) || 0;
         if (zoomWindowSize === 0 || total <= zoomWindowSize) return;
         const delta = event.originalEvent.deltaX !== 0 ? event.originalEvent.deltaX : event.originalEvent.deltaY;
         accumulatedDelta += delta;
@@ -71295,40 +71529,40 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (newWindowStart !== currentStart) {
             this.zoomWindowManualPan = true;
             this.zoomWindowStart = newWindowStart;
-            this.updateZoomIndicatorDirect(newWindowStart, zoomWindowSize, total, displayItems);
+            this.updateFeedMapZoomDirect(newWindowStart, zoomWindowSize, total, displayItems);
           }
         }
         scrollTimeout = setTimeout(() => {
           accumulatedDelta = 0;
         }, 150);
       };
-      if (this.scrollIndicator) {
-        this.scrollIndicator.on("wheel", handleWheel);
+      if (this.feedMap) {
+        this.feedMap.on("wheel", handleWheel);
       }
-      if (this.scrollIndicatorZoom) {
-        this.scrollIndicatorZoom.on("wheel", handleWheel);
+      if (this.feedMapZoom) {
+        this.feedMapZoom.on("wheel", handleWheel);
       }
     }
     /**
-     * Direct update of zoom indicator for smooth panning (bypasses full updateScrollPosition)
+     * Direct update of feed map zoom for smooth panning (bypasses full updateScrollPosition)
      */
-    updateZoomIndicatorDirect(windowStart, zoomWindowSize, total, displayItems) {
-      const zoomIndicator = this.scrollIndicatorZoom;
-      const zoomInner = this.scrollIndicatorZoomInner;
+    updateFeedMapZoomDirect(windowStart, zoomWindowSize, total, displayItems) {
+      const zoomIndicator = this.feedMapZoom;
+      const zoomInner = this.feedMapZoomInner;
       if (!zoomIndicator || !zoomInner) return;
       const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
       const selectedElement = this.items[this.index];
       const currentIndex = displayItems.indexOf(selectedElement);
-      const indicatorStyle = this.config.get("scrollIndicatorStyle") || "Advanced";
+      const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
       const isAdvancedStyle = indicatorStyle === "Advanced";
-      const heatmapMode = isAdvancedStyle ? this.config.get("scrollIndicatorHeatmap") || "None" : "None";
-      const iconsValue = this.config.get("scrollIndicatorIcons");
+      const heatmapMode = isAdvancedStyle ? this.config.get("feedMapHeatmap") || "None" : "None";
+      const iconsValue = this.config.get("feedMapIcons");
       const showIcons = isAdvancedStyle ? iconsValue === true || iconsValue === "true" || iconsValue === void 0 : false;
-      const showAvatars = isAdvancedStyle ? this.config.get("scrollIndicatorAvatars") !== false : false;
-      const avatarScale = this.config.get("scrollIndicatorAvatarScale") ?? 100;
-      const showTimestamps = isAdvancedStyle ? this.config.get("scrollIndicatorTimestamps") !== false : false;
-      const showHandles = isAdvancedStyle ? this.config.get("scrollIndicatorHandles") !== false : false;
-      const showRuleColors = isAdvancedStyle && this.config.get("scrollIndicatorHandleColors");
+      const showAvatars = isAdvancedStyle ? this.config.get("feedMapAvatars") !== false : false;
+      const avatarScale = this.config.get("feedMapAvatarScale") ?? 100;
+      const showTimestamps = isAdvancedStyle ? this.config.get("feedMapTimestamps") !== false : false;
+      const showHandles = isAdvancedStyle ? this.config.get("feedMapHandles") !== false : false;
+      const showRuleColors = isAdvancedStyle && this.config.get("ruleColorCoding");
       let maxScore = 0;
       const windowEngagement = [];
       for (let i2 = 0; i2 < zoomWindowSize; i2++) {
@@ -71343,7 +71577,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           windowEngagement[i2] = null;
         }
       }
-      const segments = zoomInner.find(".scroll-segment");
+      const segments = zoomInner.find(".feed-map-segment");
       segments.each((i2, segment) => {
         const $segment = $(segment);
         const displayIndex = windowStart + i2;
@@ -71353,33 +71587,33 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const isCurrent = displayIndex === currentIndex;
         $segment.attr("data-index", hasItem ? displayIndex : -1);
         $segment.removeClass(
-          "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+          "feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8"
         );
-        $segment.find(".scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-handle, .scroll-segment-time").remove();
+        $segment.find(".feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time").remove();
         if (!hasItem) {
-          $segment.addClass("scroll-segment-empty");
+          $segment.addClass("feed-map-segment-empty");
           return;
         }
-        if (isRead) $segment.addClass("scroll-segment-read");
-        if (isCurrent) $segment.addClass("scroll-segment-current");
+        if (isRead) $segment.addClass("feed-map-segment-read");
+        if (isCurrent) $segment.addClass("feed-map-segment-current");
         const engData = windowEngagement[i2];
         if (engData?.engagement?.isRatioed) {
-          $segment.addClass("scroll-segment-ratioed");
+          $segment.addClass("feed-map-segment-ratioed");
         } else if (heatmapMode !== "None" && engData) {
           const heatLevel = this.getHeatLevel(engData.score, maxScore);
           if (heatLevel > 0) {
-            $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+            $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
           }
         }
         if (showIcons && engData?.engagement) {
           const icon = this.getContentIcon(engData.engagement);
           if (icon) {
-            $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+            $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
           }
         }
         if (showAvatars && engData?.engagement?.avatarUrl) {
           const avatarHeight = Math.round(32 * (avatarScale / 100));
-          $segment.append(`<img class="scroll-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+          $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
         }
         if (showHandles && engData?.engagement?.handle) {
           const handle2 = engData.engagement.handle;
@@ -71389,11 +71623,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (showRuleColors) {
             const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
             if (categoryIndex >= 0) {
-              const color2 = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+              const color2 = this.getColorForCategoryIndex(categoryIndex);
               handleStyle = ` style="color: ${color2}"`;
             }
           }
-          $segment.append(`<span class="scroll-segment-handle"${handleStyle}>${handleHtml}</span>`);
+          $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
         }
         if (showTimestamps) {
           const timestamp = this.getTimestampForItem(item);
@@ -71403,53 +71637,53 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             if (showRuleColors) {
               const categoryIndex = this.getFilterCategoryIndexForContent(item);
               if (categoryIndex >= 0) {
-                const color2 = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+                const color2 = this.getColorForCategoryIndex(categoryIndex);
                 timeStyle = ` style="color: ${color2}"`;
               }
             }
-            $segment.append(`<span class="scroll-segment-time"${timeStyle}>${relativeTime}</span>`);
+            $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
           }
         }
       });
-      this.updateZoomIndicatorLabels(windowStart, windowEnd);
+      this.updateFeedMapZoomLabels(windowStart, windowEnd);
       const atStart = windowStart === 0;
       const atEnd = windowStart + zoomWindowSize >= total;
-      zoomIndicator.toggleClass("scroll-zoom-at-start", atStart);
-      zoomIndicator.toggleClass("scroll-zoom-at-end", atEnd);
-      this.updateZoomConnector(windowStart, windowEnd, total);
+      zoomIndicator.toggleClass("feed-map-zoom-at-start", atStart);
+      zoomIndicator.toggleClass("feed-map-zoom-at-end", atEnd);
+      this.updateFeedMapZoomConnector(windowStart, windowEnd, total);
     }
     /**
-     * Update the zoom indicator showing posts around the current selection
+     * Update the feed map zoom showing posts around the current selection
      */
-    updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayTotal, displayItems, displayIndices) {
-      const zoomIndicator = this.scrollIndicatorZoom;
-      const zoomInner = this.scrollIndicatorZoomInner;
+    updateFeedMapZoom(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayTotal, displayItems, displayIndices) {
+      const zoomIndicator = this.feedMapZoom;
+      const zoomInner = this.feedMapZoomInner;
       if (!zoomIndicator || !zoomInner) return;
       if (this.loading || this.loadingNew) return;
-      const zoomWindowSize = parseInt(this.config.get("scrollIndicatorZoom"), 10) || 0;
+      const zoomWindowSize = parseInt(this.config.get("feedMapZoom"), 10) || 0;
       if (zoomWindowSize === 0) return;
       const total = displayTotal;
       if (total <= zoomWindowSize) {
-        if (this.scrollIndicatorContainer) {
-          this.scrollIndicatorContainer.hide();
+        if (this.feedMapContainer) {
+          this.feedMapContainer.hide();
         }
-        if (this.scrollIndicatorConnector) {
-          this.scrollIndicatorConnector.hide();
+        if (this.feedMapConnector) {
+          this.feedMapConnector.hide();
         }
-        if (this.scrollIndicatorZoomHighlight) {
-          this.scrollIndicatorZoomHighlight.hide();
+        if (this.feedMapZoomHighlight) {
+          this.feedMapZoomHighlight.hide();
         }
-        this.scrollIndicatorZoomContainer.show();
+        this.feedMapZoomContainer.show();
       } else {
-        if (this.scrollIndicatorContainer) {
-          this.scrollIndicatorContainer.show();
+        if (this.feedMapContainer) {
+          this.feedMapContainer.show();
         }
-        this.scrollIndicatorZoomContainer.show();
-        if (this.scrollIndicatorConnector) {
-          this.scrollIndicatorConnector.show();
+        this.feedMapZoomContainer.show();
+        if (this.feedMapConnector) {
+          this.feedMapConnector.show();
         }
-        if (this.scrollIndicatorZoomHighlight) {
-          this.scrollIndicatorZoomHighlight.show();
+        if (this.feedMapZoomHighlight) {
+          this.feedMapZoomHighlight.show();
         }
       }
       if (total === 0) return;
@@ -71477,23 +71711,23 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (windowStart + zoomWindowSize > total) {
         windowStart = Math.max(0, total - zoomWindowSize);
       }
-      let segments = zoomInner.find(".scroll-segment");
+      let segments = zoomInner.find(".feed-map-segment");
       if (segments.length !== zoomWindowSize) {
-        zoomInner.find(".scroll-segment").remove();
+        zoomInner.find(".feed-map-segment").remove();
         for (let i2 = 0; i2 < zoomWindowSize; i2++) {
-          const segment = $('<div class="scroll-segment scroll-segment-zoom"></div>');
+          const segment = $('<div class="feed-map-segment feed-map-segment-zoom"></div>');
           zoomInner.append(segment);
         }
-        segments = zoomInner.find(".scroll-segment");
+        segments = zoomInner.find(".feed-map-segment");
       }
       if (this.zoomWindowStart !== null && this.zoomWindowStart !== windowStart) {
         const shift = windowStart - this.zoomWindowStart;
         const segmentWidth = zoomIndicator.width() / zoomWindowSize;
         const offsetPx = -shift * segmentWidth;
-        zoomInner.removeClass("scroll-zoom-animating");
+        zoomInner.removeClass("feed-map-zoom-animating");
         zoomInner.css("transform", `translateX(${offsetPx}px)`);
         zoomInner[0].offsetHeight;
-        zoomInner.addClass("scroll-zoom-animating");
+        zoomInner.addClass("feed-map-zoom-animating");
         zoomInner.css("transform", "translateX(0)");
       }
       this.zoomWindowStart = windowStart;
@@ -71508,37 +71742,37 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const isCurrent = displayIndex === currentIndex;
         $segment.attr("data-index", hasItem ? displayIndex : -1);
         $segment.removeClass(
-          "scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8"
+          "feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8"
         );
-        $segment.find(".scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-handle, .scroll-segment-time").remove();
+        $segment.find(".feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time").remove();
         if (!hasItem) {
-          $segment.addClass("scroll-segment-empty");
+          $segment.addClass("feed-map-segment-empty");
           return;
         }
         if (isRead) {
-          $segment.addClass("scroll-segment-read");
+          $segment.addClass("feed-map-segment-read");
         }
         if (isCurrent) {
-          $segment.addClass("scroll-segment-current");
+          $segment.addClass("feed-map-segment-current");
         }
         if (engagementData[actualIndex]?.engagement?.isRatioed) {
-          $segment.addClass("scroll-segment-ratioed");
+          $segment.addClass("feed-map-segment-ratioed");
         } else if (heatmapMode !== "None" && engagementData[actualIndex]) {
           const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
           if (heatLevel > 0) {
-            $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+            $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
           }
         }
         if (showIcons && engagementData[actualIndex]?.engagement) {
           const icon = this.getContentIcon(engagementData[actualIndex].engagement);
           if (icon) {
-            $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+            $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
           }
         }
         if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
           const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
           const avatarHeight = Math.round(32 * (avatarScale / 100));
-          $segment.append(`<img class="scroll-segment-avatar" src="${avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+          $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
         }
         if (showHandles && engagementData[actualIndex]?.engagement?.handle) {
           const handle2 = engagementData[actualIndex].engagement.handle;
@@ -71553,11 +71787,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (showRuleColors) {
             const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
             if (categoryIndex >= 0) {
-              const color2 = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+              const color2 = this.getColorForCategoryIndex(categoryIndex);
               handleStyle = ` style="color: ${color2}"`;
             }
           }
-          $segment.append(`<span class="scroll-segment-handle"${handleStyle}>${handleHtml}</span>`);
+          $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
         }
         if (showTimestamps) {
           const timestamp = this.getTimestampForItem(item);
@@ -71567,38 +71801,38 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             if (showRuleColors) {
               const categoryIndex = this.getFilterCategoryIndexForContent(item);
               if (categoryIndex >= 0) {
-                const color2 = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+                const color2 = this.getColorForCategoryIndex(categoryIndex);
                 timeStyle = ` style="color: ${color2}"`;
               }
             }
-            $segment.append(`<span class="scroll-segment-time"${timeStyle}>${relativeTime}</span>`);
+            $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
           }
         }
       });
-      zoomIndicator.css("--scroll-icon-display", "flex");
-      this.updateZoomIndicatorLabels(windowStart, windowEnd);
+      zoomIndicator.css("--feed-map-icon-display", "flex");
+      this.updateFeedMapZoomLabels(windowStart, windowEnd);
       const atStart = windowStart === 0;
       const atEnd = windowStart + zoomWindowSize >= total;
-      zoomIndicator.toggleClass("scroll-zoom-at-start", atStart);
-      zoomIndicator.toggleClass("scroll-zoom-at-end", atEnd);
-      this.updateZoomConnector(windowStart, windowEnd, total);
+      zoomIndicator.toggleClass("feed-map-zoom-at-start", atStart);
+      zoomIndicator.toggleClass("feed-map-zoom-at-end", atEnd);
+      this.updateFeedMapZoomConnector(windowStart, windowEnd, total);
     }
     /**
-     * Update the curved connector lines between the main scroll indicator and zoom indicator
+     * Update the curved connector lines between the main feed map and feed map zoom
      */
-    updateZoomConnector(windowStart, windowEnd, total) {
-      if (!this.scrollIndicatorConnector || !this.scrollIndicator || !this.scrollIndicatorZoom) {
+    updateFeedMapZoomConnector(windowStart, windowEnd, total) {
+      if (!this.feedMapConnector || !this.feedMap || !this.feedMapZoom) {
         return;
       }
-      const connectorDiv = this.scrollIndicatorConnector[0];
+      const connectorDiv = this.feedMapConnector[0];
       if (!connectorDiv) return;
-      const svg = connectorDiv.querySelector(".scroll-indicator-connector-svg");
+      const svg = connectorDiv.querySelector(".feed-map-connector-svg");
       if (!svg) return;
-      const wrapperWidth = this.scrollIndicatorWrapper ? this.scrollIndicatorWrapper.width() : 1e3;
-      const labelWidth = this.scrollIndicatorLabelStart ? this.scrollIndicatorLabelStart.outerWidth() || 0 : 0;
-      const zoomLabelWidth = this.scrollIndicatorZoomLabelStart ? this.scrollIndicatorZoomLabelStart.outerWidth() || 0 : 0;
-      const mainWidth = this.scrollIndicator.width() || wrapperWidth - labelWidth * 2;
-      const zoomWidth = this.scrollIndicatorZoom.width() || wrapperWidth - zoomLabelWidth * 2;
+      const wrapperWidth = this.feedMapWrapper ? this.feedMapWrapper.width() : 1e3;
+      const labelWidth = this.feedMapLabelStart ? this.feedMapLabelStart.outerWidth() || 0 : 0;
+      const zoomLabelWidth = this.feedMapZoomLabelStart ? this.feedMapZoomLabelStart.outerWidth() || 0 : 0;
+      const mainWidth = this.feedMap.width() || wrapperWidth - labelWidth * 2;
+      const zoomWidth = this.feedMapZoom.width() || wrapperWidth - zoomLabelWidth * 2;
       const startPercent = windowStart / total;
       const endPercent = (windowEnd + 1) / total;
       const mainStartX = labelWidth + mainWidth * startPercent;
@@ -71608,8 +71842,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const height = 16;
       const svgWidth = wrapperWidth;
       svg.setAttribute("viewBox", `0 0 ${svgWidth} ${height}`);
-      const leftPath = svg.querySelector(".scroll-indicator-connector-left");
-      const rightPath = svg.querySelector(".scroll-indicator-connector-right");
+      const leftPath = svg.querySelector(".feed-map-connector-left");
+      const rightPath = svg.querySelector(".feed-map-connector-right");
       const midY = height / 2;
       if (leftPath) {
         leftPath.setAttribute(
@@ -71623,20 +71857,20 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           `M ${mainEndX} 0 C ${mainEndX} ${midY}, ${zoomEndX} ${midY}, ${zoomEndX} ${height}`
         );
       }
-      if (this.scrollIndicatorZoomHighlight) {
+      if (this.feedMapZoomHighlight) {
         const highlightLeft = startPercent * 100;
         const highlightWidth = (endPercent - startPercent) * 100;
-        this.scrollIndicatorZoomHighlight.css({
+        this.feedMapZoomHighlight.css({
           left: `${highlightLeft}%`,
           width: `${highlightWidth}%`
         });
       }
     }
     /**
-     * Update the date/time labels for the zoom indicator
+     * Update the date/time labels for the feed map zoom
      */
-    updateZoomIndicatorLabels(windowStart, windowEnd) {
-      if (!this.scrollIndicatorZoomLabelStart || !this.scrollIndicatorZoomLabelEnd) return;
+    updateFeedMapZoomLabels(windowStart, windowEnd) {
+      if (!this.feedMapZoomLabelStart || !this.feedMapZoomLabelEnd) return;
       if (!this.items.length) return;
       const firstItem = this.items[windowStart];
       const lastItem = this.items[windowEnd];
@@ -71662,11 +71896,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           return format(date, "M/d/yy h:mma").toLowerCase();
         }
       };
-      this.scrollIndicatorZoomLabelStart.text(formatCompact(firstTimestamp));
-      this.scrollIndicatorZoomLabelEnd.text(formatCompact(lastTimestamp));
+      this.feedMapZoomLabelStart.text(formatCompact(firstTimestamp));
+      this.feedMapZoomLabelEnd.text(formatCompact(lastTimestamp));
     }
     updateViewportIndicator(indicator, total) {
-      const viewportIndicator = indicator.find(".scroll-viewport-indicator");
+      const viewportIndicator = indicator.find(".feed-map-viewport-indicator");
       if (!viewportIndicator.length || total === 0) return;
       const indicatorWidth = indicator.width();
       const segmentWidth = indicatorWidth / total;
@@ -71770,7 +72004,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const relativeTime = timestamp ? this.formatRelativeTime(timestamp) : "";
       const truncatedText = postText.length > 150 ? postText.substring(0, 150).trim() + "..." : postText;
       const avatarImg = tooltip.find(".feed-map-tooltip-avatar");
-      if (this.config.get("scrollIndicatorAvatars") !== false && engagement?.avatarUrl) {
+      if (this.config.get("feedMapAvatars") !== false && engagement?.avatarUrl) {
         avatarImg.attr("src", engagement.avatarUrl).show();
       } else {
         avatarImg.hide();
@@ -71886,11 +72120,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      */
     setupFeedMapTooltipHandlers(indicator) {
       if (!indicator) return;
-      indicator.on("mouseenter", ".scroll-segment", (e2) => {
+      indicator.on("mouseenter", ".feed-map-segment", (e2) => {
         const segment = e2.currentTarget;
         const itemIndex = $(segment).data("index");
         clearTimeout(this._tooltipHideTimer);
-        const tooltipMode = this.config.get("scrollIndicatorTooltip") || "Instant";
+        const tooltipMode = this.config.get("feedMapTooltip") || "Instant";
         const delay = tooltipMode === "Delayed" ? 300 : 0;
         if (this._tooltipTimer) {
           clearTimeout(this._tooltipTimer);
@@ -71909,7 +72143,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }, delay);
         }
       });
-      indicator.on("mouseleave", ".scroll-segment", () => {
+      indicator.on("mouseleave", ".feed-map-segment", () => {
         clearTimeout(this._tooltipTimer);
         this._tooltipTimer = null;
         this._tooltipHideTimer = setTimeout(() => {

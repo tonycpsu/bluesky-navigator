@@ -27,7 +27,7 @@ export class FeedItemHandler extends ItemHandler {
       'https://www.svgrepo.com/show/522235/preferences.svg',
       'https://www.svgrepo.com/show/522236/preferences.svg',
     ],
-    // Scroll indicator content type icons
+    // Feed map content type icons
     contentVideo: 'https://www.svgrepo.com/show/333765/camera-movie.svg',
     contentImage: 'https://www.svgrepo.com/show/334014/image-alt.svg',
     contentEmbed: 'https://www.svgrepo.com/show/334050/link-external.svg',
@@ -67,28 +67,28 @@ export class FeedItemHandler extends ItemHandler {
       });
     });
 
-    // Listen for dynamic scroll indicator setting changes
-    document.addEventListener('scrollIndicatorSettingChanged', (e) => {
-      this.handleScrollIndicatorSettingChange(e.detail);
+    // Listen for dynamic feed map setting changes
+    document.addEventListener('feedMapSettingChanged', (e) => {
+      this.handleFeedMapSettingChange(e.detail);
     });
   }
 
   /**
    * Called when feed tab changes (e.g., Following -> Discover).
-   * Resets the scroll indicator and reloads items from DOM.
+   * Resets the feed map and reloads items from DOM.
    */
   onFeedChange() {
-    // Clear the scroll indicator segments to force rebuild
-    const indicator = $('#scroll-position-indicator');
+    // Clear the feed map segments to force rebuild
+    const indicator = $('#feed-map-position-indicator');
     if (indicator.length) {
-      indicator.find('.scroll-segment').remove();
-      indicator.find('.scroll-viewport-indicator').remove();
-      indicator.find('.scroll-indicator-empty').remove();
+      indicator.find('.feed-map-segment').remove();
+      indicator.find('.feed-map-viewport-indicator').remove();
+      indicator.find('.feed-map-empty').remove();
     }
 
-    // Clear zoom indicator if present
-    if (this.scrollIndicatorZoom) {
-      this.scrollIndicatorZoom.find('.scroll-segment-zoom').remove();
+    // Clear feed map zoom if present
+    if (this.feedMapZoom) {
+      this.feedMapZoom.find('.feed-map-segment-zoom').remove();
     }
 
     // Delay to let Bluesky update the DOM with new feed items
@@ -232,30 +232,30 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   /**
-   * Handle dynamic scroll indicator setting changes from config modal
+   * Handle dynamic feed map setting changes from config modal
    */
-  handleScrollIndicatorSettingChange(detail) {
+  handleFeedMapSettingChange(detail) {
     const { setting, value } = detail;
 
     // Update the pending config value immediately for preview
     this.config.set(setting, value);
 
     // Handle position changes by moving the indicator
-    if (setting === 'scrollIndicatorPosition') {
+    if (setting === 'feedMapPosition') {
       this.moveScrollIndicator(value);
       return;
     }
 
-    // Refresh the scroll indicator display
+    // Refresh the feed map display
     this.updateScrollPosition();
   }
 
   /**
-   * Move the scroll indicator to a new position dynamically
+   * Move the feed map to a new position dynamically
    */
   moveScrollIndicator(newPosition) {
     // Get the indicator element (wrapper if exists, otherwise container)
-    const indicator = this.scrollIndicatorWrapper || this.scrollIndicatorContainer;
+    const indicator = this.feedMapWrapper || this.feedMapContainer;
     if (!indicator) return;
 
     // Detach from current location
@@ -267,31 +267,31 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     // Update classes for the new position
-    if (this.scrollIndicatorContainer) {
-      this.scrollIndicatorContainer.removeClass('scroll-indicator-container-toolbar scroll-indicator-container-statusbar');
+    if (this.feedMapContainer) {
+      this.feedMapContainer.removeClass('feed-map-container-toolbar feed-map-container-statusbar');
       if (newPosition === 'Top toolbar') {
-        this.scrollIndicatorContainer.addClass('scroll-indicator-container-toolbar');
+        this.feedMapContainer.addClass('feed-map-container-toolbar');
       } else if (newPosition === 'Bottom status bar') {
-        this.scrollIndicatorContainer.addClass('scroll-indicator-container-statusbar');
+        this.feedMapContainer.addClass('feed-map-container-statusbar');
       }
     }
 
     // Update wrapper class for status bar positioning
-    if (this.scrollIndicatorWrapper) {
-      this.scrollIndicatorWrapper.removeClass('scroll-indicator-wrapper-statusbar');
+    if (this.feedMapWrapper) {
+      this.feedMapWrapper.removeClass('feed-map-wrapper-statusbar');
       if (newPosition === 'Bottom status bar') {
-        this.scrollIndicatorWrapper.addClass('scroll-indicator-wrapper-statusbar');
+        this.feedMapWrapper.addClass('feed-map-wrapper-statusbar');
       }
     }
 
     // Append to new location
     if (newPosition === 'Top toolbar' && this.toolbarDiv) {
       $(this.toolbarDiv).append(indicator);
-      $(this.statusBar).removeClass('has-scroll-indicator');
+      $(this.statusBar).removeClass('has-feed-map');
     } else if (newPosition === 'Bottom status bar' && this.statusBar) {
       // Prepend to status bar so indicator is first in DOM order
       $(this.statusBar).prepend(indicator);
-      $(this.statusBar).addClass('has-scroll-indicator');
+      $(this.statusBar).addClass('has-feed-map');
     }
 
     // Refresh display
@@ -368,57 +368,57 @@ export class FeedItemHandler extends ItemHandler {
     $(beforeDiv).before(this.toolbarDiv);
 
     // Add scroll position indicator at top of toolbar if configured
-    const indicatorPosition = this.config.get('scrollIndicatorPosition');
-    const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
+    const indicatorPosition = this.config.get('feedMapPosition');
+    const indicatorStyle = this.config.get('feedMapStyle') || 'Advanced';
     const isAdvancedStyle = indicatorStyle === 'Advanced';
-    const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0) : 0;
-    const styleClass = isAdvancedStyle ? 'scroll-indicator-advanced' : 'scroll-indicator-basic';
-    const indicatorTheme = this.config.get('scrollIndicatorTheme') || 'Default';
-    const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
-    const indicatorScale = parseInt(this.config.get('scrollIndicatorScale'), 10) || 100;
+    const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('feedMapZoom'), 10) || 0) : 0;
+    const styleClass = isAdvancedStyle ? 'feed-map-advanced' : 'feed-map-basic';
+    const indicatorTheme = this.config.get('feedMapTheme') || 'Default';
+    const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
+    const indicatorScale = parseInt(this.config.get('feedMapScale'), 10) || 100;
     const scaleValue = indicatorScale / 100;
-    const animationInterval = parseInt(this.config.get('scrollIndicatorAnimationSpeed'), 10);
+    const animationInterval = parseInt(this.config.get('feedMapAnimationSpeed'), 10);
     // 0 = instant, 100 = normal, 200 = 2x slower
     const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
     const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
-    // Prepare scroll indicator elements (will be appended after toolbar rows)
+    // Prepare feed map elements (will be appended after toolbar rows)
     if (indicatorPosition === 'Top toolbar') {
       // Always use wrapper for dynamic style switching (styleClass goes on wrapper for CSS to hide zoom elements)
-      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar"></div>`);
-      this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
-      this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
-      this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
-      this.scrollIndicatorContainer.append(this.scrollIndicator);
-      this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
+      this.feedMapContainer = $(`<div class="feed-map-container feed-map-container-toolbar"></div>`);
+      this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+      this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+      this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
+      this.feedMapContainer.append(this.feedMapLabelStart);
+      this.feedMapContainer.append(this.feedMap);
+      this.feedMapContainer.append(this.feedMapLabelEnd);
 
       // Always create wrapper with zoom elements (CSS controls visibility based on style)
       // Get reference to zoom highlight element
-      this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
+      this.feedMapZoomHighlight = this.feedMap.find('.feed-map-position-zoom-highlight');
       // Create wrapper for both indicators and connector (styleClass + themeClass on wrapper so CSS can target children)
-      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-      this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
+      this.feedMapWrapper = $(`<div class="feed-map-wrapper ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
+      this.feedMapWrapper.append(this.feedMapContainer);
 
       // Add connector div between main indicator and zoom with SVG inside
-      this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
-        <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
-          <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
-          <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
+      this.feedMapConnector = $(`<div class="feed-map-connector">
+        <svg class="feed-map-connector-svg" preserveAspectRatio="none">
+          <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
+          <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
         </svg>
       </div>`);
-      this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
+      this.feedMapWrapper.append(this.feedMapConnector);
 
-      this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-container-toolbar scroll-indicator-zoom-container"></div>`);
-      this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
-      this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-      this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
+      this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-container-toolbar feed-map-zoom-container"></div>`);
+      this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+      this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+      this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
       // Inner wrapper for smooth scroll animation
-      this.scrollIndicatorZoomInner = $(`<div class="scroll-zoom-inner"></div>`);
-      this.scrollIndicatorZoom.append(this.scrollIndicatorZoomInner);
-      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
-      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
-      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
-      this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
+      this.feedMapZoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
+      this.feedMapZoom.append(this.feedMapZoomInner);
+      this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
+      this.feedMapZoomContainer.append(this.feedMapZoom);
+      this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
+      this.feedMapWrapper.append(this.feedMapZoomContainer);
       // Track previous window position for smooth scrolling
       this.zoomWindowStart = null;
     }
@@ -667,14 +667,14 @@ export class FeedItemHandler extends ItemHandler {
       });
     }
 
-    // Append scroll indicators after toolbar rows (so they appear below)
-    if (indicatorPosition === 'Top toolbar' && this.scrollIndicatorWrapper) {
-      $(this.toolbarDiv).append(this.scrollIndicatorWrapper);
+    // Append feed maps after toolbar rows (so they appear below)
+    if (indicatorPosition === 'Top toolbar' && this.feedMapWrapper) {
+      $(this.toolbarDiv).append(this.feedMapWrapper);
       this.setupScrollIndicatorZoomClick();
       this.setupScrollIndicatorClick();
       this.setupScrollIndicatorScroll();
-      this.setupFeedMapTooltipHandlers(this.scrollIndicator);
-      this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
+      this.setupFeedMapTooltipHandlers(this.feedMap);
+      this.setupFeedMapTooltipHandlers(this.feedMapZoom);
     }
 
     waitForElement('#bsky-navigator-toolbar', null, (_div) => {
@@ -774,62 +774,62 @@ export class FeedItemHandler extends ItemHandler {
     this.statusBarRight = $(`<div id="statusBarRight"></div>`);
 
     // Add scroll position indicator inside status bar if configured
-    const indicatorPosition = this.config.get('scrollIndicatorPosition');
-    const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
+    const indicatorPosition = this.config.get('feedMapPosition');
+    const indicatorStyle = this.config.get('feedMapStyle') || 'Advanced';
     const isAdvancedStyle = indicatorStyle === 'Advanced';
-    const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0) : 0;
-    const styleClass = isAdvancedStyle ? 'scroll-indicator-advanced' : 'scroll-indicator-basic';
-    const indicatorTheme = this.config.get('scrollIndicatorTheme') || 'Default';
-    const themeClass = `scroll-indicator-theme-${indicatorTheme.toLowerCase()}`;
-    const indicatorScale = parseInt(this.config.get('scrollIndicatorScale'), 10) || 100;
+    const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('feedMapZoom'), 10) || 0) : 0;
+    const styleClass = isAdvancedStyle ? 'feed-map-advanced' : 'feed-map-basic';
+    const indicatorTheme = this.config.get('feedMapTheme') || 'Default';
+    const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
+    const indicatorScale = parseInt(this.config.get('feedMapScale'), 10) || 100;
     const scaleValue = indicatorScale / 100;
-    const animationInterval = parseInt(this.config.get('scrollIndicatorAnimationSpeed'), 10);
+    const animationInterval = parseInt(this.config.get('feedMapAnimationSpeed'), 10);
     // 0 = instant, 100 = normal, 200 = 2x slower
     const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
     const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
     if (indicatorPosition === 'Bottom status bar') {
       // Always use wrapper for dynamic style switching (styleClass goes on wrapper for CSS to hide zoom elements)
-      this.scrollIndicatorContainer = $(`<div class="scroll-indicator-container"></div>`);
-      this.scrollIndicatorLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
-      this.scrollIndicatorLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-      this.scrollIndicator = $(`<div id="scroll-position-indicator" class="scroll-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="scroll-position-fill"></div><div class="scroll-position-zoom-highlight"></div></div>`);
-      this.scrollIndicatorContainer.append(this.scrollIndicatorLabelStart);
-      this.scrollIndicatorContainer.append(this.scrollIndicator);
-      this.scrollIndicatorContainer.append(this.scrollIndicatorLabelEnd);
+      this.feedMapContainer = $(`<div class="feed-map-container"></div>`);
+      this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+      this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+      this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
+      this.feedMapContainer.append(this.feedMapLabelStart);
+      this.feedMapContainer.append(this.feedMap);
+      this.feedMapContainer.append(this.feedMapLabelEnd);
 
       // Always create wrapper with zoom elements (CSS controls visibility based on style)
       // Get reference to zoom highlight element
-      this.scrollIndicatorZoomHighlight = this.scrollIndicator.find('.scroll-position-zoom-highlight');
+      this.feedMapZoomHighlight = this.feedMap.find('.feed-map-position-zoom-highlight');
       // Create wrapper for both indicators and connector (styleClass + themeClass on wrapper so CSS can target children)
-      this.scrollIndicatorWrapper = $(`<div class="scroll-indicator-wrapper scroll-indicator-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-      this.scrollIndicatorWrapper.append(this.scrollIndicatorContainer);
+      this.feedMapWrapper = $(`<div class="feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
+      this.feedMapWrapper.append(this.feedMapContainer);
 
       // Add connector div between main indicator and zoom with SVG inside
-      this.scrollIndicatorConnector = $(`<div class="scroll-indicator-connector">
-        <svg class="scroll-indicator-connector-svg" preserveAspectRatio="none">
-          <path class="scroll-indicator-connector-path scroll-indicator-connector-left" fill="none"/>
-          <path class="scroll-indicator-connector-path scroll-indicator-connector-right" fill="none"/>
+      this.feedMapConnector = $(`<div class="feed-map-connector">
+        <svg class="feed-map-connector-svg" preserveAspectRatio="none">
+          <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
+          <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
         </svg>
       </div>`);
-      this.scrollIndicatorWrapper.append(this.scrollIndicatorConnector);
+      this.feedMapWrapper.append(this.feedMapConnector);
 
-      this.scrollIndicatorZoomContainer = $(`<div class="scroll-indicator-container scroll-indicator-zoom-container"></div>`);
-      this.scrollIndicatorZoomLabelStart = $(`<span class="scroll-indicator-label scroll-indicator-label-start"></span>`);
-      this.scrollIndicatorZoomLabelEnd = $(`<span class="scroll-indicator-label scroll-indicator-label-end"></span>`);
-      this.scrollIndicatorZoom = $(`<div id="scroll-position-indicator-zoom" class="scroll-position-indicator scroll-position-indicator-zoom"></div>`);
-      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelStart);
-      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoom);
-      this.scrollIndicatorZoomContainer.append(this.scrollIndicatorZoomLabelEnd);
-      this.scrollIndicatorWrapper.append(this.scrollIndicatorZoomContainer);
+      this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
+      this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+      this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+      this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
+      this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
+      this.feedMapZoomContainer.append(this.feedMapZoom);
+      this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
+      this.feedMapWrapper.append(this.feedMapZoomContainer);
 
-      $(this.statusBar).append(this.scrollIndicatorWrapper);
+      $(this.statusBar).append(this.feedMapWrapper);
       this.setupScrollIndicatorZoomClick();
       this.setupScrollIndicatorClick();
       this.setupScrollIndicatorScroll();
-      this.setupFeedMapTooltipHandlers(this.scrollIndicator);
-      this.setupFeedMapTooltipHandlers(this.scrollIndicatorZoom);
+      this.setupFeedMapTooltipHandlers(this.feedMap);
+      this.setupFeedMapTooltipHandlers(this.feedMapZoom);
       // Add class to status bar for CSS styling
-      $(this.statusBar).addClass('has-scroll-indicator');
+      $(this.statusBar).addClass('has-feed-map');
     }
 
     $(this.statusBar).append(this.statusBarLeft);
@@ -906,21 +906,21 @@ export class FeedItemHandler extends ItemHandler {
     this._scrollUpdatePending = true;
 
     requestAnimationFrame(() => {
-      const indicator = $('#scroll-position-indicator');
+      const indicator = $('#feed-map-position-indicator');
       if (indicator.length && this.items.length) {
         this.updateViewportIndicator(indicator, this.items.length);
 
-        // Also update zoom indicator if present (Advanced mode only)
-        if (this.scrollIndicatorZoom) {
-          const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
+        // Also update feed map zoom if present (Advanced mode only)
+        if (this.feedMapZoom) {
+          const indicatorStyle = this.config.get('feedMapStyle') || 'Advanced';
           const isAdvancedStyle = indicatorStyle === 'Advanced';
-          const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
-          const showIcons = isAdvancedStyle ? (this.config.get('scrollIndicatorIcons') !== false) : false;
-          const showAvatars = isAdvancedStyle ? (this.config.get('scrollIndicatorAvatars') !== false) : false;
-          const avatarScale = this.config.get('scrollIndicatorAvatarScale') ?? 100;
-          const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
-          const showHandles = isAdvancedStyle ? (this.config.get('scrollIndicatorHandles') !== false) : false;
-          const showRuleColors = isAdvancedStyle && this.config.get('scrollIndicatorHandleColors');
+          const heatmapMode = isAdvancedStyle ? (this.config.get('feedMapHeatmap') || 'None') : 'None';
+          const showIcons = isAdvancedStyle ? (this.config.get('feedMapIcons') !== false) : false;
+          const showAvatars = isAdvancedStyle ? (this.config.get('feedMapAvatars') !== false) : false;
+          const avatarScale = this.config.get('feedMapAvatarScale') ?? 100;
+          const showTimestamps = isAdvancedStyle ? (this.config.get('feedMapTimestamps') !== false) : false;
+          const showHandles = isAdvancedStyle ? (this.config.get('feedMapHandles') !== false) : false;
+          const showRuleColors = isAdvancedStyle && this.config.get('ruleColorCoding');
 
           // Get all items excluding filtered ones and non-post placeholders
           const allItems = $('.item').filter((i, item) => {
@@ -964,14 +964,14 @@ export class FeedItemHandler extends ItemHandler {
           const selectedElement = this.items[this.index];
           const currentDisplayIndex = displayItems.indexOf(selectedElement);
 
-          // Only show zoom indicator in Advanced mode
+          // Only show feed map zoom in Advanced mode
           if (isAdvancedStyle) {
-            this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayItems.length, displayItems, displayIndices);
+            this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayItems.length, displayItems, displayIndices);
           } else {
             // Hide zoom elements in Basic mode
-            if (this.scrollIndicatorZoomContainer) this.scrollIndicatorZoomContainer.hide();
-            if (this.scrollIndicatorConnector) this.scrollIndicatorConnector.hide();
-            if (this.scrollIndicatorZoomHighlight) this.scrollIndicatorZoomHighlight.hide();
+            if (this.feedMapZoomContainer) this.feedMapZoomContainer.hide();
+            if (this.feedMapConnector) this.feedMapConnector.hide();
+            if (this.feedMapZoomHighlight) this.feedMapZoomHighlight.hide();
           }
         }
       }
@@ -1675,7 +1675,7 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   updateScrollPosition(forceRebuild = false) {
-    const indicator = $('#scroll-position-indicator');
+    const indicator = $('#feed-map-position-indicator');
     if (!indicator.length) return;
 
     // Use this.items which is properly filtered by loadItems()
@@ -1699,57 +1699,57 @@ export class FeedItemHandler extends ItemHandler {
 
     // If no items to display, show empty state
     if (!displayItems.length) {
-      indicator.find('.scroll-segment').remove();
-      indicator.find('.scroll-viewport-indicator').remove();
+      indicator.find('.feed-map-segment').remove();
+      indicator.find('.feed-map-viewport-indicator').remove();
       // Add empty state message if not already present
-      if (!indicator.find('.scroll-indicator-empty').length) {
-        indicator.append('<div class="scroll-indicator-empty">No results</div>');
+      if (!indicator.find('.feed-map-empty').length) {
+        indicator.append('<div class="feed-map-empty">No results</div>');
       }
       // Show main container (may have been hidden when fewer items than zoom window)
-      if (this.scrollIndicatorContainer) {
-        this.scrollIndicatorContainer.show();
+      if (this.feedMapContainer) {
+        this.feedMapContainer.show();
       }
-      // Hide zoom indicator and related elements
-      if (this.scrollIndicatorZoomContainer) {
-        this.scrollIndicatorZoomContainer.hide();
+      // Hide feed map zoom and related elements
+      if (this.feedMapZoomContainer) {
+        this.feedMapZoomContainer.hide();
       }
-      if (this.scrollIndicatorConnector) {
-        this.scrollIndicatorConnector.hide();
+      if (this.feedMapConnector) {
+        this.feedMapConnector.hide();
       }
-      if (this.scrollIndicatorZoomHighlight) {
-        this.scrollIndicatorZoomHighlight.hide();
+      if (this.feedMapZoomHighlight) {
+        this.feedMapZoomHighlight.hide();
       }
       return;
     }
 
     // Remove empty state message if present
-    indicator.find('.scroll-indicator-empty').remove();
+    indicator.find('.feed-map-empty').remove();
 
     // Get style setting early to determine if zoom should be shown
-    const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
+    const indicatorStyle = this.config.get('feedMapStyle') || 'Advanced';
     const isAdvancedStyle = indicatorStyle === 'Advanced';
 
-    // Only show zoom elements in Advanced mode (updateZoomIndicator will hide if not needed)
+    // Only show zoom elements in Advanced mode (updateFeedMapZoom will hide if not needed)
     if (isAdvancedStyle) {
-      if (this.scrollIndicatorZoomContainer) {
-        this.scrollIndicatorZoomContainer.show();
+      if (this.feedMapZoomContainer) {
+        this.feedMapZoomContainer.show();
       }
-      if (this.scrollIndicatorConnector) {
-        this.scrollIndicatorConnector.show();
+      if (this.feedMapConnector) {
+        this.feedMapConnector.show();
       }
-      if (this.scrollIndicatorZoomHighlight) {
-        this.scrollIndicatorZoomHighlight.show();
+      if (this.feedMapZoomHighlight) {
+        this.feedMapZoomHighlight.show();
       }
     } else {
       // Hide zoom elements in Basic mode
-      if (this.scrollIndicatorZoomContainer) {
-        this.scrollIndicatorZoomContainer.hide();
+      if (this.feedMapZoomContainer) {
+        this.feedMapZoomContainer.hide();
       }
-      if (this.scrollIndicatorConnector) {
-        this.scrollIndicatorConnector.hide();
+      if (this.feedMapConnector) {
+        this.feedMapConnector.hide();
       }
-      if (this.scrollIndicatorZoomHighlight) {
-        this.scrollIndicatorZoomHighlight.hide();
+      if (this.feedMapZoomHighlight) {
+        this.feedMapZoomHighlight.hide();
       }
     }
 
@@ -1763,7 +1763,7 @@ export class FeedItemHandler extends ItemHandler {
     const currentDisplayIndex = displayItems.indexOf(selectedElement);
 
     // Create or update segments
-    let segments = indicator.find('.scroll-segment');
+    let segments = indicator.find('.feed-map-segment');
     if (segments.length !== total) {
       // Skip rebuild while loading to prevent visual jumping (unless forced, e.g., by filtering)
       if (!forceRebuild && (this.loading || this.loadingNew)) {
@@ -1771,32 +1771,32 @@ export class FeedItemHandler extends ItemHandler {
       }
 
       // Rebuild segments
-      indicator.find('.scroll-segment').remove();
-      indicator.find('.scroll-viewport-indicator').remove();
+      indicator.find('.feed-map-segment').remove();
+      indicator.find('.feed-map-viewport-indicator').remove();
 
       for (let i = 0; i < total; i++) {
-        const segment = $('<div class="scroll-segment"></div>');
+        const segment = $('<div class="feed-map-segment"></div>');
         // Store actual item index for navigation
         segment.attr('data-index', displayIndices[i]);
         indicator.append(segment);
       }
 
       // Add viewport indicator
-      indicator.append('<div class="scroll-viewport-indicator"></div>');
-      segments = indicator.find('.scroll-segment');
+      indicator.append('<div class="feed-map-viewport-indicator"></div>');
+      segments = indicator.find('.feed-map-segment');
     }
 
     // Get heatmap settings (style already determined above)
-    const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
-    const iconsValue = this.config.get('scrollIndicatorIcons');
+    const heatmapMode = isAdvancedStyle ? (this.config.get('feedMapHeatmap') || 'None') : 'None';
+    const iconsValue = this.config.get('feedMapIcons');
     const showIcons = isAdvancedStyle ? (iconsValue === true || iconsValue === 'true' || iconsValue === undefined) : false;
-    const showAvatars = isAdvancedStyle ? (this.config.get('scrollIndicatorAvatars') !== false) : false;
-    const avatarScale = this.config.get('scrollIndicatorAvatarScale') ?? 100;
-    const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
-    const showHandles = isAdvancedStyle ? (this.config.get('scrollIndicatorHandles') !== false) : false;
-    const showRuleColors = isAdvancedStyle && this.config.get('scrollIndicatorHandleColors');
+    const showAvatars = isAdvancedStyle ? (this.config.get('feedMapAvatars') !== false) : false;
+    const avatarScale = this.config.get('feedMapAvatarScale') ?? 100;
+    const showTimestamps = isAdvancedStyle ? (this.config.get('feedMapTimestamps') !== false) : false;
+    const showHandles = isAdvancedStyle ? (this.config.get('feedMapHandles') !== false) : false;
+    const showRuleColors = isAdvancedStyle && this.config.get('ruleColorCoding');
 
-    // Calculate engagement data for ALL items (indexed by actual item index for zoom indicator)
+    // Calculate engagement data for ALL items (indexed by actual item index for feed map zoom)
     let engagementData = [];
     let maxScore = 0;
 
@@ -1824,42 +1824,42 @@ export class FeedItemHandler extends ItemHandler {
 
       // Skip if item doesn't exist or is no longer in DOM (virtualized away)
       if (!item || !document.contains(item)) {
-        $segment.addClass('scroll-segment-virtualized');
+        $segment.addClass('feed-map-segment-virtualized');
         return;
       }
-      $segment.removeClass('scroll-segment-virtualized');
+      $segment.removeClass('feed-map-segment-virtualized');
 
       const isRead = $(item).hasClass('item-read');
       const isCurrent = i === currentDisplayIndex;
 
       // Remove all state classes
       $segment.removeClass(
-        'scroll-segment-read scroll-segment-current scroll-segment-ratioed ' +
-        'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
-        'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
+        'feed-map-segment-read feed-map-segment-current feed-map-segment-ratioed ' +
+        'feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 ' +
+        'feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8'
       );
 
       // Clear existing icon
-      $segment.find('.scroll-segment-icon').remove();
+      $segment.find('.feed-map-segment-icon').remove();
 
       // Apply read state first (can be combined with current)
       if (isRead) {
-        $segment.addClass('scroll-segment-read');
+        $segment.addClass('feed-map-segment-read');
       }
 
       // Apply current selection (outline indicator - independent of background color)
       if (isCurrent) {
-        $segment.addClass('scroll-segment-current');
+        $segment.addClass('feed-map-segment-current');
       }
 
       // Apply background color: ratioed takes precedence, then heatmap
       // These are applied independently of current selection
       if (engagementData[actualIndex]?.engagement?.isRatioed) {
-        $segment.addClass('scroll-segment-ratioed');
+        $segment.addClass('feed-map-segment-ratioed');
       } else if (heatmapMode !== 'None' && engagementData[actualIndex]) {
         const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
         if (heatLevel > 0) {
-          $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+          $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
         }
       }
 
@@ -1867,7 +1867,7 @@ export class FeedItemHandler extends ItemHandler {
       if (showIcons && engagementData[actualIndex]?.engagement) {
         const icon = this.getContentIcon(engagementData[actualIndex].engagement);
         if (icon) {
-          $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+          $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
         }
       }
     });
@@ -1880,9 +1880,9 @@ export class FeedItemHandler extends ItemHandler {
         const segmentWidth = indicatorWidth / total;
         // Hide icons if segments are narrower than 16px - icons need more space to be readable
         if (segmentWidth < 16) {
-          indicator.css('--scroll-icon-display', 'none');
+          indicator.css('--feed-map-icon-display', 'none');
         } else {
-          indicator.css('--scroll-icon-display', 'flex');
+          indicator.css('--feed-map-icon-display', 'flex');
         }
       }
     }
@@ -1890,13 +1890,13 @@ export class FeedItemHandler extends ItemHandler {
     // Update viewport indicator position
     this.updateViewportIndicator(indicator, total);
 
-    // Update zoom indicator if present and in Advanced mode
-    if (this.scrollIndicatorZoom && isAdvancedStyle) {
-      this.updateZoomIndicator(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, total, displayItems, displayIndices);
+    // Update feed map zoom if present and in Advanced mode
+    if (this.feedMapZoom && isAdvancedStyle) {
+      this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, total, displayItems, displayIndices);
     }
 
     // Update date labels
-    this.updateScrollIndicatorLabels();
+    this.updateFeedMapLabels();
 
     // Update accessibility attributes (use display position for filtered view)
     const position = currentDisplayIndex >= 0 ? currentDisplayIndex + 1 : 0;
@@ -1905,8 +1905,8 @@ export class FeedItemHandler extends ItemHandler {
     indicator.attr('title', `${position} of ${total} items (${percentage}%)`);
   }
 
-  updateScrollIndicatorLabels() {
-    if (!this.scrollIndicatorLabelStart || !this.scrollIndicatorLabelEnd) return;
+  updateFeedMapLabels() {
+    if (!this.feedMapLabelStart || !this.feedMapLabelEnd) return;
     if (!this.items.length) return;
 
     // Get timestamps from first and last items
@@ -1943,8 +1943,8 @@ export class FeedItemHandler extends ItemHandler {
       }
     };
 
-    this.scrollIndicatorLabelStart.text(formatCompact(firstTimestamp));
-    this.scrollIndicatorLabelEnd.text(formatCompact(lastTimestamp));
+    this.feedMapLabelStart.text(formatCompact(firstTimestamp));
+    this.feedMapLabelEnd.text(formatCompact(lastTimestamp));
   }
 
   /**
@@ -2197,23 +2197,23 @@ export class FeedItemHandler extends ItemHandler {
       mediaIcon = `<img src="${this.INDICATOR_IMAGES.contentText}" alt="text">`;
     }
 
-    return `<span class="scroll-icon-stack">${postTypeIcon}${mediaIcon}</span>`;
+    return `<span class="feed-map-icon-stack">${postTypeIcon}${mediaIcon}</span>`;
   }
 
   /**
-   * Set up click handler for scroll indicator to jump to posts
+   * Set up click handler for feed map to jump to posts
    */
   setupScrollIndicatorClick() {
-    if (!this.scrollIndicator) return;
+    if (!this.feedMap) return;
 
-    this.scrollIndicator.css('cursor', 'pointer');
+    this.feedMap.css('cursor', 'pointer');
 
     // Prevent mousedown from causing visual changes
-    this.scrollIndicator.on('mousedown', (event) => {
+    this.feedMap.on('mousedown', (event) => {
       event.preventDefault();
     });
 
-    this.scrollIndicator.on('click', (event) => {
+    this.feedMap.on('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
       const indicator = $(event.currentTarget);
@@ -2248,19 +2248,19 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   /**
-   * Set up click handler for zoom indicator to jump to posts
+   * Set up click handler for feed map zoom to jump to posts
    */
   setupScrollIndicatorZoomClick() {
-    if (!this.scrollIndicatorZoom) return;
+    if (!this.feedMapZoom) return;
 
-    this.scrollIndicatorZoom.css('cursor', 'pointer');
+    this.feedMapZoom.css('cursor', 'pointer');
 
-    this.scrollIndicatorZoom.on('click', (event) => {
+    this.feedMapZoom.on('click', (event) => {
       const zoomIndicator = $(event.currentTarget);
       const indicatorWidth = zoomIndicator.width();
       const clickX = event.pageX - zoomIndicator.offset().left;
 
-      const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
+      const zoomWindowSize = parseInt(this.config.get('feedMapZoom'), 10) || 0;
       if (zoomWindowSize === 0) return;
 
       // Use display items (actual DOM elements) for click handling
@@ -2268,7 +2268,7 @@ export class FeedItemHandler extends ItemHandler {
       const total = displayItems.length || this.items.length;
       if (total === 0) return;
 
-      // Use stored window start from updateZoomIndicator
+      // Use stored window start from updateFeedMapZoom
       const windowStart = this.zoomWindowStart || 0;
 
       const segmentWidth = indicatorWidth / zoomWindowSize;
@@ -2309,7 +2309,7 @@ export class FeedItemHandler extends ItemHandler {
       const total = displayItems.length || this.items.length;
       if (total === 0) return;
 
-      const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
+      const zoomWindowSize = parseInt(this.config.get('feedMapZoom'), 10) || 0;
       if (zoomWindowSize === 0 || total <= zoomWindowSize) return;
 
       // Accumulate scroll delta - support both vertical wheel and horizontal trackpad
@@ -2342,7 +2342,7 @@ export class FeedItemHandler extends ItemHandler {
           this.zoomWindowStart = newWindowStart;
 
           // Update just the zoom-related visuals (connector lines, highlight, segments)
-          this.updateZoomIndicatorDirect(newWindowStart, zoomWindowSize, total, displayItems);
+          this.updateFeedMapZoomDirect(newWindowStart, zoomWindowSize, total, displayItems);
         }
       }
 
@@ -2353,22 +2353,22 @@ export class FeedItemHandler extends ItemHandler {
     };
 
     // Add wheel handler to main indicator
-    if (this.scrollIndicator) {
-      this.scrollIndicator.on('wheel', handleWheel);
+    if (this.feedMap) {
+      this.feedMap.on('wheel', handleWheel);
     }
 
-    // Add wheel handler to zoom indicator
-    if (this.scrollIndicatorZoom) {
-      this.scrollIndicatorZoom.on('wheel', handleWheel);
+    // Add wheel handler to feed map zoom
+    if (this.feedMapZoom) {
+      this.feedMapZoom.on('wheel', handleWheel);
     }
   }
 
   /**
-   * Direct update of zoom indicator for smooth panning (bypasses full updateScrollPosition)
+   * Direct update of feed map zoom for smooth panning (bypasses full updateScrollPosition)
    */
-  updateZoomIndicatorDirect(windowStart, zoomWindowSize, total, displayItems) {
-    const zoomIndicator = this.scrollIndicatorZoom;
-    const zoomInner = this.scrollIndicatorZoomInner;
+  updateFeedMapZoomDirect(windowStart, zoomWindowSize, total, displayItems) {
+    const zoomIndicator = this.feedMapZoom;
+    const zoomInner = this.feedMapZoomInner;
     if (!zoomIndicator || !zoomInner) return;
 
     const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
@@ -2378,16 +2378,16 @@ export class FeedItemHandler extends ItemHandler {
     const currentIndex = displayItems.indexOf(selectedElement);
 
     // Get settings for segment content
-    const indicatorStyle = this.config.get('scrollIndicatorStyle') || 'Advanced';
+    const indicatorStyle = this.config.get('feedMapStyle') || 'Advanced';
     const isAdvancedStyle = indicatorStyle === 'Advanced';
-    const heatmapMode = isAdvancedStyle ? (this.config.get('scrollIndicatorHeatmap') || 'None') : 'None';
-    const iconsValue = this.config.get('scrollIndicatorIcons');
+    const heatmapMode = isAdvancedStyle ? (this.config.get('feedMapHeatmap') || 'None') : 'None';
+    const iconsValue = this.config.get('feedMapIcons');
     const showIcons = isAdvancedStyle ? (iconsValue === true || iconsValue === 'true' || iconsValue === undefined) : false;
-    const showAvatars = isAdvancedStyle ? (this.config.get('scrollIndicatorAvatars') !== false) : false;
-    const avatarScale = this.config.get('scrollIndicatorAvatarScale') ?? 100;
-    const showTimestamps = isAdvancedStyle ? (this.config.get('scrollIndicatorTimestamps') !== false) : false;
-    const showHandles = isAdvancedStyle ? (this.config.get('scrollIndicatorHandles') !== false) : false;
-    const showRuleColors = isAdvancedStyle && this.config.get('scrollIndicatorHandleColors');
+    const showAvatars = isAdvancedStyle ? (this.config.get('feedMapAvatars') !== false) : false;
+    const avatarScale = this.config.get('feedMapAvatarScale') ?? 100;
+    const showTimestamps = isAdvancedStyle ? (this.config.get('feedMapTimestamps') !== false) : false;
+    const showHandles = isAdvancedStyle ? (this.config.get('feedMapHandles') !== false) : false;
+    const showRuleColors = isAdvancedStyle && this.config.get('ruleColorCoding');
 
     // Calculate engagement data for visible window
     let maxScore = 0;
@@ -2406,7 +2406,7 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     // Update segment content
-    const segments = zoomInner.find('.scroll-segment');
+    const segments = zoomInner.find('.feed-map-segment');
     segments.each((i, segment) => {
       const $segment = $(segment);
       const displayIndex = windowStart + i;
@@ -2420,33 +2420,33 @@ export class FeedItemHandler extends ItemHandler {
 
       // Remove all state classes
       $segment.removeClass(
-        'scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed ' +
-        'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
-        'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
+        'feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed ' +
+        'feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 ' +
+        'feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8'
       );
 
       // Clear existing content
-      $segment.find('.scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-handle, .scroll-segment-time').remove();
+      $segment.find('.feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time').remove();
 
       if (!hasItem) {
-        $segment.addClass('scroll-segment-empty');
+        $segment.addClass('feed-map-segment-empty');
         return;
       }
 
       // Apply read state
-      if (isRead) $segment.addClass('scroll-segment-read');
+      if (isRead) $segment.addClass('feed-map-segment-read');
 
       // Apply current selection
-      if (isCurrent) $segment.addClass('scroll-segment-current');
+      if (isCurrent) $segment.addClass('feed-map-segment-current');
 
       // Apply heatmap/ratioed styling
       const engData = windowEngagement[i];
       if (engData?.engagement?.isRatioed) {
-        $segment.addClass('scroll-segment-ratioed');
+        $segment.addClass('feed-map-segment-ratioed');
       } else if (heatmapMode !== 'None' && engData) {
         const heatLevel = this.getHeatLevel(engData.score, maxScore);
         if (heatLevel > 0) {
-          $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+          $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
         }
       }
 
@@ -2454,14 +2454,14 @@ export class FeedItemHandler extends ItemHandler {
       if (showIcons && engData?.engagement) {
         const icon = this.getContentIcon(engData.engagement);
         if (icon) {
-          $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+          $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
         }
       }
 
       // Add avatar
       if (showAvatars && engData?.engagement?.avatarUrl) {
         const avatarHeight = Math.round(32 * (avatarScale / 100));
-        $segment.append(`<img class="scroll-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+        $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
       }
 
       // Add handle
@@ -2476,11 +2476,11 @@ export class FeedItemHandler extends ItemHandler {
         if (showRuleColors) {
           const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
           if (categoryIndex >= 0) {
-            const color = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+            const color = this.getColorForCategoryIndex(categoryIndex);
             handleStyle = ` style="color: ${color}"`;
           }
         }
-        $segment.append(`<span class="scroll-segment-handle"${handleStyle}>${handleHtml}</span>`);
+        $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
       }
 
       // Add timestamp
@@ -2493,68 +2493,68 @@ export class FeedItemHandler extends ItemHandler {
           if (showRuleColors) {
             const categoryIndex = this.getFilterCategoryIndexForContent(item);
             if (categoryIndex >= 0) {
-              const color = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+              const color = this.getColorForCategoryIndex(categoryIndex);
               timeStyle = ` style="color: ${color}"`;
             }
           }
-          $segment.append(`<span class="scroll-segment-time"${timeStyle}>${relativeTime}</span>`);
+          $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
         }
       }
     });
 
     // Update zoom labels
-    this.updateZoomIndicatorLabels(windowStart, windowEnd);
+    this.updateFeedMapZoomLabels(windowStart, windowEnd);
 
     // Update start/end indicators
     const atStart = windowStart === 0;
     const atEnd = windowStart + zoomWindowSize >= total;
-    zoomIndicator.toggleClass('scroll-zoom-at-start', atStart);
-    zoomIndicator.toggleClass('scroll-zoom-at-end', atEnd);
+    zoomIndicator.toggleClass('feed-map-zoom-at-start', atStart);
+    zoomIndicator.toggleClass('feed-map-zoom-at-end', atEnd);
 
     // Update connector lines and highlight
-    this.updateZoomConnector(windowStart, windowEnd, total);
+    this.updateFeedMapZoomConnector(windowStart, windowEnd, total);
   }
 
   /**
-   * Update the zoom indicator showing posts around the current selection
+   * Update the feed map zoom showing posts around the current selection
    */
-  updateZoomIndicator(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayTotal, displayItems, displayIndices) {
-    const zoomIndicator = this.scrollIndicatorZoom;
-    const zoomInner = this.scrollIndicatorZoomInner;
+  updateFeedMapZoom(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayTotal, displayItems, displayIndices) {
+    const zoomIndicator = this.feedMapZoom;
+    const zoomInner = this.feedMapZoomInner;
     if (!zoomIndicator || !zoomInner) return;
 
     // Skip updates while loading to prevent visual jumping
     if (this.loading || this.loadingNew) return;
 
-    const zoomWindowSize = parseInt(this.config.get('scrollIndicatorZoom'), 10) || 0;
+    const zoomWindowSize = parseInt(this.config.get('feedMapZoom'), 10) || 0;
     if (zoomWindowSize === 0) return;
 
     // Use displayTotal from caller (accounts for filtered items)
     const total = displayTotal;
 
-    // When fewer items than window size, show only zoom indicator (hide main indicator)
+    // When fewer items than window size, show only feed map zoom (hide main indicator)
     if (total <= zoomWindowSize) {
-      if (this.scrollIndicatorContainer) {
-        this.scrollIndicatorContainer.hide();
+      if (this.feedMapContainer) {
+        this.feedMapContainer.hide();
       }
-      if (this.scrollIndicatorConnector) {
-        this.scrollIndicatorConnector.hide();
+      if (this.feedMapConnector) {
+        this.feedMapConnector.hide();
       }
-      if (this.scrollIndicatorZoomHighlight) {
-        this.scrollIndicatorZoomHighlight.hide();
+      if (this.feedMapZoomHighlight) {
+        this.feedMapZoomHighlight.hide();
       }
-      this.scrollIndicatorZoomContainer.show();
+      this.feedMapZoomContainer.show();
     } else {
       // Show both indicators when there are enough items
-      if (this.scrollIndicatorContainer) {
-        this.scrollIndicatorContainer.show();
+      if (this.feedMapContainer) {
+        this.feedMapContainer.show();
       }
-      this.scrollIndicatorZoomContainer.show();
-      if (this.scrollIndicatorConnector) {
-        this.scrollIndicatorConnector.show();
+      this.feedMapZoomContainer.show();
+      if (this.feedMapConnector) {
+        this.feedMapConnector.show();
       }
-      if (this.scrollIndicatorZoomHighlight) {
-        this.scrollIndicatorZoomHighlight.show();
+      if (this.feedMapZoomHighlight) {
+        this.feedMapZoomHighlight.show();
       }
     }
 
@@ -2600,15 +2600,15 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     // Always create exactly zoomWindowSize segments (fixed size)
-    let segments = zoomInner.find('.scroll-segment');
+    let segments = zoomInner.find('.feed-map-segment');
     if (segments.length !== zoomWindowSize) {
-      zoomInner.find('.scroll-segment').remove();
+      zoomInner.find('.feed-map-segment').remove();
 
       for (let i = 0; i < zoomWindowSize; i++) {
-        const segment = $('<div class="scroll-segment scroll-segment-zoom"></div>');
+        const segment = $('<div class="feed-map-segment feed-map-segment-zoom"></div>');
         zoomInner.append(segment);
       }
-      segments = zoomInner.find('.scroll-segment');
+      segments = zoomInner.find('.feed-map-segment');
     }
 
     // Smooth scroll animation when window shifts
@@ -2618,12 +2618,12 @@ export class FeedItemHandler extends ItemHandler {
       const offsetPx = -shift * segmentWidth;
 
       // Disable transition, apply offset instantly
-      zoomInner.removeClass('scroll-zoom-animating');
+      zoomInner.removeClass('feed-map-zoom-animating');
       zoomInner.css('transform', `translateX(${offsetPx}px)`);
 
       // Force reflow then animate back to 0
       zoomInner[0].offsetHeight;
-      zoomInner.addClass('scroll-zoom-animating');
+      zoomInner.addClass('feed-map-zoom-animating');
       zoomInner.css('transform', 'translateX(0)');
     }
     this.zoomWindowStart = windowStart;
@@ -2647,37 +2647,37 @@ export class FeedItemHandler extends ItemHandler {
 
       // Remove all state classes
       $segment.removeClass(
-        'scroll-segment-read scroll-segment-current scroll-segment-empty scroll-segment-ratioed ' +
-        'scroll-segment-heat-1 scroll-segment-heat-2 scroll-segment-heat-3 scroll-segment-heat-4 ' +
-        'scroll-segment-heat-5 scroll-segment-heat-6 scroll-segment-heat-7 scroll-segment-heat-8'
+        'feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed ' +
+        'feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 ' +
+        'feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8'
       );
 
       // Clear existing icon, avatar, handle, and time
-      $segment.find('.scroll-segment-icon, .scroll-segment-avatar, .scroll-segment-handle, .scroll-segment-time').remove();
+      $segment.find('.feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time').remove();
 
       // Mark empty segments (no corresponding item)
       if (!hasItem) {
-        $segment.addClass('scroll-segment-empty');
+        $segment.addClass('feed-map-segment-empty');
         return;
       }
 
       // Apply read state first
       if (isRead) {
-        $segment.addClass('scroll-segment-read');
+        $segment.addClass('feed-map-segment-read');
       }
 
       // Apply current selection indicator (outline only, doesn't affect background)
       if (isCurrent) {
-        $segment.addClass('scroll-segment-current');
+        $segment.addClass('feed-map-segment-current');
       }
 
       // Apply background color: ratioed takes precedence, then heatmap
       if (engagementData[actualIndex]?.engagement?.isRatioed) {
-        $segment.addClass('scroll-segment-ratioed');
+        $segment.addClass('feed-map-segment-ratioed');
       } else if (heatmapMode !== 'None' && engagementData[actualIndex]) {
         const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
         if (heatLevel > 0) {
-          $segment.addClass(`scroll-segment-heat-${heatLevel}`);
+          $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
         }
       }
 
@@ -2685,7 +2685,7 @@ export class FeedItemHandler extends ItemHandler {
       if (showIcons && engagementData[actualIndex]?.engagement) {
         const icon = this.getContentIcon(engagementData[actualIndex].engagement);
         if (icon) {
-          $segment.append(`<span class="scroll-segment-icon">${icon}</span>`);
+          $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
         }
       }
 
@@ -2694,7 +2694,7 @@ export class FeedItemHandler extends ItemHandler {
         const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
         // Avatar size in pixels: base 32px scaled by user preference (25-100%)
         const avatarHeight = Math.round(32 * (avatarScale / 100));
-        $segment.append(`<img class="scroll-segment-avatar" src="${avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+        $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
       }
 
       // Add handle if enabled (appears below avatar)
@@ -2712,11 +2712,11 @@ export class FeedItemHandler extends ItemHandler {
         if (showRuleColors) {
           const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
           if (categoryIndex >= 0) {
-            const color = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+            const color = this.getColorForCategoryIndex(categoryIndex);
             handleStyle = ` style="color: ${color}"`;
           }
         }
-        $segment.append(`<span class="scroll-segment-handle"${handleStyle}>${handleHtml}</span>`);
+        $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
       }
 
       // Add relative time in bottom right if enabled
@@ -2729,55 +2729,55 @@ export class FeedItemHandler extends ItemHandler {
           if (showRuleColors) {
             const categoryIndex = this.getFilterCategoryIndexForContent(item);
             if (categoryIndex >= 0) {
-              const color = this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+              const color = this.getColorForCategoryIndex(categoryIndex);
               timeStyle = ` style="color: ${color}"`;
             }
           }
-          $segment.append(`<span class="scroll-segment-time"${timeStyle}>${relativeTime}</span>`);
+          $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
         }
       }
     });
 
     // Always show icons in zoom view (segments are larger)
-    zoomIndicator.css('--scroll-icon-display', 'flex');
+    zoomIndicator.css('--feed-map-icon-display', 'flex');
 
-    // Update zoom indicator labels (only for actual items)
-    this.updateZoomIndicatorLabels(windowStart, windowEnd);
+    // Update feed map zoom labels (only for actual items)
+    this.updateFeedMapZoomLabels(windowStart, windowEnd);
 
     // Add visual indication when zoom reaches start or end of feed
     const atStart = windowStart === 0;
     const atEnd = windowStart + zoomWindowSize >= total;
-    zoomIndicator.toggleClass('scroll-zoom-at-start', atStart);
-    zoomIndicator.toggleClass('scroll-zoom-at-end', atEnd);
+    zoomIndicator.toggleClass('feed-map-zoom-at-start', atStart);
+    zoomIndicator.toggleClass('feed-map-zoom-at-end', atEnd);
 
     // Update connector lines between main indicator and zoom
-    this.updateZoomConnector(windowStart, windowEnd, total);
+    this.updateFeedMapZoomConnector(windowStart, windowEnd, total);
   }
 
   /**
-   * Update the curved connector lines between the main scroll indicator and zoom indicator
+   * Update the curved connector lines between the main feed map and feed map zoom
    */
-  updateZoomConnector(windowStart, windowEnd, total) {
-    if (!this.scrollIndicatorConnector || !this.scrollIndicator || !this.scrollIndicatorZoom) {
+  updateFeedMapZoomConnector(windowStart, windowEnd, total) {
+    if (!this.feedMapConnector || !this.feedMap || !this.feedMapZoom) {
       return;
     }
 
-    const connectorDiv = this.scrollIndicatorConnector[0];
+    const connectorDiv = this.feedMapConnector[0];
     if (!connectorDiv) return;
 
-    const svg = connectorDiv.querySelector('.scroll-indicator-connector-svg');
+    const svg = connectorDiv.querySelector('.feed-map-connector-svg');
     if (!svg) return;
 
     // Get the wrapper width for our coordinate system
-    const wrapperWidth = this.scrollIndicatorWrapper ? this.scrollIndicatorWrapper.width() : 1000;
+    const wrapperWidth = this.feedMapWrapper ? this.feedMapWrapper.width() : 1000;
 
     // Get label widths
-    const labelWidth = this.scrollIndicatorLabelStart ? this.scrollIndicatorLabelStart.outerWidth() || 0 : 0;
-    const zoomLabelWidth = this.scrollIndicatorZoomLabelStart ? this.scrollIndicatorZoomLabelStart.outerWidth() || 0 : 0;
+    const labelWidth = this.feedMapLabelStart ? this.feedMapLabelStart.outerWidth() || 0 : 0;
+    const zoomLabelWidth = this.feedMapZoomLabelStart ? this.feedMapZoomLabelStart.outerWidth() || 0 : 0;
 
     // Get indicator widths
-    const mainWidth = this.scrollIndicator.width() || (wrapperWidth - labelWidth * 2);
-    const zoomWidth = this.scrollIndicatorZoom.width() || (wrapperWidth - zoomLabelWidth * 2);
+    const mainWidth = this.feedMap.width() || (wrapperWidth - labelWidth * 2);
+    const zoomWidth = this.feedMapZoom.width() || (wrapperWidth - zoomLabelWidth * 2);
 
     // Calculate positions as percentages of total items
     const startPercent = windowStart / total;
@@ -2787,7 +2787,7 @@ export class FeedItemHandler extends ItemHandler {
     const mainStartX = labelWidth + (mainWidth * startPercent);
     const mainEndX = labelWidth + (mainWidth * endPercent);
 
-    // X coordinates on the zoom indicator (full width)
+    // X coordinates on the feed map zoom (full width)
     const zoomStartX = zoomLabelWidth;
     const zoomEndX = zoomLabelWidth + zoomWidth;
 
@@ -2798,8 +2798,8 @@ export class FeedItemHandler extends ItemHandler {
     // Set viewBox on the SVG element
     svg.setAttribute('viewBox', `0 0 ${svgWidth} ${height}`);
 
-    const leftPath = svg.querySelector('.scroll-indicator-connector-left');
-    const rightPath = svg.querySelector('.scroll-indicator-connector-right');
+    const leftPath = svg.querySelector('.feed-map-connector-left');
+    const rightPath = svg.querySelector('.feed-map-connector-right');
 
     // S-curve control points for zoom effect
     // The S-curve goes: start at top, curve down and outward, then curve to meet bottom
@@ -2824,10 +2824,10 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     // Update zoom highlight on main indicator
-    if (this.scrollIndicatorZoomHighlight) {
+    if (this.feedMapZoomHighlight) {
       const highlightLeft = startPercent * 100;
       const highlightWidth = (endPercent - startPercent) * 100;
-      this.scrollIndicatorZoomHighlight.css({
+      this.feedMapZoomHighlight.css({
         left: `${highlightLeft}%`,
         width: `${highlightWidth}%`
       });
@@ -2835,10 +2835,10 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   /**
-   * Update the date/time labels for the zoom indicator
+   * Update the date/time labels for the feed map zoom
    */
-  updateZoomIndicatorLabels(windowStart, windowEnd) {
-    if (!this.scrollIndicatorZoomLabelStart || !this.scrollIndicatorZoomLabelEnd) return;
+  updateFeedMapZoomLabels(windowStart, windowEnd) {
+    if (!this.feedMapZoomLabelStart || !this.feedMapZoomLabelEnd) return;
     if (!this.items.length) return;
 
     const firstItem = this.items[windowStart];
@@ -2873,12 +2873,12 @@ export class FeedItemHandler extends ItemHandler {
       }
     };
 
-    this.scrollIndicatorZoomLabelStart.text(formatCompact(firstTimestamp));
-    this.scrollIndicatorZoomLabelEnd.text(formatCompact(lastTimestamp));
+    this.feedMapZoomLabelStart.text(formatCompact(firstTimestamp));
+    this.feedMapZoomLabelEnd.text(formatCompact(lastTimestamp));
   }
 
   updateViewportIndicator(indicator, total) {
-    const viewportIndicator = indicator.find('.scroll-viewport-indicator');
+    const viewportIndicator = indicator.find('.feed-map-viewport-indicator');
     if (!viewportIndicator.length || total === 0) return;
 
     const indicatorWidth = indicator.width();
@@ -3023,7 +3023,7 @@ export class FeedItemHandler extends ItemHandler {
 
     // Update avatar if setting is enabled
     const avatarImg = tooltip.find('.feed-map-tooltip-avatar');
-    if (this.config.get('scrollIndicatorAvatars') !== false && engagement?.avatarUrl) {
+    if (this.config.get('feedMapAvatars') !== false && engagement?.avatarUrl) {
       avatarImg.attr('src', engagement.avatarUrl).show();
     } else {
       avatarImg.hide();
@@ -3176,7 +3176,7 @@ export class FeedItemHandler extends ItemHandler {
   setupFeedMapTooltipHandlers(indicator) {
     if (!indicator) return;
 
-    indicator.on('mouseenter', '.scroll-segment', (e) => {
+    indicator.on('mouseenter', '.feed-map-segment', (e) => {
       const segment = e.currentTarget;
       const itemIndex = $(segment).data('index');
 
@@ -3184,7 +3184,7 @@ export class FeedItemHandler extends ItemHandler {
       clearTimeout(this._tooltipHideTimer);
 
       // Get delay from config (0 for Instant, 300 for Delayed)
-      const tooltipMode = this.config.get('scrollIndicatorTooltip') || 'Instant';
+      const tooltipMode = this.config.get('feedMapTooltip') || 'Instant';
       const delay = tooltipMode === 'Delayed' ? 300 : 0;
 
       // Debounce: if moving between segments quickly, just update
@@ -3209,7 +3209,7 @@ export class FeedItemHandler extends ItemHandler {
       }
     });
 
-    indicator.on('mouseleave', '.scroll-segment', () => {
+    indicator.on('mouseleave', '.feed-map-segment', () => {
       clearTimeout(this._tooltipTimer);
       this._tooltipTimer = null;
 

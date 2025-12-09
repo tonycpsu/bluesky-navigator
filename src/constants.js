@@ -1,4 +1,12 @@
 const constants = {
+  // 32 distinct colors for ruleset/filter list coloring (high saturation, good contrast)
+  FILTER_LIST_COLORS: [
+    '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6',
+    '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3',
+    '#808000', '#ffd8b1', '#000075', '#808080', '#ff0000', '#00ff00', '#0000ff', '#ff00ff',
+    '#00ffff', '#ff8000', '#8000ff', '#0080ff', '#ff0080', '#80ff00', '#00ff80', '#ff8080',
+  ],
+
   // Timing constants
   DEFAULT_STATE_SAVE_TIMEOUT: 5000,
   URL_MONITOR_INTERVAL: 500,

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+453.0fa83f42
+// @version     1.0.31+454.3bdca43c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69470,30 +69470,60 @@ ${rule}`;
       }
     }
     applyRuleColorStyling(element) {
-      const profileLink = $(element).find(constants.PROFILE_SELECTOR).first();
-      const avatar = $(element).find('div[data-testid="userAvatarImage"]').first();
+      const $el = $(element);
+      const profileLink = $el.find(constants.PROFILE_SELECTOR).first();
+      const avatar = $el.find('div[data-testid="userAvatarImage"]').first();
+      const timestampLink = $el.find('a[href^="/profile/"][data-tooltip*=" at "]').first();
+      let handle2 = this.handleFromItem(element);
+      if (!handle2) {
+        const testId = $el.attr("data-testid") || "";
+        const match2 = testId.match(/^feedItem-by-(.+)$/);
+        if (match2) {
+          handle2 = match2[1];
+        }
+      }
+      const authorCategoryIndex = handle2 ? this.getFilterCategoryIndexForHandle(handle2) : -1;
+      const contentCategoryIndex = this.getFilterCategoryIndexForContent(element);
       if (!this.config.get("ruleColorCoding")) {
-        if (profileLink.length) profileLink.css("color", "");
+        if (profileLink.length) {
+          profileLink.css({ "background-color": "", "border-radius": "", "padding": "" });
+        }
         if (avatar.length) avatar.css("box-shadow", "");
+        if (timestampLink.length) {
+          timestampLink.css({ "background-color": "", "border-radius": "", "padding": "" });
+        }
         return;
       }
-      const handle2 = this.handleFromItem(element);
-      if (!handle2) return;
-      const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
-      if (categoryIndex < 0) {
-        if (profileLink.length) profileLink.css("color", "");
+      if (authorCategoryIndex >= 0) {
+        const color2 = this.getColorForCategoryIndex(authorCategoryIndex);
+        if (profileLink.length) {
+          profileLink[0].style.setProperty("background-color", `${color2}33`, "important");
+          profileLink[0].style.setProperty("border-radius", "3px", "important");
+          profileLink[0].style.setProperty("padding", "0 3px", "important");
+        }
+        if (avatar.length) {
+          avatar.css({
+            "box-shadow": `0 0 0 3px ${color2}`,
+            "border-radius": "50%"
+          });
+        }
+      } else {
+        if (profileLink.length) {
+          profileLink.css({ "background-color": "", "border-radius": "", "padding": "" });
+        }
         if (avatar.length) avatar.css("box-shadow", "");
-        return;
       }
-      const color2 = this.getColorForCategoryIndex(categoryIndex);
-      if (profileLink.length) {
-        profileLink.css("color", color2);
-      }
-      if (avatar.length) {
-        avatar.css({
-          "box-shadow": `0 0 0 3px ${color2}`,
-          "border-radius": "50%"
-        });
+      if (contentCategoryIndex >= 0) {
+        const color2 = this.getColorForCategoryIndex(contentCategoryIndex);
+        if (timestampLink.length) {
+          timestampLink[0].style.setProperty("background-color", `${color2}33`, "important");
+          timestampLink[0].style.setProperty("border-radius", "3px", "important");
+          timestampLink[0].style.setProperty("padding", "0 3px", "important");
+        }
+      } else {
+        if (timestampLink.length) {
+          timestampLink.css({ "background-color": "", "border-radius": "", "padding": "" });
+        }
       }
     }
     applyBlockStatus(element) {
@@ -71624,7 +71654,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
             if (categoryIndex >= 0) {
               const color2 = this.getColorForCategoryIndex(categoryIndex);
-              handleStyle = ` style="color: ${color2}"`;
+              const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+              const sc = isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.9)";
+              const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+              handleStyle = ` style="color: ${color2}; text-shadow: ${shadow}"`;
             }
           }
           $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
@@ -71638,7 +71671,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               const categoryIndex = this.getFilterCategoryIndexForContent(item);
               if (categoryIndex >= 0) {
                 const color2 = this.getColorForCategoryIndex(categoryIndex);
-                timeStyle = ` style="color: ${color2}"`;
+                const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+                const sc = isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.9)";
+                const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+                timeStyle = ` style="color: ${color2}; text-shadow: ${shadow}"`;
               }
             }
             $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
@@ -71788,7 +71824,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
             if (categoryIndex >= 0) {
               const color2 = this.getColorForCategoryIndex(categoryIndex);
-              handleStyle = ` style="color: ${color2}"`;
+              const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+              const sc = isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.9)";
+              const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+              handleStyle = ` style="color: ${color2}; text-shadow: ${shadow}"`;
             }
           }
           $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
@@ -71802,7 +71841,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               const categoryIndex = this.getFilterCategoryIndexForContent(item);
               if (categoryIndex >= 0) {
                 const color2 = this.getColorForCategoryIndex(categoryIndex);
-                timeStyle = ` style="color: ${color2}"`;
+                const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+                const sc = isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.9)";
+                const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+                timeStyle = ` style="color: ${color2}; text-shadow: ${shadow}"`;
               }
             }
             $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);

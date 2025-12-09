@@ -2477,7 +2477,10 @@ export class FeedItemHandler extends ItemHandler {
           const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
           if (categoryIndex >= 0) {
             const color = this.getColorForCategoryIndex(categoryIndex);
-            handleStyle = ` style="color: ${color}"`;
+            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const sc = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
+            const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+            handleStyle = ` style="color: ${color}; text-shadow: ${shadow}"`;
           }
         }
         $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
@@ -2494,7 +2497,10 @@ export class FeedItemHandler extends ItemHandler {
             const categoryIndex = this.getFilterCategoryIndexForContent(item);
             if (categoryIndex >= 0) {
               const color = this.getColorForCategoryIndex(categoryIndex);
-              timeStyle = ` style="color: ${color}"`;
+              const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+              const sc = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
+              const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+              timeStyle = ` style="color: ${color}; text-shadow: ${shadow}"`;
             }
           }
           $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
@@ -2713,7 +2719,10 @@ export class FeedItemHandler extends ItemHandler {
           const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
           if (categoryIndex >= 0) {
             const color = this.getColorForCategoryIndex(categoryIndex);
-            handleStyle = ` style="color: ${color}"`;
+            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const sc = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
+            const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+            handleStyle = ` style="color: ${color}; text-shadow: ${shadow}"`;
           }
         }
         $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
@@ -2730,7 +2739,10 @@ export class FeedItemHandler extends ItemHandler {
             const categoryIndex = this.getFilterCategoryIndexForContent(item);
             if (categoryIndex >= 0) {
               const color = this.getColorForCategoryIndex(categoryIndex);
-              timeStyle = ` style="color: ${color}"`;
+              const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+              const sc = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
+              const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+              timeStyle = ` style="color: ${color}; text-shadow: ${shadow}"`;
             }
           }
           $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);

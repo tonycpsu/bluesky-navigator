@@ -3041,41 +3041,75 @@ export class ItemHandler extends Handler {
   }
 
   applyRuleColorStyling(element) {
-    const profileLink = $(element).find(constants.PROFILE_SELECTOR).first();
-    const avatar = $(element).find('div[data-testid="userAvatarImage"]').first();
+    const $el = $(element);
+    const profileLink = $el.find(constants.PROFILE_SELECTOR).first();
+    const avatar = $el.find('div[data-testid="userAvatarImage"]').first();
+    const timestampLink = $el.find('a[href^="/profile/"][data-tooltip*=" at "]').first();
+
+    // Get handle - try handleFromItem first, fallback to data-testid
+    let handle = this.handleFromItem(element);
+    if (!handle) {
+      const testId = $el.attr('data-testid') || '';
+      const match = testId.match(/^feedItem-by-(.+)$/);
+      if (match) {
+        handle = match[1];
+      }
+    }
+
+    const authorCategoryIndex = handle ? this.getFilterCategoryIndexForHandle(handle) : -1;
+    const contentCategoryIndex = this.getFilterCategoryIndexForContent(element);
 
     // Check if color-coding is enabled
     if (!this.config.get('ruleColorCoding')) {
-      // Clear any existing styles
-      if (profileLink.length) profileLink.css('color', '');
+      // Clear any added styles
+      if (profileLink.length) {
+        profileLink.css({ 'background-color': '', 'border-radius': '', 'padding': '' });
+      }
       if (avatar.length) avatar.css('box-shadow', '');
+      if (timestampLink.length) {
+        timestampLink.css({ 'background-color': '', 'border-radius': '', 'padding': '' });
+      }
       return;
     }
 
-    const handle = this.handleFromItem(element);
-    if (!handle) return;
+    // Color by author rules (display name and avatar)
+    if (authorCategoryIndex >= 0) {
+      const color = this.getColorForCategoryIndex(authorCategoryIndex);
 
-    const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
-    if (categoryIndex < 0) {
-      // No match - clear styles
-      if (profileLink.length) profileLink.css('color', '');
+      if (profileLink.length) {
+        profileLink[0].style.setProperty('background-color', `${color}33`, 'important');
+        profileLink[0].style.setProperty('border-radius', '3px', 'important');
+        profileLink[0].style.setProperty('padding', '0 3px', 'important');
+      }
+
+      if (avatar.length) {
+        avatar.css({
+          'box-shadow': `0 0 0 3px ${color}`,
+          'border-radius': '50%'
+        });
+      }
+    } else {
+      // No author match - clear styles
+      if (profileLink.length) {
+        profileLink.css({ 'background-color': '', 'border-radius': '', 'padding': '' });
+      }
       if (avatar.length) avatar.css('box-shadow', '');
-      return;
     }
 
-    const color = this.getColorForCategoryIndex(categoryIndex);
+    // Color timestamp by content rules
+    if (contentCategoryIndex >= 0) {
+      const color = this.getColorForCategoryIndex(contentCategoryIndex);
 
-    // Color the handle/display name text
-    if (profileLink.length) {
-      profileLink.css('color', color);
-    }
-
-    // Add colored ring to avatar
-    if (avatar.length) {
-      avatar.css({
-        'box-shadow': `0 0 0 3px ${color}`,
-        'border-radius': '50%'
-      });
+      if (timestampLink.length) {
+        timestampLink[0].style.setProperty('background-color', `${color}33`, 'important');
+        timestampLink[0].style.setProperty('border-radius', '3px', 'important');
+        timestampLink[0].style.setProperty('padding', '0 3px', 'important');
+      }
+    } else {
+      // No content match - clear timestamp styles
+      if (timestampLink.length) {
+        timestampLink.css({ 'background-color': '', 'border-radius': '', 'padding': '' });
+      }
     }
   }
 

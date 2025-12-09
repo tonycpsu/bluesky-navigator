@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+463.83b47b50
+// @version     1.0.31+464.13a5ed2c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45161,12 +45161,19 @@ if (cid) {
         toastDuration: {
           label: "Duration (seconds)",
           type: "range",
-          default: 5,
-          min: 2,
-          max: 15,
+          default: 4,
+          min: 0,
+          max: 10,
           step: 1,
           help: "How long notifications stay visible",
-          showWhen: { toastNotifications: true }
+          showWhen: { toastNotifications: true },
+          // Slider positions map to: 1, 2, 3, 4, 5, 10, 15, 30, 60, 300, ∞
+          rangeValues: [1, 2, 3, 4, 5, 10, 15, 30, 60, 300, Infinity],
+          formatValue: (v) => {
+            const values = [1, 2, 3, 4, 5, 10, 15, 30, 60, 300, Infinity];
+            const actual = values[v] || 5;
+            return actual === Infinity ? "\u221E" : actual;
+          }
         },
         toastPosition: {
           label: "Position",
@@ -45659,7 +45666,10 @@ if (cid) {
       } else if (field.type === "range") {
         input.value = defaultValue;
         const valueDisplay = input.parentElement?.querySelector(".config-range-value");
-        if (valueDisplay) valueDisplay.textContent = defaultValue;
+        if (valueDisplay) {
+          const displayValue = field.formatValue ? field.formatValue(defaultValue) : defaultValue;
+          valueDisplay.textContent = displayValue;
+        }
       } else {
         input.value = defaultValue;
       }
@@ -45751,7 +45761,8 @@ if (cid) {
           </div>
         `;
           break;
-        case "range":
+        case "range": {
+          const displayValue = field.formatValue ? field.formatValue(value) : value;
           inputHtml = `
           <div class="config-field-wrapper">
             <label class="config-field">
@@ -45761,7 +45772,7 @@ if (cid) {
                        ${field.min !== void 0 ? `min="${field.min}"` : ""}
                        ${field.max !== void 0 ? `max="${field.max}"` : ""}
                        ${field.step !== void 0 ? `step="${field.step}"` : ""}>
-                <span class="config-range-value">${value}</span>
+                <span class="config-range-value">${displayValue}</span>
               </div>
               ${field.help ? `<span class="config-field-help">${field.help}</span>` : ""}
             </label>
@@ -45769,6 +45780,7 @@ if (cid) {
           </div>
         `;
           break;
+        }
         case "color":
           inputHtml = `
           <div class="config-field-wrapper">
@@ -46390,7 +46402,11 @@ if (cid) {
       }
       if (e2.target.type === "range") {
         const valueDisplay = e2.target.parentElement.querySelector(".config-range-value");
-        if (valueDisplay) valueDisplay.textContent = value;
+        if (valueDisplay) {
+          const field2 = this.getFieldSchema(name);
+          const displayValue = field2?.formatValue ? field2.formatValue(value) : value;
+          valueDisplay.textContent = displayValue;
+        }
       }
       if (name.startsWith("feedMap")) {
         this.updateFeedMapPreview(name, newValue);
@@ -73672,7 +73688,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         mention: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4a8 8 0 1 0 4.906 14.32 1 1 0 0 1 1.218 1.588A10 10 0 1 1 22 12v1.5a3.5 3.5 0 0 1-6.063 2.395A5 5 0 1 1 17 12v1.5a1.5 1.5 0 0 0 3 0V12a8 8 0 0 0-8-8Zm3 8a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z"></path></svg>',
         quote: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 7H6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Zm10 0h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Z"></path></svg>'
       };
-      const duration2 = (config.get("toastDuration") || 5) * 1e3;
+      const durationValues = [1, 2, 3, 4, 5, 10, 15, 30, 60, 300, Infinity];
+      const sliderPos = config.get("toastDuration") ?? 4;
+      const durationSeconds = durationValues[sliderPos] ?? 5;
+      const duration2 = durationSeconds === Infinity ? null : durationSeconds * 1e3;
       const $toast = $(`
       <div class="bsky-nav-toast">
         <div class="bsky-nav-toast-icon ${notification2.type}">
@@ -73702,7 +73721,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       toastContainer.append($toast);
       setTimeout(() => $toast.addClass("visible"), 10);
-      setTimeout(() => removeToast($toast), duration2);
+      if (duration2 !== null) {
+        setTimeout(() => removeToast($toast), duration2);
+      }
     }
     function removeToast($toast) {
       $toast.removeClass("visible");

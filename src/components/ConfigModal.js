@@ -255,12 +255,19 @@ const CONFIG_SCHEMA = {
       toastDuration: {
         label: 'Duration (seconds)',
         type: 'range',
-        default: 5,
-        min: 2,
-        max: 15,
+        default: 4,
+        min: 0,
+        max: 10,
         step: 1,
         help: 'How long notifications stay visible',
         showWhen: { toastNotifications: true },
+        // Slider positions map to: 1, 2, 3, 4, 5, 10, 15, 30, 60, 300, ∞
+        rangeValues: [1, 2, 3, 4, 5, 10, 15, 30, 60, 300, Infinity],
+        formatValue: (v) => {
+          const values = [1, 2, 3, 4, 5, 10, 15, 30, 60, 300, Infinity];
+          const actual = values[v] || 5;
+          return actual === Infinity ? '∞' : actual;
+        },
       },
       toastPosition: {
         label: 'Position',
@@ -791,7 +798,10 @@ export class ConfigModal {
     } else if (field.type === 'range') {
       input.value = defaultValue;
       const valueDisplay = input.parentElement?.querySelector('.config-range-value');
-      if (valueDisplay) valueDisplay.textContent = defaultValue;
+      if (valueDisplay) {
+        const displayValue = field.formatValue ? field.formatValue(defaultValue) : defaultValue;
+        valueDisplay.textContent = displayValue;
+      }
     } else {
       input.value = defaultValue;
     }
@@ -905,7 +915,8 @@ export class ConfigModal {
         `;
         break;
 
-      case 'range':
+      case 'range': {
+        const displayValue = field.formatValue ? field.formatValue(value) : value;
         inputHtml = `
           <div class="config-field-wrapper">
             <label class="config-field">
@@ -915,7 +926,7 @@ export class ConfigModal {
                        ${field.min !== undefined ? `min="${field.min}"` : ''}
                        ${field.max !== undefined ? `max="${field.max}"` : ''}
                        ${field.step !== undefined ? `step="${field.step}"` : ''}>
-                <span class="config-range-value">${value}</span>
+                <span class="config-range-value">${displayValue}</span>
               </div>
               ${field.help ? `<span class="config-field-help">${field.help}</span>` : ''}
             </label>
@@ -923,6 +934,7 @@ export class ConfigModal {
           </div>
         `;
         break;
+      }
 
       case 'color':
         inputHtml = `
@@ -1688,7 +1700,11 @@ export class ConfigModal {
     // Update range value display
     if (e.target.type === 'range') {
       const valueDisplay = e.target.parentElement.querySelector('.config-range-value');
-      if (valueDisplay) valueDisplay.textContent = value;
+      if (valueDisplay) {
+        const field = this.getFieldSchema(name);
+        const displayValue = field?.formatValue ? field.formatValue(value) : value;
+        valueDisplay.textContent = displayValue;
+      }
     }
 
     // Dynamic preview for feed map settings

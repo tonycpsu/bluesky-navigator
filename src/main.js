@@ -587,7 +587,12 @@ function getScreenFromElement(element) {
       quote: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 7H6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Zm10 0h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Z"></path></svg>',
     };
 
-    const duration = (config.get('toastDuration') || 5) * 1000;
+    // Slider position maps to actual seconds: 1, 2, 3, 4, 5, 10, 15, 30, 60, 300, Infinity
+    const durationValues = [1, 2, 3, 4, 5, 10, 15, 30, 60, 300, Infinity];
+    const sliderPos = config.get('toastDuration') ?? 4; // default position 4 = 5 seconds
+    const durationSeconds = durationValues[sliderPos] ?? 5;
+    // Infinity means "Until dismissed" (null duration skips auto-remove)
+    const duration = durationSeconds === Infinity ? null : durationSeconds * 1000;
 
     const $toast = $(`
       <div class="bsky-nav-toast">
@@ -626,8 +631,10 @@ function getScreenFromElement(element) {
     // Animate in
     setTimeout(() => $toast.addClass('visible'), 10);
 
-    // Auto-remove after duration
-    setTimeout(() => removeToast($toast), duration);
+    // Auto-remove after duration (unless "Until dismissed")
+    if (duration !== null) {
+      setTimeout(() => removeToast($toast), duration);
+    }
   }
 
   /**

@@ -2259,14 +2259,13 @@ div.item-banner {
   color: rgba(0, 0, 0, 0.5);
   pointer-events: none;
   flex-shrink: 0;
-  text-shadow: 0 0 2px white, 0 0 2px white;
 }
 
 /* Handle in zoom segments */
 .feed-map-segment-handle {
   font-family: ui-monospace, monospace;
   font-size: calc(8px * var(--indicator-scale, 1));
-  line-height: 1.1;
+  line-height: 1.3;
   color: rgba(0, 0, 0, 0.6);
   white-space: nowrap;
   overflow: hidden;
@@ -2274,7 +2273,6 @@ div.item-banner {
   max-width: 100%;
   padding: 0 calc(2px * var(--indicator-scale, 1));
   flex-shrink: 0;
-  text-shadow: 0 0 2px white, 0 0 2px white;
 }
 
 

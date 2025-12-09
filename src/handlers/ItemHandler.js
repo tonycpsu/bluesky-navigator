@@ -3186,7 +3186,7 @@ export class ItemHandler extends Handler {
     if (!this.config.get('ruleColorCoding')) {
       // Clear any added styles
       if (profileLink.length) {
-        profileLink.css({ 'background-color': '', 'border-radius': '', 'padding': '' });
+        profileLink.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
       }
       if (avatar.length) avatar.css('box-shadow', '');
       // Clear content highlights
@@ -3202,8 +3202,9 @@ export class ItemHandler extends Handler {
 
       if (profileLink.length) {
         profileLink[0].style.setProperty('background-color', `${color}33`, 'important');
+        profileLink[0].style.setProperty('border', `1px solid ${color}66`, 'important');
         profileLink[0].style.setProperty('border-radius', '3px', 'important');
-        profileLink[0].style.setProperty('padding', '0 3px', 'important');
+        profileLink[0].style.setProperty('padding', '0 2px', 'important');
       }
 
       if (avatar.length) {
@@ -3215,7 +3216,7 @@ export class ItemHandler extends Handler {
     } else {
       // No author match - clear styles
       if (profileLink.length) {
-        profileLink.css({ 'background-color': '', 'border-radius': '', 'padding': '' });
+        profileLink.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
       }
       if (avatar.length) avatar.css('box-shadow', '');
     }
@@ -3245,7 +3246,7 @@ export class ItemHandler extends Handler {
   highlightMatchingText($container, pattern, color) {
     if (!$container.length) return;
 
-    const highlightStyle = `background-color: ${color}33; border-radius: 3px; padding: 0 2px;`;
+    const highlightStyle = `background-color: ${color}33; border: 1px solid ${color}66; border-radius: 3px; padding: 0 2px;`;
 
     // Process text nodes recursively
     const processNode = (node) => {

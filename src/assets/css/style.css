@@ -2256,7 +2256,7 @@ div.item-banner {
 .feed-map-segment-time {
   font-size: calc(8px * var(--indicator-scale, 1));
   line-height: 1;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(0, 0, 0, 0.9);
   pointer-events: none;
   flex-shrink: 0;
 }
@@ -2266,7 +2266,7 @@ div.item-banner {
   font-family: ui-monospace, monospace;
   font-size: calc(8px * var(--indicator-scale, 1));
   line-height: 1.3;
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(0, 0, 0, 0.9);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

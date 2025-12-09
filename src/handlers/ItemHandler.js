@@ -3201,8 +3201,8 @@ export class ItemHandler extends Handler {
       const color = this.getColorForCategoryIndex(authorCategoryIndex);
 
       if (profileLink.length) {
-        profileLink[0].style.setProperty('background-color', `${color}33`, 'important');
-        profileLink[0].style.setProperty('border', `1px solid ${color}66`, 'important');
+        profileLink[0].style.setProperty('background-color', `${color}55`, 'important');
+        profileLink[0].style.setProperty('border', `1px solid ${color}88`, 'important');
         profileLink[0].style.setProperty('border-radius', '3px', 'important');
         profileLink[0].style.setProperty('padding', '0 2px', 'important');
       }
@@ -3246,7 +3246,7 @@ export class ItemHandler extends Handler {
   highlightMatchingText($container, pattern, color) {
     if (!$container.length) return;
 
-    const highlightStyle = `background-color: ${color}33; border: 1px solid ${color}66; border-radius: 3px; padding: 0 2px;`;
+    const highlightStyle = `background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;`;
 
     // Process text nodes recursively
     const processNode = (node) => {

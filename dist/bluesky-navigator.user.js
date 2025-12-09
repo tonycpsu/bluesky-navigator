@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+458.2e821f71
+// @version     1.0.31+459.eee64a93
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -48763,7 +48763,7 @@ div.item-banner {
 .feed-map-segment-time {
   font-size: calc(8px * var(--indicator-scale, 1));
   line-height: 1;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(0, 0, 0, 0.9);
   pointer-events: none;
   flex-shrink: 0;
 }
@@ -48773,7 +48773,7 @@ div.item-banner {
   font-family: ui-monospace, monospace;
   font-size: calc(8px * var(--indicator-scale, 1));
   line-height: 1.3;
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(0, 0, 0, 0.9);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -69639,8 +69639,8 @@ ${rule}`;
       if (authorCategoryIndex >= 0) {
         const color2 = this.getColorForCategoryIndex(authorCategoryIndex);
         if (profileLink.length) {
-          profileLink[0].style.setProperty("background-color", `${color2}33`, "important");
-          profileLink[0].style.setProperty("border", `1px solid ${color2}66`, "important");
+          profileLink[0].style.setProperty("background-color", `${color2}55`, "important");
+          profileLink[0].style.setProperty("border", `1px solid ${color2}88`, "important");
           profileLink[0].style.setProperty("border-radius", "3px", "important");
           profileLink[0].style.setProperty("padding", "0 2px", "important");
         }
@@ -69674,7 +69674,7 @@ ${rule}`;
      */
     highlightMatchingText($container, pattern, color2) {
       if (!$container.length) return;
-      const highlightStyle = `background-color: ${color2}33; border: 1px solid ${color2}66; border-radius: 3px; padding: 0 2px;`;
+      const highlightStyle = `background-color: ${color2}55; border: 1px solid ${color2}88; border-radius: 3px; padding: 0 2px;`;
       const processNode = (node) => {
         if (node.nodeType === Node.TEXT_NODE) {
           const text = node.textContent;
@@ -71866,7 +71866,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
             if (categoryIndex >= 0) {
               const color2 = this.getColorForCategoryIndex(categoryIndex);
-              handleStyle = ` style="background-color: ${color2}33; border: 1px solid ${color2}66; border-radius: 3px; padding: 0 2px;"`;
+              handleStyle = ` style="background-color: ${color2}55; border: 1px solid ${color2}88; border-radius: 3px; padding: 0 2px;"`;
             }
           }
           $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
@@ -71880,7 +71880,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               const categoryIndex = this.getFilterCategoryIndexForContent(item);
               if (categoryIndex >= 0) {
                 const color2 = this.getColorForCategoryIndex(categoryIndex);
-                timeStyle = ` style="background-color: ${color2}33; border: 1px solid ${color2}66; border-radius: 3px; padding: 0 2px;"`;
+                timeStyle = ` style="background-color: ${color2}55; border: 1px solid ${color2}88; border-radius: 3px; padding: 0 2px;"`;
               }
             }
             $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
@@ -72030,7 +72030,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
             if (categoryIndex >= 0) {
               const color2 = this.getColorForCategoryIndex(categoryIndex);
-              handleStyle = ` style="background-color: ${color2}33; border: 1px solid ${color2}66; border-radius: 3px; padding: 0 2px;"`;
+              handleStyle = ` style="background-color: ${color2}55; border: 1px solid ${color2}88; border-radius: 3px; padding: 0 2px;"`;
             }
           }
           $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
@@ -72044,7 +72044,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               const categoryIndex = this.getFilterCategoryIndexForContent(item);
               if (categoryIndex >= 0) {
                 const color2 = this.getColorForCategoryIndex(categoryIndex);
-                timeStyle = ` style="background-color: ${color2}33; border: 1px solid ${color2}66; border-radius: 3px; padding: 0 2px;"`;
+                timeStyle = ` style="background-color: ${color2}55; border: 1px solid ${color2}88; border-radius: 3px; padding: 0 2px;"`;
               }
             }
             $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);

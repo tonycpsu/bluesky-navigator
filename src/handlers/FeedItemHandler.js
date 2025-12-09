@@ -2519,7 +2519,7 @@ export class FeedItemHandler extends ItemHandler {
           const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
           if (categoryIndex >= 0) {
             const color = this.getColorForCategoryIndex(categoryIndex);
-            handleStyle = ` style="background-color: ${color}33; border: 1px solid ${color}66; border-radius: 3px; padding: 0 2px;"`;
+            handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
           }
         }
         $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
@@ -2536,7 +2536,7 @@ export class FeedItemHandler extends ItemHandler {
             const categoryIndex = this.getFilterCategoryIndexForContent(item);
             if (categoryIndex >= 0) {
               const color = this.getColorForCategoryIndex(categoryIndex);
-              timeStyle = ` style="background-color: ${color}33; border: 1px solid ${color}66; border-radius: 3px; padding: 0 2px;"`;
+              timeStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
             }
           }
           $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
@@ -2755,7 +2755,7 @@ export class FeedItemHandler extends ItemHandler {
           const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
           if (categoryIndex >= 0) {
             const color = this.getColorForCategoryIndex(categoryIndex);
-            handleStyle = ` style="background-color: ${color}33; border: 1px solid ${color}66; border-radius: 3px; padding: 0 2px;"`;
+            handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
           }
         }
         $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
@@ -2772,7 +2772,7 @@ export class FeedItemHandler extends ItemHandler {
             const categoryIndex = this.getFilterCategoryIndexForContent(item);
             if (categoryIndex >= 0) {
               const color = this.getColorForCategoryIndex(categoryIndex);
-              timeStyle = ` style="background-color: ${color}33; border: 1px solid ${color}66; border-radius: 3px; padding: 0 2px;"`;
+              timeStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
             }
           }
           $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);

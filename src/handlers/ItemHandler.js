@@ -1219,7 +1219,7 @@ export class ItemHandler extends Handler {
         this.toggleFixedSidecarPanel(item);
         break;
 
-      case 'R':
+      case '+':
         this.openAddToRulesForItem(item);
         break;
 

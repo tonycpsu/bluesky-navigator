@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+461.3459768d
+// @version     1.0.31+462.484c9257
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45424,6 +45424,12 @@ if (cid) {
           type: "checkbox",
           default: false,
           help: "Color handles/avatars in feed and feed map by author rules"
+        },
+        autoOrganizeRules: {
+          label: "Auto-organize rules",
+          type: "checkbox",
+          default: false,
+          help: "Automatically sort rules by type (all\u2192include\u2192from\u2192content) then value"
         }
       }
     },
@@ -45900,6 +45906,7 @@ if (cid) {
       const rulesConfig = this.config.get("rulesConfig") ?? "";
       this.parsedRules = this.parseRules(rulesConfig);
       const ruleColorCoding = this.config.get("ruleColorCoding") ?? false;
+      const autoOrganizeRules = this.config.get("autoOrganizeRules") ?? false;
       return `
       <div class="rules-panel">
         <div class="rules-options rules-options-top">
@@ -45907,6 +45914,11 @@ if (cid) {
             <input type="checkbox" name="ruleColorCoding" ${ruleColorCoding ? "checked" : ""}>
             <span>Color-code rule matches</span>
             <span class="config-field-help">Color handles/avatars in feed and feed map by author rules</span>
+          </label>
+          <label class="config-checkbox-label">
+            <input type="checkbox" name="autoOrganizeRules" ${autoOrganizeRules ? "checked" : ""}>
+            <span>Auto-organize rules</span>
+            <span class="config-field-help">Automatically sort rules by type then value</span>
           </label>
         </div>
         <div class="rules-subtabs">
@@ -45944,8 +45956,9 @@ if (cid) {
         const colorIndex = this.getColorIndexForCategory(category.name, catIndex);
         const color2 = constants.FILTER_LIST_COLORS[colorIndex];
         return `
-        <div class="rules-category" data-category="${catIndex}">
+        <div class="rules-category" draggable="true" data-category="${catIndex}">
           <div class="rules-category-header">
+            <span class="rules-category-drag-handle" title="Drag to reorder">\u22EE\u22EE</span>
             <button type="button" class="rules-category-toggle ${isCollapsed ? "collapsed" : ""}"
                     data-category="${catIndex}">
               <span class="rules-toggle-icon">${isCollapsed ? "\u25B6" : "\u25BC"}</span>
@@ -45962,6 +45975,8 @@ if (cid) {
             </div>
             <input type="text" class="rules-category-name" value="${this.escapeHtml(category.name)}"
                    data-category="${catIndex}">
+            <button type="button" class="rules-category-organize" data-category="${catIndex}"
+                    title="Sort rules in this category">\u21C5</button>
             <button type="button" class="rules-category-delete" data-category="${catIndex}"
                     title="Delete category">\u{1F5D1}</button>
           </div>
@@ -46007,7 +46022,8 @@ if (cid) {
         `;
         }
         return `
-        <div class="rules-row" data-category="${catIndex}" data-rule="${ruleIndex}">
+        <div class="rules-row" draggable="true" data-category="${catIndex}" data-rule="${ruleIndex}">
+          <span class="rules-drag-handle" title="Drag to reorder">\u22EE\u22EE</span>
           <select class="rules-action" data-category="${catIndex}" data-rule="${ruleIndex}">
             <option value="allow" ${rule.action === "allow" ? "selected" : ""}>Allow</option>
             <option value="deny" ${rule.action === "deny" ? "selected" : ""}>Deny</option>
@@ -46027,8 +46043,12 @@ if (cid) {
     }
     /**
      * Update raw textarea from parsed rules
+     * @param {boolean} skipAutoOrganize - Skip auto-organize (used when manually organizing)
      */
-    syncVisualToRaw() {
+    syncVisualToRaw(skipAutoOrganize = false) {
+      if (!skipAutoOrganize && this.config.get("autoOrganizeRules")) {
+        this.organizeAllRules();
+      }
       const rawText = this.serializeRules(this.parsedRules);
       const textarea = this.modalEl.querySelector("#config-rulesConfig");
       if (textarea) {
@@ -46077,6 +46097,35 @@ if (cid) {
         const rulesetColors = { [categoryName]: colorIndex };
         this.config.set("rulesetColors", JSON.stringify(rulesetColors));
         this.pendingChanges["rulesetColors"] = JSON.stringify(rulesetColors);
+      }
+    }
+    /**
+     * Organize rules in a category by type and value.
+     * Type order: all, include, from, content
+     * Within same type, sort by value alphabetically.
+     * This sorting is safe because rules of different types don't overlap.
+     * @param {number} catIndex - The category index
+     */
+    organizeRulesInCategory(catIndex) {
+      const category = this.parsedRules[catIndex];
+      if (!category || !category.rules) return;
+      const typeOrder = { all: 0, include: 1, from: 2, content: 3 };
+      category.rules.sort((a2, b) => {
+        const typeA = typeOrder[a2.type] ?? 99;
+        const typeB = typeOrder[b.type] ?? 99;
+        if (typeA !== typeB) return typeA - typeB;
+        if (a2.action !== b.action) {
+          return a2.action === "deny" ? -1 : 1;
+        }
+        return (a2.value || "").localeCompare(b.value || "", void 0, { sensitivity: "base" });
+      });
+    }
+    /**
+     * Organize all categories' rules
+     */
+    organizeAllRules() {
+      for (let i2 = 0; i2 < this.parsedRules.length; i2++) {
+        this.organizeRulesInCategory(i2);
       }
     }
     /**
@@ -46160,6 +46209,60 @@ if (cid) {
           this.refreshVisualEditor();
         });
       });
+      panel.querySelectorAll(".rules-category-organize").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          this.organizeRulesInCategory(catIndex);
+          this.syncVisualToRaw();
+          this.refreshVisualEditor();
+        });
+      });
+      let draggedCategory = null;
+      let draggedCategoryIndex = null;
+      panel.querySelectorAll(".rules-category").forEach((category) => {
+        category.addEventListener("dragstart", (e2) => {
+          if (!e2.target.classList.contains("rules-category") && !e2.target.closest(".rules-category-drag-handle")) {
+            e2.preventDefault();
+            return;
+          }
+          draggedCategory = category;
+          draggedCategoryIndex = parseInt(category.dataset.category);
+          category.classList.add("dragging");
+          e2.dataTransfer.effectAllowed = "move";
+          e2.dataTransfer.setData("text/plain", "category");
+        });
+        category.addEventListener("dragend", () => {
+          if (draggedCategory) {
+            draggedCategory.classList.remove("dragging");
+          }
+          panel.querySelectorAll(".rules-category").forEach((c) => c.classList.remove("drag-over"));
+          draggedCategory = null;
+          draggedCategoryIndex = null;
+        });
+        category.addEventListener("dragover", (e2) => {
+          if (e2.dataTransfer.types.includes("text/plain") && draggedCategory) {
+            e2.preventDefault();
+            e2.dataTransfer.dropEffect = "move";
+            if (category !== draggedCategory) {
+              category.classList.add("drag-over");
+            }
+          }
+        });
+        category.addEventListener("dragleave", () => {
+          category.classList.remove("drag-over");
+        });
+        category.addEventListener("drop", (e2) => {
+          if (!draggedCategory) return;
+          e2.preventDefault();
+          category.classList.remove("drag-over");
+          const targetCategoryIndex = parseInt(category.dataset.category);
+          if (targetCategoryIndex === draggedCategoryIndex) return;
+          const [movedCategory] = this.parsedRules.splice(draggedCategoryIndex, 1);
+          this.parsedRules.splice(targetCategoryIndex, 0, movedCategory);
+          this.syncVisualToRaw();
+          this.refreshVisualEditor();
+        });
+      });
       panel.querySelectorAll(".rules-add-rule").forEach((btn) => {
         btn.addEventListener("click", (e2) => {
           const catIndex = parseInt(e2.target.dataset.category);
@@ -46202,6 +46305,53 @@ if (cid) {
           const catIndex = parseInt(e2.target.dataset.category);
           const ruleIndex = parseInt(e2.target.dataset.rule);
           this.parsedRules[catIndex].rules.splice(ruleIndex, 1);
+          this.syncVisualToRaw();
+          this.refreshVisualEditor();
+        });
+      });
+      let draggedRow = null;
+      let draggedCatIndex = null;
+      let draggedRuleIndex = null;
+      panel.querySelectorAll(".rules-row").forEach((row) => {
+        row.addEventListener("dragstart", (e2) => {
+          draggedRow = row;
+          draggedCatIndex = parseInt(row.dataset.category);
+          draggedRuleIndex = parseInt(row.dataset.rule);
+          row.classList.add("dragging");
+          e2.dataTransfer.effectAllowed = "move";
+          e2.dataTransfer.setData("text/plain", "");
+        });
+        row.addEventListener("dragend", () => {
+          if (draggedRow) {
+            draggedRow.classList.remove("dragging");
+          }
+          panel.querySelectorAll(".rules-row").forEach((r) => r.classList.remove("drag-over"));
+          draggedRow = null;
+          draggedCatIndex = null;
+          draggedRuleIndex = null;
+        });
+        row.addEventListener("dragover", (e2) => {
+          e2.preventDefault();
+          e2.dataTransfer.dropEffect = "move";
+          const targetCatIndex = parseInt(row.dataset.category);
+          if (targetCatIndex === draggedCatIndex && row !== draggedRow) {
+            row.classList.add("drag-over");
+          }
+        });
+        row.addEventListener("dragleave", () => {
+          row.classList.remove("drag-over");
+        });
+        row.addEventListener("drop", (e2) => {
+          e2.preventDefault();
+          row.classList.remove("drag-over");
+          const targetCatIndex = parseInt(row.dataset.category);
+          const targetRuleIndex = parseInt(row.dataset.rule);
+          if (targetCatIndex !== draggedCatIndex || targetRuleIndex === draggedRuleIndex) {
+            return;
+          }
+          const rules = this.parsedRules[draggedCatIndex].rules;
+          const [movedRule] = rules.splice(draggedRuleIndex, 1);
+          rules.splice(targetRuleIndex, 0, movedRule);
           this.syncVisualToRaw();
           this.refreshVisualEditor();
         });
@@ -50731,6 +50881,47 @@ div#statusBar.has-feed-map {
   color: #dc2626;
 }
 
+.rules-category-organize {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #9ca3af;
+  font-size: 14px;
+  border-radius: 4px;
+}
+
+.rules-category-organize:hover {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.rules-category-drag-handle {
+  cursor: grab;
+  color: #9ca3af;
+  font-size: 14px;
+  padding: 4px 2px;
+  user-select: none;
+  letter-spacing: -2px;
+}
+
+.rules-category-drag-handle:hover {
+  color: #6b7280;
+}
+
+.rules-category-drag-handle:active {
+  cursor: grabbing;
+}
+
+.rules-category.dragging {
+  opacity: 0.5;
+}
+
+.rules-category.drag-over {
+  background-color: #dbeafe;
+  border-radius: 8px;
+}
+
 .rules-category-body {
   padding: 4px 0 4px 24px;
 }
@@ -50745,6 +50936,33 @@ div#statusBar.has-feed-map {
   align-items: center;
   gap: 6px;
   margin-bottom: 4px;
+  transition: opacity 150ms ease, background-color 150ms ease;
+}
+
+.rules-row.dragging {
+  opacity: 0.5;
+}
+
+.rules-row.drag-over {
+  background-color: #dbeafe;
+  border-radius: 4px;
+}
+
+.rules-drag-handle {
+  cursor: grab;
+  color: #9ca3af;
+  font-size: 14px;
+  padding: 4px 2px;
+  user-select: none;
+  letter-spacing: -2px;
+}
+
+.rules-drag-handle:hover {
+  color: #6b7280;
+}
+
+.rules-drag-handle:active {
+  cursor: grabbing;
 }
 
 .rules-action,
@@ -50938,6 +51156,39 @@ div#statusBar.has-feed-map {
 
   .rules-delete-rule:hover {
     background: #450a0a;
+  }
+
+  .rules-row.drag-over {
+    background-color: #1e3a5f;
+  }
+
+  .rules-drag-handle {
+    color: #6b7280;
+  }
+
+  .rules-drag-handle:hover {
+    color: #9ca3af;
+  }
+
+  .rules-category-organize {
+    color: #6b7280;
+  }
+
+  .rules-category-organize:hover {
+    background: #1e3a5f;
+    color: #60a5fa;
+  }
+
+  .rules-category-drag-handle {
+    color: #6b7280;
+  }
+
+  .rules-category-drag-handle:hover {
+    color: #9ca3af;
+  }
+
+  .rules-category.drag-over {
+    background-color: #1e3a5f;
   }
 
   .rules-add-rule,
@@ -68336,7 +68587,7 @@ div#statusBar.has-feed-map {
         case "t":
           this.toggleFixedSidecarPanel(item);
           break;
-        case "R":
+        case "+":
           this.openAddToRulesForItem(item);
           break;
         default:

@@ -519,6 +519,12 @@ const CONFIG_SCHEMA = {
         default: false,
         help: 'Color handles/avatars in feed and feed map by author rules',
       },
+      autoOrganizeRules: {
+        label: 'Auto-organize rules',
+        type: 'checkbox',
+        default: false,
+        help: 'Automatically sort rules by type (all→include→from→content) then value',
+      },
     },
   },
   Advanced: {
@@ -1092,6 +1098,7 @@ export class ConfigModal {
     this.parsedRules = this.parseRules(rulesConfig);
 
     const ruleColorCoding = this.config.get('ruleColorCoding') ?? false;
+    const autoOrganizeRules = this.config.get('autoOrganizeRules') ?? false;
 
     return `
       <div class="rules-panel">
@@ -1100,6 +1107,11 @@ export class ConfigModal {
             <input type="checkbox" name="ruleColorCoding" ${ruleColorCoding ? 'checked' : ''}>
             <span>Color-code rule matches</span>
             <span class="config-field-help">Color handles/avatars in feed and feed map by author rules</span>
+          </label>
+          <label class="config-checkbox-label">
+            <input type="checkbox" name="autoOrganizeRules" ${autoOrganizeRules ? 'checked' : ''}>
+            <span>Auto-organize rules</span>
+            <span class="config-field-help">Automatically sort rules by type then value</span>
           </label>
         </div>
         <div class="rules-subtabs">
@@ -1139,8 +1151,9 @@ export class ConfigModal {
       const colorIndex = this.getColorIndexForCategory(category.name, catIndex);
       const color = constants.FILTER_LIST_COLORS[colorIndex];
       return `
-        <div class="rules-category" data-category="${catIndex}">
+        <div class="rules-category" draggable="true" data-category="${catIndex}">
           <div class="rules-category-header">
+            <span class="rules-category-drag-handle" title="Drag to reorder">⋮⋮</span>
             <button type="button" class="rules-category-toggle ${isCollapsed ? 'collapsed' : ''}"
                     data-category="${catIndex}">
               <span class="rules-toggle-icon">${isCollapsed ? '▶' : '▼'}</span>
@@ -1157,6 +1170,8 @@ export class ConfigModal {
             </div>
             <input type="text" class="rules-category-name" value="${this.escapeHtml(category.name)}"
                    data-category="${catIndex}">
+            <button type="button" class="rules-category-organize" data-category="${catIndex}"
+                    title="Sort rules in this category">⇅</button>
             <button type="button" class="rules-category-delete" data-category="${catIndex}"
                     title="Delete category">🗑</button>
           </div>
@@ -1211,7 +1226,8 @@ export class ConfigModal {
       }
 
       return `
-        <div class="rules-row" data-category="${catIndex}" data-rule="${ruleIndex}">
+        <div class="rules-row" draggable="true" data-category="${catIndex}" data-rule="${ruleIndex}">
+          <span class="rules-drag-handle" title="Drag to reorder">⋮⋮</span>
           <select class="rules-action" data-category="${catIndex}" data-rule="${ruleIndex}">
             <option value="allow" ${rule.action === 'allow' ? 'selected' : ''}>Allow</option>
             <option value="deny" ${rule.action === 'deny' ? 'selected' : ''}>Deny</option>
@@ -1232,8 +1248,14 @@ export class ConfigModal {
 
   /**
    * Update raw textarea from parsed rules
+   * @param {boolean} skipAutoOrganize - Skip auto-organize (used when manually organizing)
    */
-  syncVisualToRaw() {
+  syncVisualToRaw(skipAutoOrganize = false) {
+    // Auto-organize if enabled
+    if (!skipAutoOrganize && this.config.get('autoOrganizeRules')) {
+      this.organizeAllRules();
+    }
+
     const rawText = this.serializeRules(this.parsedRules);
     const textarea = this.modalEl.querySelector('#config-rulesConfig');
     if (textarea) {
@@ -1287,6 +1309,44 @@ export class ConfigModal {
       const rulesetColors = { [categoryName]: colorIndex };
       this.config.set('rulesetColors', JSON.stringify(rulesetColors));
       this.pendingChanges['rulesetColors'] = JSON.stringify(rulesetColors);
+    }
+  }
+
+  /**
+   * Organize rules in a category by type and value.
+   * Type order: all, include, from, content
+   * Within same type, sort by value alphabetically.
+   * This sorting is safe because rules of different types don't overlap.
+   * @param {number} catIndex - The category index
+   */
+  organizeRulesInCategory(catIndex) {
+    const category = this.parsedRules[catIndex];
+    if (!category || !category.rules) return;
+
+    const typeOrder = { all: 0, include: 1, from: 2, content: 3 };
+
+    category.rules.sort((a, b) => {
+      // First sort by type
+      const typeA = typeOrder[a.type] ?? 99;
+      const typeB = typeOrder[b.type] ?? 99;
+      if (typeA !== typeB) return typeA - typeB;
+
+      // Then by action (deny before allow for same type/value)
+      if (a.action !== b.action) {
+        return a.action === 'deny' ? -1 : 1;
+      }
+
+      // Then by value alphabetically
+      return (a.value || '').localeCompare(b.value || '', undefined, { sensitivity: 'base' });
+    });
+  }
+
+  /**
+   * Organize all categories' rules
+   */
+  organizeAllRules() {
+    for (let i = 0; i < this.parsedRules.length; i++) {
+      this.organizeRulesInCategory(i);
     }
   }
 
@@ -1396,6 +1456,78 @@ export class ConfigModal {
       });
     });
 
+    // Organize rules in category
+    panel.querySelectorAll('.rules-category-organize').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        this.organizeRulesInCategory(catIndex);
+        this.syncVisualToRaw();
+        this.refreshVisualEditor();
+      });
+    });
+
+    // Category drag and drop
+    let draggedCategory = null;
+    let draggedCategoryIndex = null;
+
+    panel.querySelectorAll('.rules-category').forEach(category => {
+      category.addEventListener('dragstart', (e) => {
+        // Only start drag if the handle was clicked
+        if (!e.target.classList.contains('rules-category') &&
+            !e.target.closest('.rules-category-drag-handle')) {
+          e.preventDefault();
+          return;
+        }
+        draggedCategory = category;
+        draggedCategoryIndex = parseInt(category.dataset.category);
+        category.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'category');
+      });
+
+      category.addEventListener('dragend', () => {
+        if (draggedCategory) {
+          draggedCategory.classList.remove('dragging');
+        }
+        panel.querySelectorAll('.rules-category').forEach(c => c.classList.remove('drag-over'));
+        draggedCategory = null;
+        draggedCategoryIndex = null;
+      });
+
+      category.addEventListener('dragover', (e) => {
+        // Only handle category drags, not rule drags
+        if (e.dataTransfer.types.includes('text/plain') && draggedCategory) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (category !== draggedCategory) {
+            category.classList.add('drag-over');
+          }
+        }
+      });
+
+      category.addEventListener('dragleave', () => {
+        category.classList.remove('drag-over');
+      });
+
+      category.addEventListener('drop', (e) => {
+        // Only handle category drops
+        if (!draggedCategory) return;
+
+        e.preventDefault();
+        category.classList.remove('drag-over');
+
+        const targetCategoryIndex = parseInt(category.dataset.category);
+        if (targetCategoryIndex === draggedCategoryIndex) return;
+
+        // Reorder categories
+        const [movedCategory] = this.parsedRules.splice(draggedCategoryIndex, 1);
+        this.parsedRules.splice(targetCategoryIndex, 0, movedCategory);
+
+        this.syncVisualToRaw();
+        this.refreshVisualEditor();
+      });
+    });
+
     // Add rule
     panel.querySelectorAll('.rules-add-rule').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -1447,6 +1579,67 @@ export class ConfigModal {
         const catIndex = parseInt(e.target.dataset.category);
         const ruleIndex = parseInt(e.target.dataset.rule);
         this.parsedRules[catIndex].rules.splice(ruleIndex, 1);
+        this.syncVisualToRaw();
+        this.refreshVisualEditor();
+      });
+    });
+
+    // Drag and drop for rule reordering
+    let draggedRow = null;
+    let draggedCatIndex = null;
+    let draggedRuleIndex = null;
+
+    panel.querySelectorAll('.rules-row').forEach(row => {
+      row.addEventListener('dragstart', (e) => {
+        draggedRow = row;
+        draggedCatIndex = parseInt(row.dataset.category);
+        draggedRuleIndex = parseInt(row.dataset.rule);
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', ''); // Required for Firefox
+      });
+
+      row.addEventListener('dragend', () => {
+        if (draggedRow) {
+          draggedRow.classList.remove('dragging');
+        }
+        panel.querySelectorAll('.rules-row').forEach(r => r.classList.remove('drag-over'));
+        draggedRow = null;
+        draggedCatIndex = null;
+        draggedRuleIndex = null;
+      });
+
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const targetCatIndex = parseInt(row.dataset.category);
+        // Only allow drop within same category
+        if (targetCatIndex === draggedCatIndex && row !== draggedRow) {
+          row.classList.add('drag-over');
+        }
+      });
+
+      row.addEventListener('dragleave', () => {
+        row.classList.remove('drag-over');
+      });
+
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        row.classList.remove('drag-over');
+
+        const targetCatIndex = parseInt(row.dataset.category);
+        const targetRuleIndex = parseInt(row.dataset.rule);
+
+        // Only allow reorder within same category
+        if (targetCatIndex !== draggedCatIndex || targetRuleIndex === draggedRuleIndex) {
+          return;
+        }
+
+        // Reorder the rules array
+        const rules = this.parsedRules[draggedCatIndex].rules;
+        const [movedRule] = rules.splice(draggedRuleIndex, 1);
+        rules.splice(targetRuleIndex, 0, movedRule);
+
         this.syncVisualToRaw();
         this.refreshVisualEditor();
       });

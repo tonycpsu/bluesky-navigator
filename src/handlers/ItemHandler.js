@@ -3463,7 +3463,67 @@ export class ItemHandler extends Handler {
     this.messageContainer = null;
   }
 
+  showFeedLoading() {
+    // Only show loading indicator on first load (early indicator from main.js)
+    // Subsequent loads just use the CSS hiding without the spinner
+    if (this.initialLoadComplete) {
+      // For subsequent loads, just ensure CSS hiding is active if enabled
+      if (this.config.get('showLoadingIndicator') !== false) {
+        $('body').addClass('bsky-nav-loading-enabled').removeClass('bsky-nav-feed-ready');
+      }
+      return;
+    }
+
+    // Check if loading indicator is enabled (default true)
+    if (this.config.get('showLoadingIndicator') === false) {
+      // Remove classes and indicator when disabled
+      $('body').removeClass('bsky-nav-feed-ready bsky-nav-loading-enabled');
+      $('#feedLoadingIndicator').remove();
+      return;
+    }
+
+    // Add class to enable CSS hiding, remove ready class
+    $('body').addClass('bsky-nav-loading-enabled').removeClass('bsky-nav-feed-ready');
+
+    // Only add indicator if not already present (may be added early in main.js)
+    if ($('#feedLoadingIndicator').length) return;
+
+    const indicator = $(`
+      <div id="feedLoadingIndicator" style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(255,255,255,0.95);z-index:999;min-height:200px;">
+        <div class="spinner" style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+        <div class="loading-text" style="color:#6b7280;font-size:14px;margin-top:12px;">Loading...</div>
+      </div>
+    `);
+    // Try to append to main content area, fall back to body with fixed position
+    const container = $('main[role="main"]').first();
+    if (container.length) {
+      container.css('position', 'relative').append(indicator);
+    } else {
+      indicator.css('position', 'fixed');
+      $('body').append(indicator);
+    }
+  }
+
+  hideFeedLoading() {
+    // Mark initial load complete so subsequent loads don't show spinner
+    this.initialLoadComplete = true;
+
+    // Add ready class to show items (CSS hides by default, shows when ready)
+    $('body').addClass('bsky-nav-feed-ready');
+    $('#feedLoadingIndicator').remove();
+  }
+
   loadItems(focusedPostId) {
+    // Show loading indicator while items are being processed
+    this.showFeedLoading();
+
+    // Minimal delay to allow browser to paint the loading indicator
+    setTimeout(() => {
+      this._doLoadItems(focusedPostId);
+    }, 0);
+  }
+
+  _doLoadItems(focusedPostId) {
     const classes = ['thread-first', 'thread-middle', 'thread-last'];
     const set = [];
 
@@ -3514,16 +3574,7 @@ export class ItemHandler extends Handler {
       }
     });
 
-    // Hide existing items temporarily - be defensive as items may have been removed by React
-    $(this.items).each((i, item) => {
-      try {
-        if (document.contains(item)) {
-          $(item).css('opacity', '0%');
-        }
-      } catch (e) {
-        // Ignore - item may have been removed
-      }
-    });
+    // Items are hidden via CSS body.bsky-nav-feed-loading class
     let itemIndex = 0;
     let threadIndex = 0;
     let threadOffset = 0;
@@ -3643,6 +3694,9 @@ export class ItemHandler extends Handler {
 
     // Re-enable mouse focus after loading
     this.ignoreMouseMovement = false;
+
+    // Hide loading indicator now that items are fully processed and sorted
+    this.hideFeedLoading();
   }
 
   applyThreadIndicatorStyles() {
@@ -3728,6 +3782,9 @@ ${
     this.loadingNew = true;
     this.hideNewPostsPill();
 
+    // Show loading indicator (CSS class hides items)
+    this.showFeedLoading();
+
     // Save post ID before any DOM changes - be defensive about missing elements
     const oldPostId = this.selectedItem ? this.postIdForItem(this.selectedItem) : null;
 
@@ -3774,6 +3831,9 @@ ${
     if (!loadMoreSentinel) {
       return;
     }
+
+    // Show loading indicator (CSS class hides items)
+    this.showFeedLoading();
 
     $('img#loadOlderIndicatorImage').removeClass('image-highlight');
     $('img#loadOlderIndicatorImage').addClass('toolbar-icon-pending');

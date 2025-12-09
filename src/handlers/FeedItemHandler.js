@@ -78,6 +78,9 @@ export class FeedItemHandler extends ItemHandler {
    * Resets the feed map and reloads items from DOM.
    */
   onFeedChange() {
+    // Show loading indicator (CSS class hides items)
+    this.showFeedLoading();
+
     // Clear the feed map segments to force rebuild
     const indicator = $('#feed-map-position-indicator');
     if (indicator.length) {

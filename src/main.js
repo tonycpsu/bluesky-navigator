@@ -21,6 +21,34 @@ import {
 
 GM_addStyle(style);
 
+// Show fullscreen loading indicator immediately on first load
+// Check config from GM storage (default to true if not set)
+const storedConfig = JSON.parse(GM_getValue('bluesky_navigator_config', '{}'));
+const showLoadingIndicator = storedConfig.showLoadingIndicator !== false; // default true
+if (showLoadingIndicator) {
+  // Add class to enable CSS hiding of items
+  const addLoadingClass = () => document.body.classList.add('bsky-nav-loading-enabled');
+  if (document.body) {
+    addLoadingClass();
+  } else {
+    document.addEventListener('DOMContentLoaded', addLoadingClass);
+  }
+
+  const indicator = document.createElement('div');
+  indicator.id = 'feedLoadingIndicator';
+  indicator.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(255,255,255,0.95);z-index:99999;';
+  indicator.innerHTML = `
+    <div class="spinner" style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+    <div class="loading-text" style="color:#6b7280;font-size:14px;margin-top:12px;">Loading...</div>
+  `;
+  // Append to body immediately or wait for it
+  if (document.body) {
+    document.body.appendChild(indicator);
+  } else {
+    document.addEventListener('DOMContentLoaded', () => document.body.appendChild(indicator));
+  }
+}
+
 let config;
 let handlers;
 

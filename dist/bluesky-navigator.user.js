@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+462.484c9257
+// @version     1.0.31+463.83b47b50
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44916,6 +44916,12 @@ if (cid) {
     Display: {
       icon: "\u{1F5A5}\uFE0F",
       fields: {
+        showLoadingIndicator: {
+          label: "Show loading indicator",
+          type: "checkbox",
+          default: true,
+          help: "Show spinner while feed items are loading and sorting"
+        },
         postWidthDesktop: {
           label: "Post width (px)",
           type: "number",
@@ -46718,6 +46724,24 @@ if (cid) {
   const style = `/* style.css */
 
 /* ==========================================================================
+   Feed Loading State - Hide items until sorted (only when loading indicator enabled)
+   ========================================================================== */
+
+/* Hide all feed items by default until processing is complete */
+body.bsky-nav-loading-enabled div[data-testid^="feedItem-by-"],
+body.bsky-nav-loading-enabled div[data-testid^="postThreadItem-by-"] {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+/* Show items when feed is ready (class added after sorting) */
+body.bsky-nav-feed-ready div[data-testid^="feedItem-by-"],
+body.bsky-nav-feed-ready div[data-testid^="postThreadItem-by-"] {
+  opacity: 1 !important;
+  pointer-events: auto;
+}
+
+/* ==========================================================================
    CSS Custom Properties (Accessibility & Theming)
    ========================================================================== */
 
@@ -47190,6 +47214,67 @@ div:has(> div > .item.filtered) {
 #messageActions a:hover {
     text-decoration: underline;
     cursor: pointer;
+}
+
+/* Feed loading indicator */
+#feedLoadingIndicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.95);
+    z-index: 999;
+    gap: 12px;
+    min-height: 200px;
+}
+
+#feedLoadingIndicator .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #e5e7eb;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+#feedLoadingIndicator .loading-text {
+    color: #6b7280;
+    font-size: 14px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    #feedLoadingIndicator {
+        background: rgba(17, 24, 39, 0.9);
+    }
+
+    #feedLoadingIndicator .spinner {
+        border-color: #374151;
+        border-top-color: #60a5fa;
+    }
+
+    #feedLoadingIndicator .loading-text {
+        color: #9ca3af;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    #feedLoadingIndicator .spinner {
+        animation: none;
+        border-top-color: #3b82f6;
+        border-right-color: #3b82f6;
+    }
 }
 
 .preferences-icon-overlay {
@@ -70372,7 +70457,46 @@ ${rule}`;
       $("#messageContainer").remove();
       this.messageContainer = null;
     }
+    showFeedLoading() {
+      if (this.initialLoadComplete) {
+        if (this.config.get("showLoadingIndicator") !== false) {
+          $("body").addClass("bsky-nav-loading-enabled").removeClass("bsky-nav-feed-ready");
+        }
+        return;
+      }
+      if (this.config.get("showLoadingIndicator") === false) {
+        $("body").removeClass("bsky-nav-feed-ready bsky-nav-loading-enabled");
+        $("#feedLoadingIndicator").remove();
+        return;
+      }
+      $("body").addClass("bsky-nav-loading-enabled").removeClass("bsky-nav-feed-ready");
+      if ($("#feedLoadingIndicator").length) return;
+      const indicator = $(`
+      <div id="feedLoadingIndicator" style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(255,255,255,0.95);z-index:999;min-height:200px;">
+        <div class="spinner" style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+        <div class="loading-text" style="color:#6b7280;font-size:14px;margin-top:12px;">Loading...</div>
+      </div>
+    `);
+      const container = $('main[role="main"]').first();
+      if (container.length) {
+        container.css("position", "relative").append(indicator);
+      } else {
+        indicator.css("position", "fixed");
+        $("body").append(indicator);
+      }
+    }
+    hideFeedLoading() {
+      this.initialLoadComplete = true;
+      $("body").addClass("bsky-nav-feed-ready");
+      $("#feedLoadingIndicator").remove();
+    }
     loadItems(focusedPostId) {
+      this.showFeedLoading();
+      setTimeout(() => {
+        this._doLoadItems(focusedPostId);
+      }, 0);
+    }
+    _doLoadItems(focusedPostId) {
       const classes = ["thread-first", "thread-middle", "thread-last"];
       const set = [];
       $(".unrolled-replies").not(".post-view-modal *").each((i2, el) => {
@@ -70402,14 +70526,6 @@ ${rule}`;
           const hasVisibleItems = $(thread).find(this.selector).filter(":visible").length > 0;
           if (!hasVisibleItems) {
             $(thread).css("display", "none");
-          }
-        } catch (e2) {
-        }
-      });
-      $(this.items).each((i2, item) => {
-        try {
-          if (document.contains(item)) {
-            $(item).css("opacity", "0%");
           }
         } catch (e2) {
         }
@@ -70493,6 +70609,7 @@ ${rule}`;
         this.hideMessage();
       }
       this.ignoreMouseMovement = false;
+      this.hideFeedLoading();
     }
     applyThreadIndicatorStyles() {
       $("div.r-1mhb1uw").each((i2, el) => {
@@ -70551,6 +70668,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.loadingNew = true;
       this.hideNewPostsPill();
+      this.showFeedLoading();
       const oldPostId = this.selectedItem ? this.postIdForItem(this.selectedItem) : null;
       try {
         if (this.selectedItem && $(this.selectedItem).length && document.contains($(this.selectedItem)[0])) {
@@ -70584,6 +70702,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (!loadMoreSentinel) {
         return;
       }
+      this.showFeedLoading();
       $("img#loadOlderIndicatorImage").removeClass("image-highlight");
       $("img#loadOlderIndicatorImage").addClass("toolbar-icon-pending");
       this.loading = true;
@@ -70676,6 +70795,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * Resets the feed map and reloads items from DOM.
      */
     onFeedChange() {
+      this.showFeedLoading();
       const indicator = $("#feed-map-position-indicator");
       if (indicator.length) {
         indicator.find(".feed-map-segment").remove();
@@ -73136,6 +73256,28 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
   }
   const { waitForElement, observeVisibilityChange } = utils$1;
   GM_addStyle(style);
+  const storedConfig = JSON.parse(GM_getValue("bluesky_navigator_config", "{}"));
+  const showLoadingIndicator = storedConfig.showLoadingIndicator !== false;
+  if (showLoadingIndicator) {
+    const addLoadingClass = () => document.body.classList.add("bsky-nav-loading-enabled");
+    if (document.body) {
+      addLoadingClass();
+    } else {
+      document.addEventListener("DOMContentLoaded", addLoadingClass);
+    }
+    const indicator = document.createElement("div");
+    indicator.id = "feedLoadingIndicator";
+    indicator.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(255,255,255,0.95);z-index:99999;";
+    indicator.innerHTML = `
+    <div class="spinner" style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+    <div class="loading-text" style="color:#6b7280;font-size:14px;margin-top:12px;">Loading...</div>
+  `;
+    if (document.body) {
+      document.body.appendChild(indicator);
+    } else {
+      document.addEventListener("DOMContentLoaded", () => document.body.appendChild(indicator));
+    }
+  }
   let config;
   let handlers;
   (function proxyIntersectionObserverEarly() {

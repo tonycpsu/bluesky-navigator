@@ -10,6 +10,12 @@ const CONFIG_SCHEMA = {
   Display: {
     icon: '🖥️',
     fields: {
+      showLoadingIndicator: {
+        label: 'Show loading indicator',
+        type: 'checkbox',
+        default: true,
+        help: 'Show spinner while feed items are loading and sorting',
+      },
       postWidthDesktop: {
         label: 'Post width (px)',
         type: 'number',

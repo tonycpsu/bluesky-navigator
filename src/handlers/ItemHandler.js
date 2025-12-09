@@ -2498,7 +2498,9 @@ export class ItemHandler extends Handler {
     const selectCategory = (index) => {
       if (index >= 0 && index < categoryButtons.length) {
         categoryButtons.removeClass('selected');
-        categoryButtons.eq(index).addClass('selected');
+        const selected = categoryButtons.eq(index);
+        selected.addClass('selected');
+        selected[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
     };
 

@@ -228,6 +228,14 @@ function getScreenFromElement(element) {
     state.stateManager.saveStateImmediately(true, true);
     // Update content width dynamically
     updateContentWidth();
+    // Trigger feed map update for active handler
+    if (handlers) {
+      for (const handler of Object.values(handlers)) {
+        if (handler.isActive() && typeof handler.updateScrollPosition === 'function') {
+          handler.updateScrollPosition(true);
+        }
+      }
+    }
     config.close();
   }
 

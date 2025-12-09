@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+456.1d43f85c
+// @version     1.0.31+457.43a6d26f
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45090,12 +45090,22 @@ if (cid) {
           help: "Show user handles in zoom indicator segments",
           showWhen: { feedMapStyle: "Advanced" }
         },
+        feedMapZoomEnabled: {
+          label: "Enable zoom view",
+          type: "checkbox",
+          default: false,
+          help: "Show zoomed view of posts around selection",
+          showWhen: { feedMapStyle: "Advanced" }
+        },
         feedMapZoom: {
           label: "Zoom window size",
-          type: "number",
-          default: 0,
-          help: "Show zoomed view of N posts around selection (0 to disable)",
-          showWhen: { feedMapStyle: "Advanced" }
+          type: "range",
+          default: 5,
+          min: 3,
+          max: 20,
+          step: 1,
+          help: "Number of posts to show in zoom view",
+          showWhen: { feedMapStyle: "Advanced", feedMapZoomEnabled: true }
         },
         feedMapAnimationSpeed: {
           label: "Animation interval",
@@ -70248,7 +70258,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const indicatorPosition = this.config.get("feedMapPosition");
       const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
       const isAdvancedStyle = indicatorStyle === "Advanced";
-      isAdvancedStyle ? parseInt(this.config.get("feedMapZoom"), 10) || 0 : 0;
       const styleClass = isAdvancedStyle ? "feed-map-advanced" : "feed-map-basic";
       const indicatorTheme = this.config.get("feedMapTheme") || "Default";
       const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
@@ -70556,7 +70565,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const indicatorPosition = this.config.get("feedMapPosition");
       const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
       const isAdvancedStyle = indicatorStyle === "Advanced";
-      isAdvancedStyle ? parseInt(this.config.get("feedMapZoom"), 10) || 0 : 0;
       const styleClass = isAdvancedStyle ? "feed-map-advanced" : "feed-map-basic";
       const indicatorTheme = this.config.get("feedMapTheme") || "Default";
       const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
@@ -71694,8 +71702,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const zoomIndicator = $(event.currentTarget);
         const indicatorWidth = zoomIndicator.width();
         const clickX = event.pageX - zoomIndicator.offset().left;
-        const zoomWindowSize = parseInt(this.config.get("feedMapZoom"), 10) || 0;
-        if (zoomWindowSize === 0) return;
+        if (!this.config.get("feedMapZoomEnabled")) return;
+        const zoomWindowSize = parseInt(this.config.get("feedMapZoom"), 10) || 5;
         const displayItems = this._displayItems || [];
         const total = displayItems.length || this.items.length;
         if (total === 0) return;
@@ -71727,8 +71735,27 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const displayItems = this._displayItems || [];
         const total = displayItems.length || this.items.length;
         if (total === 0) return;
-        const zoomWindowSize = parseInt(this.config.get("feedMapZoom"), 10) || 0;
-        if (zoomWindowSize === 0 || total <= zoomWindowSize) return;
+        const zoomEnabled = this.config.get("feedMapZoomEnabled");
+        let zoomWindowSize = parseInt(this.config.get("feedMapZoom"), 10) || 5;
+        if (event.originalEvent.ctrlKey || event.originalEvent.metaKey) {
+          const delta2 = event.originalEvent.deltaY;
+          const zoomThreshold = 50;
+          accumulatedDelta += delta2;
+          if (Math.abs(accumulatedDelta) >= zoomThreshold) {
+            const zoomChange = accumulatedDelta > 0 ? -1 : 1;
+            accumulatedDelta = 0;
+            const newZoomSize = Math.max(3, Math.min(20, zoomWindowSize + zoomChange));
+            if (newZoomSize !== zoomWindowSize) {
+              if (!zoomEnabled) {
+                this.config.set("feedMapZoomEnabled", true);
+              }
+              this.config.set("feedMapZoom", newZoomSize);
+              this.updateScrollPosition(true);
+            }
+          }
+          return;
+        }
+        if (!zoomEnabled || total <= zoomWindowSize) return;
         const delta = event.originalEvent.deltaX !== 0 ? event.originalEvent.deltaX : event.originalEvent.deltaY;
         accumulatedDelta += delta;
         const threshold = 50;
@@ -71875,8 +71902,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const zoomInner = this.feedMapZoomInner;
       if (!zoomIndicator || !zoomInner) return;
       if (this.loading || this.loadingNew) return;
-      const zoomWindowSize = parseInt(this.config.get("feedMapZoom"), 10) || 0;
-      if (zoomWindowSize === 0) return;
+      if (!this.config.get("feedMapZoomEnabled")) return;
+      const zoomWindowSize = parseInt(this.config.get("feedMapZoom"), 10) || 5;
       const total = displayTotal;
       if (total <= zoomWindowSize) {
         if (this.feedMapContainer) {
@@ -72611,6 +72638,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       state.rulesConfig = config.get("rulesConfig");
       state.stateManager.saveStateImmediately(true, true);
       updateContentWidth();
+      if (handlers) {
+        for (const handler of Object.values(handlers)) {
+          if (handler.isActive() && typeof handler.updateScrollPosition === "function") {
+            handler.updateScrollPosition(true);
+          }
+        }
+      }
       config.close();
     }
     function updateContentWidth() {

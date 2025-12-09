@@ -371,7 +371,6 @@ export class FeedItemHandler extends ItemHandler {
     const indicatorPosition = this.config.get('feedMapPosition');
     const indicatorStyle = this.config.get('feedMapStyle') || 'Advanced';
     const isAdvancedStyle = indicatorStyle === 'Advanced';
-    const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('feedMapZoom'), 10) || 0) : 0;
     const styleClass = isAdvancedStyle ? 'feed-map-advanced' : 'feed-map-basic';
     const indicatorTheme = this.config.get('feedMapTheme') || 'Default';
     const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
@@ -777,7 +776,6 @@ export class FeedItemHandler extends ItemHandler {
     const indicatorPosition = this.config.get('feedMapPosition');
     const indicatorStyle = this.config.get('feedMapStyle') || 'Advanced';
     const isAdvancedStyle = indicatorStyle === 'Advanced';
-    const zoomWindowSize = isAdvancedStyle ? (parseInt(this.config.get('feedMapZoom'), 10) || 0) : 0;
     const styleClass = isAdvancedStyle ? 'feed-map-advanced' : 'feed-map-basic';
     const indicatorTheme = this.config.get('feedMapTheme') || 'Default';
     const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
@@ -2279,8 +2277,8 @@ export class FeedItemHandler extends ItemHandler {
       const indicatorWidth = zoomIndicator.width();
       const clickX = event.pageX - zoomIndicator.offset().left;
 
-      const zoomWindowSize = parseInt(this.config.get('feedMapZoom'), 10) || 0;
-      if (zoomWindowSize === 0) return;
+      if (!this.config.get('feedMapZoomEnabled')) return;
+      const zoomWindowSize = parseInt(this.config.get('feedMapZoom'), 10) || 5;
 
       // Use display items (actual DOM elements) for click handling
       const displayItems = this._displayItems || [];
@@ -2328,8 +2326,33 @@ export class FeedItemHandler extends ItemHandler {
       const total = displayItems.length || this.items.length;
       if (total === 0) return;
 
-      const zoomWindowSize = parseInt(this.config.get('feedMapZoom'), 10) || 0;
-      if (zoomWindowSize === 0 || total <= zoomWindowSize) return;
+      const zoomEnabled = this.config.get('feedMapZoomEnabled');
+      let zoomWindowSize = parseInt(this.config.get('feedMapZoom'), 10) || 5;
+
+      // Ctrl+wheel or pinch gesture changes zoom window size
+      if (event.originalEvent.ctrlKey || event.originalEvent.metaKey) {
+        const delta = event.originalEvent.deltaY;
+        const zoomThreshold = 50;
+        accumulatedDelta += delta;
+
+        if (Math.abs(accumulatedDelta) >= zoomThreshold) {
+          const zoomChange = accumulatedDelta > 0 ? -1 : 1; // Scroll down = zoom out (smaller window), scroll up = zoom in (larger window)
+          accumulatedDelta = 0;
+
+          const newZoomSize = Math.max(3, Math.min(20, zoomWindowSize + zoomChange));
+          if (newZoomSize !== zoomWindowSize) {
+            // Enable zoom if not already enabled
+            if (!zoomEnabled) {
+              this.config.set('feedMapZoomEnabled', true);
+            }
+            this.config.set('feedMapZoom', newZoomSize);
+            this.updateScrollPosition(true);
+          }
+        }
+        return;
+      }
+
+      if (!zoomEnabled || total <= zoomWindowSize) return;
 
       // Accumulate scroll delta - support both vertical wheel and horizontal trackpad
       const delta = event.originalEvent.deltaX !== 0 ? event.originalEvent.deltaX : event.originalEvent.deltaY;
@@ -2545,8 +2568,8 @@ export class FeedItemHandler extends ItemHandler {
     // Skip updates while loading to prevent visual jumping
     if (this.loading || this.loadingNew) return;
 
-    const zoomWindowSize = parseInt(this.config.get('feedMapZoom'), 10) || 0;
-    if (zoomWindowSize === 0) return;
+    if (!this.config.get('feedMapZoomEnabled')) return;
+    const zoomWindowSize = parseInt(this.config.get('feedMapZoom'), 10) || 5;
 
     // Use displayTotal from caller (accounts for filtered items)
     const total = displayTotal;

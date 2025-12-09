@@ -237,6 +237,42 @@ const CONFIG_SCHEMA = {
       },
     },
   },
+  Notifications: {
+    icon: '🔔',
+    fields: {
+      toastNotifications: {
+        label: 'Toast notifications',
+        type: 'checkbox',
+        default: true,
+        help: 'Show popup notifications for new activity',
+      },
+      toastDuration: {
+        label: 'Duration (seconds)',
+        type: 'range',
+        default: 5,
+        min: 2,
+        max: 15,
+        step: 1,
+        help: 'How long notifications stay visible',
+        showWhen: { toastNotifications: true },
+      },
+      toastPosition: {
+        label: 'Position',
+        type: 'select',
+        options: ['Top Right', 'Top Left', 'Bottom Right', 'Bottom Left'],
+        default: 'Top Right',
+        help: 'Where to show toast notifications',
+        showWhen: { toastNotifications: true },
+      },
+      toastTestMode: {
+        label: 'Test mode',
+        type: 'checkbox',
+        default: false,
+        help: 'Show most recent notification as new (for testing)',
+        showWhen: { toastNotifications: true },
+      },
+    },
+  },
   'Threads & Sidecar': {
     icon: '💬',
     fields: {

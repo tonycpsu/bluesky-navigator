@@ -26,6 +26,7 @@ const SHORTCUTS = {
     { keys: ['p'], description: 'Repost menu' },
     { keys: ['P'], description: 'Repost immediately' },
     { keys: ['r'], description: 'Reply' },
+    { keys: ['R'], description: 'Add author to rules' },
     { keys: ['i'], description: 'Open first link' },
     { keys: ['m'], description: 'Toggle media/video' },
     { keys: ['c'], description: 'Screenshot to clipboard' },

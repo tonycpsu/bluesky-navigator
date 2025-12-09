@@ -1148,6 +1148,11 @@ export class ItemHandler extends Handler {
   }
 
   handleItemAction(event) {
+    // Skip if rules dropdown is active
+    if (this.rulesDropdownActive) {
+      return false;
+    }
+
     const item = this.selectedItem;
 
     switch (event.key) {
@@ -1212,6 +1217,10 @@ export class ItemHandler extends Handler {
 
       case 't':
         this.toggleFixedSidecarPanel(item);
+        break;
+
+      case 'R':
+        this.openAddToRulesForItem(item);
         break;
 
       default:
@@ -2307,6 +2316,44 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Open Add to Rules dropdown for the author of the selected item
+   * @param {jQuery} item - The selected item
+   */
+  openAddToRulesForItem(item) {
+    if (!item || !item.length) return;
+
+    let handle = this.handleFromItem(item);
+
+    // Fallback: try data-testid
+    if (!handle) {
+      const testId = $(item).attr('data-testid') || '';
+      const match = testId.match(/^feedItem-by-(.+)$/);
+      if (match) {
+        handle = match[1];
+      }
+    }
+
+    if (!handle) return;
+
+    // Find the author name element to position the dropdown near it
+    const authorElement = $(item).find(constants.PROFILE_SELECTOR).find('span').eq(0)[0];
+    let rect;
+
+    if (authorElement) {
+      rect = authorElement.getBoundingClientRect();
+      // Check if rect is valid (not at 0,0 or off-screen)
+      if (rect.top > 0 && rect.left > 0) {
+        this.showAddToRulesDropdown(rect, handle);
+        return;
+      }
+    }
+
+    // Fallback: position near the top of the item
+    rect = item[0].getBoundingClientRect();
+    this.showAddToRulesDropdown(rect, handle);
+  }
+
+  /**
    * Show dropdown to select which rule category to add the author to
    * @param {DOMRect} buttonRect - The bounding rect of the button (captured before hover card disappears)
    * @param {string} handle - The user handle to add to rules
@@ -2314,6 +2361,9 @@ export class ItemHandler extends Handler {
   showAddToRulesDropdown(buttonRect, handle) {
     // Remove any existing dropdown
     $('.bsky-nav-rules-dropdown').remove();
+
+    // Disable global keyboard handling
+    this.rulesDropdownActive = true;
 
     // Get rule categories from config
     const rulesConfig = this.config.get('rulesConfig') || '';
@@ -2358,24 +2408,18 @@ export class ItemHandler extends Handler {
             : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings → Rules.</div>'
           }
         </div>
-        ${categories.length > 0 ? `
-          <div class="bsky-nav-rules-dropdown-footer">
-            <input type="text" class="bsky-nav-rules-new-category" placeholder="New category name...">
-            <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
-          </div>
-        ` : `
-          <div class="bsky-nav-rules-dropdown-footer">
-            <input type="text" class="bsky-nav-rules-new-category" placeholder="Create first category...">
-            <button class="bsky-nav-rules-create-btn" title="Create category">+</button>
-          </div>
-        `}
+        <div class="bsky-nav-rules-dropdown-footer">
+          <input type="text" class="bsky-nav-rules-num-input" placeholder="#" readonly>
+          <input type="text" class="bsky-nav-rules-new-category" placeholder="${categories.length > 0 ? 'New category...' : 'Create first category...'}">
+          <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
+        </div>
       </div>
     `);
 
-    // Position dropdown near where button was
+    // Position dropdown near the top of the element
     dropdown.css({
       position: 'fixed',
-      top: buttonRect.bottom + 4 + 'px',
+      top: buttonRect.top + 'px',
       left: buttonRect.left + 'px',
       zIndex: 10001
     });
@@ -2393,11 +2437,19 @@ export class ItemHandler extends Handler {
       selectedAction = $(this).data('action');
     });
 
+    // Helper to close dropdown and cleanup
+    const closeDropdown = () => {
+      dropdown.remove();
+      this.rulesDropdownActive = false;
+      $(document).off('mousedown', closeHandler);
+      $(document).off('keydown', keyHandler);
+    };
+
     // Category button handlers
     dropdown.find('.bsky-nav-rules-category-btn').on('click', (e) => {
       const category = $(e.target).data('category');
       this.addAuthorToRules(handle, category, selectedAction);
-      dropdown.remove();
+      closeDropdown();
     });
 
     // Create new category handler
@@ -2406,7 +2458,7 @@ export class ItemHandler extends Handler {
       const newCategory = input.val().trim();
       if (newCategory) {
         this.addAuthorToRules(handle, newCategory, selectedAction);
-        dropdown.remove();
+        closeDropdown();
       }
     });
 
@@ -2416,7 +2468,7 @@ export class ItemHandler extends Handler {
         const newCategory = $(e.target).val().trim();
         if (newCategory) {
           this.addAuthorToRules(handle, newCategory, selectedAction);
-          dropdown.remove();
+          closeDropdown();
         }
       }
     });
@@ -2430,13 +2482,83 @@ export class ItemHandler extends Handler {
     const closeHandler = (e) => {
       if (!$(e.target).closest('.bsky-nav-rules-dropdown').length &&
           !$(e.target).closest('.bsky-nav-add-to-rules-btn').length) {
-        dropdown.remove();
-        $(document).off('mousedown', closeHandler);
+        closeDropdown();
       }
     };
     setTimeout(() => {
       $(document).on('mousedown', closeHandler);
     }, 100);
+
+    // Keyboard handler for numeric selection (supports two-digit entry)
+    const categoryButtons = dropdown.find('.bsky-nav-rules-category-btn');
+    const numInput = dropdown.find('.bsky-nav-rules-num-input');
+    let numBuffer = '';
+    let numTimeout = null;
+
+    const selectCategory = (index) => {
+      if (index >= 0 && index < categoryButtons.length) {
+        categoryButtons.removeClass('selected');
+        categoryButtons.eq(index).addClass('selected');
+      }
+    };
+
+    const updateNumDisplay = () => {
+      numInput.val(numBuffer);
+    };
+
+    const keyHandler = (e) => {
+      // Skip if focus is in text input (except the readonly num input)
+      if ($(e.target).is('input') && !$(e.target).hasClass('bsky-nav-rules-num-input')) return;
+
+      // Number keys 0-9 for category selection
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Clear previous timeout
+        if (numTimeout) clearTimeout(numTimeout);
+
+        // Append to buffer
+        numBuffer += e.key;
+        updateNumDisplay();
+
+        // Try to select immediately
+        const num = parseInt(numBuffer);
+        if (num > 0) {
+          selectCategory(num - 1);
+        }
+
+        // Set timeout to clear buffer (500ms for second digit)
+        numTimeout = setTimeout(() => {
+          numBuffer = '';
+          updateNumDisplay();
+        }, 500);
+
+        return;
+      }
+
+      // Enter confirms selected category
+      if (e.key === 'Enter') {
+        const selected = dropdown.find('.bsky-nav-rules-category-btn.selected');
+        if (selected.length) {
+          e.preventDefault();
+          e.stopPropagation();
+          const category = selected.data('category');
+          this.addAuthorToRules(handle, category, selectedAction);
+          closeDropdown();
+        }
+        return;
+      }
+
+      // Escape closes dropdown
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeDropdown();
+        return;
+      }
+    };
+    $(document).on('keydown', keyHandler);
   }
 
   /**

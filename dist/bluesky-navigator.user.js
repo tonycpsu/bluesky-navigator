@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+459.eee64a93
+// @version     1.0.31+460.e0fff5d5
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44743,6 +44743,30 @@ if (cid) {
         return reply.post.record.text;
       });
     }
+    /**
+     * Fetches notifications from the API
+     * @param {number} limit - Maximum number of notifications to fetch
+     * @param {string} cursor - Pagination cursor
+     * @returns {Promise<{notifications: Array, cursor: string, seenAt: string}>}
+     */
+    async getNotifications(limit = 20, cursor = null) {
+      const params = { limit };
+      if (cursor) {
+        params.cursor = cursor;
+      }
+      const { data } = await this.agent.listNotifications(params);
+      return {
+        notifications: data.notifications,
+        cursor: data.cursor,
+        seenAt: data.seenAt
+      };
+    }
+    /**
+     * Mark notifications as seen up to the current time
+     */
+    async markNotificationsSeen() {
+      await this.agent.updateSeenNotifications({ seenAt: (/* @__PURE__ */ new Date()).toISOString() });
+    }
     async unrollThread(thread) {
       const originalAuthor = thread.post.author.did;
       const collectPosts = async (threadNode, parentAuthorDid, posts = []) => {
@@ -45116,6 +45140,42 @@ if (cid) {
           step: 50,
           help: "Zoom scroll animation duration (0=instant, 100=normal)",
           showWhen: { feedMapStyle: "Advanced" }
+        }
+      }
+    },
+    Notifications: {
+      icon: "\u{1F514}",
+      fields: {
+        toastNotifications: {
+          label: "Toast notifications",
+          type: "checkbox",
+          default: true,
+          help: "Show popup notifications for new activity"
+        },
+        toastDuration: {
+          label: "Duration (seconds)",
+          type: "range",
+          default: 5,
+          min: 2,
+          max: 15,
+          step: 1,
+          help: "How long notifications stay visible",
+          showWhen: { toastNotifications: true }
+        },
+        toastPosition: {
+          label: "Position",
+          type: "select",
+          options: ["Top Right", "Top Left", "Bottom Right", "Bottom Left"],
+          default: "Top Right",
+          help: "Where to show toast notifications",
+          showWhen: { toastNotifications: true }
+        },
+        toastTestMode: {
+          label: "Test mode",
+          type: "checkbox",
+          default: false,
+          help: "Show most recent notification as new (for testing)",
+          showWhen: { toastNotifications: true }
         }
       }
     },
@@ -50957,16 +51017,15 @@ div#statusBar.has-feed-map {
   background: white;
   border: 1px solid #dce2ea;
   border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  min-width: 200px;
-  max-width: 280px;
+  min-width: 220px;
+  max-width: 320px;
   overflow: hidden;
   font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .bsky-nav-rules-dropdown-header {
   padding: 12px 14px 8px;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: #1f2937;
   border-bottom: 1px solid #e5e7eb;
@@ -50986,11 +51045,11 @@ div#statusBar.has-feed-map {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 8px 14px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   background: white;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   color: #4b5563;
   cursor: pointer;
@@ -51028,23 +51087,17 @@ div#statusBar.has-feed-map {
 .bsky-nav-rules-category-btn {
   display: block;
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 14px;
   margin-bottom: 4px;
   border: none;
   border-radius: 6px;
   background: transparent;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   text-align: left;
   color: #374151;
   cursor: pointer;
   transition: background-color 150ms ease;
-  text-shadow:
-    -1px -1px 0 rgba(255, 255, 255, 0.8),
-    1px -1px 0 rgba(255, 255, 255, 0.8),
-    -1px 1px 0 rgba(255, 255, 255, 0.8),
-    1px 1px 0 rgba(255, 255, 255, 0.8),
-    0 0 3px rgba(255, 255, 255, 0.9);
 }
 
 .bsky-nav-rules-category-btn:last-child {
@@ -51074,6 +51127,19 @@ div#statusBar.has-feed-map {
   padding: 10px 14px;
   border-top: 1px solid #e5e7eb;
   background: #f9fafb;
+}
+
+.bsky-nav-rules-num-input {
+  width: 36px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  background: white;
+  color: #374151;
+  outline: none;
 }
 
 .bsky-nav-rules-new-category {
@@ -51219,6 +51285,12 @@ div#statusBar.has-feed-map {
     border-top-color: #374151;
   }
 
+  .bsky-nav-rules-num-input {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f3f4f6;
+  }
+
   .bsky-nav-rules-new-category {
     background: #374151;
     border-color: #4b5563;
@@ -51231,6 +51303,225 @@ div#statusBar.has-feed-map {
 
   .bsky-nav-rule-notification {
     background: #374151;
+  }
+}
+
+/* Toast Notifications */
+.bsky-nav-toast-container {
+  position: fixed;
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  max-width: 380px;
+}
+
+.bsky-nav-toast-container.top-right {
+  top: 70px;
+  right: 10px;
+}
+
+.bsky-nav-toast-container.top-left {
+  top: 70px;
+  left: 10px;
+}
+
+.bsky-nav-toast-container.bottom-right {
+  bottom: 100px;
+  right: 10px;
+  flex-direction: column-reverse;
+}
+
+.bsky-nav-toast-container.bottom-left {
+  bottom: 100px;
+  left: 10px;
+  flex-direction: column-reverse;
+}
+
+.bsky-nav-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  opacity: 0;
+  transform: translateX(100%);
+  transition: opacity 300ms ease, transform 300ms ease;
+  pointer-events: auto;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.bsky-nav-toast-container.top-left .bsky-nav-toast {
+  transform: translateX(-100%);
+}
+
+.bsky-nav-toast-container.bottom-right .bsky-nav-toast,
+.bsky-nav-toast-container.bottom-left .bsky-nav-toast {
+  transform: translateY(100%);
+}
+
+.bsky-nav-toast.visible {
+  opacity: 1;
+  transform: translate(0, 0);
+}
+
+.bsky-nav-toast:hover {
+  background: #f9fafb;
+}
+
+.bsky-nav-toast-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.bsky-nav-toast-icon.like {
+  background: rgba(236, 72, 153, 0.15);
+  color: #ec4899;
+}
+
+.bsky-nav-toast-icon.repost {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.bsky-nav-toast-icon.reply {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.bsky-nav-toast-icon.follow {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+}
+
+.bsky-nav-toast-icon.mention {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.bsky-nav-toast-icon.quote {
+  background: rgba(20, 184, 166, 0.15);
+  color: #14b8a6;
+}
+
+.bsky-nav-toast-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bsky-nav-toast-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bsky-nav-toast-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #e5e7eb;
+  object-fit: cover;
+}
+
+.bsky-nav-toast-author {
+  font-weight: 600;
+  font-size: 14px;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bsky-nav-toast-action {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.bsky-nav-toast-preview {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.bsky-nav-toast-time {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.bsky-nav-toast-close {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  margin: -4px -4px -4px 0;
+}
+
+.bsky-nav-toast-close:hover {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Dark mode for toasts */
+@media (prefers-color-scheme: dark) {
+  .bsky-nav-toast {
+    background: #1f2937;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+
+  .bsky-nav-toast:hover {
+    background: #374151;
+  }
+
+  .bsky-nav-toast-author {
+    color: #f9fafb;
+  }
+
+  .bsky-nav-toast-action {
+    color: #9ca3af;
+  }
+
+  .bsky-nav-toast-preview {
+    color: #9ca3af;
+  }
+
+  .bsky-nav-toast-time {
+    color: #6b7280;
+  }
+
+  .bsky-nav-toast-close {
+    color: #6b7280;
+  }
+
+  .bsky-nav-toast-close:hover {
+    background: #4b5563;
+    color: #9ca3af;
   }
 }
 `;
@@ -51256,6 +51547,7 @@ div#statusBar.has-feed-map {
       { keys: ["p"], description: "Repost menu" },
       { keys: ["P"], description: "Repost immediately" },
       { keys: ["r"], description: "Reply" },
+      { keys: ["R"], description: "Add author to rules" },
       { keys: ["i"], description: "Open first link" },
       { keys: ["m"], description: "Toggle media/video" },
       { keys: ["c"], description: "Screenshot to clipboard" },
@@ -67991,6 +68283,9 @@ div#statusBar.has-feed-map {
       return event.key;
     }
     handleItemAction(event) {
+      if (this.rulesDropdownActive) {
+        return false;
+      }
       const item = this.selectedItem;
       switch (event.key) {
         case "o":
@@ -68040,6 +68335,9 @@ div#statusBar.has-feed-map {
           break;
         case "t":
           this.toggleFixedSidecarPanel(item);
+          break;
+        case "R":
+          this.openAddToRulesForItem(item);
           break;
         default:
           if (!isNaN(parseInt(event.key))) {
@@ -68933,12 +69231,40 @@ div#statusBar.has-feed-map {
     onProfileHoverCardRemove() {
     }
     /**
+     * Open Add to Rules dropdown for the author of the selected item
+     * @param {jQuery} item - The selected item
+     */
+    openAddToRulesForItem(item) {
+      if (!item || !item.length) return;
+      let handle2 = this.handleFromItem(item);
+      if (!handle2) {
+        const testId = $(item).attr("data-testid") || "";
+        const match2 = testId.match(/^feedItem-by-(.+)$/);
+        if (match2) {
+          handle2 = match2[1];
+        }
+      }
+      if (!handle2) return;
+      const authorElement = $(item).find(constants.PROFILE_SELECTOR).find("span").eq(0)[0];
+      let rect;
+      if (authorElement) {
+        rect = authorElement.getBoundingClientRect();
+        if (rect.top > 0 && rect.left > 0) {
+          this.showAddToRulesDropdown(rect, handle2);
+          return;
+        }
+      }
+      rect = item[0].getBoundingClientRect();
+      this.showAddToRulesDropdown(rect, handle2);
+    }
+    /**
      * Show dropdown to select which rule category to add the author to
      * @param {DOMRect} buttonRect - The bounding rect of the button (captured before hover card disappears)
      * @param {string} handle - The user handle to add to rules
      */
     showAddToRulesDropdown(buttonRect, handle2) {
       $(".bsky-nav-rules-dropdown").remove();
+      this.rulesDropdownActive = true;
       const rulesConfig = this.config.get("rulesConfig") || "";
       const categories = this.parseRuleCategories(rulesConfig);
       const activeFilter = this.state.filter || "";
@@ -68974,22 +69300,16 @@ div#statusBar.has-feed-map {
               `;
       }).join("") : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings \u2192 Rules.</div>'}
         </div>
-        ${categories.length > 0 ? `
-          <div class="bsky-nav-rules-dropdown-footer">
-            <input type="text" class="bsky-nav-rules-new-category" placeholder="New category name...">
-            <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
-          </div>
-        ` : `
-          <div class="bsky-nav-rules-dropdown-footer">
-            <input type="text" class="bsky-nav-rules-new-category" placeholder="Create first category...">
-            <button class="bsky-nav-rules-create-btn" title="Create category">+</button>
-          </div>
-        `}
+        <div class="bsky-nav-rules-dropdown-footer">
+          <input type="text" class="bsky-nav-rules-num-input" placeholder="#" readonly>
+          <input type="text" class="bsky-nav-rules-new-category" placeholder="${categories.length > 0 ? "New category..." : "Create first category..."}">
+          <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
+        </div>
       </div>
     `);
       dropdown.css({
         position: "fixed",
-        top: buttonRect.bottom + 4 + "px",
+        top: buttonRect.top + "px",
         left: buttonRect.left + "px",
         zIndex: 10001
       });
@@ -69001,17 +69321,23 @@ div#statusBar.has-feed-map {
         $(this).addClass("selected");
         selectedAction = $(this).data("action");
       });
+      const closeDropdown = () => {
+        dropdown.remove();
+        this.rulesDropdownActive = false;
+        $(document).off("mousedown", closeHandler);
+        $(document).off("keydown", keyHandler);
+      };
       dropdown.find(".bsky-nav-rules-category-btn").on("click", (e2) => {
         const category = $(e2.target).data("category");
         this.addAuthorToRules(handle2, category, selectedAction);
-        dropdown.remove();
+        closeDropdown();
       });
       dropdown.find(".bsky-nav-rules-create-btn").on("click", () => {
         const input = dropdown.find(".bsky-nav-rules-new-category");
         const newCategory = input.val().trim();
         if (newCategory) {
           this.addAuthorToRules(handle2, newCategory, selectedAction);
-          dropdown.remove();
+          closeDropdown();
         }
       });
       dropdown.find(".bsky-nav-rules-new-category").on("keypress", (e2) => {
@@ -69019,7 +69345,7 @@ div#statusBar.has-feed-map {
           const newCategory = $(e2.target).val().trim();
           if (newCategory) {
             this.addAuthorToRules(handle2, newCategory, selectedAction);
-            dropdown.remove();
+            closeDropdown();
           }
         }
       });
@@ -69028,13 +69354,62 @@ div#statusBar.has-feed-map {
       });
       const closeHandler = (e2) => {
         if (!$(e2.target).closest(".bsky-nav-rules-dropdown").length && !$(e2.target).closest(".bsky-nav-add-to-rules-btn").length) {
-          dropdown.remove();
-          $(document).off("mousedown", closeHandler);
+          closeDropdown();
         }
       };
       setTimeout(() => {
         $(document).on("mousedown", closeHandler);
       }, 100);
+      const categoryButtons = dropdown.find(".bsky-nav-rules-category-btn");
+      const numInput = dropdown.find(".bsky-nav-rules-num-input");
+      let numBuffer = "";
+      let numTimeout = null;
+      const selectCategory = (index) => {
+        if (index >= 0 && index < categoryButtons.length) {
+          categoryButtons.removeClass("selected");
+          categoryButtons.eq(index).addClass("selected");
+        }
+      };
+      const updateNumDisplay = () => {
+        numInput.val(numBuffer);
+      };
+      const keyHandler = (e2) => {
+        if ($(e2.target).is("input") && !$(e2.target).hasClass("bsky-nav-rules-num-input")) return;
+        if (/^[0-9]$/.test(e2.key)) {
+          e2.preventDefault();
+          e2.stopPropagation();
+          if (numTimeout) clearTimeout(numTimeout);
+          numBuffer += e2.key;
+          updateNumDisplay();
+          const num = parseInt(numBuffer);
+          if (num > 0) {
+            selectCategory(num - 1);
+          }
+          numTimeout = setTimeout(() => {
+            numBuffer = "";
+            updateNumDisplay();
+          }, 500);
+          return;
+        }
+        if (e2.key === "Enter") {
+          const selected = dropdown.find(".bsky-nav-rules-category-btn.selected");
+          if (selected.length) {
+            e2.preventDefault();
+            e2.stopPropagation();
+            const category = selected.data("category");
+            this.addAuthorToRules(handle2, category, selectedAction);
+            closeDropdown();
+          }
+          return;
+        }
+        if (e2.key === "Escape") {
+          e2.preventDefault();
+          e2.stopPropagation();
+          closeDropdown();
+          return;
+        }
+      };
+      $(document).on("keydown", keyHandler);
     }
     /**
      * Parse rule categories from config text
@@ -72645,6 +73020,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         }
       }
+      if (config.get("toastNotifications")) {
+        createToastContainer();
+      }
       config.close();
     }
     function updateContentWidth() {
@@ -72773,6 +73151,241 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         styleEl.textContent = "";
       }
     }
+    const seenNotifications = /* @__PURE__ */ new Set();
+    let toastContainer = null;
+    let notificationPollInterval = null;
+    let toastApi = null;
+    let lastSeenAt = null;
+    function initToastNotifications(api) {
+      if (!config.get("toastNotifications")) {
+        return;
+      }
+      toastApi = api;
+      createToastContainer();
+      if (toastApi) {
+        startNotificationPolling();
+        if (config.get("toastTestMode")) {
+          setTimeout(() => {
+            fetchAndShowTestNotification();
+          }, 2e3);
+        }
+      }
+    }
+    function createToastContainer() {
+      if (toastContainer) {
+        toastContainer.remove();
+      }
+      const position2 = config.get("toastPosition") || "Top Right";
+      const positionClass = position2.toLowerCase().replace(" ", "-");
+      toastContainer = $(`<div class="bsky-nav-toast-container ${positionClass}"></div>`);
+      $("body").append(toastContainer);
+    }
+    function parseApiNotification(apiNotification) {
+      const notification2 = {
+        id: apiNotification.uri || apiNotification.cid || Date.now().toString(),
+        indexedAt: apiNotification.indexedAt
+      };
+      const author = apiNotification.author;
+      if (author) {
+        notification2.author = author.displayName || author.handle;
+        notification2.handle = author.handle;
+        notification2.avatar = author.avatar || "";
+      }
+      const reason = apiNotification.reason;
+      switch (reason) {
+        case "like":
+          notification2.type = "like";
+          notification2.action = "liked your post";
+          break;
+        case "like-via-repost":
+          notification2.type = "like";
+          notification2.action = "liked your repost";
+          break;
+        case "repost":
+          notification2.type = "repost";
+          notification2.action = "reposted your post";
+          break;
+        case "repost-via-repost":
+          notification2.type = "repost";
+          notification2.action = "reposted your repost";
+          break;
+        case "reply":
+          notification2.type = "reply";
+          notification2.action = "replied to your post";
+          break;
+        case "follow":
+          notification2.type = "follow";
+          notification2.action = "followed you";
+          break;
+        case "quote":
+          notification2.type = "quote";
+          notification2.action = "quoted your post";
+          break;
+        case "mention":
+          notification2.type = "mention";
+          notification2.action = "mentioned you";
+          break;
+        case "starterpack-joined":
+          notification2.type = "follow";
+          notification2.action = "joined your starter pack";
+          break;
+        default:
+          console.log("Unknown notification reason:", reason);
+          return null;
+      }
+      if (apiNotification.record?.text) {
+        notification2.preview = apiNotification.record.text.substring(0, 150);
+      }
+      if (apiNotification.indexedAt) {
+        const date = new Date(apiNotification.indexedAt);
+        const now = /* @__PURE__ */ new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 6e4);
+        const diffHours = Math.floor(diffMs / 36e5);
+        const diffDays = Math.floor(diffMs / 864e5);
+        if (diffMins < 1) {
+          notification2.time = "now";
+        } else if (diffMins < 60) {
+          notification2.time = `${diffMins}m`;
+        } else if (diffHours < 24) {
+          notification2.time = `${diffHours}h`;
+        } else {
+          notification2.time = `${diffDays}d`;
+        }
+      }
+      if (apiNotification.reasonSubject) {
+        const parts = apiNotification.reasonSubject.split("/");
+        const postId = parts[parts.length - 1];
+        const did2 = parts[2];
+        notification2.url = `/profile/${did2}/post/${postId}`;
+      } else if (apiNotification.uri && reason !== "follow") {
+        const parts = apiNotification.uri.split("/");
+        const postId = parts[parts.length - 1];
+        notification2.url = `/profile/${notification2.handle}/post/${postId}`;
+      } else if (reason === "follow") {
+        notification2.url = `/profile/${notification2.handle}`;
+      }
+      return notification2;
+    }
+    function showToast(notification2) {
+      if (!toastContainer || !notification2) return;
+      const iconSvgs = {
+        like: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12.489 21.372c8.528-4.78 10.626-10.47 9.022-14.47-.779-1.941-2.414-3.333-4.342-3.763-1.697-.378-3.552.003-5.169 1.287-1.617-1.284-3.472-1.665-5.17-1.287-1.927.43-3.562 1.822-4.34 3.764-1.605 4 .493 9.69 9.021 14.47a1 1 0 0 0 .978 0Z"></path></svg>',
+        repost: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M17.957 2.293a1 1 0 1 0-1.414 1.414L17.836 5H6a3 3 0 0 0-3 3v3a1 1 0 1 0 2 0V8a1 1 0 0 1 1-1h11.836l-1.293 1.293a1 1 0 0 0 1.414 1.414l2.47-2.47a1.75 1.75 0 0 0 0-2.474l-2.47-2.47ZM20 12a1 1 0 0 1 1 1v3a3 3 0 0 1-3 3H6.164l1.293 1.293a1 1 0 1 1-1.414 1.414l-2.47-2.47a1.75 1.75 0 0 1 0-2.474l2.47-2.47a1 1 0 0 1 1.414 1.414L6.164 17H18a1 1 0 0 0 1-1v-3a1 1 0 0 1 1-1Z"></path></svg>',
+        reply: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M20.002 7a2 2 0 0 0-2-2h-12a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2a1 1 0 0 1 1 1v1.918l3.375-2.7a1 1 0 0 1 .625-.218h5a2 2 0 0 0 2-2V7Zm2 8a4 4 0 0 1-4 4h-4.648l-4.727 3.781A1.001 1.001 0 0 1 7.002 22v-3h-1a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4h12a4 4 0 0 1 4 4v8Z"></path></svg>',
+        follow: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM6 8a6 6 0 1 1 12 0A6 6 0 0 1 6 8Zm2 10a3 3 0 0 0-3 3 1 1 0 1 1-2 0 5 5 0 0 1 5-5h8a5 5 0 0 1 5 5 1 1 0 1 1-2 0 3 3 0 0 0-3-3H8Z"></path></svg>',
+        mention: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4a8 8 0 1 0 4.906 14.32 1 1 0 0 1 1.218 1.588A10 10 0 1 1 22 12v1.5a3.5 3.5 0 0 1-6.063 2.395A5 5 0 1 1 17 12v1.5a1.5 1.5 0 0 0 3 0V12a8 8 0 0 0-8-8Zm3 8a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z"></path></svg>',
+        quote: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 7H6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Zm10 0h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Z"></path></svg>'
+      };
+      const duration2 = (config.get("toastDuration") || 5) * 1e3;
+      const $toast = $(`
+      <div class="bsky-nav-toast">
+        <div class="bsky-nav-toast-icon ${notification2.type}">
+          ${iconSvgs[notification2.type] || ""}
+        </div>
+        <div class="bsky-nav-toast-content">
+          <div class="bsky-nav-toast-header">
+            ${notification2.avatar ? `<img class="bsky-nav-toast-avatar" src="${notification2.avatar}" alt="">` : ""}
+            <span class="bsky-nav-toast-author">${notification2.author || "Someone"}</span>
+          </div>
+          <span class="bsky-nav-toast-action">${notification2.action}</span>
+          ${notification2.preview ? `<div class="bsky-nav-toast-preview">${notification2.preview}</div>` : ""}
+          ${notification2.time ? `<span class="bsky-nav-toast-time">${notification2.time}</span>` : ""}
+        </div>
+        <button class="bsky-nav-toast-close" aria-label="Dismiss">\xD7</button>
+      </div>
+    `);
+      $toast.on("click", (e2) => {
+        if (!$(e2.target).is(".bsky-nav-toast-close")) {
+          window.location.href = "/notifications";
+          removeToast($toast);
+        }
+      });
+      $toast.find(".bsky-nav-toast-close").on("click", (e2) => {
+        e2.stopPropagation();
+        removeToast($toast);
+      });
+      toastContainer.append($toast);
+      setTimeout(() => $toast.addClass("visible"), 10);
+      setTimeout(() => removeToast($toast), duration2);
+    }
+    function removeToast($toast) {
+      $toast.removeClass("visible");
+      setTimeout(() => $toast.remove(), 300);
+    }
+    function startNotificationPolling() {
+      if (notificationPollInterval) {
+        clearInterval(notificationPollInterval);
+      }
+      const pollIntervalMs = 3e4;
+      fetchNotifications(true);
+      notificationPollInterval = setInterval(() => {
+        if (config.get("toastNotifications") && toastApi) {
+          fetchNotifications(false);
+        }
+      }, pollIntervalMs);
+    }
+    async function fetchNotifications(isInitial = false) {
+      if (!toastApi) return;
+      try {
+        if (!toastApi.agent.session) {
+          await toastApi.login();
+        }
+        const result = await toastApi.getNotifications(20);
+        const notifications = result.notifications || [];
+        if (result.seenAt) {
+          lastSeenAt = new Date(result.seenAt);
+        }
+        for (const apiNotification of notifications) {
+          const notification2 = parseApiNotification(apiNotification);
+          if (!notification2) continue;
+          if (seenNotifications.has(notification2.id)) {
+            continue;
+          }
+          seenNotifications.add(notification2.id);
+          if (isInitial) {
+            continue;
+          }
+          if (lastSeenAt && notification2.indexedAt) {
+            const notificationDate = new Date(notification2.indexedAt);
+            if (notificationDate <= lastSeenAt) {
+              continue;
+            }
+          }
+          showToast(notification2);
+        }
+        if (seenNotifications.size > 1e3) {
+          const iterator = seenNotifications.values();
+          for (let i2 = 0; i2 < 500; i2++) {
+            seenNotifications.delete(iterator.next().value);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch notifications:", error);
+      }
+    }
+    async function fetchAndShowTestNotification() {
+      if (!toastApi) {
+        console.log("Toast test: No API available");
+        return;
+      }
+      try {
+        if (!toastApi.agent.session) {
+          await toastApi.login();
+        }
+        const result = await toastApi.getNotifications(1);
+        const notifications = result.notifications || [];
+        if (notifications.length > 0) {
+          const notification2 = parseApiNotification(notifications[0]);
+          if (notification2) {
+            seenNotifications.clear();
+            showToast(notification2);
+          }
+        }
+      } catch (error) {
+        console.error("Toast test: Failed to fetch notification:", error);
+      }
+    }
     function onStateInit() {
       let widthWatcher;
       let api;
@@ -72806,6 +73419,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         config.set("rulesConfig", state.rulesConfig);
       }
       state.rules = parseRulesConfig(config.get("rulesConfig"));
+      initToastNotifications(api);
       if (config.get("showDebuggingInfo")) {
         let appendLog = function(type, args) {
           const message2 = `[${type.toUpperCase()}] ${args.map((arg) => typeof arg === "object" ? JSON.stringify(arg, null, 2) : arg).join(" ")}`;

@@ -236,6 +236,10 @@ function getScreenFromElement(element) {
         }
       }
     }
+    // Recreate toast container with new position
+    if (config.get('toastNotifications')) {
+      createToastContainer();
+    }
     config.close();
   }
 
@@ -381,6 +385,346 @@ function getScreenFromElement(element) {
     }
   }
 
+  // ==========================================================================
+  // Toast Notifications
+  // ==========================================================================
+
+  // Track seen notifications to avoid duplicates
+  const seenNotifications = new Set();
+  let toastContainer = null;
+  let notificationPollInterval = null;
+  let toastApi = null;
+  let lastSeenAt = null;
+
+  /**
+   * Initialize the toast notification system
+   * @param {BlueskyAPI} api - The API instance to use for fetching notifications
+   */
+  function initToastNotifications(api) {
+    if (!config.get('toastNotifications')) {
+      return;
+    }
+
+    toastApi = api;
+
+    // Create toast container
+    createToastContainer();
+
+    // Only start polling if we have an API instance
+    if (toastApi) {
+      startNotificationPolling();
+
+      // In test mode, show the most recent notification after a short delay
+      if (config.get('toastTestMode')) {
+        setTimeout(() => {
+          fetchAndShowTestNotification();
+        }, 2000);
+      }
+    }
+  }
+
+  /**
+   * Create the toast container element
+   */
+  function createToastContainer() {
+    if (toastContainer) {
+      toastContainer.remove();
+    }
+
+    const position = config.get('toastPosition') || 'Top Right';
+    const positionClass = position.toLowerCase().replace(' ', '-');
+
+    toastContainer = $(`<div class="bsky-nav-toast-container ${positionClass}"></div>`);
+    $('body').append(toastContainer);
+  }
+
+  /**
+   * Parse notification data from API response
+   */
+  function parseApiNotification(apiNotification) {
+    const notification = {
+      id: apiNotification.uri || apiNotification.cid || Date.now().toString(),
+      indexedAt: apiNotification.indexedAt,
+    };
+
+    // Extract author info
+    const author = apiNotification.author;
+    if (author) {
+      notification.author = author.displayName || author.handle;
+      notification.handle = author.handle;
+      notification.avatar = author.avatar || '';
+    }
+
+    // Map API reason to notification type
+    const reason = apiNotification.reason;
+    switch (reason) {
+      case 'like':
+        notification.type = 'like';
+        notification.action = 'liked your post';
+        break;
+      case 'like-via-repost':
+        notification.type = 'like';
+        notification.action = 'liked your repost';
+        break;
+      case 'repost':
+        notification.type = 'repost';
+        notification.action = 'reposted your post';
+        break;
+      case 'repost-via-repost':
+        notification.type = 'repost';
+        notification.action = 'reposted your repost';
+        break;
+      case 'reply':
+        notification.type = 'reply';
+        notification.action = 'replied to your post';
+        break;
+      case 'follow':
+        notification.type = 'follow';
+        notification.action = 'followed you';
+        break;
+      case 'quote':
+        notification.type = 'quote';
+        notification.action = 'quoted your post';
+        break;
+      case 'mention':
+        notification.type = 'mention';
+        notification.action = 'mentioned you';
+        break;
+      case 'starterpack-joined':
+        notification.type = 'follow';
+        notification.action = 'joined your starter pack';
+        break;
+      default:
+        console.log('Unknown notification reason:', reason);
+        return null; // Unknown notification type
+    }
+
+    // Extract preview text from the record if available
+    if (apiNotification.record?.text) {
+      notification.preview = apiNotification.record.text.substring(0, 150);
+    }
+
+    // Format relative time
+    if (apiNotification.indexedAt) {
+      const date = new Date(apiNotification.indexedAt);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) {
+        notification.time = 'now';
+      } else if (diffMins < 60) {
+        notification.time = `${diffMins}m`;
+      } else if (diffHours < 24) {
+        notification.time = `${diffHours}h`;
+      } else {
+        notification.time = `${diffDays}d`;
+      }
+    }
+
+    // Build URL for navigation
+    if (apiNotification.reasonSubject) {
+      // For likes/reposts, link to the subject post
+      const parts = apiNotification.reasonSubject.split('/');
+      const postId = parts[parts.length - 1];
+      const did = parts[2];
+      notification.url = `/profile/${did}/post/${postId}`;
+    } else if (apiNotification.uri && reason !== 'follow') {
+      // For replies/quotes/mentions, link to the notification post
+      const parts = apiNotification.uri.split('/');
+      const postId = parts[parts.length - 1];
+      notification.url = `/profile/${notification.handle}/post/${postId}`;
+    } else if (reason === 'follow') {
+      // For follows, link to the profile
+      notification.url = `/profile/${notification.handle}`;
+    }
+
+    return notification;
+  }
+
+  /**
+   * Show a toast notification
+   */
+  function showToast(notification) {
+    if (!toastContainer || !notification) return;
+
+    const iconSvgs = {
+      like: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12.489 21.372c8.528-4.78 10.626-10.47 9.022-14.47-.779-1.941-2.414-3.333-4.342-3.763-1.697-.378-3.552.003-5.169 1.287-1.617-1.284-3.472-1.665-5.17-1.287-1.927.43-3.562 1.822-4.34 3.764-1.605 4 .493 9.69 9.021 14.47a1 1 0 0 0 .978 0Z"></path></svg>',
+      repost: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M17.957 2.293a1 1 0 1 0-1.414 1.414L17.836 5H6a3 3 0 0 0-3 3v3a1 1 0 1 0 2 0V8a1 1 0 0 1 1-1h11.836l-1.293 1.293a1 1 0 0 0 1.414 1.414l2.47-2.47a1.75 1.75 0 0 0 0-2.474l-2.47-2.47ZM20 12a1 1 0 0 1 1 1v3a3 3 0 0 1-3 3H6.164l1.293 1.293a1 1 0 1 1-1.414 1.414l-2.47-2.47a1.75 1.75 0 0 1 0-2.474l2.47-2.47a1 1 0 0 1 1.414 1.414L6.164 17H18a1 1 0 0 0 1-1v-3a1 1 0 0 1 1-1Z"></path></svg>',
+      reply: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M20.002 7a2 2 0 0 0-2-2h-12a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2a1 1 0 0 1 1 1v1.918l3.375-2.7a1 1 0 0 1 .625-.218h5a2 2 0 0 0 2-2V7Zm2 8a4 4 0 0 1-4 4h-4.648l-4.727 3.781A1.001 1.001 0 0 1 7.002 22v-3h-1a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4h12a4 4 0 0 1 4 4v8Z"></path></svg>',
+      follow: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM6 8a6 6 0 1 1 12 0A6 6 0 0 1 6 8Zm2 10a3 3 0 0 0-3 3 1 1 0 1 1-2 0 5 5 0 0 1 5-5h8a5 5 0 0 1 5 5 1 1 0 1 1-2 0 3 3 0 0 0-3-3H8Z"></path></svg>',
+      mention: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4a8 8 0 1 0 4.906 14.32 1 1 0 0 1 1.218 1.588A10 10 0 1 1 22 12v1.5a3.5 3.5 0 0 1-6.063 2.395A5 5 0 1 1 17 12v1.5a1.5 1.5 0 0 0 3 0V12a8 8 0 0 0-8-8Zm3 8a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z"></path></svg>',
+      quote: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 7H6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Zm10 0h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Z"></path></svg>',
+    };
+
+    const duration = (config.get('toastDuration') || 5) * 1000;
+
+    const $toast = $(`
+      <div class="bsky-nav-toast">
+        <div class="bsky-nav-toast-icon ${notification.type}">
+          ${iconSvgs[notification.type] || ''}
+        </div>
+        <div class="bsky-nav-toast-content">
+          <div class="bsky-nav-toast-header">
+            ${notification.avatar ? `<img class="bsky-nav-toast-avatar" src="${notification.avatar}" alt="">` : ''}
+            <span class="bsky-nav-toast-author">${notification.author || 'Someone'}</span>
+          </div>
+          <span class="bsky-nav-toast-action">${notification.action}</span>
+          ${notification.preview ? `<div class="bsky-nav-toast-preview">${notification.preview}</div>` : ''}
+          ${notification.time ? `<span class="bsky-nav-toast-time">${notification.time}</span>` : ''}
+        </div>
+        <button class="bsky-nav-toast-close" aria-label="Dismiss">×</button>
+      </div>
+    `);
+
+    // Click to navigate to notifications page
+    $toast.on('click', (e) => {
+      if (!$(e.target).is('.bsky-nav-toast-close')) {
+        window.location.href = '/notifications';
+        removeToast($toast);
+      }
+    });
+
+    // Close button
+    $toast.find('.bsky-nav-toast-close').on('click', (e) => {
+      e.stopPropagation();
+      removeToast($toast);
+    });
+
+    toastContainer.append($toast);
+
+    // Animate in
+    setTimeout(() => $toast.addClass('visible'), 10);
+
+    // Auto-remove after duration
+    setTimeout(() => removeToast($toast), duration);
+  }
+
+  /**
+   * Remove a toast with animation
+   */
+  function removeToast($toast) {
+    $toast.removeClass('visible');
+    setTimeout(() => $toast.remove(), 300);
+  }
+
+  /**
+   * Start polling for new notifications via API
+   */
+  function startNotificationPolling() {
+    if (notificationPollInterval) {
+      clearInterval(notificationPollInterval);
+    }
+
+    // Poll every 30 seconds
+    const pollIntervalMs = 30000;
+
+    // Initial fetch to set the baseline (don't show toasts for existing notifications)
+    fetchNotifications(true);
+
+    // Start polling
+    notificationPollInterval = setInterval(() => {
+      if (config.get('toastNotifications') && toastApi) {
+        fetchNotifications(false);
+      }
+    }, pollIntervalMs);
+  }
+
+  /**
+   * Fetch notifications from the API
+   * @param {boolean} isInitial - If true, just record seen notifications without showing toasts
+   */
+  async function fetchNotifications(isInitial = false) {
+    if (!toastApi) return;
+
+    try {
+      // Ensure we're logged in before fetching
+      if (!toastApi.agent.session) {
+        await toastApi.login();
+      }
+
+      const result = await toastApi.getNotifications(20);
+      const notifications = result.notifications || [];
+
+      // Update lastSeenAt from the API response
+      if (result.seenAt) {
+        lastSeenAt = new Date(result.seenAt);
+      }
+
+      for (const apiNotification of notifications) {
+        const notification = parseApiNotification(apiNotification);
+        if (!notification) continue;
+
+        // Skip if we've already seen this notification
+        if (seenNotifications.has(notification.id)) {
+          continue;
+        }
+
+        // Mark as seen
+        seenNotifications.add(notification.id);
+
+        // On initial load, don't show toasts - just record what we've seen
+        if (isInitial) {
+          continue;
+        }
+
+        // Only show toast if this notification is newer than our last seen time
+        if (lastSeenAt && notification.indexedAt) {
+          const notificationDate = new Date(notification.indexedAt);
+          if (notificationDate <= lastSeenAt) {
+            continue;
+          }
+        }
+
+        // Show the toast
+        showToast(notification);
+      }
+
+      // Limit the size of seenNotifications to prevent memory issues
+      if (seenNotifications.size > 1000) {
+        const iterator = seenNotifications.values();
+        for (let i = 0; i < 500; i++) {
+          seenNotifications.delete(iterator.next().value);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    }
+  }
+
+  /**
+   * Fetch and show the most recent notification for testing
+   */
+  async function fetchAndShowTestNotification() {
+    if (!toastApi) {
+      console.log('Toast test: No API available');
+      return;
+    }
+
+    try {
+      // Ensure we're logged in before fetching
+      if (!toastApi.agent.session) {
+        await toastApi.login();
+      }
+
+      const result = await toastApi.getNotifications(1);
+      const notifications = result.notifications || [];
+
+      if (notifications.length > 0) {
+        const notification = parseApiNotification(notifications[0]);
+        if (notification) {
+          // Clear the seen set so the test notification shows
+          seenNotifications.clear();
+          showToast(notification);
+        }
+      }
+    } catch (error) {
+      console.error('Toast test: Failed to fetch notification:', error);
+    }
+  }
+
   function onStateInit() {
     let widthWatcher;
     let api;
@@ -432,6 +776,9 @@ function getScreenFromElement(element) {
       config.set('rulesConfig', state.rulesConfig);
     }
     state.rules = parseRulesConfig(config.get('rulesConfig'));
+
+    // Initialize toast notification system (pass API if available)
+    initToastNotifications(api);
 
     if (config.get('showDebuggingInfo')) {
       const logContainer = $(`<div id="logContainer"></div>`);

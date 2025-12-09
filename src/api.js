@@ -99,6 +99,32 @@ export class BlueskyAPI {
     });
   }
 
+  /**
+   * Fetches notifications from the API
+   * @param {number} limit - Maximum number of notifications to fetch
+   * @param {string} cursor - Pagination cursor
+   * @returns {Promise<{notifications: Array, cursor: string, seenAt: string}>}
+   */
+  async getNotifications(limit = 20, cursor = null) {
+    const params = { limit };
+    if (cursor) {
+      params.cursor = cursor;
+    }
+    const { data } = await this.agent.listNotifications(params);
+    return {
+      notifications: data.notifications,
+      cursor: data.cursor,
+      seenAt: data.seenAt,
+    };
+  }
+
+  /**
+   * Mark notifications as seen up to the current time
+   */
+  async markNotificationsSeen() {
+    await this.agent.updateSeenNotifications({ seenAt: new Date().toISOString() });
+  }
+
   async unrollThread(thread) {
     const originalAuthor = thread.post.author.did;
 

@@ -36,6 +36,8 @@ Features
     - optionally hide right sidebar
     - repost timestamps showing when content was reposted
 - Additional functionality (`(*)` = requires AT protocol agent, see below):
+    - **toast notifications**: popup alerts for new likes, reposts, replies,
+      follows, quotes, and mentions (*)
     - automatic "unrolling" of threads (*)
     - show replies in a "sidecar" next to each post (*) - inline or fixed panel mode
     - **fixed sidecar panel**: persistent side panel with keyboard/hover navigation,
@@ -48,7 +50,8 @@ Features
     - **rule color coding**: highlight matching authors and content phrases with
       customizable category colors
     - **include rules**: rules can reference other rule categories for reuse
-    - **Add to Rules button**: quickly add authors to rules from profile hover cards
+    - **Add to Rules**: quickly add authors to rules from profile hover cards or
+      via `R` shortcut (supports numeric category selection with 1-9 keys, Enter to confirm)
     - optionally disable embedded video previews
     - sync read/unread state between multiple browsers via cloud service(s)
     - optionally disable built-in behavior of loading more items when scrolling
@@ -88,6 +91,7 @@ Press `?` to show the keyboard shortcuts overlay at any time.
  | m            | view/play/pause media in post                      |
  | a            | open post author's profile                         |
  | r            | reply to post                                      |
+ | R            | add post author to filter rules                    |
  | l            | like/unlike post                                   |
  | p            | open repost menu                                   |
  | P            | repost immediately                                 |
@@ -246,6 +250,33 @@ The sidecar (replies panel) can be displayed in two modes:
 - Context indicator on minimized panel
 
 Configure in Settings → Threads & Sidecar → Sidecar panel.
+
+
+Toast Notifications
+-------------------
+
+Toast notifications provide real-time popup alerts when you receive new activity
+on Bluesky. Requires the AT Protocol agent to be configured.
+
+**Supported notification types:**
+- Likes (including likes on your reposts)
+- Reposts (including reposts of your reposts)
+- Replies to your posts
+- New followers
+- Quote posts
+- Mentions
+
+**Features:**
+- Configurable display duration (2-15 seconds)
+- Position options: Top Right, Top Left, Bottom Right, Bottom Left
+- Click any toast to go to the notifications page
+- Close button to dismiss early
+- Polls for new notifications every 30 seconds
+- Test mode to verify toasts are working
+
+**Configuration:**
+Enable in Settings → Notifications. Test mode shows your most recent
+notification on page load to verify the feature is working.
 
 
 AT Protocol Agent (beta)

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+467.e5cc5019
+// @version     1.0.31+468.b807d3cc
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -67991,11 +67991,17 @@ div#statusBar.has-feed-map {
         return;
       } else if (value < 0) {
         this._threadIndex = null;
-        this.setIndex(this.index - 1, false, true);
+        this.setIndex(this.index - 1, false, false);
+        if (!this.isElementFullyVisible(this.selectedItem)) {
+          this.scrollElementIntoView(this.selectedItem[0], -1);
+        }
         return;
       } else if (value > this.unrolledReplies.length) {
         this._threadIndex = null;
-        this.setIndex(this.index + 1, false, true);
+        this.setIndex(this.index + 1, false, false);
+        if (!this.isElementFullyVisible(this.selectedItem)) {
+          this.scrollElementIntoView(this.selectedItem[0], 1);
+        }
         return;
       }
       if (oldIndex != null) {
@@ -68010,17 +68016,35 @@ div#statusBar.has-feed-map {
           $(this.selectedItem).addClass("item-selection-child-focused");
           $(this.selectedItem).removeClass("item-selection-active");
           this.selectedPost.addClass("reply-selection-active");
-          if (value === 0) {
-            const threadContainer = $(this.selectedItem).closest(".thread")[0];
-            const target2 = threadContainer || $(this.selectedItem)[0];
-            const rect = target2.getBoundingClientRect();
-            const scrollTop = window.pageYOffset + rect.top - this.scrollMargin;
-            window.scrollTo({
-              top: Math.max(0, scrollTop),
-              behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
-            });
-          } else {
-            this.scrollToElement(this.selectedPost[0], "nearest");
+          const post2 = this.selectedPost[0];
+          if (post2) {
+            const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
+            if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+              const containerRect = scrollContainer.getBoundingClientRect();
+              const postRect = post2.getBoundingClientRect();
+              const postTopInContainer = postRect.top - containerRect.top + scrollContainer.scrollTop;
+              const targetScrollTop = postTopInContainer - 10;
+              console.log("[thread-scroll] threadIndex:", value, "scrolling container to:", targetScrollTop, "current:", scrollContainer.scrollTop);
+              scrollContainer.scrollTo({
+                top: targetScrollTop,
+                behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
+              });
+            } else {
+              const rect = post2.getBoundingClientRect();
+              const toolbarHeight = this.getToolbarHeight();
+              const scrollNeeded = rect.top - toolbarHeight - 10;
+              console.log("[thread-scroll] threadIndex:", value, "no container, window scroll:", scrollNeeded);
+              if (Math.abs(scrollNeeded) > 50) {
+                this.ignoreMouseMovement = true;
+                window.scrollBy({
+                  top: scrollNeeded,
+                  behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
+                });
+                setTimeout(() => {
+                  this.ignoreMouseMovement = false;
+                }, 500);
+              }
+            }
           }
         } else {
           return;
@@ -68774,9 +68798,11 @@ div#statusBar.has-feed-map {
             event.preventDefault();
             if (sidecarFocused) {
               this.replyIndex += 1;
-            } else if (this.config.get("unrolledPostSelection") && this.unrolledReplies.length > 0) {
+            } else if (this.config.get("unrolledPostSelection") && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
               const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
-              if (!this.isElementFullyVisible(currentThreadPost)) {
+              const isVisible = this.isElementFullyVisible(currentThreadPost);
+              console.log("[thread-nav] j pressed, threadIndex:", this.threadIndex, "unrolledReplies.length:", this.unrolledReplies.length, "isVisible:", isVisible);
+              if (!isVisible) {
                 if (!this.scrollElementIntoView(currentThreadPost[0], 1)) {
                   if (this.threadIndex < this.unrolledReplies.length) {
                     if (event.key == "j") this.markItemRead(this.index, true);
@@ -68786,6 +68812,7 @@ div#statusBar.has-feed-map {
                   }
                 }
               } else if (this.threadIndex < this.unrolledReplies.length) {
+                console.log("[thread-nav] advancing from", this.threadIndex, "to", this.threadIndex + 1);
                 if (event.key == "j") {
                   this.markItemRead(this.index, true);
                 }
@@ -68808,7 +68835,7 @@ div#statusBar.has-feed-map {
             event.preventDefault();
             if (sidecarFocused) {
               this.replyIndex -= 1;
-            } else if (this.config.get("unrolledPostSelection") && this.unrolledReplies.length > 0) {
+            } else if (this.config.get("unrolledPostSelection") && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
               const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
               if (!this.isElementFullyVisible(currentThreadPost)) {
                 if (!this.scrollElementIntoView(currentThreadPost[0], -1)) {
@@ -69679,9 +69706,23 @@ div#statusBar.has-feed-map {
           scrollAmount = -Math.min(viewportHeight * 0.5, remaining + 10);
         }
       } else if (rect.top < toolbarHeight) {
+        const topOverlap = toolbarHeight - rect.top;
+        const bottomOverlap = rect.bottom - viewportBottom;
+        if (bottomOverlap > 0 && topOverlap < 20 && bottomOverlap < 20) {
+          console.log("[scroll] post almost fits (top overlap:", topOverlap, "bottom overlap:", bottomOverlap, ") - skipping");
+          return false;
+        }
         scrollAmount = rect.top - toolbarHeight - 10;
       } else if (rect.bottom > viewportBottom) {
-        scrollAmount = rect.bottom - viewportBottom + 10;
+        const bottomOverlap = rect.bottom - viewportBottom;
+        const topGap = rect.top - toolbarHeight;
+        if (topGap < 20 && bottomOverlap < 20) {
+          console.log("[scroll] post almost fits (top gap:", topGap, "bottom overlap:", bottomOverlap, ") - skipping");
+          return false;
+        }
+        const scrollToShowTop = rect.top - toolbarHeight - 10;
+        const scrollToShowBottom = rect.bottom - viewportBottom + 10;
+        scrollAmount = Math.max(scrollToShowTop, scrollToShowBottom);
       } else {
         return true;
       }

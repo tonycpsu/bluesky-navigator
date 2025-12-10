@@ -320,11 +320,19 @@ export class ItemHandler extends Handler {
       return;
     } else if (value < 0) {
       this._threadIndex = null;
-      this.setIndex(this.index - 1, false, true);
+      // Don't use updateItems scroll - scroll manually to avoid backwards jump
+      this.setIndex(this.index - 1, false, false);
+      if (!this.isElementFullyVisible(this.selectedItem)) {
+        this.scrollElementIntoView(this.selectedItem[0], -1);
+      }
       return;
     } else if (value > this.unrolledReplies.length) {
       this._threadIndex = null;
-      this.setIndex(this.index + 1, false, true);
+      // Don't use updateItems scroll - scroll manually to avoid backwards jump
+      this.setIndex(this.index + 1, false, false);
+      if (!this.isElementFullyVisible(this.selectedItem)) {
+        this.scrollElementIntoView(this.selectedItem[0], 1);
+      }
       return;
     }
     if (oldIndex != null) {
@@ -339,20 +347,46 @@ export class ItemHandler extends Handler {
         $(this.selectedItem).addClass('item-selection-child-focused');
         $(this.selectedItem).removeClass('item-selection-active');
         this.selectedPost.addClass('reply-selection-active');
-        // When at first post (index 0), scroll to show top of entire thread container
-        // For other posts, scroll to the specific reply
-        if (value === 0) {
-          const threadContainer = $(this.selectedItem).closest('.thread')[0];
-          const target = threadContainer || $(this.selectedItem)[0];
-          // Use window.scrollTo to ensure thread top is visible accounting for toolbar
-          const rect = target.getBoundingClientRect();
-          const scrollTop = window.pageYOffset + rect.top - this.scrollMargin;
-          window.scrollTo({
-            top: Math.max(0, scrollTop),
-            behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant'
-          });
-        } else {
-          this.scrollToElement(this.selectedPost[0], 'nearest');
+        // Scroll thread post into view within the unrolled thread's scroll container
+        const post = this.selectedPost[0];
+        if (post) {
+          // Find the scroll container (parent of contentHider-post with overflow-y: scroll)
+          const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
+
+          if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+            // Container is scrollable - scroll within it
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const postRect = post.getBoundingClientRect();
+
+            // Calculate position relative to container
+            const postTopInContainer = postRect.top - containerRect.top + scrollContainer.scrollTop;
+            const targetScrollTop = postTopInContainer - 10; // 10px padding from top
+
+            console.log('[thread-scroll] threadIndex:', value, 'scrolling container to:', targetScrollTop, 'current:', scrollContainer.scrollTop);
+
+            scrollContainer.scrollTo({
+              top: targetScrollTop,
+              behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+            });
+          } else {
+            // Fallback to window scroll if no scroll container
+            const rect = post.getBoundingClientRect();
+            const toolbarHeight = this.getToolbarHeight();
+            const scrollNeeded = rect.top - toolbarHeight - 10;
+
+            console.log('[thread-scroll] threadIndex:', value, 'no container, window scroll:', scrollNeeded);
+
+            if (Math.abs(scrollNeeded) > 50) {
+              this.ignoreMouseMovement = true;
+              window.scrollBy({
+                top: scrollNeeded,
+                behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+              });
+              setTimeout(() => {
+                this.ignoreMouseMovement = false;
+              }, 500);
+            }
+          }
         }
       } else {
         return;
@@ -1328,10 +1362,12 @@ export class ItemHandler extends Handler {
           event.preventDefault();
           if (sidecarFocused) {
             this.replyIndex += 1;
-          } else if (this.config.get('unrolledPostSelection') && this.unrolledReplies.length > 0) {
-            // In unrolled thread
+          } else if (this.config.get('unrolledPostSelection') && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
+            // In unrolled thread (threadIndex is set)
             const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
-            if (!this.isElementFullyVisible(currentThreadPost)) {
+            const isVisible = this.isElementFullyVisible(currentThreadPost);
+            console.log('[thread-nav] j pressed, threadIndex:', this.threadIndex, 'unrolledReplies.length:', this.unrolledReplies.length, 'isVisible:', isVisible);
+            if (!isVisible) {
               // Scroll current thread post into view (direction: down)
               // If scrollElementIntoView returns false, post scrolled past - continue to next
               if (!this.scrollElementIntoView(currentThreadPost[0], 1)) {
@@ -1344,7 +1380,8 @@ export class ItemHandler extends Handler {
                 }
               }
             } else if (this.threadIndex < this.unrolledReplies.length) {
-              // More posts in thread - go to next
+              // More posts in thread - go to next (setter handles scrolling)
+              console.log('[thread-nav] advancing from', this.threadIndex, 'to', this.threadIndex + 1);
               if (event.key == 'j') {
                 this.markItemRead(this.index, true);
               }
@@ -1371,8 +1408,8 @@ export class ItemHandler extends Handler {
           event.preventDefault();
           if (sidecarFocused) {
             this.replyIndex -= 1;
-          } else if (this.config.get('unrolledPostSelection') && this.unrolledReplies.length > 0) {
-            // In unrolled thread
+          } else if (this.config.get('unrolledPostSelection') && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
+            // In unrolled thread (threadIndex is set)
             const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
             if (!this.isElementFullyVisible(currentThreadPost)) {
               // Scroll current thread post into view (direction: up)
@@ -1387,7 +1424,7 @@ export class ItemHandler extends Handler {
                 }
               }
             } else if (this.threadIndex > 0) {
-              // More posts in thread - go to previous
+              // More posts in thread - go to previous (setter handles scrolling)
               if (event.key == 'k') {
                 this.markItemRead(this.index, true);
               }
@@ -2439,10 +2476,30 @@ export class ItemHandler extends Handler {
       }
     } else if (rect.top < toolbarHeight) {
       // Normal post above viewport - scroll up to show top
+      // But if bottom would go off-screen and post almost fits, consider it visible
+      const topOverlap = toolbarHeight - rect.top;
+      const bottomOverlap = rect.bottom - viewportBottom;
+      if (bottomOverlap > 0 && topOverlap < 20 && bottomOverlap < 20) {
+        // Post almost fits, both edges just slightly off - consider visible
+        console.log('[scroll] post almost fits (top overlap:', topOverlap, 'bottom overlap:', bottomOverlap, ') - skipping');
+        return false;
+      }
       scrollAmount = rect.top - toolbarHeight - 10;
     } else if (rect.bottom > viewportBottom) {
-      // Normal post below viewport - scroll down to show bottom
-      scrollAmount = rect.bottom - viewportBottom + 10;
+      // Normal post below viewport - scroll to show bottom
+      // But if top would go off-screen and post almost fits, consider it visible
+      const bottomOverlap = rect.bottom - viewportBottom;
+      const topGap = rect.top - toolbarHeight;
+      if (topGap < 20 && bottomOverlap < 20) {
+        // Post almost fits, both edges just slightly off - consider visible
+        console.log('[scroll] post almost fits (top gap:', topGap, 'bottom overlap:', bottomOverlap, ') - skipping');
+        return false;
+      }
+      // If post fits in viewport, align top with toolbar; otherwise just show more of bottom
+      const scrollToShowTop = rect.top - toolbarHeight - 10;
+      const scrollToShowBottom = rect.bottom - viewportBottom + 10;
+      // Use whichever scroll amount actually moves the viewport
+      scrollAmount = Math.max(scrollToShowTop, scrollToShowBottom);
     } else {
       // Already visible, shouldn't happen but handle gracefully
       return true;

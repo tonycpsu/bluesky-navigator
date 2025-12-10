@@ -1328,31 +1328,85 @@ export class ItemHandler extends Handler {
           event.preventDefault();
           if (sidecarFocused) {
             this.replyIndex += 1;
-          } else if (this.shouldScrollWithinItem(1)) {
-            // Post is taller than viewport and has more content below - scroll within it
-            this.scrollWithinItem(1);
-          } else if (this.config.get('unrolledPostSelection')) {
-            if (event.key == 'j') {
-              this.markItemRead(this.index, true);
+          } else if (this.config.get('unrolledPostSelection') && this.unrolledReplies.length > 0) {
+            // In unrolled thread
+            const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
+            if (!this.isElementFullyVisible(currentThreadPost)) {
+              // Scroll current thread post into view (direction: down)
+              // If scrollElementIntoView returns false, post scrolled past - continue to next
+              if (!this.scrollElementIntoView(currentThreadPost[0], 1)) {
+                // Post scrolled past - go to next
+                if (this.threadIndex < this.unrolledReplies.length) {
+                  if (event.key == 'j') this.markItemRead(this.index, true);
+                  this.threadIndex += 1;
+                } else {
+                  this.jumpToNext(event.key == 'j');
+                }
+              }
+            } else if (this.threadIndex < this.unrolledReplies.length) {
+              // More posts in thread - go to next
+              if (event.key == 'j') {
+                this.markItemRead(this.index, true);
+              }
+              this.threadIndex += 1;
+            } else {
+              // End of thread - go to next main post
+              this.jumpToNext(event.key == 'j');
             }
-            this.threadIndex += 1;
           } else {
-            moved = this.jumpToNext(event.key == 'j');
+            // Normal post - check visibility first
+            const isVisible = this.isElementFullyVisible(this.selectedItem);
+            console.log('[nav] j pressed, isVisible:', isVisible, 'selectedItem:', this.selectedItem?.length, this.selectedItem?.[0]);
+            if (!isVisible) {
+              // Scroll to make the post visible (direction: down)
+              // If scrollElementIntoView returns false, post scrolled past - jump to next
+              if (!this.scrollElementIntoView(this.selectedItem[0], 1)) {
+                moved = this.jumpToNext(event.key == 'j');
+              }
+            } else {
+              moved = this.jumpToNext(event.key == 'j');
+            }
           }
         } else if (['k', 'ArrowUp'].indexOf(event.key) != -1) {
           event.preventDefault();
           if (sidecarFocused) {
             this.replyIndex -= 1;
-          } else if (this.shouldScrollWithinItem(-1)) {
-            // Post is taller than viewport and has more content above - scroll within it
-            this.scrollWithinItem(-1);
-          } else if (this.config.get('unrolledPostSelection')) {
-            if (event.key == 'k') {
-              this.markItemRead(this.index, true);
+          } else if (this.config.get('unrolledPostSelection') && this.unrolledReplies.length > 0) {
+            // In unrolled thread
+            const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
+            if (!this.isElementFullyVisible(currentThreadPost)) {
+              // Scroll current thread post into view (direction: up)
+              // If scrollElementIntoView returns false, post scrolled past - continue to prev
+              if (!this.scrollElementIntoView(currentThreadPost[0], -1)) {
+                // Post scrolled past - go to prev
+                if (this.threadIndex > 0) {
+                  if (event.key == 'k') this.markItemRead(this.index, true);
+                  this.threadIndex -= 1;
+                } else {
+                  this.jumpToPrev(event.key == 'k');
+                }
+              }
+            } else if (this.threadIndex > 0) {
+              // More posts in thread - go to previous
+              if (event.key == 'k') {
+                this.markItemRead(this.index, true);
+              }
+              this.threadIndex -= 1;
+            } else {
+              // Start of thread - go to previous main post
+              this.jumpToPrev(event.key == 'k');
             }
-            this.threadIndex -= 1;
           } else {
-            moved = this.jumpToPrev(event.key == 'k');
+            // Normal post - check visibility first
+            if (!this.isElementFullyVisible(this.selectedItem)) {
+              // Scroll to make the post visible (direction: up)
+              // If scrollElementIntoView returns false, post scrolled past - jump to prev
+              if (!this.scrollElementIntoView(this.selectedItem[0], -1)) {
+                moved = this.jumpToPrev(event.key == 'k');
+              }
+            } else {
+              moved = this.jumpToPrev(event.key == 'k');
+            }
           }
         } else if (event.key == 'PageDown') {
           event.preventDefault();
@@ -2334,7 +2388,7 @@ export class ItemHandler extends Handler {
    * Get the height of the status bar at the bottom
    */
   getStatusBarHeight() {
-    const statusBar = $('#feed-map-container');
+    const statusBar = $('#statusBar');
     if (statusBar.length && statusBar.is(':visible')) {
       return statusBar.outerHeight() || 0;
     }
@@ -2342,65 +2396,94 @@ export class ItemHandler extends Handler {
   }
 
   /**
-   * Get the visible viewport height (excluding toolbar and status bar)
+   * Scroll to make an element more visible, accounting for toolbar and status bar.
+   * For tall posts that don't fit, scrolls by a page amount.
+   * Returns true if scrolled, false if element is already fully visible and should jump to next/prev.
    */
-  getVisibleViewportHeight() {
-    return window.innerHeight - this.getToolbarHeight() - this.getStatusBarHeight();
-  }
+  scrollElementIntoView(element, direction = 1) {
+    if (!element) return false;
 
-  /**
-   * Check if the currently selected item is taller than the visible viewport
-   * and whether there's more content to scroll to in the given direction.
-   * @param {number} direction - 1 for down, -1 for up
-   * @returns {boolean} true if we should scroll within the item, false if we should move to next/prev
-   */
-  shouldScrollWithinItem(direction) {
-    if (!this.selectedItem || !this.selectedItem.length) {
-      console.log('[scroll-debug] No selected item');
-      return false;
-    }
-
-    const item = this.selectedItem[0];
-    const rect = item.getBoundingClientRect();
-    const viewportHeight = this.getVisibleViewportHeight();
+    const el = element[0] || element;
+    const rect = el.getBoundingClientRect();
     const toolbarHeight = this.getToolbarHeight();
     const statusBarHeight = this.getStatusBarHeight();
+    const viewportHeight = window.innerHeight - toolbarHeight - statusBarHeight;
     const viewportBottom = window.innerHeight - statusBarHeight;
 
-    console.log('[scroll-debug] item height:', rect.height, 'viewport:', viewportHeight,
-      'rect.top:', rect.top, 'rect.bottom:', rect.bottom,
-      'toolbarHeight:', toolbarHeight, 'viewportBottom:', viewportBottom,
-      'direction:', direction);
+    let scrollAmount;
 
-    // If item fits in viewport, no need to scroll within it
-    if (rect.height <= viewportHeight) {
-      console.log('[scroll-debug] Item fits in viewport, no scroll needed');
-      return false;
-    }
-
-    // Check if there's more to scroll in the given direction
-    if (direction > 0) {
-      // Scrolling down: is the item's bottom below the viewport bottom?
-      const shouldScroll = rect.bottom > viewportBottom + 10;
-      console.log('[scroll-debug] Down: shouldScroll=', shouldScroll);
-      return shouldScroll;
+    // Check if post is taller than viewport
+    const postHeight = rect.bottom - rect.top;
+    if (postHeight > viewportHeight) {
+      // Tall post handling
+      if (direction > 0) {
+        // Going down: check if bottom is visible
+        if (rect.bottom <= viewportBottom) {
+          // Bottom is visible - jump to next post
+          console.log('[scroll] tall post bottom visible, jumping to next');
+          return false;
+        }
+        // Scroll down to show more of the post (by half viewport or remaining distance)
+        const remaining = rect.bottom - viewportBottom;
+        scrollAmount = Math.min(viewportHeight * 0.5, remaining + 10);
+      } else {
+        // Going up: check if top is visible
+        if (rect.top >= toolbarHeight) {
+          // Top is visible - jump to prev post
+          console.log('[scroll] tall post top visible, jumping to prev');
+          return false;
+        }
+        // Scroll up to show more of the post (by half viewport or remaining distance)
+        const remaining = toolbarHeight - rect.top;
+        scrollAmount = -Math.min(viewportHeight * 0.5, remaining + 10);
+      }
+    } else if (rect.top < toolbarHeight) {
+      // Normal post above viewport - scroll up to show top
+      scrollAmount = rect.top - toolbarHeight - 10;
+    } else if (rect.bottom > viewportBottom) {
+      // Normal post below viewport - scroll down to show bottom
+      scrollAmount = rect.bottom - viewportBottom + 10;
     } else {
-      // Scrolling up: is the item's top above the toolbar?
-      const shouldScroll = rect.top < toolbarHeight - 10;
-      console.log('[scroll-debug] Up: shouldScroll=', shouldScroll);
-      return shouldScroll;
+      // Already visible, shouldn't happen but handle gracefully
+      return true;
     }
+
+    console.log('[scroll] scrolling by', scrollAmount, 'postHeight:', postHeight, 'viewportHeight:', viewportHeight);
+
+    this.ignoreMouseMovement = true;
+    window.scrollBy({
+      top: scrollAmount,
+      behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+    });
+
+    setTimeout(() => {
+      this.ignoreMouseMovement = false;
+    }, 500);
+
+    return true;
   }
 
   /**
-   * Scroll within the current item by approximately one page.
-   * @param {number} direction - 1 for down, -1 for up
+   * Check if an element is fully visible in the viewport,
+   * accounting for toolbar and status bar.
    */
-  scrollWithinItem(direction) {
-    const viewportHeight = this.getVisibleViewportHeight();
-    // Scroll by 80% of viewport height to maintain context
-    const scrollAmount = Math.floor(viewportHeight * 0.8) * direction;
-    window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+  isElementFullyVisible(element) {
+    if (!element || (element.length !== undefined && element.length === 0)) return false;
+
+    const el = element[0] || element;
+    const rect = el.getBoundingClientRect();
+
+    const toolbarHeight = this.getToolbarHeight();
+    const statusBarHeight = this.getStatusBarHeight();
+
+    const viewportTop = toolbarHeight;
+    const viewportBottom = window.innerHeight - statusBarHeight;
+
+    const isVisible = rect.top >= viewportTop && rect.bottom <= viewportBottom;
+    console.log('[visibility]', { top: rect.top, bottom: rect.bottom, viewportTop, viewportBottom, isVisible });
+
+    // Element is fully visible if entirely within the unobstructed viewport
+    return isVisible;
   }
 
   onPopupAdd() {

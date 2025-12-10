@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+466.974a9b67
+// @version     1.0.31+467.e5cc5019
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -68774,29 +68774,67 @@ div#statusBar.has-feed-map {
             event.preventDefault();
             if (sidecarFocused) {
               this.replyIndex += 1;
-            } else if (this.shouldScrollWithinItem(1)) {
-              this.scrollWithinItem(1);
-            } else if (this.config.get("unrolledPostSelection")) {
-              if (event.key == "j") {
-                this.markItemRead(this.index, true);
+            } else if (this.config.get("unrolledPostSelection") && this.unrolledReplies.length > 0) {
+              const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
+              if (!this.isElementFullyVisible(currentThreadPost)) {
+                if (!this.scrollElementIntoView(currentThreadPost[0], 1)) {
+                  if (this.threadIndex < this.unrolledReplies.length) {
+                    if (event.key == "j") this.markItemRead(this.index, true);
+                    this.threadIndex += 1;
+                  } else {
+                    this.jumpToNext(event.key == "j");
+                  }
+                }
+              } else if (this.threadIndex < this.unrolledReplies.length) {
+                if (event.key == "j") {
+                  this.markItemRead(this.index, true);
+                }
+                this.threadIndex += 1;
+              } else {
+                this.jumpToNext(event.key == "j");
               }
-              this.threadIndex += 1;
             } else {
-              moved = this.jumpToNext(event.key == "j");
+              const isVisible = this.isElementFullyVisible(this.selectedItem);
+              console.log("[nav] j pressed, isVisible:", isVisible, "selectedItem:", this.selectedItem?.length, this.selectedItem?.[0]);
+              if (!isVisible) {
+                if (!this.scrollElementIntoView(this.selectedItem[0], 1)) {
+                  moved = this.jumpToNext(event.key == "j");
+                }
+              } else {
+                moved = this.jumpToNext(event.key == "j");
+              }
             }
           } else if (["k", "ArrowUp"].indexOf(event.key) != -1) {
             event.preventDefault();
             if (sidecarFocused) {
               this.replyIndex -= 1;
-            } else if (this.shouldScrollWithinItem(-1)) {
-              this.scrollWithinItem(-1);
-            } else if (this.config.get("unrolledPostSelection")) {
-              if (event.key == "k") {
-                this.markItemRead(this.index, true);
+            } else if (this.config.get("unrolledPostSelection") && this.unrolledReplies.length > 0) {
+              const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
+              if (!this.isElementFullyVisible(currentThreadPost)) {
+                if (!this.scrollElementIntoView(currentThreadPost[0], -1)) {
+                  if (this.threadIndex > 0) {
+                    if (event.key == "k") this.markItemRead(this.index, true);
+                    this.threadIndex -= 1;
+                  } else {
+                    this.jumpToPrev(event.key == "k");
+                  }
+                }
+              } else if (this.threadIndex > 0) {
+                if (event.key == "k") {
+                  this.markItemRead(this.index, true);
+                }
+                this.threadIndex -= 1;
+              } else {
+                this.jumpToPrev(event.key == "k");
               }
-              this.threadIndex -= 1;
             } else {
-              moved = this.jumpToPrev(event.key == "k");
+              if (!this.isElementFullyVisible(this.selectedItem)) {
+                if (!this.scrollElementIntoView(this.selectedItem[0], -1)) {
+                  moved = this.jumpToPrev(event.key == "k");
+                }
+              } else {
+                moved = this.jumpToPrev(event.key == "k");
+              }
             }
           } else if (event.key == "PageDown") {
             event.preventDefault();
@@ -69603,73 +69641,76 @@ div#statusBar.has-feed-map {
      * Get the height of the status bar at the bottom
      */
     getStatusBarHeight() {
-      const statusBar = $("#feed-map-container");
+      const statusBar = $("#statusBar");
       if (statusBar.length && statusBar.is(":visible")) {
         return statusBar.outerHeight() || 0;
       }
       return 0;
     }
     /**
-     * Get the visible viewport height (excluding toolbar and status bar)
+     * Scroll to make an element more visible, accounting for toolbar and status bar.
+     * For tall posts that don't fit, scrolls by a page amount.
+     * Returns true if scrolled, false if element is already fully visible and should jump to next/prev.
      */
-    getVisibleViewportHeight() {
-      return window.innerHeight - this.getToolbarHeight() - this.getStatusBarHeight();
-    }
-    /**
-     * Check if the currently selected item is taller than the visible viewport
-     * and whether there's more content to scroll to in the given direction.
-     * @param {number} direction - 1 for down, -1 for up
-     * @returns {boolean} true if we should scroll within the item, false if we should move to next/prev
-     */
-    shouldScrollWithinItem(direction2) {
-      if (!this.selectedItem || !this.selectedItem.length) {
-        console.log("[scroll-debug] No selected item");
-        return false;
-      }
-      const item = this.selectedItem[0];
-      const rect = item.getBoundingClientRect();
-      const viewportHeight = this.getVisibleViewportHeight();
+    scrollElementIntoView(element, direction2 = 1) {
+      if (!element) return false;
+      const el = element[0] || element;
+      const rect = el.getBoundingClientRect();
       const toolbarHeight = this.getToolbarHeight();
       const statusBarHeight = this.getStatusBarHeight();
+      const viewportHeight = window.innerHeight - toolbarHeight - statusBarHeight;
       const viewportBottom = window.innerHeight - statusBarHeight;
-      console.log(
-        "[scroll-debug] item height:",
-        rect.height,
-        "viewport:",
-        viewportHeight,
-        "rect.top:",
-        rect.top,
-        "rect.bottom:",
-        rect.bottom,
-        "toolbarHeight:",
-        toolbarHeight,
-        "viewportBottom:",
-        viewportBottom,
-        "direction:",
-        direction2
-      );
-      if (rect.height <= viewportHeight) {
-        console.log("[scroll-debug] Item fits in viewport, no scroll needed");
-        return false;
-      }
-      if (direction2 > 0) {
-        const shouldScroll = rect.bottom > viewportBottom + 10;
-        console.log("[scroll-debug] Down: shouldScroll=", shouldScroll);
-        return shouldScroll;
+      let scrollAmount;
+      const postHeight = rect.bottom - rect.top;
+      if (postHeight > viewportHeight) {
+        if (direction2 > 0) {
+          if (rect.bottom <= viewportBottom) {
+            console.log("[scroll] tall post bottom visible, jumping to next");
+            return false;
+          }
+          const remaining = rect.bottom - viewportBottom;
+          scrollAmount = Math.min(viewportHeight * 0.5, remaining + 10);
+        } else {
+          if (rect.top >= toolbarHeight) {
+            console.log("[scroll] tall post top visible, jumping to prev");
+            return false;
+          }
+          const remaining = toolbarHeight - rect.top;
+          scrollAmount = -Math.min(viewportHeight * 0.5, remaining + 10);
+        }
+      } else if (rect.top < toolbarHeight) {
+        scrollAmount = rect.top - toolbarHeight - 10;
+      } else if (rect.bottom > viewportBottom) {
+        scrollAmount = rect.bottom - viewportBottom + 10;
       } else {
-        const shouldScroll = rect.top < toolbarHeight - 10;
-        console.log("[scroll-debug] Up: shouldScroll=", shouldScroll);
-        return shouldScroll;
+        return true;
       }
+      console.log("[scroll] scrolling by", scrollAmount, "postHeight:", postHeight, "viewportHeight:", viewportHeight);
+      this.ignoreMouseMovement = true;
+      window.scrollBy({
+        top: scrollAmount,
+        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
+      });
+      setTimeout(() => {
+        this.ignoreMouseMovement = false;
+      }, 500);
+      return true;
     }
     /**
-     * Scroll within the current item by approximately one page.
-     * @param {number} direction - 1 for down, -1 for up
+     * Check if an element is fully visible in the viewport,
+     * accounting for toolbar and status bar.
      */
-    scrollWithinItem(direction2) {
-      const viewportHeight = this.getVisibleViewportHeight();
-      const scrollAmount = Math.floor(viewportHeight * 0.8) * direction2;
-      window.scrollBy({ top: scrollAmount, behavior: "smooth" });
+    isElementFullyVisible(element) {
+      if (!element || element.length !== void 0 && element.length === 0) return false;
+      const el = element[0] || element;
+      const rect = el.getBoundingClientRect();
+      const toolbarHeight = this.getToolbarHeight();
+      const statusBarHeight = this.getStatusBarHeight();
+      const viewportTop = toolbarHeight;
+      const viewportBottom = window.innerHeight - statusBarHeight;
+      const isVisible = rect.top >= viewportTop && rect.bottom <= viewportBottom;
+      console.log("[visibility]", { top: rect.top, bottom: rect.bottom, viewportTop, viewportBottom, isVisible });
+      return isVisible;
     }
     onPopupAdd() {
       this.isPopupVisible = true;

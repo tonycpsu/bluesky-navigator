@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+464.13a5ed2c
+// @version     1.0.31+465.bdaf09da
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45508,6 +45508,12 @@ if (cid) {
           type: "checkbox",
           default: false,
           help: "Show developer debugging information"
+        },
+        performanceLogging: {
+          label: "Performance logging",
+          type: "checkbox",
+          default: false,
+          help: "Log performance metrics to console (helps diagnose slowdowns)"
         }
       }
     }
@@ -67808,6 +67814,53 @@ div#statusBar.has-feed-map {
       this.onWheel = this.onWheel.bind(this);
       this.onProfileHoverCardAdd = this.onProfileHoverCardAdd.bind(this);
       this.onProfileHoverCardRemove = this.onProfileHoverCardRemove.bind(this);
+      this._perfLog = [];
+      this._perfCallCounts = {};
+      this._perfLastReport = Date.now();
+    }
+    /**
+     * Log performance metrics when performanceLogging is enabled.
+     * Tracks call counts, timing, and can detect runaway loops.
+     */
+    perfLog(label, durationMs = null) {
+      if (!this.config.get("performanceLogging")) return;
+      const now = Date.now();
+      const entry = {
+        time: now,
+        label,
+        duration: durationMs
+      };
+      this._perfCallCounts[label] = (this._perfCallCounts[label] || 0) + 1;
+      this._perfLog.push(entry);
+      if (this._perfLog.length > 500) this._perfLog.shift();
+      if (durationMs !== null) {
+        console.log(`[perf] ${label}: ${durationMs.toFixed(1)}ms`);
+      } else {
+        console.log(`[perf] ${label} (count: ${this._perfCallCounts[label]})`);
+      }
+      if (now - this._perfLastReport > 1e4) {
+        this._perfLastReport = now;
+        const summary = Object.entries(this._perfCallCounts).sort((a2, b) => b[1] - a2[1]).slice(0, 10).map(([k, v]) => `${k}: ${v}`).join(", ");
+        console.log(`[perf] === 10s summary === ${summary}`);
+        Object.entries(this._perfCallCounts).forEach(([k, v]) => {
+          if (v > 100) {
+            console.warn(`[perf] WARNING: ${k} called ${v} times in 10s - possible runaway loop!`);
+          }
+        });
+        this._perfCallCounts = {};
+      }
+    }
+    /**
+     * Start a performance timer. Returns a function to call when done.
+     */
+    perfStart(label) {
+      if (!this.config.get("performanceLogging")) return () => {
+      };
+      const start = performance.now();
+      return () => {
+        const duration2 = performance.now() - start;
+        this.perfLog(label, duration2);
+      };
     }
     isActive() {
       return false;
@@ -67820,6 +67873,7 @@ div#statusBar.has-feed-map {
         this.onPopupRemove
       );
       this.hoverCardObserver = new MutationObserver(() => {
+        this.perfLog("hoverCardObserver mutation");
         if (this.hoverCardDebounce) return;
         this.hoverCardDebounce = requestAnimationFrame(() => {
           this.hoverCardDebounce = null;
@@ -69382,6 +69436,7 @@ div#statusBar.has-feed-map {
     // Event Handlers
     // ===========================================================================
     onItemAdded(element) {
+      this.perfLog("onItemAdded");
       this.applyItemStyle(element);
       clearTimeout(this.loadItemsDebounceTimeout);
       this.loadItemsDebounceTimeout = setTimeout(() => this.loadItems(), 500);
@@ -69404,6 +69459,7 @@ div#statusBar.has-feed-map {
      * Handle scroll events - track direction and set ignoreMouseMovement
      */
     onScroll(_event) {
+      this.perfLog("onScroll");
       if (!this.enableScrollMonitor) {
         return;
       }
@@ -70507,12 +70563,21 @@ ${rule}`;
       $("#feedLoadingIndicator").remove();
     }
     loadItems(focusedPostId) {
+      this.perfLog("loadItems called");
       this.showFeedLoading();
       setTimeout(() => {
         this._doLoadItems(focusedPostId);
       }, 0);
     }
     _doLoadItems(focusedPostId) {
+      const perfEnd = this.perfStart("_doLoadItems");
+      try {
+        this._doLoadItemsInner(focusedPostId);
+      } finally {
+        perfEnd();
+      }
+    }
+    _doLoadItemsInner(focusedPostId) {
       const classes = ["thread-first", "thread-middle", "thread-last"];
       const set = [];
       $(".unrolled-replies").not(".post-view-modal *").each((i2, el) => {
@@ -70811,6 +70876,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * Resets the feed map and reloads items from DOM.
      */
     onFeedChange() {
+      this.perfLog("onFeedChange");
       this.showFeedLoading();
       const indicator = $("#feed-map-position-indicator");
       if (indicator.length) {
@@ -71917,6 +71983,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return items.length !== filteredItems.length;
     }
     filterItems() {
+      const perfEnd = this.perfStart("filterItems");
       const hideRead = this.state.feedHideRead;
       $("#filterIndicatorImage").attr("src", this.INDICATOR_IMAGES.filter[+hideRead]);
       $("#filterIndicator").attr(
@@ -71969,8 +72036,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (hideRead && $(this.selectedItem).hasClass("item-read")) {
         this.jumpToNextUnseenItem();
       }
+      perfEnd();
     }
     sortItems() {
+      const perfEnd = this.perfStart("sortItems");
       const reversed = this.state.feedSortReverse;
       $("#sortIndicatorImage").attr("src", this.INDICATOR_IMAGES.sort[+reversed]);
       $("#sortIndicator").attr(
@@ -71989,6 +72058,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return itemIndexA - itemIndexB;
       });
       reversed ^ this.loadingNew ? parent.prepend(newItems) : parent.children(".thread").last().next().after(newItems);
+      perfEnd();
     }
     updateInfoIndicator() {
       super.updateInfoIndicator();

@@ -90,6 +90,73 @@ export class ItemHandler extends Handler {
     this.onWheel = this.onWheel.bind(this);
     this.onProfileHoverCardAdd = this.onProfileHoverCardAdd.bind(this);
     this.onProfileHoverCardRemove = this.onProfileHoverCardRemove.bind(this);
+
+    // Performance logging state
+    this._perfLog = [];
+    this._perfCallCounts = {};
+    this._perfLastReport = Date.now();
+  }
+
+  /**
+   * Log performance metrics when performanceLogging is enabled.
+   * Tracks call counts, timing, and can detect runaway loops.
+   */
+  perfLog(label, durationMs = null) {
+    if (!this.config.get('performanceLogging')) return;
+
+    const now = Date.now();
+    const entry = {
+      time: now,
+      label,
+      duration: durationMs,
+    };
+
+    // Track call counts per label
+    this._perfCallCounts[label] = (this._perfCallCounts[label] || 0) + 1;
+
+    // Keep last 500 entries
+    this._perfLog.push(entry);
+    if (this._perfLog.length > 500) this._perfLog.shift();
+
+    // Log to console
+    if (durationMs !== null) {
+      console.log(`[perf] ${label}: ${durationMs.toFixed(1)}ms`);
+    } else {
+      console.log(`[perf] ${label} (count: ${this._perfCallCounts[label]})`);
+    }
+
+    // Periodic summary every 10 seconds
+    if (now - this._perfLastReport > 10000) {
+      this._perfLastReport = now;
+      const summary = Object.entries(this._perfCallCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(', ');
+      console.log(`[perf] === 10s summary === ${summary}`);
+
+      // Warn if any function called excessively (>100 times in 10s)
+      Object.entries(this._perfCallCounts).forEach(([k, v]) => {
+        if (v > 100) {
+          console.warn(`[perf] WARNING: ${k} called ${v} times in 10s - possible runaway loop!`);
+        }
+      });
+
+      // Reset counts
+      this._perfCallCounts = {};
+    }
+  }
+
+  /**
+   * Start a performance timer. Returns a function to call when done.
+   */
+  perfStart(label) {
+    if (!this.config.get('performanceLogging')) return () => {};
+    const start = performance.now();
+    return () => {
+      const duration = performance.now() - start;
+      this.perfLog(label, duration);
+    };
   }
 
   isActive() {
@@ -107,6 +174,7 @@ export class ItemHandler extends Handler {
     // Watch for hover card portals (added as direct children of body)
     // Using custom observer instead of waitForElement to avoid interfering with Bluesky's render
     this.hoverCardObserver = new MutationObserver(() => {
+      this.perfLog('hoverCardObserver mutation');
       // Debounce and defer processing to avoid interfering with Bluesky's render cycle
       if (this.hoverCardDebounce) return;
       this.hoverCardDebounce = requestAnimationFrame(() => {
@@ -2055,6 +2123,7 @@ export class ItemHandler extends Handler {
   // ===========================================================================
 
   onItemAdded(element) {
+    this.perfLog('onItemAdded');
     this.applyItemStyle(element);
     clearTimeout(this.loadItemsDebounceTimeout);
     this.loadItemsDebounceTimeout = setTimeout(() => this.loadItems(), 500);
@@ -2083,6 +2152,7 @@ export class ItemHandler extends Handler {
    * Handle scroll events - track direction and set ignoreMouseMovement
    */
   onScroll(_event) {
+    this.perfLog('onScroll');
     if (!this.enableScrollMonitor) {
       return;
     }
@@ -3514,6 +3584,8 @@ export class ItemHandler extends Handler {
   }
 
   loadItems(focusedPostId) {
+    this.perfLog('loadItems called');
+
     // Show loading indicator while items are being processed
     this.showFeedLoading();
 
@@ -3524,6 +3596,15 @@ export class ItemHandler extends Handler {
   }
 
   _doLoadItems(focusedPostId) {
+    const perfEnd = this.perfStart('_doLoadItems');
+    try {
+      this._doLoadItemsInner(focusedPostId);
+    } finally {
+      perfEnd();
+    }
+  }
+
+  _doLoadItemsInner(focusedPostId) {
     const classes = ['thread-first', 'thread-middle', 'thread-last'];
     const set = [];
 

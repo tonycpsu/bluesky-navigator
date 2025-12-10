@@ -603,6 +603,12 @@ const CONFIG_SCHEMA = {
         default: false,
         help: 'Show developer debugging information',
       },
+      performanceLogging: {
+        label: 'Performance logging',
+        type: 'checkbox',
+        default: false,
+        help: 'Log performance metrics to console (helps diagnose slowdowns)',
+      },
     },
   },
 };

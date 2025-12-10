@@ -78,6 +78,7 @@ export class FeedItemHandler extends ItemHandler {
    * Resets the feed map and reloads items from DOM.
    */
   onFeedChange() {
+    this.perfLog('onFeedChange');
     // Show loading indicator (CSS class hides items)
     this.showFeedLoading();
 
@@ -1519,6 +1520,7 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   filterItems() {
+    const perfEnd = this.perfStart('filterItems');
     const hideRead = this.state.feedHideRead;
     $('#filterIndicatorImage').attr('src', this.INDICATOR_IMAGES.filter[+hideRead]);
     $('#filterIndicator').attr(
@@ -1590,9 +1592,11 @@ export class FeedItemHandler extends ItemHandler {
     if (hideRead && $(this.selectedItem).hasClass('item-read')) {
       this.jumpToNextUnseenItem();
     }
+    perfEnd();
   }
 
   sortItems() {
+    const perfEnd = this.perfStart('sortItems');
     const reversed = this.state.feedSortReverse;
     $('#sortIndicatorImage').attr('src', this.INDICATOR_IMAGES.sort[+reversed]);
     $('#sortIndicator').attr(
@@ -1618,6 +1622,7 @@ export class FeedItemHandler extends ItemHandler {
     reversed ^ this.loadingNew
       ? parent.prepend(newItems)
       : parent.children('.thread').last().next().after(newItems);
+    perfEnd();
   }
 
   updateInfoIndicator() {

@@ -1328,6 +1328,9 @@ export class ItemHandler extends Handler {
           event.preventDefault();
           if (sidecarFocused) {
             this.replyIndex += 1;
+          } else if (this.shouldScrollWithinItem(1)) {
+            // Post is taller than viewport and has more content below - scroll within it
+            this.scrollWithinItem(1);
           } else if (this.config.get('unrolledPostSelection')) {
             if (event.key == 'j') {
               this.markItemRead(this.index, true);
@@ -1340,6 +1343,9 @@ export class ItemHandler extends Handler {
           event.preventDefault();
           if (sidecarFocused) {
             this.replyIndex -= 1;
+          } else if (this.shouldScrollWithinItem(-1)) {
+            // Post is taller than viewport and has more content above - scroll within it
+            this.scrollWithinItem(-1);
           } else if (this.config.get('unrolledPostSelection')) {
             if (event.key == 'k') {
               this.markItemRead(this.index, true);
@@ -1773,12 +1779,28 @@ export class ItemHandler extends Handler {
       // Wait for browser to process DOM changes
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      // Hide action buttons during capture (html2canvas has issues with flex layouts)
+      const actionButtons = item.querySelectorAll('[data-testid="repostBtn"], [data-testid="likeBtn"], [data-testid="replyBtn"], [data-testid="postDropdownBtn"]');
+      const hiddenButtons = [];
+      actionButtons.forEach(btn => {
+        const container = btn.closest('div[style*="flex"]') || btn.parentElement;
+        if (container && container.style.display !== 'none') {
+          hiddenButtons.push({ el: container, display: container.style.display });
+          container.style.display = 'none';
+        }
+      });
+
       const canvas = await html2canvas(item, {
         backgroundColor: '#ffffff',
         scale: 2,
         logging: false,
         useCORS: true,
         allowTaint: true,
+      });
+
+      // Restore action buttons
+      hiddenButtons.forEach(({ el, display }) => {
+        el.style.display = display;
       });
 
       // Restore original values
@@ -2317,6 +2339,68 @@ export class ItemHandler extends Handler {
       return statusBar.outerHeight() || 0;
     }
     return 0;
+  }
+
+  /**
+   * Get the visible viewport height (excluding toolbar and status bar)
+   */
+  getVisibleViewportHeight() {
+    return window.innerHeight - this.getToolbarHeight() - this.getStatusBarHeight();
+  }
+
+  /**
+   * Check if the currently selected item is taller than the visible viewport
+   * and whether there's more content to scroll to in the given direction.
+   * @param {number} direction - 1 for down, -1 for up
+   * @returns {boolean} true if we should scroll within the item, false if we should move to next/prev
+   */
+  shouldScrollWithinItem(direction) {
+    if (!this.selectedItem || !this.selectedItem.length) {
+      console.log('[scroll-debug] No selected item');
+      return false;
+    }
+
+    const item = this.selectedItem[0];
+    const rect = item.getBoundingClientRect();
+    const viewportHeight = this.getVisibleViewportHeight();
+    const toolbarHeight = this.getToolbarHeight();
+    const statusBarHeight = this.getStatusBarHeight();
+    const viewportBottom = window.innerHeight - statusBarHeight;
+
+    console.log('[scroll-debug] item height:', rect.height, 'viewport:', viewportHeight,
+      'rect.top:', rect.top, 'rect.bottom:', rect.bottom,
+      'toolbarHeight:', toolbarHeight, 'viewportBottom:', viewportBottom,
+      'direction:', direction);
+
+    // If item fits in viewport, no need to scroll within it
+    if (rect.height <= viewportHeight) {
+      console.log('[scroll-debug] Item fits in viewport, no scroll needed');
+      return false;
+    }
+
+    // Check if there's more to scroll in the given direction
+    if (direction > 0) {
+      // Scrolling down: is the item's bottom below the viewport bottom?
+      const shouldScroll = rect.bottom > viewportBottom + 10;
+      console.log('[scroll-debug] Down: shouldScroll=', shouldScroll);
+      return shouldScroll;
+    } else {
+      // Scrolling up: is the item's top above the toolbar?
+      const shouldScroll = rect.top < toolbarHeight - 10;
+      console.log('[scroll-debug] Up: shouldScroll=', shouldScroll);
+      return shouldScroll;
+    }
+  }
+
+  /**
+   * Scroll within the current item by approximately one page.
+   * @param {number} direction - 1 for down, -1 for up
+   */
+  scrollWithinItem(direction) {
+    const viewportHeight = this.getVisibleViewportHeight();
+    // Scroll by 80% of viewport height to maintain context
+    const scrollAmount = Math.floor(viewportHeight * 0.8) * direction;
+    window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
   }
 
   onPopupAdd() {

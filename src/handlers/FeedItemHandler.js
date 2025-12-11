@@ -4,6 +4,7 @@ import constants from '../constants.js';
 import * as utils from '../utils.js';
 import { ItemHandler } from './ItemHandler.js';
 import { format, formatDistanceToNowStrict } from 'date-fns';
+import icons from '../icons.js';
 
 const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
 
@@ -12,30 +13,21 @@ const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
  */
 export class FeedItemHandler extends ItemHandler {
   INDICATOR_IMAGES = {
-    loadTop: ['https://www.svgrepo.com/show/502348/circleupmajor.svg'],
-    loadBottom: ['https://www.svgrepo.com/show/502338/circledownmajor.svg'],
-    loadTime: ['https://www.svgrepo.com/show/446075/time-history.svg'],
-    filter: [
-      'https://www.svgrepo.com/show/347140/mail.svg',
-      'https://www.svgrepo.com/show/347147/mail-unread.svg',
-    ],
-    sort: [
-      'https://www.svgrepo.com/show/506581/sort-numeric-alt-down.svg',
-      'https://www.svgrepo.com/show/506582/sort-numeric-up.svg',
-    ],
-    preferences: [
-      'https://www.svgrepo.com/show/522235/preferences.svg',
-      'https://www.svgrepo.com/show/522236/preferences.svg',
-    ],
+    loadTop: [icons.circleUp],
+    loadBottom: [icons.circleDown],
+    loadTime: [icons.timeHistory],
+    filter: [icons.mail, icons.mailUnread],
+    sort: [icons.sortNumericDown, icons.sortNumericUp],
+    preferences: [icons.preferencesOutline, icons.preferencesFilled],
     // Feed map content type icons
-    contentVideo: 'https://www.svgrepo.com/show/333765/camera-movie.svg',
-    contentImage: 'https://www.svgrepo.com/show/334014/image-alt.svg',
-    contentEmbed: 'https://www.svgrepo.com/show/334050/link-external.svg',
-    contentText: 'https://www.svgrepo.com/show/333882/detail.svg',
-    contentRepost: 'https://www.svgrepo.com/show/334212/repost.svg',
-    contentReply: 'https://www.svgrepo.com/show/334206/reply.svg',
-    contentPost: 'https://www.svgrepo.com/show/333848/comment.svg',
-    contentThread: 'https://www.svgrepo.com/show/142955/spool-of-thread.svg',
+    contentVideo: icons.cameraMovie,
+    contentImage: icons.imageAlt,
+    contentEmbed: icons.linkExternal,
+    contentText: icons.detail,
+    contentRepost: icons.repost,
+    contentReply: icons.reply,
+    contentPost: icons.comment,
+    contentThread: icons.spoolOfThread,
   };
 
   constructor(name, config, state, api, selector) {

@@ -10,6 +10,7 @@ import { formatPost, urlForPost } from './postFormatting.js';
 import { GestureHandler } from '../components/GestureHandler.js';
 import { BottomSheet } from '../components/BottomSheet.js';
 import { PostViewModal } from '../components/PostViewModal.js';
+import icons from '../icons.js';
 
 const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
 
@@ -36,8 +37,8 @@ export class ItemHandler extends Handler {
   FILTER_LIST_COLORS = constants.FILTER_LIST_COLORS;
 
   FLOATING_BUTTON_IMAGES = {
-    prev: ['https://www.svgrepo.com/show/238452/up-arrow.svg'],
-    next: ['https://www.svgrepo.com/show/238463/down-arrow-multimedia-option.svg'],
+    prev: [icons.upArrow],
+    next: [icons.downArrow],
   };
 
   constructor(name, config, state, api, selector) {

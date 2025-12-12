@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+471.cc6670e3
+// @version     1.0.31+472.bcbbbab6
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -48684,8 +48684,41 @@ div.item-banner {
   margin: 0;
 }
 
+/* Modal navigation selection - reset outlines on navigable items */
+.post-view-modal .sidecar-post,
+.post-view-modal .unrolled-reply,
+.post-view-modal div[data-testid="contentHider-post"],
+.post-view-modal .reader-mode-post {
+  outline: none !important;
+  box-shadow: none;
+}
+
+/* Modal navigation selection - use box-shadow instead of outline for reliability */
+.modal-item-selected {
+  box-shadow: inset 0 0 0 2px #3b82f6 !important;
+  border-radius: 4px;
+}
+
+.reader-mode-post.modal-item-selected,
+.sidecar-post.modal-item-selected,
+.unrolled-reply.modal-item-selected,
+div[data-testid="contentHider-post"].modal-item-selected {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
 /* Reader mode dark mode */
 @media (prefers-color-scheme: dark) {
+  .modal-item-selected {
+    box-shadow: inset 0 0 0 2px #60a5fa !important;
+  }
+
+  .reader-mode-post.modal-item-selected,
+  .sidecar-post.modal-item-selected,
+  .unrolled-reply.modal-item-selected,
+  div[data-testid="contentHider-post"].modal-item-selected {
+    background-color: rgba(96, 165, 250, 0.15);
+  }
+
   .reader-mode-author {
     color: #9ca3af;
     border-bottom-color: #374151;
@@ -67567,43 +67600,208 @@ div#statusBar.has-feed-map {
       }
     }
   }
+  class NavigableList {
+    /**
+     * @param {Object} options - Configuration options
+     * @param {string} options.itemSelector - CSS selector for navigable items
+     * @param {string} options.selectedClass - CSS class to add to selected item (default: 'modal-item-selected')
+     * @param {HTMLElement} options.container - Container element to search within
+     * @param {Function} options.onSelect - Callback when selection changes (receives element, index)
+     */
+    constructor(options = {}) {
+      this.itemSelector = options.itemSelector;
+      this.selectedClass = options.selectedClass || "modal-item-selected";
+      this.container = options.container;
+      this.onSelect = options.onSelect;
+      this.selectedIndex = 0;
+    }
+    /**
+     * Get all navigable items
+     * @returns {HTMLElement[]}
+     */
+    getItems() {
+      if (!this.container) return [];
+      return Array.from(this.container.querySelectorAll(this.itemSelector));
+    }
+    /**
+     * Get currently selected item
+     * @returns {HTMLElement|null}
+     */
+    getSelectedItem() {
+      const items = this.getItems();
+      return items[this.selectedIndex] || null;
+    }
+    /**
+     * Navigate by direction
+     * @param {number} direction - 1 for next, -1 for previous
+     * @returns {boolean} - True if navigation occurred
+     */
+    navigate(direction2) {
+      const items = this.getItems();
+      if (!items.length) return false;
+      items.forEach((item) => item.classList.remove(this.selectedClass));
+      const newIndex = this.selectedIndex + direction2;
+      if (newIndex < 0) {
+        this.selectedIndex = 0;
+      } else if (newIndex >= items.length) {
+        this.selectedIndex = items.length - 1;
+      } else {
+        this.selectedIndex = newIndex;
+      }
+      const newItem = items[this.selectedIndex];
+      if (newItem) {
+        newItem.classList.add(this.selectedClass);
+        newItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        if (this.onSelect) {
+          this.onSelect(newItem, this.selectedIndex);
+        }
+      }
+      return true;
+    }
+    /**
+     * Jump to specific index
+     * @param {number} index - Target index
+     */
+    jumpTo(index) {
+      const items = this.getItems();
+      if (!items.length) return;
+      items.forEach((item) => item.classList.remove(this.selectedClass));
+      this.selectedIndex = Math.max(0, Math.min(index, items.length - 1));
+      const newItem = items[this.selectedIndex];
+      if (newItem) {
+        newItem.classList.add(this.selectedClass);
+        newItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        if (this.onSelect) {
+          this.onSelect(newItem, this.selectedIndex);
+        }
+      }
+    }
+    /**
+     * Jump to first item
+     */
+    jumpToFirst() {
+      this.jumpTo(0);
+    }
+    /**
+     * Jump to last item
+     */
+    jumpToLast() {
+      const items = this.getItems();
+      this.jumpTo(items.length - 1);
+    }
+    /**
+     * Handle keyboard event
+     * @param {KeyboardEvent} event
+     * @returns {boolean} - True if event was handled
+     */
+    handleKeydown(event) {
+      switch (event.key) {
+        case "j":
+        case "ArrowDown":
+          event.preventDefault();
+          this.navigate(1);
+          return true;
+        case "k":
+        case "ArrowUp":
+          event.preventDefault();
+          this.navigate(-1);
+          return true;
+        case "Home":
+          event.preventDefault();
+          this.jumpToFirst();
+          return true;
+        case "End":
+          event.preventDefault();
+          this.jumpToLast();
+          return true;
+        default:
+          return false;
+      }
+    }
+    /**
+     * Update selection after items change (e.g., async content load)
+     */
+    updateSelection() {
+      const items = this.getItems();
+      items.forEach((item) => item.classList.remove(this.selectedClass));
+      if (this.selectedIndex >= items.length) {
+        this.selectedIndex = Math.max(0, items.length - 1);
+      }
+      const currentItem = items[this.selectedIndex];
+      if (currentItem) {
+        currentItem.classList.add(this.selectedClass);
+      }
+    }
+    /**
+     * Reset selection to first item
+     */
+    reset() {
+      this.selectedIndex = 0;
+      this.updateSelection();
+    }
+  }
   let instance = null;
   class PostViewModal {
-    constructor(config2) {
+    constructor(config2, onClose) {
       if (instance) {
         instance.config = config2;
+        instance.onClose = onClose;
         return instance;
       }
       this.config = config2;
+      this.onClose = onClose;
       this.isVisible = false;
       this.modalEl = null;
       this.previousActiveElement = null;
+      this.isReaderMode = false;
+      this.navList = null;
       instance = this;
     }
     /**
      * Show the modal with post content and sidecar
      * @param {HTMLElement} postElement - The post element to display
      * @param {string} sidecarHtml - HTML content for the sidecar
+     * @param {boolean} isUnrolledThread - Whether this is an unrolled thread (navigate posts, not replies)
      */
-    show(postElement, sidecarHtml) {
+    show(postElement, sidecarHtml, isUnrolledThread = false) {
       if (this.isVisible) return;
       this.previousActiveElement = document.activeElement;
       this.isVisible = true;
-      this.modalEl = this.createModal(postElement, sidecarHtml);
+      this.isReaderMode = false;
+      this.isUnrolledThread = isUnrolledThread;
+      this.modalEl = this.createModal(postElement, sidecarHtml, isUnrolledThread);
       document.body.appendChild(this.modalEl);
+      if (isUnrolledThread) {
+        this.threadNavList = new NavigableList({
+          itemSelector: 'div[data-testid="contentHider-post"], .unrolled-reply',
+          container: this.modalEl.querySelector(".post-view-modal-post"),
+          selectedClass: "modal-item-selected"
+        });
+        this.sidecarNavList = new NavigableList({
+          itemSelector: ".sidecar-post",
+          container: this.modalEl.querySelector(".post-view-modal-sidecar"),
+          selectedClass: "modal-item-selected"
+        });
+        this.navList = this.threadNavList;
+        this.focusedPane = "thread";
+      } else {
+        this.navList = new NavigableList({
+          itemSelector: ".sidecar-post",
+          container: this.modalEl,
+          selectedClass: "modal-item-selected"
+        });
+        this.threadNavList = null;
+        this.sidecarNavList = null;
+        this.focusedPane = "sidecar";
+      }
       const closeBtn = this.modalEl.querySelector(".post-view-modal-close");
       if (closeBtn) {
         closeBtn.focus();
       }
-      announceToScreenReader$2("Post view opened. Press Escape to close.");
-      this.escapeHandler = (e2) => {
-        if (e2.key === "Escape") {
-          e2.preventDefault();
-          e2.stopPropagation();
-          this.hide();
-        }
-      };
-      document.addEventListener("keydown", this.escapeHandler, true);
+      const navTarget = isUnrolledThread ? "posts (left/right to switch to replies)" : "replies";
+      announceToScreenReader$2(`Post view opened. Press Escape to close, j/k to navigate ${navTarget}.`);
+      this.keyHandler = (e2) => this.handleKeydown(e2);
+      document.addEventListener("keydown", this.keyHandler, true);
       document.body.style.overflow = "hidden";
     }
     /**
@@ -67613,6 +67811,9 @@ div#statusBar.has-feed-map {
       if (!this.isVisible || !this.modalEl) return;
       const animDuration = getAnimationDuration$1(200, this.config);
       this.modalEl.classList.add("post-view-modal-hiding");
+      if (this.onClose) {
+        this.onClose();
+      }
       setTimeout(() => {
         if (this.modalEl && this.modalEl.parentNode) {
           this.modalEl.parentNode.removeChild(this.modalEl);
@@ -67624,17 +67825,21 @@ div#statusBar.has-feed-map {
           this.previousActiveElement.focus();
         }
       }, animDuration);
-      document.removeEventListener("keydown", this.escapeHandler, true);
+      document.removeEventListener("keydown", this.keyHandler, true);
       announceToScreenReader$2("Post view closed.");
     }
     /**
      * Create the modal DOM element
      * @param {HTMLElement} postElement - The post element to clone
      * @param {string} sidecarHtml - HTML content for the sidecar
+     * @param {boolean} isUnrolledThread - Whether this is an unrolled thread
      */
-    createModal(postElement, sidecarHtml) {
+    createModal(postElement, sidecarHtml, isUnrolledThread = false) {
       const modal = document.createElement("div");
       modal.className = "post-view-modal";
+      if (isUnrolledThread) {
+        modal.classList.add("post-view-modal-thread");
+      }
       modal.setAttribute("role", "dialog");
       modal.setAttribute("aria-modal", "true");
       modal.setAttribute("aria-labelledby", "post-view-modal-title");
@@ -67650,11 +67855,12 @@ div#statusBar.has-feed-map {
       postClone.style.width = "100%";
       postClone.style.maxWidth = "100%";
       postClone.style.opacity = "1";
+      const title = isUnrolledThread ? "Thread View" : "Post View";
       modal.innerHTML = `
       <div class="post-view-modal-backdrop"></div>
       <div class="post-view-modal-content">
         <div class="post-view-modal-header">
-          <h2 id="post-view-modal-title">Post View</h2>
+          <h2 id="post-view-modal-title">${title}</h2>
           <button class="post-view-modal-close" aria-label="Close">\xD7</button>
         </div>
         <div class="post-view-modal-body">
@@ -67684,6 +67890,17 @@ div#statusBar.has-feed-map {
       const sidecarContainer = this.modalEl.querySelector(".post-view-modal-sidecar");
       if (sidecarContainer) {
         sidecarContainer.innerHTML = sidecarHtml;
+        if (this.isUnrolledThread) {
+          this.sidecarNavList = new NavigableList({
+            itemSelector: ".sidecar-post",
+            container: sidecarContainer,
+            selectedClass: "modal-item-selected"
+          });
+          if (this.focusedPane === "sidecar") {
+            this.navList = this.sidecarNavList;
+          }
+        }
+        this.updateSelection();
       }
     }
     /**
@@ -67695,21 +67912,21 @@ div#statusBar.has-feed-map {
       if (this.isVisible) return;
       this.previousActiveElement = document.activeElement;
       this.isVisible = true;
+      this.isReaderMode = true;
       this.modalEl = this.createReaderModal(contentHtml, title);
       document.body.appendChild(this.modalEl);
+      this.navList = new NavigableList({
+        itemSelector: ".reader-mode-post",
+        container: this.modalEl,
+        selectedClass: "modal-item-selected"
+      });
       const closeBtn = this.modalEl.querySelector(".post-view-modal-close");
       if (closeBtn) {
         closeBtn.focus();
       }
-      announceToScreenReader$2("Reader view opened. Press Escape to close.");
-      this.escapeHandler = (e2) => {
-        if (e2.key === "Escape") {
-          e2.preventDefault();
-          e2.stopPropagation();
-          this.hide();
-        }
-      };
-      document.addEventListener("keydown", this.escapeHandler, true);
+      announceToScreenReader$2("Reader view opened. Press Escape to close, j/k to navigate posts.");
+      this.keyHandler = (e2) => this.handleKeydown(e2);
+      document.addEventListener("keydown", this.keyHandler, true);
       document.body.style.overflow = "hidden";
     }
     /**
@@ -67750,6 +67967,7 @@ div#statusBar.has-feed-map {
       const contentContainer = this.modalEl.querySelector(".post-view-modal-reader-content");
       if (contentContainer) {
         contentContainer.innerHTML = contentHtml;
+        this.updateSelection();
       }
     }
     /**
@@ -67757,6 +67975,57 @@ div#statusBar.has-feed-map {
      */
     get visible() {
       return this.isVisible;
+    }
+    /**
+     * Handle keyboard events for navigation
+     * @param {KeyboardEvent} e - The keyboard event
+     */
+    handleKeydown(e2) {
+      if (e2.key === "Escape") {
+        e2.preventDefault();
+        e2.stopPropagation();
+        e2.stopImmediatePropagation();
+        this.hide();
+        return;
+      }
+      if (this.isUnrolledThread && (e2.key === "ArrowLeft" || e2.key === "ArrowRight" || e2.key === "h" || e2.key === "l")) {
+        e2.preventDefault();
+        e2.stopPropagation();
+        e2.stopImmediatePropagation();
+        this.switchPane(e2.key === "ArrowLeft" || e2.key === "h" ? "thread" : "sidecar");
+        return;
+      }
+      const navKeys = ["j", "k", "ArrowDown", "ArrowUp", "Home", "End"];
+      if (navKeys.includes(e2.key)) {
+        e2.preventDefault();
+        e2.stopPropagation();
+        e2.stopImmediatePropagation();
+        if (this.navList) {
+          this.navList.handleKeydown(e2);
+        }
+      }
+    }
+    /**
+     * Switch focus between thread and sidecar panes
+     * @param {string} pane - 'thread' or 'sidecar'
+     */
+    switchPane(pane) {
+      if (!this.isUnrolledThread || this.focusedPane === pane) return;
+      const currentItems = this.navList.getItems();
+      currentItems.forEach((item) => item.classList.remove("modal-item-selected"));
+      this.focusedPane = pane;
+      this.navList = pane === "thread" ? this.threadNavList : this.sidecarNavList;
+      this.navList.updateSelection();
+      const target2 = pane === "thread" ? "thread posts" : "replies";
+      announceToScreenReader$2(`Now navigating ${target2}.`);
+    }
+    /**
+     * Update selection styling after content loads
+     */
+    updateSelection() {
+      if (this.navList) {
+        this.navList.updateSelection();
+      }
     }
   }
   const svgToDataUrl = (svg) => `data:image/svg+xml,${encodeURIComponent(svg.trim())}`;
@@ -69308,10 +69577,14 @@ div#statusBar.has-feed-map {
         console.warn("showPostViewModal: no post element found");
         return;
       }
+      const hasUnrolledThread = $(postElement).find(".unrolled-reply").length > 0;
       if (!this.postViewModal) {
-        this.postViewModal = new PostViewModal(this.config);
+        this.postViewModal = new PostViewModal(this.config, () => {
+          this.isPopupVisible = false;
+        });
       }
-      this.postViewModal.show(postElement, null);
+      this.isPopupVisible = true;
+      this.postViewModal.show(postElement, null, hasUnrolledThread);
       try {
         const thread = await this.getThreadForItem(postElement);
         if (thread) {
@@ -69333,8 +69606,11 @@ div#statusBar.has-feed-map {
         return;
       }
       if (!this.postViewModal) {
-        this.postViewModal = new PostViewModal(this.config);
+        this.postViewModal = new PostViewModal(this.config, () => {
+          this.isPopupVisible = false;
+        });
       }
+      this.isPopupVisible = true;
       this.postViewModal.showReaderMode(null, "Reader View");
       try {
         const thread = await this.getThreadForItem(postElement);

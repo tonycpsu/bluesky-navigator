@@ -1944,13 +1944,23 @@ export class ItemHandler extends Handler {
       return;
     }
 
+    // Check if this is an unrolled thread (has .unrolled-reply elements)
+    const hasUnrolledThread = $(postElement).find('.unrolled-reply').length > 0;
+
     // Create modal instance if needed
     if (!this.postViewModal) {
-      this.postViewModal = new PostViewModal(this.config);
+      this.postViewModal = new PostViewModal(this.config, () => {
+        // Callback when modal closes
+        this.isPopupVisible = false;
+      });
     }
 
+    // Block feed keyboard handling while modal is open
+    this.isPopupVisible = true;
+
     // Show modal immediately with loading state
-    this.postViewModal.show(postElement, null);
+    // Pass whether this is an unrolled thread to determine navigation selector
+    this.postViewModal.show(postElement, null, hasUnrolledThread);
 
     // Fetch thread data and update sidecar
     try {
@@ -1978,8 +1988,14 @@ export class ItemHandler extends Handler {
 
     // Create modal instance if needed
     if (!this.postViewModal) {
-      this.postViewModal = new PostViewModal(this.config);
+      this.postViewModal = new PostViewModal(this.config, () => {
+        // Callback when modal closes
+        this.isPopupVisible = false;
+      });
     }
+
+    // Block feed keyboard handling while modal is open
+    this.isPopupVisible = true;
 
     // Show modal immediately with loading state
     this.postViewModal.showReaderMode(null, 'Reader View');

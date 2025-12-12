@@ -1081,7 +1081,6 @@ function getScreenFromElement(element) {
       }
       context = ctx;
       for (const [name, handler] of Object.entries(handlers)) {
-        //console.log(name, handler)
         handler.deactivate();
       }
       if (handlers[context]) {

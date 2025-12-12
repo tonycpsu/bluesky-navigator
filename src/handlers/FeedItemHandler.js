@@ -877,6 +877,10 @@ export class FeedItemHandler extends ItemHandler {
 
     // Start filter enforcement if a filter is active
     this.updateFilterEnforcement();
+
+    // Re-scan DOM for items when reactivating (e.g., after navigating back from post detail)
+    // This ensures this.items array is fresh and not holding stale DOM references
+    this.loadItems();
   }
 
   deactivate() {

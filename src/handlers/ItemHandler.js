@@ -4003,6 +4003,13 @@ export class ItemHandler extends Handler {
 
     // Hide loading indicator now that items are fully processed and sorted
     this.hideFeedLoading();
+
+    // Scroll to restored post after DOM is ready (deferred to allow layout to settle)
+    if (focusedPostId && this.selectedItem && this.selectedItem.length) {
+      requestAnimationFrame(() => {
+        this.scrollToElement(this.selectedItem[0]);
+      });
+    }
   }
 
   applyThreadIndicatorStyles() {

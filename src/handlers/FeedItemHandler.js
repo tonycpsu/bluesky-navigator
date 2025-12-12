@@ -880,11 +880,15 @@ export class FeedItemHandler extends ItemHandler {
 
     // Re-scan DOM for items when reactivating (e.g., after navigating back from post detail)
     // This ensures this.items array is fresh and not holding stale DOM references
-    this.loadItems();
+    // Pass the saved post ID to restore selection to the same post
+    this.loadItems(this._savedPostId);
   }
 
   deactivate() {
     super.deactivate();
+
+    // Save current post ID so we can restore selection when reactivating
+    this._savedPostId = this.postId;
 
     // Remove scroll listener
     if (this._scrollHandler) {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+470.a366fe0a
+// @version     1.0.31+471.cc6670e3
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -70876,6 +70876,11 @@ ${rule}`;
       }
       this.ignoreMouseMovement = false;
       this.hideFeedLoading();
+      if (focusedPostId && this.selectedItem && this.selectedItem.length) {
+        requestAnimationFrame(() => {
+          this.scrollToElement(this.selectedItem[0]);
+        });
+      }
     }
     applyThreadIndicatorStyles() {
       $("div.r-1mhb1uw").each((i2, el) => {
@@ -71652,10 +71657,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this._scrollHandler = this._throttledScrollUpdate.bind(this);
       window.addEventListener("scroll", this._scrollHandler, { passive: true });
       this.updateFilterEnforcement();
-      this.loadItems();
+      this.loadItems(this._savedPostId);
     }
     deactivate() {
       super.deactivate();
+      this._savedPostId = this.postId;
       if (this._scrollHandler) {
         window.removeEventListener("scroll", this._scrollHandler);
         this._scrollHandler = null;

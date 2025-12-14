@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+472.bcbbbab6
+// @version     1.0.31+473.f797d8d2
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -48684,41 +48684,14 @@ div.item-banner {
   margin: 0;
 }
 
-/* Modal navigation selection - reset outlines on navigable items */
-.post-view-modal .sidecar-post,
-.post-view-modal .unrolled-reply,
-.post-view-modal div[data-testid="contentHider-post"],
-.post-view-modal .reader-mode-post {
-  outline: none !important;
-  box-shadow: none;
-}
-
-/* Modal navigation selection - use box-shadow instead of outline for reliability */
+/* Modal navigation selection - consistent with feed/post selection styling */
 .modal-item-selected {
-  box-shadow: inset 0 0 0 2px #3b82f6 !important;
-  border-radius: 4px;
-}
-
-.reader-mode-post.modal-item-selected,
-.sidecar-post.modal-item-selected,
-.unrolled-reply.modal-item-selected,
-div[data-testid="contentHider-post"].modal-item-selected {
-  background-color: rgba(59, 130, 246, 0.1);
+  outline: 2px solid var(--focus-ring-color, #0066cc) !important;
+  outline-offset: -2px;
 }
 
 /* Reader mode dark mode */
 @media (prefers-color-scheme: dark) {
-  .modal-item-selected {
-    box-shadow: inset 0 0 0 2px #60a5fa !important;
-  }
-
-  .reader-mode-post.modal-item-selected,
-  .sidecar-post.modal-item-selected,
-  .unrolled-reply.modal-item-selected,
-  div[data-testid="contentHider-post"].modal-item-selected {
-    background-color: rgba(96, 165, 250, 0.15);
-  }
-
   .reader-mode-author {
     color: #9ca3af;
     border-bottom-color: #374151;
@@ -67603,16 +67576,26 @@ div#statusBar.has-feed-map {
   class NavigableList {
     /**
      * @param {Object} options - Configuration options
-     * @param {string} options.itemSelector - CSS selector for navigable items
-     * @param {string} options.selectedClass - CSS class to add to selected item (default: 'modal-item-selected')
-     * @param {HTMLElement} options.container - Container element to search within
-     * @param {Function} options.onSelect - Callback when selection changes (receives element, index)
+     * @param {string} [options.itemSelector] - CSS selector for navigable items (selector mode)
+     * @param {HTMLElement} [options.container] - Container element to search within (selector mode)
+     * @param {Function} [options.getItems] - Callback returning array of items (callback mode)
+     * @param {string} [options.selectedClass] - CSS class for selected item (default: 'modal-item-selected')
+     * @param {Function} [options.onSelect] - Called when selection changes: (element, index, oldIndex)
+     * @param {Function} [options.onDeselect] - Called when item is deselected: (element, index)
+     * @param {Function} [options.onScroll] - Custom scroll handler: (element). If not provided, uses scrollIntoView
+     * @param {boolean} [options.autoScroll] - Whether to auto-scroll on selection (default: true)
+     * @param {boolean} [options.wrapAround] - Whether to wrap from end to start (default: false)
      */
     constructor(options = {}) {
       this.itemSelector = options.itemSelector;
-      this.selectedClass = options.selectedClass || "modal-item-selected";
       this.container = options.container;
+      this._getItemsCallback = options.getItems;
+      this.selectedClass = options.selectedClass || "modal-item-selected";
       this.onSelect = options.onSelect;
+      this.onDeselect = options.onDeselect;
+      this.onScroll = options.onScroll;
+      this.autoScroll = options.autoScroll !== false;
+      this.wrapAround = options.wrapAround || false;
       this.selectedIndex = 0;
     }
     /**
@@ -67620,6 +67603,13 @@ div#statusBar.has-feed-map {
      * @returns {HTMLElement[]}
      */
     getItems() {
+      if (this._getItemsCallback) {
+        const items = this._getItemsCallback();
+        if (items && items.toArray) {
+          return items.toArray();
+        }
+        return Array.isArray(items) ? items : [];
+      }
       if (!this.container) return [];
       return Array.from(this.container.querySelectorAll(this.itemSelector));
     }
@@ -67632,28 +67622,71 @@ div#statusBar.has-feed-map {
       return items[this.selectedIndex] || null;
     }
     /**
+     * Get current selection index
+     * @returns {number}
+     */
+    getSelectedIndex() {
+      return this.selectedIndex;
+    }
+    /**
+     * Check if we're at the first item
+     * @returns {boolean}
+     */
+    isAtStart() {
+      return this.selectedIndex === 0;
+    }
+    /**
+     * Check if we're at the last item
+     * @returns {boolean}
+     */
+    isAtEnd() {
+      const items = this.getItems();
+      return this.selectedIndex >= items.length - 1;
+    }
+    /**
      * Navigate by direction
      * @param {number} direction - 1 for next, -1 for previous
-     * @returns {boolean} - True if navigation occurred
+     * @returns {boolean} - True if navigation moved to a different item
      */
     navigate(direction2) {
       const items = this.getItems();
       if (!items.length) return false;
-      items.forEach((item) => item.classList.remove(this.selectedClass));
-      const newIndex = this.selectedIndex + direction2;
-      if (newIndex < 0) {
-        this.selectedIndex = 0;
-      } else if (newIndex >= items.length) {
-        this.selectedIndex = items.length - 1;
+      const oldIndex = this.selectedIndex;
+      let newIndex = this.selectedIndex + direction2;
+      if (this.wrapAround) {
+        if (newIndex < 0) {
+          newIndex = items.length - 1;
+        } else if (newIndex >= items.length) {
+          newIndex = 0;
+        }
       } else {
-        this.selectedIndex = newIndex;
+        if (newIndex < 0) {
+          newIndex = 0;
+        } else if (newIndex >= items.length) {
+          newIndex = items.length - 1;
+        }
       }
+      if (newIndex === oldIndex) {
+        return false;
+      }
+      items.forEach((item) => item.classList.remove(this.selectedClass));
+      const oldItem = items[oldIndex];
+      if (oldItem && this.onDeselect) {
+        this.onDeselect(oldItem, oldIndex);
+      }
+      this.selectedIndex = newIndex;
       const newItem = items[this.selectedIndex];
       if (newItem) {
         newItem.classList.add(this.selectedClass);
-        newItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        if (this.autoScroll) {
+          if (this.onScroll) {
+            this.onScroll(newItem);
+          } else {
+            newItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }
+        }
         if (this.onSelect) {
-          this.onSelect(newItem, this.selectedIndex);
+          this.onSelect(newItem, this.selectedIndex, oldIndex);
         }
       }
       return true;
@@ -67661,33 +67694,52 @@ div#statusBar.has-feed-map {
     /**
      * Jump to specific index
      * @param {number} index - Target index
+     * @returns {boolean} - True if selection changed
      */
     jumpTo(index) {
       const items = this.getItems();
-      if (!items.length) return;
+      if (!items.length) return false;
+      const oldIndex = this.selectedIndex;
+      const newIndex = Math.max(0, Math.min(index, items.length - 1));
+      if (newIndex === oldIndex) {
+        return false;
+      }
       items.forEach((item) => item.classList.remove(this.selectedClass));
-      this.selectedIndex = Math.max(0, Math.min(index, items.length - 1));
+      const oldItem = items[oldIndex];
+      if (oldItem && this.onDeselect) {
+        this.onDeselect(oldItem, oldIndex);
+      }
+      this.selectedIndex = newIndex;
       const newItem = items[this.selectedIndex];
       if (newItem) {
         newItem.classList.add(this.selectedClass);
-        newItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        if (this.autoScroll) {
+          if (this.onScroll) {
+            this.onScroll(newItem);
+          } else {
+            newItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }
+        }
         if (this.onSelect) {
-          this.onSelect(newItem, this.selectedIndex);
+          this.onSelect(newItem, this.selectedIndex, oldIndex);
         }
       }
+      return true;
     }
     /**
      * Jump to first item
+     * @returns {boolean} - True if selection changed
      */
     jumpToFirst() {
-      this.jumpTo(0);
+      return this.jumpTo(0);
     }
     /**
      * Jump to last item
+     * @returns {boolean} - True if selection changed
      */
     jumpToLast() {
       const items = this.getItems();
-      this.jumpTo(items.length - 1);
+      return this.jumpTo(items.length - 1);
     }
     /**
      * Handle keyboard event
@@ -67720,6 +67772,7 @@ div#statusBar.has-feed-map {
     }
     /**
      * Update selection after items change (e.g., async content load)
+     * Ensures selectedIndex is within bounds and applies styling
      */
     updateSelection() {
       const items = this.getItems();
@@ -67733,11 +67786,29 @@ div#statusBar.has-feed-map {
       }
     }
     /**
+     * Clear selection styling from all items
+     */
+    clearSelection() {
+      const items = this.getItems();
+      items.forEach((item) => item.classList.remove(this.selectedClass));
+      if (this.onDeselect && items[this.selectedIndex]) {
+        this.onDeselect(items[this.selectedIndex], this.selectedIndex);
+      }
+    }
+    /**
      * Reset selection to first item
      */
     reset() {
       this.selectedIndex = 0;
       this.updateSelection();
+    }
+    /**
+     * Set index without triggering selection callbacks (for external sync)
+     * @param {number} index - New index value
+     */
+    setIndexSilent(index) {
+      const items = this.getItems();
+      this.selectedIndex = Math.max(0, Math.min(index, items.length - 1));
     }
   }
   let instance = null;
@@ -68228,11 +68299,93 @@ div#statusBar.has-feed-map {
       this._replyIndex = null;
       this._threadIndex = null;
       this.postId = null;
+      this.sidecarNavList = null;
+      this.threadNavList = null;
       $("#fixed-sidecar-toggle").removeClass("visible");
+    }
+    /**
+     * Create or get the sidecar NavigableList for reply navigation
+     */
+    getSidecarNavList() {
+      if (!this.sidecarNavList) {
+        this.sidecarNavList = new NavigableList({
+          getItems: () => this.getSidecarReplies(),
+          selectedClass: "reply-selection-active",
+          autoScroll: false,
+          // We handle scrolling ourselves
+          onSelect: (item, index) => {
+            $(this.selectedItem).addClass("item-selection-child-focused");
+            $(this.selectedItem).removeClass("item-selection-active");
+            this.scrollSidecarToReply(item);
+          }
+        });
+      }
+      return this.sidecarNavList;
+    }
+    /**
+     * Create or get the thread NavigableList for unrolled thread navigation
+     */
+    getThreadNavList() {
+      if (!this.threadNavList) {
+        this.threadNavList = new NavigableList({
+          getItems: () => this.getUnrolledThreadPosts(),
+          selectedClass: "reply-selection-active",
+          autoScroll: false,
+          // We handle scrolling ourselves
+          onSelect: (item, index) => {
+            $(this.selectedItem).addClass("item-selection-child-focused");
+            $(this.selectedItem).removeClass("item-selection-active");
+            this.scrollThreadPostIntoView(item);
+          }
+        });
+      }
+      return this.threadNavList;
+    }
+    /**
+     * Get unrolled thread posts (main post + unrolled replies) for navigation
+     */
+    getUnrolledThreadPosts() {
+      if (!this.selectedItem || !this.unrolledReplies.length) return [];
+      const mainPost = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
+      return [mainPost[0], ...this.unrolledReplies.toArray()];
+    }
+    /**
+     * Scroll a thread post into view within the unrolled thread container
+     */
+    scrollThreadPostIntoView(post2) {
+      if (!post2) return;
+      const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
+      if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const postRect = post2.getBoundingClientRect();
+        const postTopInContainer = postRect.top - containerRect.top + scrollContainer.scrollTop;
+        const targetScrollTop = postTopInContainer - 10;
+        scrollContainer.scrollTo({
+          top: targetScrollTop,
+          behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
+        });
+      } else {
+        const rect = post2.getBoundingClientRect();
+        const toolbarHeight = this.getToolbarHeight();
+        const scrollNeeded = rect.top - toolbarHeight - 10;
+        if (Math.abs(scrollNeeded) > 50) {
+          this.ignoreMouseMovement = true;
+          window.scrollBy({
+            top: scrollNeeded,
+            behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
+          });
+          setTimeout(() => {
+            this.ignoreMouseMovement = false;
+          }, 500);
+        }
+      }
     }
     set index(value) {
       this._index = value;
       this._threadIndex = null;
+      this._replyIndex = null;
+      this.sidecarNavList = null;
+      this.threadNavList = null;
       this.postId = this.postIdForItem(this.selectedItem);
       this.updateInfoIndicator();
       $("#fixed-sidecar-toggle").removeClass("visible");
@@ -68247,50 +68400,64 @@ div#statusBar.has-feed-map {
       return this.getSidecarReplies().eq(index);
     }
     get selectedReply() {
-      return this.getReplyForIndex(this.replyIndex);
+      if (this._replyIndex == null) return $();
+      return $(this.getSidecarNavList().getSelectedItem());
     }
     get replyIndex() {
       return this._replyIndex;
     }
     set replyIndex(value) {
-      const oldIndex = this._replyIndex;
       const replies = this.getSidecarReplies();
-      if (value == oldIndex || value < 0 || value >= replies.length) {
+      if (value == null) {
+        if (this._replyIndex != null) {
+          this.getSidecarNavList().clearSelection();
+          $(this.selectedItem).addClass("item-selection-active");
+          $(this.selectedItem).removeClass("item-selection-child-focused");
+        }
+        this._replyIndex = null;
         return;
       }
-      if (oldIndex != null) {
-        replies.eq(oldIndex).removeClass("reply-selection-active");
+      if (value < 0 || value >= replies.length) {
+        return;
       }
-      this._replyIndex = value;
-      if (this.replyIndex == null) {
-        $(this.selectedItem).addClass("item-selection-active");
-        $(this.selectedItem).removeClass("item-selection-child-focused");
-        replies.removeClass("reply-selection-active");
-      } else {
-        const selectedReply = replies.eq(this.replyIndex);
-        if (selectedReply.length) {
-          $(this.selectedItem).addClass("item-selection-child-focused");
-          $(this.selectedItem).removeClass("item-selection-active");
-          selectedReply.addClass("reply-selection-active");
-          this.scrollSidecarToReply(selectedReply[0]);
+      const navList = this.getSidecarNavList();
+      const wasNull = this._replyIndex == null;
+      if (wasNull) {
+        navList.reset();
+        if (value > 0) {
+          navList.jumpTo(value);
+        } else {
+          navList.updateSelection();
         }
+      } else {
+        navList.jumpTo(value);
       }
+      this._replyIndex = navList.getSelectedIndex();
     }
     get threadIndex() {
       return this._threadIndex;
     }
     set threadIndex(value) {
-      const oldIndex = this._threadIndex;
-      if (value == oldIndex) {
-        return;
-      } else if (value < 0) {
+      const posts = this.getUnrolledThreadPosts();
+      if (value < 0) {
+        if (this._threadIndex != null) {
+          this.getThreadNavList().clearSelection();
+          $(this.selectedItem).addClass("item-selection-active");
+          $(this.selectedItem).removeClass("item-selection-child-focused");
+        }
         this._threadIndex = null;
         this.setIndex(this.index - 1, false, false);
         if (!this.isElementFullyVisible(this.selectedItem)) {
           this.scrollElementIntoView(this.selectedItem[0], -1);
         }
         return;
-      } else if (value > this.unrolledReplies.length) {
+      }
+      if (value >= posts.length) {
+        if (this._threadIndex != null) {
+          this.getThreadNavList().clearSelection();
+          $(this.selectedItem).addClass("item-selection-active");
+          $(this.selectedItem).removeClass("item-selection-child-focused");
+        }
         this._threadIndex = null;
         this.setIndex(this.index + 1, false, false);
         if (!this.isElementFullyVisible(this.selectedItem)) {
@@ -68298,52 +68465,29 @@ div#statusBar.has-feed-map {
         }
         return;
       }
-      if (oldIndex != null) {
-        this.getPostForThreadIndex(oldIndex).removeClass("reply-selection-active");
-      }
-      this._threadIndex = value;
-      if (this.threadIndex == null) {
-        $(this.selectedItem).addClass("item-selection-active");
-        $(this.selectedItem).removeClass("item-selection-child-focused");
-      } else {
-        if (this.unrolledReplies.length && this.selectedPost) {
-          $(this.selectedItem).addClass("item-selection-child-focused");
-          $(this.selectedItem).removeClass("item-selection-active");
-          this.selectedPost.addClass("reply-selection-active");
-          const post2 = this.selectedPost[0];
-          if (post2) {
-            const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
-            if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
-              const containerRect = scrollContainer.getBoundingClientRect();
-              const postRect = post2.getBoundingClientRect();
-              const postTopInContainer = postRect.top - containerRect.top + scrollContainer.scrollTop;
-              const targetScrollTop = postTopInContainer - 10;
-              console.log("[thread-scroll] threadIndex:", value, "scrolling container to:", targetScrollTop, "current:", scrollContainer.scrollTop);
-              scrollContainer.scrollTo({
-                top: targetScrollTop,
-                behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
-              });
-            } else {
-              const rect = post2.getBoundingClientRect();
-              const toolbarHeight = this.getToolbarHeight();
-              const scrollNeeded = rect.top - toolbarHeight - 10;
-              console.log("[thread-scroll] threadIndex:", value, "no container, window scroll:", scrollNeeded);
-              if (Math.abs(scrollNeeded) > 50) {
-                this.ignoreMouseMovement = true;
-                window.scrollBy({
-                  top: scrollNeeded,
-                  behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
-                });
-                setTimeout(() => {
-                  this.ignoreMouseMovement = false;
-                }, 500);
-              }
-            }
-          }
-        } else {
-          return;
+      if (value == null) {
+        if (this._threadIndex != null) {
+          this.getThreadNavList().clearSelection();
+          $(this.selectedItem).addClass("item-selection-active");
+          $(this.selectedItem).removeClass("item-selection-child-focused");
         }
+        this._threadIndex = null;
+        this.updateInfoIndicator();
+        return;
       }
+      const navList = this.getThreadNavList();
+      const wasNull = this._threadIndex == null;
+      if (wasNull) {
+        navList.reset();
+        if (value > 0) {
+          navList.jumpTo(value);
+        } else {
+          navList.updateSelection();
+        }
+      } else {
+        navList.jumpTo(value);
+      }
+      this._threadIndex = navList.getSelectedIndex();
       this.updateInfoIndicator();
     }
     get unrolledReplies() {
@@ -68358,10 +68502,12 @@ div#statusBar.has-feed-map {
       return value === true || value === "Fixed";
     }
     getPostForThreadIndex(index) {
-      return index > 0 ? this.unrolledReplies.eq(index - 1) : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
+      const posts = this.getUnrolledThreadPosts();
+      return $(posts[index]);
     }
     get selectedPost() {
-      return this.getPostForThreadIndex(this.threadIndex);
+      if (this._threadIndex == null) return $();
+      return $(this.getThreadNavList().getSelectedItem());
     }
     setIndex(index, mark, update, skipSidecar = false) {
       const oldIndex = this.index;

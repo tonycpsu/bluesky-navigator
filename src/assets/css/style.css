@@ -1939,41 +1939,14 @@ div.item-banner {
   margin: 0;
 }
 
-/* Modal navigation selection - reset outlines on navigable items */
-.post-view-modal .sidecar-post,
-.post-view-modal .unrolled-reply,
-.post-view-modal div[data-testid="contentHider-post"],
-.post-view-modal .reader-mode-post {
-  outline: none !important;
-  box-shadow: none;
-}
-
-/* Modal navigation selection - use box-shadow instead of outline for reliability */
+/* Modal navigation selection - consistent with feed/post selection styling */
 .modal-item-selected {
-  box-shadow: inset 0 0 0 2px #3b82f6 !important;
-  border-radius: 4px;
-}
-
-.reader-mode-post.modal-item-selected,
-.sidecar-post.modal-item-selected,
-.unrolled-reply.modal-item-selected,
-div[data-testid="contentHider-post"].modal-item-selected {
-  background-color: rgba(59, 130, 246, 0.1);
+  outline: 2px solid var(--focus-ring-color, #0066cc) !important;
+  outline-offset: -2px;
 }
 
 /* Reader mode dark mode */
 @media (prefers-color-scheme: dark) {
-  .modal-item-selected {
-    box-shadow: inset 0 0 0 2px #60a5fa !important;
-  }
-
-  .reader-mode-post.modal-item-selected,
-  .sidecar-post.modal-item-selected,
-  .unrolled-reply.modal-item-selected,
-  div[data-testid="contentHider-post"].modal-item-selected {
-    background-color: rgba(96, 165, 250, 0.15);
-  }
-
   .reader-mode-author {
     color: #9ca3af;
     border-bottom-color: #374151;

@@ -10,6 +10,7 @@ import { formatPost, urlForPost } from './postFormatting.js';
 import { GestureHandler } from '../components/GestureHandler.js';
 import { BottomSheet } from '../components/BottomSheet.js';
 import { PostViewModal } from '../components/PostViewModal.js';
+import { NavigableList } from '../utils/NavigableList.js';
 import icons from '../icons.js';
 
 const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
@@ -252,13 +253,112 @@ export class ItemHandler extends Handler {
     this._replyIndex = null;
     this._threadIndex = null;
     this.postId = null;
+    this.sidecarNavList = null;
+    this.threadNavList = null;
     // Hide the sidecar toggle when selection is cleared
     $('#fixed-sidecar-toggle').removeClass('visible');
+  }
+
+  /**
+   * Create or get the sidecar NavigableList for reply navigation
+   */
+  getSidecarNavList() {
+    if (!this.sidecarNavList) {
+      this.sidecarNavList = new NavigableList({
+        getItems: () => this.getSidecarReplies(),
+        selectedClass: 'reply-selection-active',
+        autoScroll: false, // We handle scrolling ourselves
+        onSelect: (item, index) => {
+          // Update parent item styling to show child is focused
+          $(this.selectedItem).addClass('item-selection-child-focused');
+          $(this.selectedItem).removeClass('item-selection-active');
+          // Custom scroll handling
+          this.scrollSidecarToReply(item);
+        },
+      });
+    }
+    return this.sidecarNavList;
+  }
+
+  /**
+   * Create or get the thread NavigableList for unrolled thread navigation
+   */
+  getThreadNavList() {
+    if (!this.threadNavList) {
+      this.threadNavList = new NavigableList({
+        getItems: () => this.getUnrolledThreadPosts(),
+        selectedClass: 'reply-selection-active',
+        autoScroll: false, // We handle scrolling ourselves
+        onSelect: (item, index) => {
+          // Update parent item styling to show child is focused
+          $(this.selectedItem).addClass('item-selection-child-focused');
+          $(this.selectedItem).removeClass('item-selection-active');
+          // Custom scroll handling for thread posts
+          this.scrollThreadPostIntoView(item);
+        },
+      });
+    }
+    return this.threadNavList;
+  }
+
+  /**
+   * Get unrolled thread posts (main post + unrolled replies) for navigation
+   */
+  getUnrolledThreadPosts() {
+    if (!this.selectedItem || !this.unrolledReplies.length) return [];
+    // Return array: [main post, ...unrolled replies]
+    const mainPost = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first();
+    return [mainPost[0], ...this.unrolledReplies.toArray()];
+  }
+
+  /**
+   * Scroll a thread post into view within the unrolled thread container
+   */
+  scrollThreadPostIntoView(post) {
+    if (!post) return;
+
+    // Find the scroll container (parent of contentHider-post with overflow-y: scroll)
+    const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
+
+    if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+      // Container is scrollable - scroll within it
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const postRect = post.getBoundingClientRect();
+
+      // Calculate position relative to container
+      const postTopInContainer = postRect.top - containerRect.top + scrollContainer.scrollTop;
+      const targetScrollTop = postTopInContainer - 10; // 10px padding from top
+
+      scrollContainer.scrollTo({
+        top: targetScrollTop,
+        behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+      });
+    } else {
+      // Fallback to window scroll if no scroll container
+      const rect = post.getBoundingClientRect();
+      const toolbarHeight = this.getToolbarHeight();
+      const scrollNeeded = rect.top - toolbarHeight - 10;
+
+      if (Math.abs(scrollNeeded) > 50) {
+        this.ignoreMouseMovement = true;
+        window.scrollBy({
+          top: scrollNeeded,
+          behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+        });
+        setTimeout(() => {
+          this.ignoreMouseMovement = false;
+        }, 500);
+      }
+    }
   }
 
   set index(value) {
     this._index = value;
     this._threadIndex = null;
+    this._replyIndex = null;
+    // Reset navLists for new item (they'll be recreated on demand)
+    this.sidecarNavList = null;
+    this.threadNavList = null;
     this.postId = this.postIdForItem(this.selectedItem);
     this.updateInfoIndicator();
     // Hide toggle when changing posts (will reappear via showSidecar if needed)
@@ -278,7 +378,8 @@ export class ItemHandler extends Handler {
   }
 
   get selectedReply() {
-    return this.getReplyForIndex(this.replyIndex);
+    if (this._replyIndex == null) return $();
+    return $(this.getSidecarNavList().getSelectedItem());
   }
 
   get replyIndex() {
@@ -286,29 +387,42 @@ export class ItemHandler extends Handler {
   }
 
   set replyIndex(value) {
-    const oldIndex = this._replyIndex;
     const replies = this.getSidecarReplies();
-    if (value == oldIndex || value < 0 || value >= replies.length) {
+
+    // Handle null - deactivate sidecar focus
+    if (value == null) {
+      if (this._replyIndex != null) {
+        this.getSidecarNavList().clearSelection();
+        $(this.selectedItem).addClass('item-selection-active');
+        $(this.selectedItem).removeClass('item-selection-child-focused');
+      }
+      this._replyIndex = null;
       return;
     }
-    if (oldIndex != null) {
-      replies.eq(oldIndex).removeClass('reply-selection-active');
+
+    // Bounds check
+    if (value < 0 || value >= replies.length) {
+      return;
     }
-    this._replyIndex = value;
-    if (this.replyIndex == null) {
-      $(this.selectedItem).addClass('item-selection-active');
-      $(this.selectedItem).removeClass('item-selection-child-focused');
-      replies.removeClass('reply-selection-active');
-    } else {
-      const selectedReply = replies.eq(this.replyIndex);
-      if (selectedReply.length) {
-        $(this.selectedItem).addClass('item-selection-child-focused');
-        $(this.selectedItem).removeClass('item-selection-active');
-        selectedReply.addClass('reply-selection-active');
-        // Scroll within the appropriate container
-        this.scrollSidecarToReply(selectedReply[0]);
+
+    // Activate or navigate sidecar
+    const navList = this.getSidecarNavList();
+    const wasNull = this._replyIndex == null;
+
+    if (wasNull) {
+      // First activation - reset and jump to requested index
+      navList.reset();
+      if (value > 0) {
+        navList.jumpTo(value);
+      } else {
+        navList.updateSelection();
       }
+    } else {
+      // Already active - navigate to new index
+      navList.jumpTo(value);
     }
+
+    this._replyIndex = navList.getSelectedIndex();
   }
 
   get threadIndex() {
@@ -316,83 +430,70 @@ export class ItemHandler extends Handler {
   }
 
   set threadIndex(value) {
-    const oldIndex = this._threadIndex;
-    if (value == oldIndex) {
-      return;
-    } else if (value < 0) {
+    const posts = this.getUnrolledThreadPosts();
+
+    // Handle exiting thread at the start - go to previous main post
+    if (value < 0) {
+      if (this._threadIndex != null) {
+        this.getThreadNavList().clearSelection();
+        $(this.selectedItem).addClass('item-selection-active');
+        $(this.selectedItem).removeClass('item-selection-child-focused');
+      }
       this._threadIndex = null;
-      // Don't use updateItems scroll - scroll manually to avoid backwards jump
+      // Navigate to previous main post
       this.setIndex(this.index - 1, false, false);
       if (!this.isElementFullyVisible(this.selectedItem)) {
         this.scrollElementIntoView(this.selectedItem[0], -1);
       }
       return;
-    } else if (value > this.unrolledReplies.length) {
+    }
+
+    // Handle exiting thread at the end - go to next main post
+    if (value >= posts.length) {
+      if (this._threadIndex != null) {
+        this.getThreadNavList().clearSelection();
+        $(this.selectedItem).addClass('item-selection-active');
+        $(this.selectedItem).removeClass('item-selection-child-focused');
+      }
       this._threadIndex = null;
-      // Don't use updateItems scroll - scroll manually to avoid backwards jump
+      // Navigate to next main post
       this.setIndex(this.index + 1, false, false);
       if (!this.isElementFullyVisible(this.selectedItem)) {
         this.scrollElementIntoView(this.selectedItem[0], 1);
       }
       return;
     }
-    if (oldIndex != null) {
-      this.getPostForThreadIndex(oldIndex).removeClass('reply-selection-active');
-    }
-    this._threadIndex = value;
-    if (this.threadIndex == null) {
-      $(this.selectedItem).addClass('item-selection-active');
-      $(this.selectedItem).removeClass('item-selection-child-focused');
-    } else {
-      if (this.unrolledReplies.length && this.selectedPost) {
-        $(this.selectedItem).addClass('item-selection-child-focused');
-        $(this.selectedItem).removeClass('item-selection-active');
-        this.selectedPost.addClass('reply-selection-active');
-        // Scroll thread post into view within the unrolled thread's scroll container
-        const post = this.selectedPost[0];
-        if (post) {
-          // Find the scroll container (parent of contentHider-post with overflow-y: scroll)
-          const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
 
-          if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
-            // Container is scrollable - scroll within it
-            const containerRect = scrollContainer.getBoundingClientRect();
-            const postRect = post.getBoundingClientRect();
-
-            // Calculate position relative to container
-            const postTopInContainer = postRect.top - containerRect.top + scrollContainer.scrollTop;
-            const targetScrollTop = postTopInContainer - 10; // 10px padding from top
-
-            console.log('[thread-scroll] threadIndex:', value, 'scrolling container to:', targetScrollTop, 'current:', scrollContainer.scrollTop);
-
-            scrollContainer.scrollTo({
-              top: targetScrollTop,
-              behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
-            });
-          } else {
-            // Fallback to window scroll if no scroll container
-            const rect = post.getBoundingClientRect();
-            const toolbarHeight = this.getToolbarHeight();
-            const scrollNeeded = rect.top - toolbarHeight - 10;
-
-            console.log('[thread-scroll] threadIndex:', value, 'no container, window scroll:', scrollNeeded);
-
-            if (Math.abs(scrollNeeded) > 50) {
-              this.ignoreMouseMovement = true;
-              window.scrollBy({
-                top: scrollNeeded,
-                behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
-              });
-              setTimeout(() => {
-                this.ignoreMouseMovement = false;
-              }, 500);
-            }
-          }
-        }
-      } else {
-        return;
+    // Handle null - deactivate thread focus
+    if (value == null) {
+      if (this._threadIndex != null) {
+        this.getThreadNavList().clearSelection();
+        $(this.selectedItem).addClass('item-selection-active');
+        $(this.selectedItem).removeClass('item-selection-child-focused');
       }
+      this._threadIndex = null;
+      this.updateInfoIndicator();
+      return;
     }
+
+    // Activate or navigate thread
+    const navList = this.getThreadNavList();
+    const wasNull = this._threadIndex == null;
+
+    if (wasNull) {
+      // First activation - reset and jump to requested index
+      navList.reset();
+      if (value > 0) {
+        navList.jumpTo(value);
+      } else {
+        navList.updateSelection();
+      }
+    } else {
+      // Already active - navigate to new index
+      navList.jumpTo(value);
+    }
+
+    this._threadIndex = navList.getSelectedIndex();
     this.updateInfoIndicator();
   }
 
@@ -411,13 +512,13 @@ export class ItemHandler extends Handler {
   }
 
   getPostForThreadIndex(index) {
-    return index > 0
-      ? this.unrolledReplies.eq(index - 1)
-      : $(this.selectedItem).find(constants.POST_CONTENT_SELECTOR).first();
+    const posts = this.getUnrolledThreadPosts();
+    return $(posts[index]);
   }
 
   get selectedPost() {
-    return this.getPostForThreadIndex(this.threadIndex);
+    if (this._threadIndex == null) return $();
+    return $(this.getThreadNavList().getSelectedItem());
   }
 
   setIndex(index, mark, update, skipSidecar = false) {

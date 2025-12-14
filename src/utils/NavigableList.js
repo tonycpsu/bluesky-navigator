@@ -1,22 +1,36 @@
 // NavigableList.js - Reusable keyboard navigation for lists of items
 
 /**
- * Provides keyboard navigation for a list of items within a container.
- * Handles j/k/arrow keys, selection styling, and scroll-into-view.
+ * Provides keyboard navigation for a list of items.
+ * Handles selection tracking, styling, and optional scroll-into-view.
+ *
+ * Supports two modes:
+ * 1. Selector-based: provide `itemSelector` and `container` to query items dynamically
+ * 2. Callback-based: provide `getItems` function to retrieve items (for pre-loaded arrays)
  */
 export class NavigableList {
   /**
    * @param {Object} options - Configuration options
-   * @param {string} options.itemSelector - CSS selector for navigable items
-   * @param {string} options.selectedClass - CSS class to add to selected item (default: 'modal-item-selected')
-   * @param {HTMLElement} options.container - Container element to search within
-   * @param {Function} options.onSelect - Callback when selection changes (receives element, index)
+   * @param {string} [options.itemSelector] - CSS selector for navigable items (selector mode)
+   * @param {HTMLElement} [options.container] - Container element to search within (selector mode)
+   * @param {Function} [options.getItems] - Callback returning array of items (callback mode)
+   * @param {string} [options.selectedClass] - CSS class for selected item (default: 'modal-item-selected')
+   * @param {Function} [options.onSelect] - Called when selection changes: (element, index, oldIndex)
+   * @param {Function} [options.onDeselect] - Called when item is deselected: (element, index)
+   * @param {Function} [options.onScroll] - Custom scroll handler: (element). If not provided, uses scrollIntoView
+   * @param {boolean} [options.autoScroll] - Whether to auto-scroll on selection (default: true)
+   * @param {boolean} [options.wrapAround] - Whether to wrap from end to start (default: false)
    */
   constructor(options = {}) {
     this.itemSelector = options.itemSelector;
-    this.selectedClass = options.selectedClass || 'modal-item-selected';
     this.container = options.container;
+    this._getItemsCallback = options.getItems;
+    this.selectedClass = options.selectedClass || 'modal-item-selected';
     this.onSelect = options.onSelect;
+    this.onDeselect = options.onDeselect;
+    this.onScroll = options.onScroll;
+    this.autoScroll = options.autoScroll !== false;
+    this.wrapAround = options.wrapAround || false;
     this.selectedIndex = 0;
   }
 
@@ -25,6 +39,14 @@ export class NavigableList {
    * @returns {HTMLElement[]}
    */
   getItems() {
+    if (this._getItemsCallback) {
+      const items = this._getItemsCallback();
+      // Handle jQuery objects
+      if (items && items.toArray) {
+        return items.toArray();
+      }
+      return Array.isArray(items) ? items : [];
+    }
     if (!this.container) return [];
     return Array.from(this.container.querySelectorAll(this.itemSelector));
   }
@@ -39,34 +61,91 @@ export class NavigableList {
   }
 
   /**
+   * Get current selection index
+   * @returns {number}
+   */
+  getSelectedIndex() {
+    return this.selectedIndex;
+  }
+
+  /**
+   * Check if we're at the first item
+   * @returns {boolean}
+   */
+  isAtStart() {
+    return this.selectedIndex === 0;
+  }
+
+  /**
+   * Check if we're at the last item
+   * @returns {boolean}
+   */
+  isAtEnd() {
+    const items = this.getItems();
+    return this.selectedIndex >= items.length - 1;
+  }
+
+  /**
    * Navigate by direction
    * @param {number} direction - 1 for next, -1 for previous
-   * @returns {boolean} - True if navigation occurred
+   * @returns {boolean} - True if navigation moved to a different item
    */
   navigate(direction) {
     const items = this.getItems();
     if (!items.length) return false;
 
-    // Clear all selections first (handles stray selections)
-    items.forEach(item => item.classList.remove(this.selectedClass));
+    const oldIndex = this.selectedIndex;
 
-    // Update index with bounds checking
-    const newIndex = this.selectedIndex + direction;
-    if (newIndex < 0) {
-      this.selectedIndex = 0;
-    } else if (newIndex >= items.length) {
-      this.selectedIndex = items.length - 1;
+    // Calculate new index
+    let newIndex = this.selectedIndex + direction;
+
+    if (this.wrapAround) {
+      if (newIndex < 0) {
+        newIndex = items.length - 1;
+      } else if (newIndex >= items.length) {
+        newIndex = 0;
+      }
     } else {
-      this.selectedIndex = newIndex;
+      if (newIndex < 0) {
+        newIndex = 0;
+      } else if (newIndex >= items.length) {
+        newIndex = items.length - 1;
+      }
     }
 
-    // Add selection to new item and scroll into view
+    // Check if we actually moved
+    if (newIndex === oldIndex) {
+      return false;
+    }
+
+    // Clear ALL selections first (handles stray selections)
+    items.forEach(item => item.classList.remove(this.selectedClass));
+
+    // Fire deselect callback for old item
+    const oldItem = items[oldIndex];
+    if (oldItem && this.onDeselect) {
+      this.onDeselect(oldItem, oldIndex);
+    }
+
+    // Update index
+    this.selectedIndex = newIndex;
+
+    // Select new item
     const newItem = items[this.selectedIndex];
     if (newItem) {
       newItem.classList.add(this.selectedClass);
-      newItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+      // Scroll into view
+      if (this.autoScroll) {
+        if (this.onScroll) {
+          this.onScroll(newItem);
+        } else {
+          newItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      }
+
       if (this.onSelect) {
-        this.onSelect(newItem, this.selectedIndex);
+        this.onSelect(newItem, this.selectedIndex, oldIndex);
       }
     }
 
@@ -76,41 +155,67 @@ export class NavigableList {
   /**
    * Jump to specific index
    * @param {number} index - Target index
+   * @returns {boolean} - True if selection changed
    */
   jumpTo(index) {
     const items = this.getItems();
-    if (!items.length) return;
+    if (!items.length) return false;
 
-    // Clear all selections first (handles stray selections)
+    const oldIndex = this.selectedIndex;
+    const newIndex = Math.max(0, Math.min(index, items.length - 1));
+
+    if (newIndex === oldIndex) {
+      return false;
+    }
+
+    // Clear ALL selections first (handles stray selections)
     items.forEach(item => item.classList.remove(this.selectedClass));
 
-    // Set new index with bounds checking
-    this.selectedIndex = Math.max(0, Math.min(index, items.length - 1));
+    // Fire deselect callback for old item
+    const oldItem = items[oldIndex];
+    if (oldItem && this.onDeselect) {
+      this.onDeselect(oldItem, oldIndex);
+    }
 
-    // Add selection to new item
+    // Update index
+    this.selectedIndex = newIndex;
+
+    // Select new item
     const newItem = items[this.selectedIndex];
     if (newItem) {
       newItem.classList.add(this.selectedClass);
-      newItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+      if (this.autoScroll) {
+        if (this.onScroll) {
+          this.onScroll(newItem);
+        } else {
+          newItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      }
+
       if (this.onSelect) {
-        this.onSelect(newItem, this.selectedIndex);
+        this.onSelect(newItem, this.selectedIndex, oldIndex);
       }
     }
+
+    return true;
   }
 
   /**
    * Jump to first item
+   * @returns {boolean} - True if selection changed
    */
   jumpToFirst() {
-    this.jumpTo(0);
+    return this.jumpTo(0);
   }
 
   /**
    * Jump to last item
+   * @returns {boolean} - True if selection changed
    */
   jumpToLast() {
     const items = this.getItems();
-    this.jumpTo(items.length - 1);
+    return this.jumpTo(items.length - 1);
   }
 
   /**
@@ -149,9 +254,11 @@ export class NavigableList {
 
   /**
    * Update selection after items change (e.g., async content load)
+   * Ensures selectedIndex is within bounds and applies styling
    */
   updateSelection() {
     const items = this.getItems();
+
     // Clear any existing selections
     items.forEach(item => item.classList.remove(this.selectedClass));
 
@@ -168,10 +275,30 @@ export class NavigableList {
   }
 
   /**
+   * Clear selection styling from all items
+   */
+  clearSelection() {
+    const items = this.getItems();
+    items.forEach(item => item.classList.remove(this.selectedClass));
+    if (this.onDeselect && items[this.selectedIndex]) {
+      this.onDeselect(items[this.selectedIndex], this.selectedIndex);
+    }
+  }
+
+  /**
    * Reset selection to first item
    */
   reset() {
     this.selectedIndex = 0;
     this.updateSelection();
+  }
+
+  /**
+   * Set index without triggering selection callbacks (for external sync)
+   * @param {number} index - New index value
+   */
+  setIndexSilent(index) {
+    const items = this.getItems();
+    this.selectedIndex = Math.max(0, Math.min(index, items.length - 1));
   }
 }

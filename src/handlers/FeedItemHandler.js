@@ -39,6 +39,8 @@ export class FeedItemHandler extends ItemHandler {
     // Cache for repost timestamps (postUri -> Date) from AT Protocol API
     this.repostTimestampCache = {};
     this.repostTimestampsFetched = false;
+    // Track toolbar observer to prevent duplicates
+    this._toolbarObserver = null;
     this.feedTabObserver = waitForElement(constants.FEED_TAB_SELECTOR, (tab) => {
       utils.observeChanges(
         tab,
@@ -360,6 +362,12 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   addToolbar(beforeDiv) {
+    // Disconnect any previous removal observer to prevent cascading duplicates
+    if (this._toolbarRemovalObserver) {
+      this._toolbarRemovalObserver.disconnect();
+      this._toolbarRemovalObserver = null;
+    }
+
     this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
     $(beforeDiv).before(this.toolbarDiv);
 
@@ -598,11 +606,11 @@ export class FeedItemHandler extends ItemHandler {
     $(this.searchField).on('input', () => {
       const val = $(this.searchField).val();
 
-      // Special case: "/" triggers native search
+      // Special case: "/" triggers native search (Explore)
       if (val === '/') {
         $('#bsky-navigator-search').val('');
         $(this.searchField).autocomplete('close');
-        $("a[aria-label='Search']")[0].click();
+        $("a[aria-label='Explore']")[0].click();
         return;
       }
 
@@ -672,32 +680,101 @@ export class FeedItemHandler extends ItemHandler {
       this.setupFeedMapTooltipHandlers(this.feedMapZoom);
     }
 
-    waitForElement('#bsky-navigator-toolbar', null, (_div) => {
+    this._toolbarRemovalObserver = waitForElement('#bsky-navigator-toolbar', null, (_div) => {
       this.addToolbar(beforeDiv);
     });
   }
 
   refreshToolbars() {
-    waitForElement(constants.TOOLBAR_CONTAINER_SELECTOR, (_indicatorContainer) => {
-      waitForElement('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
-        if (!$('#bsky-navigator-toolbar').length) {
-          this.addToolbar(homeScreenFeedTabsDiv);
-        }
-      });
-    });
+    // Disconnect any previous observer
+    if (this._toolbarObserver) {
+      this._toolbarObserver.disconnect();
+      this._toolbarObserver = null;
+    }
 
-    waitForElement(constants.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer, observer) => {
-      if (!$('#statusBar').length) {
-        this.addStatusBar($(statusBarContainer).parent().parent().parent().parent().parent());
-        observer.disconnect();
+    // Prevent multiple simultaneous setup attempts
+    if (this._settingUpToolbars) {
+      return;
+    }
+
+    const setupToolbar = () => {
+      // If we already have a toolbar reference and it's in the DOM, we're done
+      if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+        return true;
+      }
+
+      // Remove any existing toolbar (stale from previous handler)
+      $('#bsky-navigator-toolbar').remove();
+
+      const feedTabs = $('div[data-testid="homeScreenFeedTabs"]').first();
+      if (feedTabs.length) {
+        this._settingUpToolbars = true;
+        this.addToolbar(feedTabs);
+        this._settingUpToolbars = false;
+        return true;
+      }
+      return false;
+    };
+
+    const setupStatusBar = () => {
+      // If we already have a status bar reference and it's in the DOM, we're done
+      if (this.statusBar && $.contains(document, this.statusBar[0])) {
+        return true;
+      }
+
+      // Remove any existing status bar (stale from previous handler)
+      $('#statusBar').remove();
+
+      const statusBarContainer = $(constants.STATUS_BAR_CONTAINER_SELECTOR).first();
+      if (statusBarContainer.length) {
+        this.addStatusBar(statusBarContainer.parent().parent().parent().parent().parent());
+        return true;
+      }
+      return false;
+    };
+
+    // Try immediately
+    const toolbarDone = setupToolbar();
+    const statusBarDone = setupStatusBar();
+
+    if (toolbarDone && statusBarDone) {
+      this.setSortIcons();
+      return;
+    }
+
+    // Use MutationObserver to wait for elements to appear
+    this._toolbarObserver = new MutationObserver((mutations, obs) => {
+      // Skip if already setting up
+      if (this._settingUpToolbars) {
+        return;
+      }
+
+      const toolbar = setupToolbar();
+      const statusBar = setupStatusBar();
+
+      if (toolbar && statusBar) {
+        obs.disconnect();
+        this._toolbarObserver = null;
+        this.setSortIcons();
       }
     });
 
-    waitForElement('#bsky-navigator-toolbar', (_div) => {
-      waitForElement('#statusBar', (_div2) => {
-        this.setSortIcons();
-      });
+    this._toolbarObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
     });
+
+    // Timeout fallback - disconnect after 10 seconds
+    setTimeout(() => {
+      if (this._toolbarObserver) {
+        this._toolbarObserver.disconnect();
+        this._toolbarObserver = null;
+      }
+      // Final attempt
+      if (setupToolbar() && setupStatusBar()) {
+        this.setSortIcons();
+      }
+    }, 10000);
   }
 
   onSearchAutocomplete(request, response) {
@@ -901,6 +978,32 @@ export class FeedItemHandler extends ItemHandler {
       clearInterval(this._filterEnforcementInterval);
       this._filterEnforcementInterval = null;
     }
+
+    // Disconnect any pending toolbar observer
+    if (this._toolbarObserver) {
+      this._toolbarObserver.disconnect();
+      this._toolbarObserver = null;
+    }
+
+    // Disconnect toolbar removal observer to prevent re-creation after deactivate
+    if (this._toolbarRemovalObserver) {
+      this._toolbarRemovalObserver.disconnect();
+      this._toolbarRemovalObserver = null;
+    }
+
+    // Clean up toolbar and status bar (including feed map) to avoid conflicts with other handlers
+    if (this.toolbarDiv) {
+      this.toolbarDiv.remove();
+      this.toolbarDiv = null;
+    }
+    if (this.statusBar) {
+      this.statusBar.remove();
+      this.statusBar = null;
+    }
+    // Clear feed map references
+    this.feedMap = null;
+    this.feedMapWrapper = null;
+    this.feedMapZoom = null;
   }
 
   _throttledScrollUpdate() {
@@ -1094,8 +1197,18 @@ export class FeedItemHandler extends ItemHandler {
               transform: none !important;
             }
           }
-          div[data-testid="homeScreenFeedTabs"] {
+          div[data-testid="homeScreenFeedTabs"],
+          div[data-testid="profilePager"] {
             width: 100% !important;
+            max-width: none !important;
+          }
+          /* Profile page: widen the profile content container */
+          main[role="main"] div[data-testid="profilePager"] {
+            width: ${contentWidth}px !important;
+          }
+          /* Also target the profile header/content wrapper */
+          main[role="main"] [data-testid^="profile"] {
+            max-width: ${contentWidth}px !important;
           }
           /* Position nav from left edge instead of center-relative */
           nav[role="navigation"] {
@@ -1114,8 +1227,19 @@ export class FeedItemHandler extends ItemHandler {
             max-width: ${contentWidth}px !important;
             transform: translateX(${shiftRight}px) !important;
           }
-          div[data-testid="homeScreenFeedTabs"] {
+          div[data-testid="homeScreenFeedTabs"],
+          div[data-testid="profilePager"] {
             width: 100% !important;
+            max-width: none !important;
+          }
+          /* Profile page: widen the profile content container */
+          main[role="main"] div[data-testid="profilePager"] {
+            width: ${contentWidth}px !important;
+            transform: translateX(${shiftRight}px) !important;
+          }
+          /* Also target the profile header/content wrapper */
+          main[role="main"] [data-testid^="profile"] {
+            max-width: ${contentWidth}px !important;
           }
           #statusBar {
             max-width: ${contentWidth}px !important;

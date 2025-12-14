@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+475.7e696267
+// @version     1.0.31+476.e879eac7
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46922,7 +46922,7 @@ div#bsky-navigator-toolbar {
     position: sticky;
     top: 0;
     width: 100%;
-    background-color: inherit;
+    background-color: #ffffff;
     border-bottom: 1px solid rgb(192, 192, 192);
     z-index: var(--z-toolbar);
     overflow: visible;
@@ -52030,9 +52030,117 @@ div#statusBar.has-feed-map {
     color: #9ca3af;
   }
 }
+
+/* ==========================================================================
+   Global UIManager Toolbar and Status Bar
+   These styles apply to the persistent toolbar/status bar shown on all pages
+   ========================================================================== */
+
+/* Global toolbar - positioned within main content area */
+.bsky-navigator-global-toolbar {
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  width: 100%;
+  background-color: #ffffff;
+  border-bottom: 1px solid rgb(192, 192, 192);
+  z-index: var(--z-toolbar);
+  overflow: visible;
+}
+
+/* Global status bar - fixed at bottom of viewport */
+.bsky-navigator-global-statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  min-height: 32px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: var(--z-raised);
+  align-items: center;
+  background-color: #ffffff;
+  bottom: 0;
+  font-size: 1em;
+  padding: 1px;
+  border-top: 1px solid rgb(192, 192, 192);
+  overflow: clip;
+}
+
+/* Mobile status bar positioning - above mobile nav */
+@media only screen and (max-width: 800px) {
+  .bsky-navigator-global-statusbar {
+    bottom: 58px;
+  }
+}
+
+/* Dark mode support for global UI elements */
+@media (prefers-color-scheme: dark) {
+  .bsky-navigator-global-toolbar {
+    background-color: #29333d;
+  }
+
+  .bsky-navigator-global-statusbar {
+    background-color: #29333d;
+  }
+}
+
+/* Global status bar section styling (mirrors #statusBarLeft/Center/Right) */
+.global-statusbar-left {
+  display: flex;
+  flex: 1;
+  text-align: left;
+  padding: 1px;
+}
+
+.global-statusbar-center {
+  display: flex;
+  flex: 1 1 auto;
+  text-align: center;
+  justify-content: center;
+  padding: 1px;
+}
+
+.global-statusbar-right {
+  display: flex;
+  flex: 1;
+  text-align: right;
+  justify-content: flex-end;
+  padding: 1px;
+}
+
+/* Global info indicator styling */
+.global-info-indicator {
+  display: flex;
+  justify-content: center;
+}
+
+.global-info-indicator-text {
+  font-size: 0.9em;
+  color: #374151;
+}
+
+@media (prefers-color-scheme: dark) {
+  .global-info-indicator-text {
+    color: #9ca3af;
+  }
+}
 `;
   const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-section sidecar-parent-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Parent</span>\n    </button>\n    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">\n      <div class="sidecar-parent">\n        <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n        {{> postTemplate parent}}\n      </div>\n    </div>\n  </div>\n  {{/if}}\n  {{#if replies.length}}\n  <div class="sidecar-section sidecar-replies-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Replies ({{replies.length}})</span>\n    </button>\n    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">\n      {{#each replies}}\n      {{> postTemplate this}}\n      {{/each}}\n    </div>\n  </div>\n  {{/if}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this}}\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title="{{alt}}"></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">\n  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">\n      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>\n      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{{text}}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images" style="margin-top: 8px;">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a href="{{uri}}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">\n  <div class="sidecar-embed-external" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; margin-top: 8px; overflow: hidden;">\n    {{#if thumb}}\n    <div class="sidecar-external-thumb" style="width: 100%; max-height: 200px; overflow: hidden;">\n      <img src="{{thumb}}" alt="{{title}}" style="width: 100%; object-fit: cover;" loading="lazy">\n    </div>\n    {{/if}}\n    <div class="sidecar-external-info" style="padding: 12px;">\n      <div class="sidecar-external-domain" style="font-size: 12px; color: rgb(112, 127, 140); margin-bottom: 4px;">{{domain}}</div>\n      <div class="sidecar-external-title" style="font-weight: 600; margin-bottom: 4px;">{{title}}</div>\n      {{#if description}}\n      <div class="sidecar-external-description" style="font-size: 14px; color: rgb(66, 87, 108); line-height: 1.3;">{{description}}</div>\n      {{/if}}\n    </div>\n  </div>\n</a>\n<\/script>\n\n<script id="sidecar-skeleton-template" type="text/x-handlebars-template">\n<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <span class="sr-only">Loading replies...</span>\n</div>\n<\/script>\n';
   const SHORTCUTS = {
+    "Global Navigation": [
+      { keys: ["Alt+H"], description: "Home" },
+      { keys: ["Alt+E"], description: "Explore (Search)" },
+      { keys: ["Alt+S"], description: "Saved" },
+      { keys: ["Alt+N"], description: "Notifications" },
+      { keys: ["Alt+M"], description: "Messages" },
+      { keys: ["Alt+F"], description: "Feeds" },
+      { keys: ["Alt+L"], description: "Lists" },
+      { keys: ["Alt+P"], description: "Profile" },
+      { keys: ["Alt+,"], description: "Settings" },
+      { keys: ["Alt+."], description: "Extension preferences" }
+    ],
     Navigation: [
       { keys: ["j", "\u2193"], description: "Next item" },
       { keys: ["k", "\u2191"], description: "Previous item" },
@@ -52248,9 +52356,12 @@ div#statusBar.has-feed-map {
         if (event.code === "KeyH") {
           event.preventDefault();
           $("nav a[aria-label='Home']")[0].click();
+        } else if (event.code === "KeyE") {
+          event.preventDefault();
+          $("nav a[aria-label='Explore']")[0].click();
         } else if (event.code === "KeyS") {
           event.preventDefault();
-          $("nav a[aria-label='Search']")[0].click();
+          $("nav a[aria-label='Saved']")[0].click();
         } else if (event.code === "KeyN") {
           event.preventDefault();
           $("nav a[aria-label='Notifications']")[0].click();
@@ -71668,6 +71779,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.mediaCache = {};
       this.repostTimestampCache = {};
       this.repostTimestampsFetched = false;
+      this._toolbarObserver = null;
       this.feedTabObserver = waitForElement$1(constants.FEED_TAB_SELECTOR, (tab) => {
         observeChanges(
           tab,
@@ -71900,6 +72012,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
     addToolbar(beforeDiv) {
+      if (this._toolbarRemovalObserver) {
+        this._toolbarRemovalObserver.disconnect();
+        this._toolbarRemovalObserver = null;
+      }
       this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
       $(beforeDiv).before(this.toolbarDiv);
       const indicatorPosition = this.config.get("feedMapPosition");
@@ -72079,7 +72195,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (val === "/") {
           $("#bsky-navigator-search").val("");
           $(this.searchField).autocomplete("close");
-          $("a[aria-label='Search']")[0].click();
+          $("a[aria-label='Explore']")[0].click();
           return;
         }
         this.applyFilterDelayed();
@@ -72133,29 +72249,75 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.setupFeedMapTooltipHandlers(this.feedMap);
         this.setupFeedMapTooltipHandlers(this.feedMapZoom);
       }
-      waitForElement$1("#bsky-navigator-toolbar", null, (_div) => {
+      this._toolbarRemovalObserver = waitForElement$1("#bsky-navigator-toolbar", null, (_div) => {
         this.addToolbar(beforeDiv);
       });
     }
     refreshToolbars() {
-      waitForElement$1(constants.TOOLBAR_CONTAINER_SELECTOR, (_indicatorContainer) => {
-        waitForElement$1('div[data-testid="homeScreenFeedTabs"]', (homeScreenFeedTabsDiv) => {
-          if (!$("#bsky-navigator-toolbar").length) {
-            this.addToolbar(homeScreenFeedTabsDiv);
-          }
-        });
-      });
-      waitForElement$1(constants.STATUS_BAR_CONTAINER_SELECTOR, (statusBarContainer, observer) => {
-        if (!$("#statusBar").length) {
-          this.addStatusBar($(statusBarContainer).parent().parent().parent().parent().parent());
-          observer.disconnect();
+      if (this._toolbarObserver) {
+        this._toolbarObserver.disconnect();
+        this._toolbarObserver = null;
+      }
+      if (this._settingUpToolbars) {
+        return;
+      }
+      const setupToolbar = () => {
+        if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+          return true;
+        }
+        $("#bsky-navigator-toolbar").remove();
+        const feedTabs = $('div[data-testid="homeScreenFeedTabs"]').first();
+        if (feedTabs.length) {
+          this._settingUpToolbars = true;
+          this.addToolbar(feedTabs);
+          this._settingUpToolbars = false;
+          return true;
+        }
+        return false;
+      };
+      const setupStatusBar = () => {
+        if (this.statusBar && $.contains(document, this.statusBar[0])) {
+          return true;
+        }
+        $("#statusBar").remove();
+        const statusBarContainer = $(constants.STATUS_BAR_CONTAINER_SELECTOR).first();
+        if (statusBarContainer.length) {
+          this.addStatusBar(statusBarContainer.parent().parent().parent().parent().parent());
+          return true;
+        }
+        return false;
+      };
+      const toolbarDone = setupToolbar();
+      const statusBarDone = setupStatusBar();
+      if (toolbarDone && statusBarDone) {
+        this.setSortIcons();
+        return;
+      }
+      this._toolbarObserver = new MutationObserver((mutations, obs) => {
+        if (this._settingUpToolbars) {
+          return;
+        }
+        const toolbar = setupToolbar();
+        const statusBar = setupStatusBar();
+        if (toolbar && statusBar) {
+          obs.disconnect();
+          this._toolbarObserver = null;
+          this.setSortIcons();
         }
       });
-      waitForElement$1("#bsky-navigator-toolbar", (_div) => {
-        waitForElement$1("#statusBar", (_div2) => {
-          this.setSortIcons();
-        });
+      this._toolbarObserver.observe(document.body, {
+        childList: true,
+        subtree: true
       });
+      setTimeout(() => {
+        if (this._toolbarObserver) {
+          this._toolbarObserver.disconnect();
+          this._toolbarObserver = null;
+        }
+        if (setupToolbar() && setupStatusBar()) {
+          this.setSortIcons();
+        }
+      }, 1e4);
     }
     onSearchAutocomplete(request, response) {
       const authors = this.getAuthors().sort(
@@ -72306,6 +72468,25 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         clearInterval(this._filterEnforcementInterval);
         this._filterEnforcementInterval = null;
       }
+      if (this._toolbarObserver) {
+        this._toolbarObserver.disconnect();
+        this._toolbarObserver = null;
+      }
+      if (this._toolbarRemovalObserver) {
+        this._toolbarRemovalObserver.disconnect();
+        this._toolbarRemovalObserver = null;
+      }
+      if (this.toolbarDiv) {
+        this.toolbarDiv.remove();
+        this.toolbarDiv = null;
+      }
+      if (this.statusBar) {
+        this.statusBar.remove();
+        this.statusBar = null;
+      }
+      this.feedMap = null;
+      this.feedMapWrapper = null;
+      this.feedMapZoom = null;
     }
     _throttledScrollUpdate() {
       if (this._scrollUpdatePending) return;
@@ -72457,8 +72638,18 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               transform: none !important;
             }
           }
-          div[data-testid="homeScreenFeedTabs"] {
+          div[data-testid="homeScreenFeedTabs"],
+          div[data-testid="profilePager"] {
             width: 100% !important;
+            max-width: none !important;
+          }
+          /* Profile page: widen the profile content container */
+          main[role="main"] div[data-testid="profilePager"] {
+            width: ${contentWidth}px !important;
+          }
+          /* Also target the profile header/content wrapper */
+          main[role="main"] [data-testid^="profile"] {
+            max-width: ${contentWidth}px !important;
           }
           /* Position nav from left edge instead of center-relative */
           nav[role="navigation"] {
@@ -72476,8 +72667,19 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             max-width: ${contentWidth}px !important;
             transform: translateX(${shiftRight}px) !important;
           }
-          div[data-testid="homeScreenFeedTabs"] {
+          div[data-testid="homeScreenFeedTabs"],
+          div[data-testid="profilePager"] {
             width: 100% !important;
+            max-width: none !important;
+          }
+          /* Profile page: widen the profile content container */
+          main[role="main"] div[data-testid="profilePager"] {
+            width: ${contentWidth}px !important;
+            transform: translateX(${shiftRight}px) !important;
+          }
+          /* Also target the profile header/content wrapper */
+          main[role="main"] [data-testid^="profile"] {
+            max-width: ${contentWidth}px !important;
           }
           #statusBar {
             max-width: ${contentWidth}px !important;
@@ -74155,16 +74357,191 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
   class ProfileItemHandler extends FeedItemHandler {
     constructor(name, config2, state2, api, selector) {
       super(name, config2, state2, api, selector);
+      this.uiManagerStatusBar = null;
+      this.uiManagerStatusBarLeft = null;
+      this._toolbarObserver = null;
+    }
+    /**
+     * Called by ProfileUIAdapter to provide UIManager's status bar
+     * This is called after activate(), so we need to setup feed map here
+     */
+    setUIManagerStatusBar(statusBar, statusBarLeft) {
+      console.log("[ProfileItemHandler] setUIManagerStatusBar called", {
+        statusBar: statusBar?.length,
+        statusBarLeft: statusBarLeft?.length,
+        hasFeedMap: statusBar?.find(".feed-map-wrapper").length
+      });
+      this.uiManagerStatusBar = statusBar;
+      this.uiManagerStatusBarLeft = statusBarLeft;
+      if (!statusBar.find(".feed-map-wrapper").length) {
+        console.log("[ProfileItemHandler] Adding feed map to UIManager status bar");
+        this.addFeedMapToStatusBar(statusBar);
+      } else {
+        console.log("[ProfileItemHandler] Feed map already exists");
+      }
+      this.loadItemsWithRetry();
+    }
+    /**
+     * Load items with retry for profile pages where feed loads asynchronously
+     */
+    loadItemsWithRetry() {
+      let retryCount = 0;
+      const maxRetries = 10;
+      const tryLoad = () => {
+        this.loadItems();
+        const itemCount = this.items?.length || 0;
+        console.log("[ProfileItemHandler] loadItemsWithRetry attempt", retryCount, "found", itemCount, "items");
+        if (itemCount === 0 && retryCount < maxRetries) {
+          retryCount++;
+          setTimeout(tryLoad, 300);
+        } else if (itemCount > 0) {
+          console.log("[ProfileItemHandler] Items loaded, updating scroll position");
+          this.updateScrollPosition(true);
+        }
+      };
+      setTimeout(tryLoad, 500);
     }
     activate() {
       this.setIndex(0);
       super.activate();
     }
     deactivate() {
+      if (this._toolbarObserver) {
+        this._toolbarObserver.disconnect();
+        this._toolbarObserver = null;
+      }
+      this.feedMap = null;
+      this.feedMapWrapper = null;
+      this.feedMapZoom = null;
       super.deactivate();
+      this.uiManagerStatusBar = null;
+      this.uiManagerStatusBarLeft = null;
     }
     isActive() {
       return window.location.pathname.match(/^\/profile\//);
+    }
+    /**
+     * Override refreshToolbars to use profile-specific selectors
+     * Uses UIManager's fixed status bar instead of creating our own
+     */
+    refreshToolbars() {
+      if (this._toolbarObserver) {
+        this._toolbarObserver.disconnect();
+        this._toolbarObserver = null;
+      }
+      if (this._settingUpToolbars) {
+        return;
+      }
+      if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+        this.setSortIcons();
+        return;
+      }
+      $("#bsky-navigator-toolbar").remove();
+      const profileFeedTabs = $('div[data-testid="profilePager"]').first();
+      if (profileFeedTabs.length) {
+        this._settingUpToolbars = true;
+        this.addToolbar(profileFeedTabs);
+        this._settingUpToolbars = false;
+        this.setSortIcons();
+        this.applyProfileWidth();
+        return;
+      }
+      this._toolbarObserver = new MutationObserver((mutations, obs) => {
+        if (this._settingUpToolbars) {
+          return;
+        }
+        if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+          obs.disconnect();
+          this._toolbarObserver = null;
+          return;
+        }
+        $("#bsky-navigator-toolbar").remove();
+        const profilePager = $('div[data-testid="profilePager"]').first();
+        if (profilePager.length) {
+          obs.disconnect();
+          this._toolbarObserver = null;
+          this._settingUpToolbars = true;
+          this.addToolbar(profilePager);
+          this._settingUpToolbars = false;
+          this.setSortIcons();
+          this.applyProfileWidth();
+        }
+      });
+      this._toolbarObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      setTimeout(() => {
+        if (this._toolbarObserver) {
+          this._toolbarObserver.disconnect();
+          this._toolbarObserver = null;
+        }
+      }, 1e4);
+    }
+    /**
+     * Add feed map elements to an existing status bar (UIManager's)
+     */
+    addFeedMapToStatusBar(statusBar) {
+      const indicatorPosition = this.config.get("feedMapPosition");
+      if (indicatorPosition !== "Bottom status bar") {
+        return;
+      }
+      const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
+      const isAdvancedStyle = indicatorStyle === "Advanced";
+      const styleClass = isAdvancedStyle ? "feed-map-advanced" : "feed-map-basic";
+      const indicatorTheme = this.config.get("feedMapTheme") || "Default";
+      const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
+      const indicatorScale = parseInt(this.config.get("feedMapScale"), 10) || 100;
+      const scaleValue = indicatorScale / 100;
+      const animationInterval = parseInt(this.config.get("feedMapAnimationSpeed"), 10);
+      const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
+      const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
+      this.feedMapContainer = $(`<div class="feed-map-container"></div>`);
+      this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+      this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+      this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
+      this.feedMapContainer.append(this.feedMapLabelStart);
+      this.feedMapContainer.append(this.feedMap);
+      this.feedMapContainer.append(this.feedMapLabelEnd);
+      this.feedMapZoomHighlight = this.feedMap.find(".feed-map-position-zoom-highlight");
+      this.feedMapWrapper = $(`<div class="feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
+      this.feedMapWrapper.append(this.feedMapContainer);
+      this.feedMapConnector = $(`<div class="feed-map-connector">
+      <svg class="feed-map-connector-svg" preserveAspectRatio="none">
+        <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
+        <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
+      </svg>
+    </div>`);
+      this.feedMapWrapper.append(this.feedMapConnector);
+      this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
+      this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+      this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+      this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
+      this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
+      this.feedMapZoomContainer.append(this.feedMapZoom);
+      this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
+      this.feedMapWrapper.append(this.feedMapZoomContainer);
+      statusBar.prepend(this.feedMapWrapper);
+      statusBar.addClass("has-feed-map");
+      this.setupScrollIndicatorZoomClick();
+      this.setupScrollIndicatorClick();
+      this.setupScrollIndicatorScroll();
+      this.setupFeedMapTooltipHandlers(this.feedMap);
+      this.setupFeedMapTooltipHandlers(this.feedMapZoom);
+      this.statusBar = statusBar;
+    }
+    /**
+     * Apply configured width to profile page elements
+     */
+    applyProfileWidth() {
+      const contentWidth = this.config.get("postWidthDesktop") || 600;
+      if (contentWidth === 600) {
+        return;
+      }
+      const profilePager = $('div[data-testid="profilePager"]');
+      if (profilePager.length) {
+        profilePager.css("width", contentWidth + "px");
+      }
     }
     handleInput(event) {
       if (super.handleInput(event)) {
@@ -74198,6 +74575,415 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           $("div[data-testid='profileHeaderDropdownReportBtn']").click();
         }, 200);
       }
+    }
+  }
+  class UIManager {
+    constructor(config2, state2) {
+      this.config = config2;
+      this.state = state2;
+      this.currentContext = null;
+      this.currentAdapter = null;
+      this.adapters = /* @__PURE__ */ new Map();
+      this.toolbarDiv = null;
+      this.toolbarRow1 = null;
+      this.toolbarRow2 = null;
+      this.statusBar = null;
+      this.statusBarLeft = null;
+      this.statusBarCenter = null;
+      this.statusBarRight = null;
+      this.preferencesIcon = null;
+      this.initialized = false;
+    }
+    /**
+     * Register a context adapter for a specific page type
+     * @param {string} contextName - Name of the context (e.g., 'feed', 'post', 'profile')
+     * @param {object} adapter - Adapter object with activate/deactivate methods
+     */
+    registerAdapter(contextName, adapter) {
+      this.adapters.set(contextName, adapter);
+      adapter.setUIManager(this);
+    }
+    /**
+     * Initialize the UIManager - creates DOM elements and inserts into page
+     * Should be called after main[role="main"] is available
+     */
+    async initialize() {
+      if (this.initialized) return;
+      await waitForElement$3(constants.MAIN_SELECTOR, async (main) => {
+        this.createToolbar();
+        this.createStatusBar();
+        await this.insertIntoDOM();
+        this.initialized = true;
+      });
+    }
+    /**
+     * Create the toolbar DOM structure
+     */
+    createToolbar() {
+      this.toolbarDiv = $(`<div id="bsky-navigator-global-toolbar" class="bsky-navigator-global-toolbar"/>`);
+      this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1 global-toolbar-row-1"/>`);
+      this.toolbarDiv.append(this.toolbarRow1);
+      this.toolbarRow2 = $(`<div class="toolbar-row toolbar-row-2 global-toolbar-row-2"/>`);
+      this.toolbarDiv.append(this.toolbarRow2);
+      this.toolbarDiv.hide();
+    }
+    /**
+     * Create the status bar DOM structure
+     */
+    createStatusBar() {
+      this.statusBar = $(`<div id="bsky-navigator-global-statusbar" class="bsky-navigator-global-statusbar"/>`);
+      this.statusBarLeft = $(`<div class="statusBarLeft global-statusbar-left"></div>`);
+      this.statusBarCenter = $(`<div class="statusBarCenter global-statusbar-center"></div>`);
+      this.statusBarRight = $(`<div class="statusBarRight global-statusbar-right"></div>`);
+      this.statusBar.append(this.statusBarLeft);
+      this.statusBar.append(this.statusBarCenter);
+      this.statusBar.append(this.statusBarRight);
+      this.infoIndicator = $(
+        `<div class="global-info-indicator css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div class="global-info-indicator-text"/></div>`
+      );
+      this.statusBarCenter.append(this.infoIndicator);
+      this.preferencesIcon = $(
+        `<div id="globalPreferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="globalPreferencesIcon"><img id="globalPreferencesIconImage" class="indicator-image preferences-icon-overlay" src="${icons.preferencesOutline}"/></div></div>`
+      );
+      this.preferencesIcon.on("click", () => {
+        $("#globalPreferencesIconImage").attr("src", icons.preferencesFilled);
+        this.config.open();
+      });
+      this.statusBarRight.append(this.preferencesIcon);
+      this.statusBar.hide();
+    }
+    /**
+     * Insert toolbar and status bar into the DOM
+     */
+    async insertIntoDOM() {
+      const main = $(constants.MAIN_SELECTOR);
+      if (!main.length) {
+        console.warn('[UIManager] main[role="main"] not found');
+        return;
+      }
+      let contentContainer = main.find("> div").first();
+      if (!contentContainer.length) {
+        contentContainer = main;
+      }
+      console.log("[UIManager] Inserting into container:", contentContainer[0]);
+      console.log("[UIManager] Container visible:", contentContainer.is(":visible"));
+      console.log("[UIManager] Container dimensions:", contentContainer.width(), "x", contentContainer.height());
+      contentContainer.prepend(this.toolbarDiv);
+      contentContainer.append(this.statusBar);
+      console.log("[UIManager] Toolbar in DOM:", $.contains(document, this.toolbarDiv[0]));
+      console.log("[UIManager] StatusBar in DOM:", $.contains(document, this.statusBar[0]));
+    }
+    /**
+     * Set the current context and activate appropriate adapter
+     * @param {string} contextName - Name of the context
+     * @param {object} handler - The handler for this context (optional)
+     */
+    setContext(contextName, handler = null) {
+      console.log("[UIManager] setContext called with:", contextName);
+      if (this.initialized && !$.contains(document, this.toolbarDiv[0])) {
+        console.log("[UIManager] Elements removed from DOM, re-inserting...");
+        this.insertIntoDOM();
+      }
+      if (this.currentAdapter) {
+        this.currentAdapter.deactivate();
+      }
+      this.currentContext = contextName;
+      this.currentAdapter = this.adapters.get(contextName) || this.adapters.get("default");
+      console.log("[UIManager] adapter found:", this.currentAdapter ? "yes" : "no");
+      if (this.currentAdapter) {
+        this.currentAdapter.activate(handler);
+      } else {
+        this.showMinimalUI();
+      }
+    }
+    /**
+     * Show minimal UI when no adapter is available
+     */
+    showMinimalUI() {
+      this.hideToolbarRow1();
+      this.hideToolbarRow2();
+      this.setInfoText("");
+    }
+    /**
+     * Show/hide toolbar row 1 (indicators)
+     */
+    showToolbarRow1() {
+      this.toolbarRow1.show();
+    }
+    hideToolbarRow1() {
+      this.toolbarRow1.hide();
+    }
+    /**
+     * Show/hide toolbar row 2 (search and controls)
+     */
+    showToolbarRow2() {
+      this.toolbarRow2.show();
+    }
+    hideToolbarRow2() {
+      this.toolbarRow2.hide();
+    }
+    /**
+     * Set info text in status bar center
+     * @param {string} html - HTML content to display
+     */
+    setInfoText(html) {
+      this.infoIndicator.find(".global-info-indicator-text").html(html);
+    }
+    /**
+     * Get toolbar row 1 element for adapter to populate
+     */
+    getToolbarRow1() {
+      return this.toolbarRow1;
+    }
+    /**
+     * Get toolbar row 2 element for adapter to populate
+     */
+    getToolbarRow2() {
+      return this.toolbarRow2;
+    }
+    /**
+     * Get status bar left section for adapter to populate
+     */
+    getStatusBarLeft() {
+      return this.statusBarLeft;
+    }
+    /**
+     * Get status bar right section for adapter to populate
+     */
+    getStatusBarRight() {
+      return this.statusBarRight;
+    }
+    /**
+     * Get the toolbar div for adding feed map or other elements
+     */
+    getToolbarDiv() {
+      return this.toolbarDiv;
+    }
+    /**
+     * Get the status bar element
+     */
+    getStatusBar() {
+      return this.statusBar;
+    }
+    /**
+     * Check if UIManager is initialized
+     */
+    isInitialized() {
+      return this.initialized;
+    }
+    /**
+     * Reposition UI elements (call when DOM structure changes)
+     */
+    async reposition() {
+      this.toolbarDiv.detach();
+      this.statusBar.detach();
+      await this.insertIntoDOM();
+    }
+    /**
+     * Clean up - remove UI elements from DOM
+     */
+    destroy() {
+      if (this.toolbarDiv) {
+        this.toolbarDiv.remove();
+      }
+      if (this.statusBar) {
+        this.statusBar.remove();
+      }
+      this.initialized = false;
+    }
+  }
+  class DefaultUIAdapter {
+    constructor() {
+      this.uiManager = null;
+      this.handler = null;
+    }
+    /**
+     * Set reference to UIManager
+     */
+    setUIManager(uiManager) {
+      this.uiManager = uiManager;
+    }
+    /**
+     * Activate this adapter - called when switching to this context
+     * @param {object} handler - The handler for this page (may be null)
+     */
+    activate(handler) {
+      console.log("[DefaultUIAdapter] activate called, handler:", handler ? "yes" : "no");
+      this.handler = handler;
+      const toolbar = this.uiManager.getToolbarDiv();
+      const statusBar = this.uiManager.getStatusBar();
+      console.log("[DefaultUIAdapter] toolbar element:", toolbar.length, "statusBar element:", statusBar.length);
+      toolbar.hide();
+      statusBar.show();
+      console.log("[DefaultUIAdapter] statusBar display after show():", statusBar.css("display"));
+      this.uiManager.hideToolbarRow1();
+      this.uiManager.hideToolbarRow2();
+      this.uiManager.getStatusBarLeft().empty();
+      this.updateInfoText();
+      const sb = this.uiManager.getStatusBar();
+      console.log("[DefaultUIAdapter] StatusBar visible:", sb.is(":visible"));
+      console.log("[DefaultUIAdapter] StatusBar position:", sb.offset());
+      console.log("[DefaultUIAdapter] StatusBar dimensions:", sb.width(), "x", sb.height());
+      console.log("[DefaultUIAdapter] activation complete");
+    }
+    /**
+     * Deactivate this adapter - called when switching away
+     */
+    deactivate() {
+      this.handler = null;
+    }
+    /**
+     * Update info text based on current page
+     */
+    updateInfoText() {
+      const path = window.location.pathname;
+      let pageInfo = "";
+      if (path.includes("/notifications")) {
+        pageInfo = "Notifications";
+      } else if (path.includes("/search")) {
+        pageInfo = "Explore";
+      } else if (path.includes("/settings")) {
+        pageInfo = "Settings";
+      } else if (path.includes("/messages")) {
+        pageInfo = "Messages";
+      } else if (path.includes("/lists")) {
+        pageInfo = "Lists";
+      } else if (path.includes("/feeds")) {
+        pageInfo = "Feeds";
+      } else if (path.includes("/saved") || path.includes("/bookmarks") || $('div[data-testid="bookmarksScreen"]').length) {
+        pageInfo = "Saved";
+      } else {
+        pageInfo = "Bluesky";
+      }
+      this.uiManager.setInfoText(pageInfo);
+    }
+  }
+  class FeedUIAdapter {
+    constructor() {
+      this.uiManager = null;
+      this.handler = null;
+    }
+    /**
+     * Set reference to UIManager
+     */
+    setUIManager(uiManager) {
+      this.uiManager = uiManager;
+    }
+    /**
+     * Activate this adapter - called when switching to feed context
+     * @param {object} handler - The FeedItemHandler instance
+     */
+    activate(handler) {
+      this.handler = handler;
+      this.uiManager.getToolbarDiv().hide();
+      this.uiManager.getStatusBar().hide();
+    }
+    /**
+     * Deactivate this adapter - called when switching away from feed context
+     */
+    deactivate() {
+      this.uiManager.getToolbarDiv().show();
+      this.uiManager.getStatusBar().show();
+      this.handler = null;
+    }
+  }
+  class PostUIAdapter {
+    constructor() {
+      this.uiManager = null;
+      this.handler = null;
+    }
+    /**
+     * Set reference to UIManager
+     */
+    setUIManager(uiManager) {
+      this.uiManager = uiManager;
+    }
+    /**
+     * Activate this adapter - called when switching to post context
+     * @param {object} handler - The PostItemHandler instance
+     */
+    activate(handler) {
+      this.handler = handler;
+      this.uiManager.getToolbarDiv().hide();
+      this.uiManager.getStatusBar().show();
+      this.uiManager.hideToolbarRow1();
+      this.uiManager.hideToolbarRow2();
+      this.uiManager.getStatusBarLeft().empty();
+      this.updateInfoText();
+    }
+    /**
+     * Deactivate this adapter
+     */
+    deactivate() {
+      this.handler = null;
+    }
+    /**
+     * Update status bar with post info
+     */
+    updateInfoText() {
+      const path = window.location.pathname;
+      const match2 = path.match(/\/profile\/([^/]+)\/post\//);
+      if (match2) {
+        const author = match2[1];
+        this.uiManager.setInfoText(`Post by @${author}`);
+      } else {
+        this.uiManager.setInfoText("Post detail");
+      }
+    }
+  }
+  class ProfileUIAdapter {
+    constructor() {
+      this.uiManager = null;
+      this.handler = null;
+    }
+    /**
+     * Set reference to UIManager
+     */
+    setUIManager(uiManager) {
+      this.uiManager = uiManager;
+    }
+    /**
+     * Activate this adapter - called when switching to profile context
+     * @param {object} handler - The ProfileItemHandler instance
+     */
+    activate(handler) {
+      console.log("[ProfileUIAdapter] activate called", { handler: handler?.name, hasMethod: !!handler?.setUIManagerStatusBar });
+      this.handler = handler;
+      this.uiManager.getToolbarDiv().hide();
+      this.uiManager.getStatusBar().show();
+      this.uiManager.getStatusBarLeft().empty();
+      this.updateInfoText();
+      if (handler && handler.setUIManagerStatusBar) {
+        console.log("[ProfileUIAdapter] Calling handler.setUIManagerStatusBar");
+        handler.setUIManagerStatusBar(this.uiManager.getStatusBar(), this.uiManager.getStatusBarLeft());
+      } else {
+        console.log("[ProfileUIAdapter] handler or setUIManagerStatusBar not available");
+      }
+    }
+    /**
+     * Update info text with profile username
+     */
+    updateInfoText() {
+      const path = window.location.pathname;
+      const match2 = path.match(/\/profile\/([^/]+)/);
+      if (match2) {
+        const handle2 = match2[1];
+        const displayName = handle2.startsWith("did:") ? "Profile" : `@${handle2}`;
+        this.uiManager.setInfoText(displayName);
+      } else {
+        this.uiManager.setInfoText("Profile");
+      }
+    }
+    /**
+     * Deactivate this adapter - called when switching away from profile context
+     */
+    deactivate() {
+      const statusBar = this.uiManager.getStatusBar();
+      statusBar.find(".feed-map-wrapper").remove();
+      statusBar.removeClass("has-feed-map");
+      this.uiManager.getToolbarDiv().show();
+      this.uiManager.getStatusBar().show();
+      this.handler = null;
     }
   }
   const { waitForElement, observeVisibilityChange } = utils$1;
@@ -74766,6 +75552,22 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       state.rules = parseRulesConfig(config.get("rulesConfig"));
       initToastNotifications(api);
+      const uiManager = new UIManager(config, state);
+      const defaultAdapter = new DefaultUIAdapter();
+      const feedAdapter = new FeedUIAdapter();
+      const postAdapter = new PostUIAdapter();
+      const profileAdapter = new ProfileUIAdapter();
+      uiManager.registerAdapter("default", defaultAdapter);
+      uiManager.registerAdapter("input", defaultAdapter);
+      uiManager.registerAdapter("feed", feedAdapter);
+      uiManager.registerAdapter("post", postAdapter);
+      uiManager.registerAdapter("profile", profileAdapter);
+      uiManager.initialize().then(() => {
+        console.log("[bsky-navigator] UIManager initialized");
+        if (context && uiManager.isInitialized()) {
+          uiManager.setContext(context, handlers[context] || null);
+        }
+      });
       if (config.get("showDebuggingInfo")) {
         let appendLog = function(type, args) {
           const message2 = `[${type.toUpperCase()}] ${args.map((arg) => typeof arg === "object" ? JSON.stringify(arg, null, 2) : arg).join(" ")}`;
@@ -74986,31 +75788,46 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         });
       });
-      function setContext(ctx) {
-        if (context == ctx) {
-          return;
+      function setContext(ctx, forceRefresh = false) {
+        console.log("[bsky-navigator] setContext called with:", ctx, "current:", context, "forceRefresh:", forceRefresh);
+        const contextChanged = context !== ctx;
+        if (contextChanged) {
+          context = ctx;
+          for (const [name, handler] of Object.entries(handlers)) {
+            handler.deactivate();
+          }
+          if (handlers[context]) {
+            handlers[context].activate();
+          }
         }
-        context = ctx;
-        for (const [name, handler] of Object.entries(handlers)) {
-          handler.deactivate();
-        }
-        if (handlers[context]) {
-          handlers[context].activate();
+        if ((contextChanged || forceRefresh) && uiManager.isInitialized()) {
+          console.log("[bsky-navigator] Calling uiManager.setContext with:", ctx);
+          uiManager.setContext(ctx, handlers[ctx] || null);
         }
       }
       function setContextFromUrl() {
-        current_url = window.location.href;
+        const newUrl = window.location.href;
+        const urlChanged = newUrl !== current_url;
+        current_url = newUrl;
+        let matched = false;
         for (const [name, handler] of Object.entries(handlers)) {
           if (handler.isActive()) {
-            setContext(name);
+            setContext(name, urlChanged);
+            matched = true;
             break;
           }
+        }
+        if (!matched) {
+          setContext("default", urlChanged);
         }
       }
       function onFocus(e2) {
         const target2 = e2.target;
         if (typeof target2.tagName === "undefined") {
           return false;
+        }
+        if ($(target2).closest("#bsky-navigator-toolbar").length) {
+          return;
         }
         const targetTagName = target2.tagName.toLowerCase();
         switch (targetTagName) {

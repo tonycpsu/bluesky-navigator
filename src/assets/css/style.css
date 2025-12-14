@@ -169,7 +169,7 @@ div#bsky-navigator-toolbar {
     position: sticky;
     top: 0;
     width: 100%;
-    background-color: inherit;
+    background-color: #ffffff;
     border-bottom: 1px solid rgb(192, 192, 192);
     z-index: var(--z-toolbar);
     overflow: visible;
@@ -5274,6 +5274,102 @@ div#statusBar.has-feed-map {
 
   .bsky-nav-toast-close:hover {
     background: #4b5563;
+    color: #9ca3af;
+  }
+}
+
+/* ==========================================================================
+   Global UIManager Toolbar and Status Bar
+   These styles apply to the persistent toolbar/status bar shown on all pages
+   ========================================================================== */
+
+/* Global toolbar - positioned within main content area */
+.bsky-navigator-global-toolbar {
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  width: 100%;
+  background-color: #ffffff;
+  border-bottom: 1px solid rgb(192, 192, 192);
+  z-index: var(--z-toolbar);
+  overflow: visible;
+}
+
+/* Global status bar - fixed at bottom of viewport */
+.bsky-navigator-global-statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  min-height: 32px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: var(--z-raised);
+  align-items: center;
+  background-color: #ffffff;
+  bottom: 0;
+  font-size: 1em;
+  padding: 1px;
+  border-top: 1px solid rgb(192, 192, 192);
+  overflow: clip;
+}
+
+/* Mobile status bar positioning - above mobile nav */
+@media only screen and (max-width: 800px) {
+  .bsky-navigator-global-statusbar {
+    bottom: 58px;
+  }
+}
+
+/* Dark mode support for global UI elements */
+@media (prefers-color-scheme: dark) {
+  .bsky-navigator-global-toolbar {
+    background-color: #29333d;
+  }
+
+  .bsky-navigator-global-statusbar {
+    background-color: #29333d;
+  }
+}
+
+/* Global status bar section styling (mirrors #statusBarLeft/Center/Right) */
+.global-statusbar-left {
+  display: flex;
+  flex: 1;
+  text-align: left;
+  padding: 1px;
+}
+
+.global-statusbar-center {
+  display: flex;
+  flex: 1 1 auto;
+  text-align: center;
+  justify-content: center;
+  padding: 1px;
+}
+
+.global-statusbar-right {
+  display: flex;
+  flex: 1;
+  text-align: right;
+  justify-content: flex-end;
+  padding: 1px;
+}
+
+/* Global info indicator styling */
+.global-info-indicator {
+  display: flex;
+  justify-content: center;
+}
+
+.global-info-indicator-text {
+  font-size: 0.9em;
+  color: #374151;
+}
+
+@media (prefers-color-scheme: dark) {
+  .global-info-indicator-text {
     color: #9ca3af;
   }
 }

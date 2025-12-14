@@ -42,9 +42,12 @@ export class Handler {
       if (event.code === 'KeyH') {
         event.preventDefault();
         $("nav a[aria-label='Home']")[0].click();
+      } else if (event.code === 'KeyE') {
+        event.preventDefault();
+        $("nav a[aria-label='Explore']")[0].click();
       } else if (event.code === 'KeyS') {
         event.preventDefault();
-        $("nav a[aria-label='Search']")[0].click();
+        $("nav a[aria-label='Saved']")[0].click();
       } else if (event.code === 'KeyN') {
         event.preventDefault();
         $("nav a[aria-label='Notifications']")[0].click();

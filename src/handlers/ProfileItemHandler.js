@@ -8,6 +8,60 @@ import { FeedItemHandler } from './FeedItemHandler.js';
 export class ProfileItemHandler extends FeedItemHandler {
   constructor(name, config, state, api, selector) {
     super(name, config, state, api, selector);
+    this.uiManagerStatusBar = null;
+    this.uiManagerStatusBarLeft = null;
+    this._toolbarObserver = null;
+  }
+
+  /**
+   * Called by ProfileUIAdapter to provide UIManager's status bar
+   * This is called after activate(), so we need to setup feed map here
+   */
+  setUIManagerStatusBar(statusBar, statusBarLeft) {
+    console.log('[ProfileItemHandler] setUIManagerStatusBar called', {
+      statusBar: statusBar?.length,
+      statusBarLeft: statusBarLeft?.length,
+      hasFeedMap: statusBar?.find('.feed-map-wrapper').length,
+    });
+    this.uiManagerStatusBar = statusBar;
+    this.uiManagerStatusBarLeft = statusBarLeft;
+
+    // Now that we have UIManager's status bar, setup the feed map
+    if (!statusBar.find('.feed-map-wrapper').length) {
+      console.log('[ProfileItemHandler] Adding feed map to UIManager status bar');
+      this.addFeedMapToStatusBar(statusBar);
+    } else {
+      console.log('[ProfileItemHandler] Feed map already exists');
+    }
+
+    // Load items with retry - profile feed takes time to render
+    this.loadItemsWithRetry();
+  }
+
+  /**
+   * Load items with retry for profile pages where feed loads asynchronously
+   */
+  loadItemsWithRetry() {
+    let retryCount = 0;
+    const maxRetries = 10;
+
+    const tryLoad = () => {
+      this.loadItems();
+      const itemCount = this.items?.length || 0;
+      console.log('[ProfileItemHandler] loadItemsWithRetry attempt', retryCount, 'found', itemCount, 'items');
+
+      if (itemCount === 0 && retryCount < maxRetries) {
+        retryCount++;
+        setTimeout(tryLoad, 300);
+      } else if (itemCount > 0) {
+        // Items found - update feed map
+        console.log('[ProfileItemHandler] Items loaded, updating scroll position');
+        this.updateScrollPosition(true);
+      }
+    };
+
+    // Initial delay to let profile feed render
+    setTimeout(tryLoad, 500);
   }
 
   activate() {
@@ -16,11 +70,185 @@ export class ProfileItemHandler extends FeedItemHandler {
   }
 
   deactivate() {
+    // Disconnect any pending toolbar observer
+    if (this._toolbarObserver) {
+      this._toolbarObserver.disconnect();
+      this._toolbarObserver = null;
+    }
+
+    // Clear feed map references before calling super (which removes elements)
+    this.feedMap = null;
+    this.feedMapWrapper = null;
+    this.feedMapZoom = null;
+
     super.deactivate();
+
+    this.uiManagerStatusBar = null;
+    this.uiManagerStatusBarLeft = null;
   }
 
   isActive() {
     return window.location.pathname.match(/^\/profile\//);
+  }
+
+  /**
+   * Override refreshToolbars to use profile-specific selectors
+   * Uses UIManager's fixed status bar instead of creating our own
+   */
+  refreshToolbars() {
+    // Disconnect any previous observer
+    if (this._toolbarObserver) {
+      this._toolbarObserver.disconnect();
+      this._toolbarObserver = null;
+    }
+
+    // Prevent multiple simultaneous setup attempts
+    if (this._settingUpToolbars) {
+      return;
+    }
+
+    // If we already have a toolbar reference and it's in the DOM, we're done
+    if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+      this.setSortIcons();
+      return;
+    }
+
+    // Remove any existing toolbar (stale from previous handler)
+    $('#bsky-navigator-toolbar').remove();
+
+    // Try to insert immediately if element exists
+    const profileFeedTabs = $('div[data-testid="profilePager"]').first();
+    if (profileFeedTabs.length) {
+      this._settingUpToolbars = true;
+      this.addToolbar(profileFeedTabs);
+      this._settingUpToolbars = false;
+      this.setSortIcons();
+      this.applyProfileWidth();
+      return;
+    }
+
+    // Use MutationObserver to wait for profilePager to appear
+    this._toolbarObserver = new MutationObserver((mutations, obs) => {
+      // Skip if already setting up
+      if (this._settingUpToolbars) {
+        return;
+      }
+
+      // If we already have a toolbar reference and it's in the DOM, we're done
+      if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+        obs.disconnect();
+        this._toolbarObserver = null;
+        return;
+      }
+
+      // Remove any existing toolbar (stale)
+      $('#bsky-navigator-toolbar').remove();
+
+      const profilePager = $('div[data-testid="profilePager"]').first();
+      if (profilePager.length) {
+        obs.disconnect();
+        this._toolbarObserver = null;
+        this._settingUpToolbars = true;
+        this.addToolbar(profilePager);
+        this._settingUpToolbars = false;
+        this.setSortIcons();
+        this.applyProfileWidth();
+      }
+    });
+
+    // Observe the document for added nodes
+    this._toolbarObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    // Timeout fallback - disconnect after 10 seconds
+    setTimeout(() => {
+      if (this._toolbarObserver) {
+        this._toolbarObserver.disconnect();
+        this._toolbarObserver = null;
+      }
+    }, 10000);
+  }
+
+  /**
+   * Add feed map elements to an existing status bar (UIManager's)
+   */
+  addFeedMapToStatusBar(statusBar) {
+    const indicatorPosition = this.config.get('feedMapPosition');
+    if (indicatorPosition !== 'Bottom status bar') {
+      return; // Feed map not configured for status bar
+    }
+
+    const indicatorStyle = this.config.get('feedMapStyle') || 'Advanced';
+    const isAdvancedStyle = indicatorStyle === 'Advanced';
+    const styleClass = isAdvancedStyle ? 'feed-map-advanced' : 'feed-map-basic';
+    const indicatorTheme = this.config.get('feedMapTheme') || 'Default';
+    const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
+    const indicatorScale = parseInt(this.config.get('feedMapScale'), 10) || 100;
+    const scaleValue = indicatorScale / 100;
+    const animationInterval = parseInt(this.config.get('feedMapAnimationSpeed'), 10);
+    const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
+    const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
+
+    // Create feed map elements (same as FeedItemHandler.addStatusBar)
+    this.feedMapContainer = $(`<div class="feed-map-container"></div>`);
+    this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+    this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+    this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
+    this.feedMapContainer.append(this.feedMapLabelStart);
+    this.feedMapContainer.append(this.feedMap);
+    this.feedMapContainer.append(this.feedMapLabelEnd);
+
+    this.feedMapZoomHighlight = this.feedMap.find('.feed-map-position-zoom-highlight');
+    this.feedMapWrapper = $(`<div class="feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
+    this.feedMapWrapper.append(this.feedMapContainer);
+
+    this.feedMapConnector = $(`<div class="feed-map-connector">
+      <svg class="feed-map-connector-svg" preserveAspectRatio="none">
+        <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
+        <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
+      </svg>
+    </div>`);
+    this.feedMapWrapper.append(this.feedMapConnector);
+
+    this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
+    this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+    this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+    this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
+    this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
+    this.feedMapZoomContainer.append(this.feedMapZoom);
+    this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
+    this.feedMapWrapper.append(this.feedMapZoomContainer);
+
+    // Prepend to status bar (before other sections)
+    statusBar.prepend(this.feedMapWrapper);
+    statusBar.addClass('has-feed-map');
+
+    // Setup event handlers
+    this.setupScrollIndicatorZoomClick();
+    this.setupScrollIndicatorClick();
+    this.setupScrollIndicatorScroll();
+    this.setupFeedMapTooltipHandlers(this.feedMap);
+    this.setupFeedMapTooltipHandlers(this.feedMapZoom);
+
+    // Store reference to status bar for other operations
+    this.statusBar = statusBar;
+  }
+
+  /**
+   * Apply configured width to profile page elements
+   */
+  applyProfileWidth() {
+    const contentWidth = this.config.get('postWidthDesktop') || 600;
+    if (contentWidth === 600) {
+      return; // Default width, no changes needed
+    }
+
+    const profilePager = $('div[data-testid="profilePager"]');
+    if (profilePager.length) {
+      profilePager.css('width', contentWidth + 'px');
+    }
   }
 
   handleInput(event) {

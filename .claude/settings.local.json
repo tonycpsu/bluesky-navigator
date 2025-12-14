@@ -14,7 +14,16 @@
       "Bash(mdfind:*)",
       "Bash(unzip:*)",
       "Skill(superpowers:brainstorming)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "WebSearch",
+      "WebFetch(domain:www.svgrepo.com)",
+      "Bash(ls:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(grep:*)",
+      "WebFetch(domain:github.com)",
+      "SlashCommand(/commit-commands:commit)",
+      "Bash(npm run dev:*)"
     ],
     "deny": [],
     "ask": []

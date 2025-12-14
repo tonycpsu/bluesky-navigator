@@ -19,6 +19,12 @@ import {
   ProfileItemHandler,
 } from './handlers/index.js';
 
+import UIManager from './components/UIManager.js';
+import DefaultUIAdapter from './components/ui-adapters/DefaultUIAdapter.js';
+import FeedUIAdapter from './components/ui-adapters/FeedUIAdapter.js';
+import PostUIAdapter from './components/ui-adapters/PostUIAdapter.js';
+import ProfileUIAdapter from './components/ui-adapters/ProfileUIAdapter.js';
+
 GM_addStyle(style);
 
 // Show fullscreen loading indicator immediately on first load
@@ -815,6 +821,29 @@ function getScreenFromElement(element) {
     // Initialize toast notification system (pass API if available)
     initToastNotifications(api);
 
+    // Initialize UIManager for global toolbar and status bar
+    const uiManager = new UIManager(config, state);
+
+    // Register UI adapters
+    const defaultAdapter = new DefaultUIAdapter();
+    const feedAdapter = new FeedUIAdapter();
+    const postAdapter = new PostUIAdapter();
+    const profileAdapter = new ProfileUIAdapter();
+    uiManager.registerAdapter('default', defaultAdapter);
+    uiManager.registerAdapter('input', defaultAdapter); // Use default for input context
+    uiManager.registerAdapter('feed', feedAdapter);
+    uiManager.registerAdapter('post', postAdapter);
+    uiManager.registerAdapter('profile', profileAdapter);
+
+    // Initialize UIManager once main element is available
+    uiManager.initialize().then(() => {
+      console.log('[bsky-navigator] UIManager initialized');
+      // Set initial context based on current URL/page
+      if (context && uiManager.isInitialized()) {
+        uiManager.setContext(context, handlers[context] || null);
+      }
+    });
+
     if (config.get('showDebuggingInfo')) {
       const logContainer = $(`<div id="logContainer"></div>`);
       $('body').append(logContainer);
@@ -1075,27 +1104,47 @@ function getScreenFromElement(element) {
       });
     });
 
-    function setContext(ctx) {
-      if (context == ctx) {
-        return;
+    function setContext(ctx, forceRefresh = false) {
+      console.log('[bsky-navigator] setContext called with:', ctx, 'current:', context, 'forceRefresh:', forceRefresh);
+
+      const contextChanged = context !== ctx;
+
+      if (contextChanged) {
+        context = ctx;
+        for (const [name, handler] of Object.entries(handlers)) {
+          handler.deactivate();
+        }
+        if (handlers[context]) {
+          handlers[context].activate();
+        }
       }
-      context = ctx;
-      for (const [name, handler] of Object.entries(handlers)) {
-        handler.deactivate();
-      }
-      if (handlers[context]) {
-        handlers[context].activate();
+
+      // Always notify UIManager if context changed OR forceRefresh requested
+      // This handles URL changes within the same context (e.g., notifications -> search)
+      if ((contextChanged || forceRefresh) && uiManager.isInitialized()) {
+        console.log('[bsky-navigator] Calling uiManager.setContext with:', ctx);
+        uiManager.setContext(ctx, handlers[ctx] || null);
       }
     }
 
     function setContextFromUrl() {
-      current_url = window.location.href;
+      const newUrl = window.location.href;
+      const urlChanged = newUrl !== current_url;
+      current_url = newUrl;
 
+      let matched = false;
       for (const [name, handler] of Object.entries(handlers)) {
         if (handler.isActive()) {
-          setContext(name);
+          setContext(name, urlChanged);
+          matched = true;
           break;
         }
+      }
+
+      // If no handler matched, use 'default' context for other pages
+      // (notifications, search, settings, etc.)
+      if (!matched) {
+        setContext('default', urlChanged);
       }
     }
 
@@ -1103,6 +1152,10 @@ function getScreenFromElement(element) {
       const target = e.target;
       if (typeof target.tagName === 'undefined') {
         return false;
+      }
+      // Ignore focus events on our toolbar elements - don't switch context
+      if ($(target).closest('#bsky-navigator-toolbar').length) {
+        return;
       }
       const targetTagName = target.tagName.toLowerCase();
       switch (targetTagName) {

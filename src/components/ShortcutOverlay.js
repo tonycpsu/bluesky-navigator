@@ -6,6 +6,18 @@ import { announceToScreenReader, getAnimationDuration } from '../utils.js';
  * Keyboard shortcuts organized by category
  */
 const SHORTCUTS = {
+  'Global Navigation': [
+    { keys: ['Alt+H'], description: 'Home' },
+    { keys: ['Alt+E'], description: 'Explore (Search)' },
+    { keys: ['Alt+S'], description: 'Saved' },
+    { keys: ['Alt+N'], description: 'Notifications' },
+    { keys: ['Alt+M'], description: 'Messages' },
+    { keys: ['Alt+F'], description: 'Feeds' },
+    { keys: ['Alt+L'], description: 'Lists' },
+    { keys: ['Alt+P'], description: 'Profile' },
+    { keys: ['Alt+,'], description: 'Settings' },
+    { keys: ['Alt+.'], description: 'Extension preferences' },
+  ],
   Navigation: [
     { keys: ['j', '↓'], description: 'Next item' },
     { keys: ['k', '↑'], description: 'Previous item' },

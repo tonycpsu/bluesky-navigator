@@ -67,6 +67,111 @@ export class ProfileItemHandler extends FeedItemHandler {
   activate() {
     this.setIndex(0);
     super.activate();
+
+    // Start watching for the profile buttons container
+    this._watchForProfileButtons();
+  }
+
+  /**
+   * Watch for profile buttons container and insert our button when ready
+   */
+  _watchForProfileButtons() {
+    // Disconnect any existing observer
+    if (this._profileButtonObserver) {
+      this._profileButtonObserver.disconnect();
+      this._profileButtonObserver = null;
+    }
+
+    // Function to try inserting the button
+    const tryInsert = () => {
+      // Check if already present AND visible
+      const existingBtn = $('.bsky-nav-profile-rules-btn');
+      if (existingBtn.length) {
+        const rect = existingBtn[0].getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          return true; // Already exists and visible
+        }
+        // Exists but not visible - remove orphaned element
+        existingBtn.closest('.bsky-nav-profile-rules-wrapper').remove();
+        existingBtn.remove();
+      }
+
+      // Find the "More options" button - use querySelectorAll and filter to the connected, visible one
+      // (jQuery can return stale elements from previous pages on SPA navigation)
+      const allMoreOptionsBtns = document.querySelectorAll('button[data-testid="profileHeaderDropdownBtn"]');
+
+      let moreOptionsBtn = null;
+      for (const btn of allMoreOptionsBtns) {
+        const rect = btn.getBoundingClientRect();
+        if (btn.isConnected && rect.width > 0 && rect.height > 0) {
+          moreOptionsBtn = $(btn);
+          break;
+        }
+      }
+
+      if (!moreOptionsBtn) {
+        return false;
+      }
+
+      // Get the wrapper div around the more options button
+      const moreOptionsWrapper = moreOptionsBtn.parent();
+      if (!moreOptionsWrapper.length) return false;
+
+      // Extract handle from URL
+      const path = window.location.pathname;
+      const handleMatch = path.match(/^\/profile\/([^/]+)/);
+      if (!handleMatch) return false;
+      const handle = handleMatch[1];
+
+      // Create button with same structure as notification button (wrapped in div)
+      const addButton = $(`
+        <div class="css-g5y9jx bsky-nav-profile-rules-wrapper">
+          <button class="bsky-nav-profile-rules-btn" aria-label="Add @${handle} to filter rules" title="Add @${handle} to filter rules" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </button>
+        </div>
+      `);
+
+      // Insert before the more options wrapper (so it appears between follow and more options)
+      moreOptionsWrapper.before(addButton);
+
+      // Verify the button is actually visible after inserting
+      const insertedBtn = addButton.find('.bsky-nav-profile-rules-btn')[0];
+      const insertedRect = insertedBtn.getBoundingClientRect();
+
+      if (insertedRect.width === 0 || insertedRect.height === 0) {
+        // Remove it and try again later
+        addButton.remove();
+        return false;
+      }
+
+      // Handle click
+      addButton.find('.bsky-nav-profile-rules-btn').on('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const btnRect = e.currentTarget.getBoundingClientRect();
+        this.showAddToRulesDropdown(btnRect, handle);
+      });
+
+      return true;
+    };
+
+    // Try immediately
+    if (tryInsert()) return;
+
+    // Set up observer to keep trying
+    this._profileButtonObserver = new MutationObserver(() => {
+      if (tryInsert()) {
+        // Keep observer running to re-insert if React removes our button
+      }
+    });
+
+    this._profileButtonObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
   }
 
   deactivate() {
@@ -75,6 +180,15 @@ export class ProfileItemHandler extends FeedItemHandler {
       this._toolbarObserver.disconnect();
       this._toolbarObserver = null;
     }
+
+    // Disconnect profile button observer
+    if (this._profileButtonObserver) {
+      this._profileButtonObserver.disconnect();
+      this._profileButtonObserver = null;
+    }
+
+    // Remove the profile rules button
+    $('.bsky-nav-profile-rules-wrapper').remove();
 
     // Clear feed map references before calling super (which removes elements)
     this.feedMap = null;

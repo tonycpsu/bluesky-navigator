@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+478.a23a8a04
+// @version     1.0.31+479.3b6824bf
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45563,6 +45563,7 @@ if (cid) {
       this.previousActiveElement = document.activeElement;
       this.isVisible = true;
       this.pendingChanges = {};
+      this.prefillRule = null;
       Object.entries(CONFIG_SCHEMA).forEach(([tab, schema2]) => {
         if (schema2.collapsed) {
           this.collapsedSections[tab] = true;
@@ -45581,6 +45582,47 @@ if (cid) {
         }
       };
       document.addEventListener("keydown", this.escapeHandler, true);
+    }
+    /**
+     * Open the modal directly to Rules tab with a pre-filled rule for an author
+     * @param {string} handle - The author handle (with or without @)
+     * @param {string} categoryName - Optional category name (defaults to 'favorites')
+     */
+    showWithRule(handle2, categoryName = "favorites") {
+      const normalizedHandle = handle2.startsWith("@") ? handle2 : `@${handle2}`;
+      this.prefillRule = {
+        handle: normalizedHandle,
+        categoryName
+      };
+      this.activeTab = "Rules";
+      this.rulesSubTab = "visual";
+      this.show();
+      if (this.prefillRule) {
+        this.addPrefillRule();
+      }
+    }
+    /**
+     * Add the pre-filled rule to the visual editor
+     */
+    addPrefillRule() {
+      if (!this.prefillRule) return;
+      const { handle: handle2, categoryName } = this.prefillRule;
+      let categoryIndex = this.parsedRules.findIndex((c) => c.name === categoryName);
+      if (categoryIndex === -1) {
+        this.parsedRules.push({ name: categoryName, rules: [] });
+        categoryIndex = this.parsedRules.length - 1;
+      }
+      const category = this.parsedRules[categoryIndex];
+      const ruleExists = category.rules.some(
+        (r) => r.type === "from" && r.value.toLowerCase() === handle2.toLowerCase()
+      );
+      if (!ruleExists) {
+        category.rules.push({ action: "allow", type: "from", value: handle2 });
+        this.syncVisualToRaw();
+        this.refreshVisualEditor();
+      }
+      this.collapsedCategories[categoryIndex] = false;
+      this.prefillRule = null;
     }
     hide() {
       if (!this.isVisible || !this.modalEl) return;
@@ -51515,6 +51557,34 @@ div#statusBar.has-feed-map {
 }
 
 .bsky-nav-add-to-rules-btn svg {
+  pointer-events: none;
+}
+
+/* Add to Rules Button (Profile Page) - inline with profile buttons */
+.bsky-nav-profile-rules-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 33px;
+  height: 33px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background-color: rgb(239, 242, 246);
+  color: rgb(64, 81, 104);
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.bsky-nav-profile-rules-btn:hover {
+  background-color: rgb(220, 226, 235);
+}
+
+.bsky-nav-profile-rules-btn:active {
+  transform: scale(0.95);
+}
+
+.bsky-nav-profile-rules-btn svg {
   pointer-events: none;
 }
 
@@ -74396,12 +74466,87 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     activate() {
       this.setIndex(0);
       super.activate();
+      this._watchForProfileButtons();
+    }
+    /**
+     * Watch for profile buttons container and insert our button when ready
+     */
+    _watchForProfileButtons() {
+      if (this._profileButtonObserver) {
+        this._profileButtonObserver.disconnect();
+        this._profileButtonObserver = null;
+      }
+      const tryInsert = () => {
+        const existingBtn = $(".bsky-nav-profile-rules-btn");
+        if (existingBtn.length) {
+          const rect = existingBtn[0].getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            return true;
+          }
+          existingBtn.closest(".bsky-nav-profile-rules-wrapper").remove();
+          existingBtn.remove();
+        }
+        const allMoreOptionsBtns = document.querySelectorAll('button[data-testid="profileHeaderDropdownBtn"]');
+        let moreOptionsBtn = null;
+        for (const btn of allMoreOptionsBtns) {
+          const rect = btn.getBoundingClientRect();
+          if (btn.isConnected && rect.width > 0 && rect.height > 0) {
+            moreOptionsBtn = $(btn);
+            break;
+          }
+        }
+        if (!moreOptionsBtn) {
+          return false;
+        }
+        const moreOptionsWrapper = moreOptionsBtn.parent();
+        if (!moreOptionsWrapper.length) return false;
+        const path = window.location.pathname;
+        const handleMatch = path.match(/^\/profile\/([^/]+)/);
+        if (!handleMatch) return false;
+        const handle2 = handleMatch[1];
+        const addButton = $(`
+        <div class="css-g5y9jx bsky-nav-profile-rules-wrapper">
+          <button class="bsky-nav-profile-rules-btn" aria-label="Add @${handle2} to filter rules" title="Add @${handle2} to filter rules" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </button>
+        </div>
+      `);
+        moreOptionsWrapper.before(addButton);
+        const insertedBtn = addButton.find(".bsky-nav-profile-rules-btn")[0];
+        const insertedRect = insertedBtn.getBoundingClientRect();
+        if (insertedRect.width === 0 || insertedRect.height === 0) {
+          addButton.remove();
+          return false;
+        }
+        addButton.find(".bsky-nav-profile-rules-btn").on("click", (e2) => {
+          e2.preventDefault();
+          e2.stopPropagation();
+          const btnRect = e2.currentTarget.getBoundingClientRect();
+          this.showAddToRulesDropdown(btnRect, handle2);
+        });
+        return true;
+      };
+      if (tryInsert()) return;
+      this._profileButtonObserver = new MutationObserver(() => {
+        if (tryInsert()) ;
+      });
+      this._profileButtonObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
     }
     deactivate() {
       if (this._toolbarObserver) {
         this._toolbarObserver.disconnect();
         this._toolbarObserver = null;
       }
+      if (this._profileButtonObserver) {
+        this._profileButtonObserver.disconnect();
+        this._profileButtonObserver = null;
+      }
+      $(".bsky-nav-profile-rules-wrapper").remove();
       this.feedMap = null;
       this.feedMapWrapper = null;
       this.feedMapZoom = null;

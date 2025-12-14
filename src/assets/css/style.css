@@ -4765,6 +4765,34 @@ div#statusBar.has-feed-map {
   pointer-events: none;
 }
 
+/* Add to Rules Button (Profile Page) - inline with profile buttons */
+.bsky-nav-profile-rules-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 33px;
+  height: 33px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background-color: rgb(239, 242, 246);
+  color: rgb(64, 81, 104);
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.bsky-nav-profile-rules-btn:hover {
+  background-color: rgb(220, 226, 235);
+}
+
+.bsky-nav-profile-rules-btn:active {
+  transform: scale(0.95);
+}
+
+.bsky-nav-profile-rules-btn svg {
+  pointer-events: none;
+}
+
 /* Rules Dropdown */
 .bsky-nav-rules-dropdown {
   background: white;

@@ -665,6 +665,7 @@ export class ConfigModal {
     this.previousActiveElement = document.activeElement;
     this.isVisible = true;
     this.pendingChanges = {};
+    this.prefillRule = null; // Clear any pre-fill data
 
     // Initialize collapsed state from schema
     Object.entries(CONFIG_SCHEMA).forEach(([tab, schema]) => {
@@ -689,6 +690,73 @@ export class ConfigModal {
       }
     };
     document.addEventListener('keydown', this.escapeHandler, true);
+  }
+
+  /**
+   * Open the modal directly to Rules tab with a pre-filled rule for an author
+   * @param {string} handle - The author handle (with or without @)
+   * @param {string} categoryName - Optional category name (defaults to 'favorites')
+   */
+  showWithRule(handle, categoryName = 'favorites') {
+    // Ensure handle starts with @
+    const normalizedHandle = handle.startsWith('@') ? handle : `@${handle}`;
+
+    // Store pre-fill data for when visual editor renders
+    this.prefillRule = {
+      handle: normalizedHandle,
+      categoryName: categoryName
+    };
+
+    // Set active tab to Rules before showing
+    this.activeTab = 'Rules';
+    this.rulesSubTab = 'visual';
+
+    this.show();
+
+    // After modal is created, add the pre-filled rule
+    if (this.prefillRule) {
+      this.addPrefillRule();
+    }
+  }
+
+  /**
+   * Add the pre-filled rule to the visual editor
+   */
+  addPrefillRule() {
+    if (!this.prefillRule) return;
+
+    const { handle, categoryName } = this.prefillRule;
+
+    // Find or create the category
+    let categoryIndex = this.parsedRules.findIndex(c => c.name === categoryName);
+    if (categoryIndex === -1) {
+      // Create new category
+      this.parsedRules.push({ name: categoryName, rules: [] });
+      categoryIndex = this.parsedRules.length - 1;
+    }
+
+    // Check if rule already exists
+    const category = this.parsedRules[categoryIndex];
+    const ruleExists = category.rules.some(r =>
+      r.type === 'from' && r.value.toLowerCase() === handle.toLowerCase()
+    );
+
+    if (!ruleExists) {
+      // Add the new rule
+      category.rules.push({ action: 'allow', type: 'from', value: handle });
+
+      // Sync to raw textarea
+      this.syncVisualToRaw();
+
+      // Refresh visual editor to show the new rule
+      this.refreshVisualEditor();
+    }
+
+    // Expand the category if collapsed
+    this.collapsedCategories[categoryIndex] = false;
+
+    // Clear prefill data
+    this.prefillRule = null;
   }
 
   hide() {

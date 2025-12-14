@@ -845,13 +845,13 @@ div.item-banner {
     text-align: center;
 }
 
-/* Fixed sidecar toggle button */
+/* Fixed sidecar toggle button - attached to selected item */
 .fixed-sidecar-toggle {
-    position: fixed;
-    top: 110px;
-    right: 16px;
-    width: 48px;
-    height: 48px;
+    position: absolute;
+    top: 8px;
+    left: calc(100% + 8px);
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     background-color: var(--background-color, white);
     border: 1px solid var(--border-color, #e5e7eb);

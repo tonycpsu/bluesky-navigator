@@ -40,6 +40,10 @@ class DefaultUIAdapter {
     this.uiManager.hideToolbarRow1();
     this.uiManager.hideToolbarRow2();
 
+    // Hide thread context toggle/panel (only shown on feed/profile/post pages)
+    $('#fixed-sidecar-toggle').removeClass('visible');
+    $('#fixed-sidecar-panel').removeClass('visible');
+
     // Clear status bar left section (right section has persistent preferences icon)
     this.uiManager.getStatusBarLeft().empty();
 

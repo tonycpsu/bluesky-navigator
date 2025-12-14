@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+476.e879eac7
+// @version     1.0.31+477.5deab77e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47598,13 +47598,13 @@ div.item-banner {
     text-align: center;
 }
 
-/* Fixed sidecar toggle button */
+/* Fixed sidecar toggle button - attached to selected item */
 .fixed-sidecar-toggle {
-    position: fixed;
-    top: 110px;
-    right: 16px;
-    width: 48px;
-    height: 48px;
+    position: absolute;
+    top: 8px;
+    left: calc(100% + 8px);
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     background-color: var(--background-color, white);
     border: 1px solid var(--border-color, #e5e7eb);
@@ -68671,7 +68671,6 @@ div#statusBar.has-feed-map {
       this.threadNavList = null;
       this.postId = this.postIdForItem(this.selectedItem);
       this.updateInfoIndicator();
-      $("#fixed-sidecar-toggle").removeClass("visible");
     }
     get index() {
       return this._index;
@@ -68957,7 +68956,7 @@ div#statusBar.has-feed-map {
     `);
       this.fixedSidecarToggle = $(`
       <button id="fixed-sidecar-toggle" class="fixed-sidecar-toggle" aria-label="Show thread context" title="Show thread context (t)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           <line x1="9" y1="10" x2="15" y2="10"/>
         </svg>
@@ -68965,29 +68964,17 @@ div#statusBar.has-feed-map {
       </button>
     `);
       $("body").append(this.fixedSidecarPanel);
-      $("body").append(this.fixedSidecarToggle);
       this.fixedSidecarPanel.find(".fixed-sidecar-panel-close").on("click", () => {
         this.config.set("fixedSidecarVisible", false);
         this.config.save();
         this.hideFixedSidecarPanel();
       });
-      this.fixedSidecarToggle.on("click", async () => {
+      $(document).on("click", "#fixed-sidecar-toggle", async () => {
         await this.openFixedSidecarPanel();
       });
       $(window).on("resize.fixedSidecar", () => {
         if ($("#fixed-sidecar-panel").hasClass("visible")) {
           this.positionFixedSidecarPanel();
-        } else if ($("#fixed-sidecar-toggle").hasClass("visible")) {
-          this.positionFixedSidecarToggle();
-        }
-      });
-      let scrollTimeout;
-      $(window).on("scroll.fixedSidecar", () => {
-        if ($("#fixed-sidecar-toggle").hasClass("visible")) {
-          if (scrollTimeout) cancelAnimationFrame(scrollTimeout);
-          scrollTimeout = requestAnimationFrame(() => {
-            this.positionFixedSidecarToggle();
-          });
         }
       });
     }
@@ -69042,44 +69029,23 @@ div#statusBar.has-feed-map {
       $("#fixed-sidecar-toggle").addClass("visible");
     }
     /**
-     * Position the toggle button aligned with the top of the selected post
+     * Attach the toggle button to the selected item so it scrolls with it
      */
     positionFixedSidecarToggle() {
-      const toggle = $("#fixed-sidecar-toggle");
-      if (!toggle.length) return;
+      const toggle = this.fixedSidecarToggle;
+      if (!toggle || !toggle.length) return;
       const $item = this.selectedItem;
       if (!$item || !$item.length) {
-        toggle.css({
-          left: "auto",
-          right: "16px",
-          top: "110px"
-        });
+        toggle.detach();
         return;
       }
-      const itemEl = $item[0];
-      const itemRect = itemEl.getBoundingClientRect();
-      const threadContainer = $item.closest(".thread")[0];
-      const containerRect = threadContainer ? threadContainer.getBoundingClientRect() : itemRect;
-      const tabBar = document.querySelector('[role="tablist"]') || document.querySelector('[data-testid="homeScreenFeedTabs"]') || document.querySelector('div[style*="position: sticky"]');
-      const tabBarRect = tabBar ? tabBar.getBoundingClientRect() : null;
-      const minTabBottom = tabBarRect ? tabBarRect.bottom : 200;
-      const gap = 16;
-      const left = containerRect.right + gap;
-      const minTop = Math.max(minTabBottom, 150);
-      const maxTop = window.innerHeight - 60;
-      const top = Math.max(minTop, Math.min(maxTop, itemRect.top));
-      if (window.innerWidth - left >= 48) {
-        toggle.css({
-          left: `${left}px`,
-          right: "auto",
-          top: `${top}px`
-        });
-      } else {
-        toggle.css({
-          left: "auto",
-          right: "16px",
-          top: `${top}px`
-        });
+      let container = $item;
+      if (container.css("position") === "static") {
+        container.css("position", "relative");
+      }
+      if (!container.find("#fixed-sidecar-toggle").length) {
+        toggle.detach();
+        container.append(toggle);
       }
     }
     /**
@@ -69134,6 +69100,7 @@ div#statusBar.has-feed-map {
       }
       const contentContainer = $("#fixed-sidecar-panel .fixed-sidecar-panel-content");
       contentContainer.html(this.getSkeletonContent());
+      await this.waitForElementStable(item);
       this.showFixedSidecarPanel();
       const sidecarContent = await this.getSidecarContent(item, thread);
       contentContainer.html(sidecarContent);
@@ -69353,9 +69320,7 @@ div#statusBar.has-feed-map {
         if (this.config.get("fixedSidecarVisible") !== false) {
           await this.updateFixedSidecarPanel(item, thread);
         } else {
-          this.positionFixedSidecarToggle();
           const toggle = $("#fixed-sidecar-toggle");
-          toggle.addClass("visible");
           const hasContext = thread && (thread.parent || thread.replies && thread.replies.length > 0);
           toggle.toggleClass("has-context", hasContext);
           let replyCount = thread?.replies?.length || 0;
@@ -69369,6 +69334,8 @@ div#statusBar.has-feed-map {
           } else {
             countEl.hide();
           }
+          this.positionFixedSidecarToggle();
+          toggle.addClass("visible");
         }
         return;
       }
@@ -70311,7 +70278,6 @@ div#statusBar.has-feed-map {
         return;
       }
       this.ignoreMouseMovement = true;
-      $("#fixed-sidecar-toggle").removeClass("visible");
       if (!this.scrollTick) {
         requestAnimationFrame(() => {
           const currentScroll = $(window).scrollTop();
@@ -70421,14 +70387,19 @@ div#statusBar.has-feed-map {
     }
     /**
      * Get the height of the toolbar at the top (fixed position, not scroll-dependent)
+     * Includes any sticky tab bars (profile page, home feed tabs)
      */
     getToolbarHeight() {
-      const toolbar = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
-      if (toolbar.length) {
-        const rect = toolbar[0].getBoundingClientRect();
-        return rect.bottom || 60;
+      let height = 0;
+      const navigatorToolbar = $("#bsky-navigator-toolbar, #bsky-navigator-global-toolbar").filter(":visible").first();
+      if (navigatorToolbar.length) {
+        height += navigatorToolbar.outerHeight(true) || 0;
       }
-      return 60;
+      const tabBar = $('div[data-testid="profilePager"], div[data-testid="homeScreenFeedTabs"]').filter(":visible").first();
+      if (tabBar.length) {
+        height += tabBar.outerHeight(true) || 0;
+      }
+      return Math.max(height, 60);
     }
     /**
      * Get the height of the status bar at the bottom
@@ -71138,32 +71109,52 @@ ${rule}`;
         this.ignoreMouseMovement = false;
       }, 500);
     }
-    get scrollMargin() {
-      let margin = 0;
-      let el;
-      try {
-        if (this.state.mobileView) {
-          el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
-          el = el.first().children().filter(":visible").first();
-          if (el.length && this.index) {
-            const transform2 = el[0]?.style?.transform || "";
-            const translateY = transform2.indexOf("(") == -1 ? 0 : parseInt(transform2.split("(")[1].split("px")[0]);
-            margin = el.outerHeight() + translateY;
-          } else if (el.length) {
-            margin = el.outerHeight();
-          }
-        } else {
-          el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
-          margin = el.length ? el.outerHeight() : 0;
+    /**
+     * Wait for an element's position to stabilize (no movement for stabilityMs)
+     * @param {Element|jQuery} element - The element to monitor
+     * @param {number} stabilityMs - How long position must be stable (default 100ms)
+     * @param {number} maxWaitMs - Maximum time to wait (default 600ms)
+     * @returns {Promise} Resolves when element position has stabilized
+     */
+    waitForElementStable(element, stabilityMs = 100, maxWaitMs = 600) {
+      return new Promise((resolve) => {
+        if (!this.config.get("enableSmoothScrolling")) {
+          resolve();
+          return;
         }
-        const selectorEl = $(this.selector);
-        const marginTop2 = selectorEl.length ? selectorEl.css("margin-top") : "0px";
-        const itemMargin = parseInt((marginTop2 || "0px").replace("px", ""));
-        return margin + itemMargin;
-      } catch (e2) {
-        console.warn("[bsky-navigator] scrollMargin error:", e2);
-        return 0;
-      }
+        const el = element instanceof $ ? element[0] : element;
+        if (!el) {
+          resolve();
+          return;
+        }
+        let lastTop = el.getBoundingClientRect().top;
+        let stableTime = 0;
+        let elapsed = 0;
+        const checkInterval = 16;
+        const check2 = () => {
+          elapsed += checkInterval;
+          const currentTop = el.getBoundingClientRect().top;
+          if (Math.abs(currentTop - lastTop) < 1) {
+            stableTime += checkInterval;
+            if (stableTime >= stabilityMs) {
+              resolve();
+              return;
+            }
+          } else {
+            stableTime = 0;
+            lastTop = currentTop;
+          }
+          if (elapsed >= maxWaitMs) {
+            resolve();
+            return;
+          }
+          requestAnimationFrame(check2);
+        };
+        requestAnimationFrame(check2);
+      });
+    }
+    get scrollMargin() {
+      return this.getToolbarHeight();
     }
     updateItems() {
       this.ignoreMouseMovement = true;
@@ -74818,6 +74809,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       console.log("[DefaultUIAdapter] statusBar display after show():", statusBar.css("display"));
       this.uiManager.hideToolbarRow1();
       this.uiManager.hideToolbarRow2();
+      $("#fixed-sidecar-toggle").removeClass("visible");
+      $("#fixed-sidecar-panel").removeClass("visible");
       this.uiManager.getStatusBarLeft().empty();
       this.updateInfoText();
       const sb = this.uiManager.getStatusBar();

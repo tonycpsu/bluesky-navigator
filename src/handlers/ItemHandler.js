@@ -361,8 +361,6 @@ export class ItemHandler extends Handler {
     this.threadNavList = null;
     this.postId = this.postIdForItem(this.selectedItem);
     this.updateInfoIndicator();
-    // Hide toggle when changing posts (will reappear via showSidecar if needed)
-    $('#fixed-sidecar-toggle').removeClass('visible');
   }
 
   get index() {
@@ -715,10 +713,10 @@ export class ItemHandler extends Handler {
       </div>
     `);
 
-    // Create the toggle button (shown when panel is hidden)
+    // Create the toggle button (will be attached to selected item)
     this.fixedSidecarToggle = $(`
       <button id="fixed-sidecar-toggle" class="fixed-sidecar-toggle" aria-label="Show thread context" title="Show thread context (t)">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           <line x1="9" y1="10" x2="15" y2="10"/>
         </svg>
@@ -727,7 +725,7 @@ export class ItemHandler extends Handler {
     `);
 
     $('body').append(this.fixedSidecarPanel);
-    $('body').append(this.fixedSidecarToggle);
+    // Toggle is not appended to body - it will be attached to selected item
 
     // Close button handler
     this.fixedSidecarPanel.find('.fixed-sidecar-panel-close').on('click', () => {
@@ -736,28 +734,15 @@ export class ItemHandler extends Handler {
       this.hideFixedSidecarPanel();
     });
 
-    // Toggle button handler
-    this.fixedSidecarToggle.on('click', async () => {
+    // Toggle button handler (use event delegation since toggle moves around)
+    $(document).on('click', '#fixed-sidecar-toggle', async () => {
       await this.openFixedSidecarPanel();
     });
 
-    // Update position on resize
+    // Update panel position on resize (toggle doesn't need repositioning - it's attached to item)
     $(window).on('resize.fixedSidecar', () => {
       if ($('#fixed-sidecar-panel').hasClass('visible')) {
         this.positionFixedSidecarPanel();
-      } else if ($('#fixed-sidecar-toggle').hasClass('visible')) {
-        this.positionFixedSidecarToggle();
-      }
-    });
-
-    // Update toggle position on scroll (throttled)
-    let scrollTimeout;
-    $(window).on('scroll.fixedSidecar', () => {
-      if ($('#fixed-sidecar-toggle').hasClass('visible')) {
-        if (scrollTimeout) cancelAnimationFrame(scrollTimeout);
-        scrollTimeout = requestAnimationFrame(() => {
-          this.positionFixedSidecarToggle();
-        });
       }
     });
   }
@@ -825,58 +810,33 @@ export class ItemHandler extends Handler {
   }
 
   /**
-   * Position the toggle button aligned with the top of the selected post
+   * Attach the toggle button to the selected item so it scrolls with it
    */
   positionFixedSidecarToggle() {
-    const toggle = $('#fixed-sidecar-toggle');
-    if (!toggle.length) return;
+    const toggle = this.fixedSidecarToggle;
+    if (!toggle || !toggle.length) return;
 
-    // Get the selected item's position (selectedItem is a jQuery object)
+    // Get the selected item
     const $item = this.selectedItem;
     if (!$item || !$item.length) {
-      // Fallback: position at a fixed location if no item selected
-      toggle.css({
-        left: 'auto',
-        right: '16px',
-        top: '110px'
-      });
+      // No item selected - detach toggle
+      toggle.detach();
       return;
     }
 
-    const itemEl = $item[0]; // Get DOM element from jQuery object
-    const itemRect = itemEl.getBoundingClientRect();
-    const threadContainer = $item.closest('.thread')[0];
-    const containerRect = threadContainer ? threadContainer.getBoundingClientRect() : itemRect;
+    // Find the item's container (the post wrapper that has position: relative)
+    // Look for the closest element that can serve as positioning context
+    let container = $item;
 
-    // Find the tab bar to get the minimum top position (below tabs)
-    // Look for common tab container selectors
-    const tabBar = document.querySelector('[role="tablist"]') ||
-                   document.querySelector('[data-testid="homeScreenFeedTabs"]') ||
-                   document.querySelector('div[style*="position: sticky"]');
-    const tabBarRect = tabBar ? tabBar.getBoundingClientRect() : null;
-    const minTabBottom = tabBarRect ? tabBarRect.bottom : 200;
+    // Ensure the container has relative positioning for absolute child
+    if (container.css('position') === 'static') {
+      container.css('position', 'relative');
+    }
 
-    const gap = 16;
-    const left = containerRect.right + gap;
-
-    // Clamp top position: below tab bar, above viewport bottom
-    const minTop = Math.max(minTabBottom, 150); // Below tabs
-    const maxTop = window.innerHeight - 60;
-    const top = Math.max(minTop, Math.min(maxTop, itemRect.top));
-
-    // Check if there's enough space on the right
-    if (window.innerWidth - left >= 48) {
-      toggle.css({
-        left: `${left}px`,
-        right: 'auto',
-        top: `${top}px`
-      });
-    } else {
-      toggle.css({
-        left: 'auto',
-        right: '16px',
-        top: `${top}px`
-      });
+    // Attach toggle to this item if not already there
+    if (!container.find('#fixed-sidecar-toggle').length) {
+      toggle.detach();
+      container.append(toggle);
     }
   }
 
@@ -946,6 +906,9 @@ export class ItemHandler extends Handler {
 
     // Show loading skeleton
     contentContainer.html(this.getSkeletonContent());
+
+    // Wait for selected item to stop moving before positioning panel
+    await this.waitForElementStable(item);
     this.showFixedSidecarPanel();
 
     // Get the sidecar content
@@ -1238,9 +1201,7 @@ export class ItemHandler extends Handler {
         await this.updateFixedSidecarPanel(item, thread);
       } else {
         // Show the toggle button when sidecar is hidden
-        this.positionFixedSidecarToggle();
         const toggle = $('#fixed-sidecar-toggle');
-        toggle.addClass('visible');
 
         // Show indicator if thread has context (parent or replies)
         const hasContext = thread && (thread.parent || (thread.replies && thread.replies.length > 0));
@@ -1258,6 +1219,10 @@ export class ItemHandler extends Handler {
         } else {
           countEl.hide();
         }
+
+        // Attach toggle to item and show it (it scrolls with the item)
+        this.positionFixedSidecarToggle();
+        toggle.addClass('visible');
       }
       return;
     }
@@ -2443,8 +2408,6 @@ export class ItemHandler extends Handler {
       return;
     }
     this.ignoreMouseMovement = true;
-    // Hide sidecar toggle while scrolling
-    $('#fixed-sidecar-toggle').removeClass('visible');
     if (!this.scrollTick) {
       requestAnimationFrame(() => {
         const currentScroll = $(window).scrollTop();
@@ -2583,15 +2546,25 @@ export class ItemHandler extends Handler {
 
   /**
    * Get the height of the toolbar at the top (fixed position, not scroll-dependent)
+   * Includes any sticky tab bars (profile page, home feed tabs)
    */
   getToolbarHeight() {
-    const toolbar = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
-    if (toolbar.length) {
-      // Use getBoundingClientRect for screen position, not offset() which includes scroll
-      const rect = toolbar[0].getBoundingClientRect();
-      return rect.bottom || 60;
+    let height = 0;
+
+    // Get navigator toolbar height
+    const navigatorToolbar = $('#bsky-navigator-toolbar, #bsky-navigator-global-toolbar').filter(':visible').first();
+    if (navigatorToolbar.length) {
+      height += navigatorToolbar.outerHeight(true) || 0;
     }
-    return 60;
+
+    // Get tab bar height (profile page or home feed tabs)
+    const tabBar = $('div[data-testid="profilePager"], div[data-testid="homeScreenFeedTabs"]').filter(':visible').first();
+    if (tabBar.length) {
+      height += tabBar.outerHeight(true) || 0;
+    }
+
+    // Return at least a minimum height
+    return Math.max(height, 60);
   }
 
   /**
@@ -3525,33 +3498,62 @@ export class ItemHandler extends Handler {
     }, 500);
   }
 
-  get scrollMargin() {
-    let margin = 0;
-    let el;
-    try {
-      if (this.state.mobileView) {
-        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div > div`);
-        el = el.first().children().filter(':visible').first();
-        if (el.length && this.index) {
-          const transform = el[0]?.style?.transform || '';
-          const translateY =
-            transform.indexOf('(') == -1 ? 0 : parseInt(transform.split('(')[1].split('px')[0]);
-          margin = el.outerHeight() + translateY;
-        } else if (el.length) {
-          margin = el.outerHeight();
-        }
-      } else {
-        el = $(`${constants.HOME_SCREEN_SELECTOR} > div > div`).eq(2);
-        margin = el.length ? el.outerHeight() : 0;
+  /**
+   * Wait for an element's position to stabilize (no movement for stabilityMs)
+   * @param {Element|jQuery} element - The element to monitor
+   * @param {number} stabilityMs - How long position must be stable (default 100ms)
+   * @param {number} maxWaitMs - Maximum time to wait (default 600ms)
+   * @returns {Promise} Resolves when element position has stabilized
+   */
+  waitForElementStable(element, stabilityMs = 100, maxWaitMs = 600) {
+    return new Promise((resolve) => {
+      if (!this.config.get('enableSmoothScrolling')) {
+        // No smooth scrolling, resolve immediately
+        resolve();
+        return;
       }
-      const selectorEl = $(this.selector);
-      const marginTop = selectorEl.length ? selectorEl.css('margin-top') : '0px';
-      const itemMargin = parseInt((marginTop || '0px').replace('px', ''));
-      return margin + itemMargin;
-    } catch (e) {
-      console.warn('[bsky-navigator] scrollMargin error:', e);
-      return 0;
-    }
+
+      const el = element instanceof $ ? element[0] : element;
+      if (!el) {
+        resolve();
+        return;
+      }
+
+      let lastTop = el.getBoundingClientRect().top;
+      let stableTime = 0;
+      let elapsed = 0;
+      const checkInterval = 16; // ~60fps
+
+      const check = () => {
+        elapsed += checkInterval;
+        const currentTop = el.getBoundingClientRect().top;
+
+        if (Math.abs(currentTop - lastTop) < 1) {
+          stableTime += checkInterval;
+          if (stableTime >= stabilityMs) {
+            resolve();
+            return;
+          }
+        } else {
+          stableTime = 0;
+          lastTop = currentTop;
+        }
+
+        if (elapsed >= maxWaitMs) {
+          resolve();
+          return;
+        }
+
+        requestAnimationFrame(check);
+      };
+
+      requestAnimationFrame(check);
+    });
+  }
+
+  get scrollMargin() {
+    // Use getToolbarHeight which properly handles all pages (home, profile, etc.)
+    return this.getToolbarHeight();
   }
 
   updateItems() {

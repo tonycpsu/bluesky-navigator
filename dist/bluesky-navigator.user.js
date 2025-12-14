@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+474.5f37ed6d
+// @version     1.0.31+475.7e696267
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46754,6 +46754,20 @@ if (cid) {
   const style = `/* style.css */
 
 /* ==========================================================================
+   Hidden View Full Thread - Hide redundant "View full thread" when thread is unrolled
+   ========================================================================== */
+
+div.thread.unrolled-view-full-thread-hidden,
+.unrolled-view-full-thread-hidden {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* ==========================================================================
    Feed Loading State - Hide items until sorted (only when loading indicator enabled)
    ========================================================================== */
 
@@ -69155,6 +69169,42 @@ div#statusBar.has-feed-map {
         if (this.selectedPost) {
           this.selectedPost.addClass("reply-selection-active");
         }
+        const rootPostId = thread.post.uri?.split("/").slice(-1)[0];
+        console.log("[hideViewFullThread] rootPostId:", rootPostId, "unrolledIds:", unrolledIds);
+        if (rootPostId) {
+          const threadPostIds = /* @__PURE__ */ new Set([rootPostId, ...unrolledIds]);
+          console.log("[hideViewFullThread] threadPostIds:", [...threadPostIds]);
+          const unrolledThread = $(item).closest(".thread")[0];
+          $("div.thread").each(function() {
+            const threadEl = $(this);
+            if (this === unrolledThread) return;
+            if (threadEl.hasClass("unrolled-view-full-thread-hidden")) return;
+            const items = threadEl.find('[role="link"]');
+            const realPosts = items.filter(function() {
+              const testId = $(this).attr("data-testid") || "";
+              return testId.startsWith("feedItem-by-") || testId.startsWith("postThreadItem-by-");
+            });
+            const viewFullThreadItems = items.filter(function() {
+              const testId = $(this).attr("data-testid") || "";
+              return !testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-");
+            });
+            if (viewFullThreadItems.length > 0 && realPosts.length === 0) {
+              console.log("[hideViewFullThread] Found View full thread only element:", threadEl[0]);
+              const links = threadEl.find('a[href*="/post/"]');
+              console.log("[hideViewFullThread] Links found:", links.toArray().map((l) => $(l).attr("href")));
+              const matchesThread = links.toArray().some((link) => {
+                const href = $(link).attr("href");
+                const linkPostId = href?.split("/post/")[1]?.split("?")[0];
+                console.log("[hideViewFullThread] Checking linkPostId:", linkPostId, "in threadPostIds:", threadPostIds.has(linkPostId));
+                return linkPostId && threadPostIds.has(linkPostId);
+              });
+              if (matchesThread) {
+                console.log("[hideViewFullThread] HIDING thread:", threadEl[0]);
+                threadEl.addClass("unrolled-view-full-thread-hidden");
+              }
+            }
+          });
+        }
       }
     }
     async getSidecarContent(item, thread) {
@@ -71345,26 +71395,32 @@ ${rule}`;
     _doLoadItemsInner(focusedPostId) {
       const classes = ["thread-first", "thread-middle", "thread-last"];
       const set = [];
-      $(".unrolled-replies").not(".post-view-modal *").each((i2, el) => {
-        try {
-          if (el.parentNode) {
-            el.parentNode.removeChild(el);
+      const unrolledRepliesCount = $(".unrolled-replies").not(".post-view-modal *").length;
+      const hasUnrolledContent = unrolledRepliesCount > 0;
+      console.log("[_doLoadItemsInner] hasUnrolledContent:", hasUnrolledContent, "count:", unrolledRepliesCount);
+      if (!hasUnrolledContent) {
+        console.log("[_doLoadItemsInner] Cleaning up - no unrolled content");
+        $(".sidecar-replies").not(".post-view-modal *").each((i2, el) => {
+          try {
+            if (el.parentNode) {
+              el.parentNode.removeChild(el);
+            }
+          } catch (e2) {
           }
+        });
+        this.unrolledPostIds.clear();
+        try {
+          $(".unrolled-duplicate").removeClass("unrolled-duplicate filtered");
         } catch (e2) {
         }
-      });
-      $(".sidecar-replies").not(".post-view-modal *").each((i2, el) => {
         try {
-          if (el.parentNode) {
-            el.parentNode.removeChild(el);
-          }
+          const hiddenCount = $(".unrolled-view-full-thread-hidden").length;
+          console.log("[_doLoadItemsInner] Unhiding View full thread elements, count:", hiddenCount);
+          $(".unrolled-view-full-thread-hidden").removeClass("unrolled-view-full-thread-hidden").show();
         } catch (e2) {
         }
-      });
-      this.unrolledPostIds.clear();
-      try {
-        $(".unrolled-duplicate").removeClass("unrolled-duplicate filtered");
-      } catch (e2) {
+      } else {
+        console.log("[_doLoadItemsInner] Preserving unrolled state - NOT cleaning up");
       }
       $("div.thread").each((i2, thread) => {
         try {

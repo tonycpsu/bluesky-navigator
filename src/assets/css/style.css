@@ -1,6 +1,20 @@
 /* style.css */
 
 /* ==========================================================================
+   Hidden View Full Thread - Hide redundant "View full thread" when thread is unrolled
+   ========================================================================== */
+
+div.thread.unrolled-view-full-thread-hidden,
+.unrolled-view-full-thread-hidden {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* ==========================================================================
    Feed Loading State - Hide items until sorted (only when loading indicator enabled)
    ========================================================================== */
 

@@ -1132,6 +1132,61 @@ export class ItemHandler extends Handler {
       if (this.selectedPost) {
         this.selectedPost.addClass('reply-selection-active');
       }
+
+      // Hide "View full thread" element that follows unrolled threads (it's redundant)
+      // Get the root post ID from the unrolled thread
+      const rootPostId = thread.post.uri?.split('/').slice(-1)[0];
+      console.log('[hideViewFullThread] rootPostId:', rootPostId, 'unrolledIds:', unrolledIds);
+      if (rootPostId) {
+        // Collect all post IDs in this thread (root + all unrolled replies)
+        const threadPostIds = new Set([rootPostId, ...unrolledIds]);
+        console.log('[hideViewFullThread] threadPostIds:', [...threadPostIds]);
+
+        // Get the thread containing the unrolled item - we must NOT hide this one
+        const unrolledThread = $(item).closest('.thread')[0];
+
+        // Find and hide ALL "View full thread" elements in the feed that link to any post in this thread
+        $('div.thread').each(function () {
+          const threadEl = $(this);
+
+          // Skip the thread containing our unrolled content
+          if (this === unrolledThread) return;
+
+          // Skip if already hidden
+          if (threadEl.hasClass('unrolled-view-full-thread-hidden')) return;
+
+          // Look for items with and without feedItem-by- testid
+          const items = threadEl.find('[role="link"]');
+          const realPosts = items.filter(function () {
+            const testId = $(this).attr('data-testid') || '';
+            return testId.startsWith('feedItem-by-') || testId.startsWith('postThreadItem-by-');
+          });
+          const viewFullThreadItems = items.filter(function () {
+            const testId = $(this).attr('data-testid') || '';
+            return !testId.startsWith('feedItem-by-') && !testId.startsWith('postThreadItem-by-');
+          });
+
+          // Only hide threads that ONLY contain "View full thread" (no real posts)
+          if (viewFullThreadItems.length > 0 && realPosts.length === 0) {
+            console.log('[hideViewFullThread] Found View full thread only element:', threadEl[0]);
+            // Check if any link in this thread points to one of our thread's posts
+            const links = threadEl.find('a[href*="/post/"]');
+            console.log('[hideViewFullThread] Links found:', links.toArray().map(l => $(l).attr('href')));
+            const matchesThread = links.toArray().some((link) => {
+              const href = $(link).attr('href');
+              const linkPostId = href?.split('/post/')[1]?.split('?')[0];
+              console.log('[hideViewFullThread] Checking linkPostId:', linkPostId, 'in threadPostIds:', threadPostIds.has(linkPostId));
+              return linkPostId && threadPostIds.has(linkPostId);
+            });
+
+            if (matchesThread) {
+              console.log('[hideViewFullThread] HIDING thread:', threadEl[0]);
+              threadEl.addClass('unrolled-view-full-thread-hidden');
+              // CSS rule handles hiding with !important
+            }
+          }
+        });
+      }
     }
   }
 
@@ -3950,36 +4005,47 @@ export class ItemHandler extends Handler {
     const classes = ['thread-first', 'thread-middle', 'thread-last'];
     const set = [];
 
-    // Clean up unrolled replies and sidecar containers from previous load
-    // These are elements WE created and appended to React containers
-    // Use individual try-catch per element since React may have removed parents
-    // Exclude elements inside post-view-modal to avoid affecting the modal's sidecar
-    $('.unrolled-replies').not('.post-view-modal *').each((i, el) => {
-      try {
-        if (el.parentNode) {
-          el.parentNode.removeChild(el);
-        }
-      } catch (e) {
-        // Element already removed or parent changed - ignore
-      }
-    });
-    $('.sidecar-replies').not('.post-view-modal *').each((i, el) => {
-      try {
-        if (el.parentNode) {
-          el.parentNode.removeChild(el);
-        }
-      } catch (e) {
-        // Element already removed or parent changed - ignore
-      }
-    });
+    // Check if there are unrolled threads BEFORE cleanup - we want to preserve their state
+    const unrolledRepliesCount = $('.unrolled-replies').not('.post-view-modal *').length;
+    const hasUnrolledContent = unrolledRepliesCount > 0;
+    console.log('[_doLoadItemsInner] hasUnrolledContent:', hasUnrolledContent, 'count:', unrolledRepliesCount);
 
-    // Clear tracked unrolled post IDs when unrolled content is removed
-    this.unrolledPostIds.clear();
-    // Remove unrolled-duplicate class from items (safely)
-    try {
-      $('.unrolled-duplicate').removeClass('unrolled-duplicate filtered');
-    } catch (e) {
-      // Ignore - elements may have been removed
+    // Only clean up unrolled content if the user has navigated away (no unrolled content visible)
+    // If there's still unrolled content, preserve it and its hidden "View full thread" elements
+    if (!hasUnrolledContent) {
+      console.log('[_doLoadItemsInner] Cleaning up - no unrolled content');
+      // Clean up unrolled replies and sidecar containers from previous load
+      // These are elements WE created and appended to React containers
+      // Use individual try-catch per element since React may have removed parents
+      // Exclude elements inside post-view-modal to avoid affecting the modal's sidecar
+      $('.sidecar-replies').not('.post-view-modal *').each((i, el) => {
+        try {
+          if (el.parentNode) {
+            el.parentNode.removeChild(el);
+          }
+        } catch (e) {
+          // Element already removed or parent changed - ignore
+        }
+      });
+
+      // Clear tracked unrolled post IDs when unrolled content is removed
+      this.unrolledPostIds.clear();
+      // Remove unrolled-duplicate class from items (safely)
+      try {
+        $('.unrolled-duplicate').removeClass('unrolled-duplicate filtered');
+      } catch (e) {
+        // Ignore - elements may have been removed
+      }
+      // Show any hidden "View full thread" elements
+      try {
+        const hiddenCount = $('.unrolled-view-full-thread-hidden').length;
+        console.log('[_doLoadItemsInner] Unhiding View full thread elements, count:', hiddenCount);
+        $('.unrolled-view-full-thread-hidden').removeClass('unrolled-view-full-thread-hidden').show();
+      } catch (e) {
+        // Ignore - elements may have been removed
+      }
+    } else {
+      console.log('[_doLoadItemsInner] Preserving unrolled state - NOT cleaning up');
     }
 
     // Hide empty thread containers (threads with no visible items)

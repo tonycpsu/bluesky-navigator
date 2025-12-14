@@ -1858,7 +1858,9 @@ div.item-banner {
    ========================================================================== */
 
 .post-view-modal-content-reader {
-  max-width: 800px;
+  max-width: 95vw;
+  width: 95vw;
+  max-height: 95vh;
 }
 
 .post-view-modal-body-reader {
@@ -1870,6 +1872,96 @@ div.item-banner {
   overflow-y: auto;
   padding: 20px;
   font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Reader mode font size controls */
+.reader-mode-font-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 16px;
+}
+
+.reader-mode-font-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.reader-mode-font-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.reader-mode-font-btn:active {
+  background: #e5e7eb;
+}
+
+.reader-mode-font-input {
+  width: 48px;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 14px;
+  color: #374151;
+  background: white;
+}
+
+.reader-mode-font-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Hide number input spinners */
+.reader-mode-font-input::-webkit-outer-spin-button,
+.reader-mode-font-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.reader-mode-font-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+@media (prefers-color-scheme: dark) {
+  .reader-mode-font-btn {
+    background: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .reader-mode-font-btn:hover {
+    background: #4b5563;
+    border-color: #6b7280;
+  }
+
+  .reader-mode-font-btn:active {
+    background: #1f2937;
+  }
+
+  .reader-mode-font-input {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .reader-mode-font-input:focus {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+  }
 }
 
 .reader-mode-thread {
@@ -1913,7 +2005,7 @@ div.item-banner {
 }
 
 .reader-mode-post-content {
-  font-size: 15px;
+  font-size: inherit;
   line-height: 1.6;
   color: #111827;
 }
@@ -2272,6 +2364,34 @@ div.item-banner {
 /* Thread icon is taller SVG - constrain to match others */
 .feed-map-icon-stack img[alt="thread"] {
   height: 40%;
+}
+
+/* Thread progress bar for unrolled threads */
+.feed-map-segment-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.feed-map-segment-progress-fill {
+  height: 100%;
+  background-color: #3b82f6;
+  transition: width 0.15s ease-out;
+}
+
+/* Theme-specific progress bar colors */
+.feed-map-theme-campfire .feed-map-segment-progress-fill { background-color: #f59e0b; }
+.feed-map-theme-ocean .feed-map-segment-progress-fill { background-color: #0ea5e9; }
+.feed-map-theme-forest .feed-map-segment-progress-fill { background-color: #22c55e; }
+.feed-map-theme-monochrome .feed-map-segment-progress-fill { background-color: #6b7280; }
+
+/* Progress bar in zoom segments - slightly taller for visibility */
+.feed-map-segment-zoom .feed-map-segment-progress {
+  height: 4px;
 }
 
 .feed-map-segment {

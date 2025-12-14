@@ -1864,8 +1864,8 @@ export class FeedItemHandler extends ItemHandler {
         'feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8'
       );
 
-      // Clear existing icon
-      $segment.find('.feed-map-segment-icon').remove();
+      // Clear existing icon and progress bar
+      $segment.find('.feed-map-segment-icon, .feed-map-segment-progress').remove();
 
       // Apply read state first (can be combined with current)
       if (isRead) {
@@ -1894,6 +1894,18 @@ export class FeedItemHandler extends ItemHandler {
         if (icon) {
           $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
         }
+      }
+
+      // Add thread progress bar for unrolled threads (only in Advanced mode)
+      if (isAdvancedStyle && engagementData[actualIndex]?.engagement?.unrolledCount > 0) {
+        const unrolledCount = engagementData[actualIndex].engagement.unrolledCount;
+        const totalPosts = unrolledCount + 1; // main post + replies
+        // For current item, show progress based on threadIndex; otherwise show full bar (0%)
+        let progressPercent = 0;
+        if (isCurrent && this.threadIndex != null) {
+          progressPercent = ((this.threadIndex + 1) / totalPosts) * 100;
+        }
+        $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
       }
     });
 
@@ -2068,11 +2080,16 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     // Check if thread was previously unrolled (has .unrolled-replies div)
+    // Also count the number of unrolled replies for progress tracking
+    let unrolledCount = 0;
     if (!isSelfThread) {
       const unrolledInItem = $item.find('.unrolled-replies');
       const unrolledInThread = $thread.length ? $thread.find('.unrolled-replies') : $();
       if (unrolledInItem.length > 0 || unrolledInThread.length > 0) {
         isSelfThread = true;
+        // Count unrolled replies (total posts = replies + 1 for main post)
+        const unrolledReplies = (unrolledInItem.length > 0 ? unrolledInItem : unrolledInThread).find('.unrolled-reply');
+        unrolledCount = unrolledReplies.length;
       } else {
         // Check globally - the unrolled-replies might be in a different DOM location
         const unrolledGlobal = $('.unrolled-replies');
@@ -2081,8 +2098,18 @@ export class FeedItemHandler extends ItemHandler {
           const unrolledPostId = unrolledParent.length ? this.postIdForItem(unrolledParent) : null;
           if (unrolledPostId === postId) {
             isSelfThread = true;
+            unrolledCount = unrolledGlobal.find('.unrolled-reply').length;
           }
         }
+      }
+    } else {
+      // If isSelfThread was detected from cache, still count the unrolled replies if present
+      const unrolledInItem = $item.find('.unrolled-replies');
+      const unrolledInThread = $thread.length ? $thread.find('.unrolled-replies') : $();
+      if (unrolledInItem.length > 0) {
+        unrolledCount = unrolledInItem.find('.unrolled-reply').length;
+      } else if (unrolledInThread.length > 0) {
+        unrolledCount = unrolledInThread.find('.unrolled-reply').length;
       }
     }
 
@@ -2141,6 +2168,7 @@ export class FeedItemHandler extends ItemHandler {
       isRatioed,
       avatarUrl,
       handle,
+      unrolledCount, // Number of unrolled replies (0 if not unrolled)
     };
   }
 
@@ -2476,7 +2504,7 @@ export class FeedItemHandler extends ItemHandler {
       );
 
       // Clear existing content
-      $segment.find('.feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time').remove();
+      $segment.find('.feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time, .feed-map-segment-progress').remove();
 
       if (!hasItem) {
         $segment.addClass('feed-map-segment-empty');
@@ -2549,6 +2577,18 @@ export class FeedItemHandler extends ItemHandler {
           }
           $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
         }
+      }
+
+      // Add thread progress bar for unrolled threads
+      if (engData?.engagement?.unrolledCount > 0) {
+        const unrolledCount = engData.engagement.unrolledCount;
+        const totalPosts = unrolledCount + 1; // main post + replies
+        // For current item, show progress based on threadIndex; otherwise show 0%
+        let progressPercent = 0;
+        if (isCurrent && this.threadIndex != null) {
+          progressPercent = ((this.threadIndex + 1) / totalPosts) * 100;
+        }
+        $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
       }
     });
 
@@ -2702,8 +2742,8 @@ export class FeedItemHandler extends ItemHandler {
         'feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8'
       );
 
-      // Clear existing icon, avatar, handle, and time
-      $segment.find('.feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time').remove();
+      // Clear existing icon, avatar, handle, time, and progress bar
+      $segment.find('.feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time, .feed-map-segment-progress').remove();
 
       // Mark empty segments (no corresponding item)
       if (!hasItem) {
@@ -2785,6 +2825,18 @@ export class FeedItemHandler extends ItemHandler {
           }
           $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
         }
+      }
+
+      // Add thread progress bar for unrolled threads
+      if (engagementData[actualIndex]?.engagement?.unrolledCount > 0) {
+        const unrolledCount = engagementData[actualIndex].engagement.unrolledCount;
+        const totalPosts = unrolledCount + 1; // main post + replies
+        // For current item, show progress based on threadIndex; otherwise show 0%
+        let progressPercent = 0;
+        if (isCurrent && this.threadIndex != null) {
+          progressPercent = ((this.threadIndex + 1) / totalPosts) * 100;
+        }
+        $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
       }
     });
 

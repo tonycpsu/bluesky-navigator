@@ -126,6 +126,14 @@ const CONFIG_SCHEMA = {
         help: 'Focus sidecar items when hovering with the mouse',
         showWhen: { hoverToFocus: true },
       },
+      readerModeFontSize: {
+        label: 'Reader mode font size (px)',
+        type: 'number',
+        default: 16,
+        min: 10,
+        max: 32,
+        help: 'Font size for reader mode (V key)',
+      },
     },
   },
   'Feed Map': {

@@ -274,15 +274,22 @@ export class PostViewModal {
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-labelledby', 'post-view-modal-title');
 
+    const fontSize = this.config.get('readerModeFontSize') || 16;
+
     modal.innerHTML = `
       <div class="post-view-modal-backdrop"></div>
       <div class="post-view-modal-content post-view-modal-content-reader">
         <div class="post-view-modal-header">
           <h2 id="post-view-modal-title">${title}</h2>
+          <div class="reader-mode-font-controls">
+            <button class="reader-mode-font-btn" data-action="decrease" aria-label="Decrease font size">−</button>
+            <input type="number" class="reader-mode-font-input" value="${fontSize}" min="10" max="32" aria-label="Font size">
+            <button class="reader-mode-font-btn" data-action="increase" aria-label="Increase font size">+</button>
+          </div>
           <button class="post-view-modal-close" aria-label="Close">×</button>
         </div>
         <div class="post-view-modal-body post-view-modal-body-reader">
-          <div class="post-view-modal-reader-content">
+          <div class="post-view-modal-reader-content" style="font-size: ${fontSize}px;">
             ${contentHtml || '<div class="post-view-modal-loading">Loading thread...</div>'}
           </div>
         </div>
@@ -292,6 +299,34 @@ export class PostViewModal {
     // Event listeners
     modal.querySelector('.post-view-modal-backdrop').addEventListener('click', () => this.hide());
     modal.querySelector('.post-view-modal-close').addEventListener('click', () => this.hide());
+
+    // Font size controls
+    const fontInput = modal.querySelector('.reader-mode-font-input');
+    const contentEl = modal.querySelector('.post-view-modal-reader-content');
+
+    modal.querySelectorAll('.reader-mode-font-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        let newSize = parseInt(fontInput.value, 10);
+        if (action === 'increase') {
+          newSize = Math.min(32, newSize + 1);
+        } else {
+          newSize = Math.max(10, newSize - 1);
+        }
+        fontInput.value = newSize;
+        contentEl.style.fontSize = `${newSize}px`;
+        this.config.set('readerModeFontSize', newSize);
+        announceToScreenReader(`Font size: ${newSize} pixels`);
+      });
+    });
+
+    fontInput.addEventListener('change', () => {
+      let newSize = parseInt(fontInput.value, 10);
+      newSize = Math.max(10, Math.min(32, newSize));
+      fontInput.value = newSize;
+      contentEl.style.fontSize = `${newSize}px`;
+      this.config.set('readerModeFontSize', newSize);
+    });
 
     return modal;
   }

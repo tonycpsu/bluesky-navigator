@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+473.f797d8d2
+// @version     1.0.31+474.5f37ed6d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45031,6 +45031,14 @@ if (cid) {
           default: true,
           help: "Focus sidecar items when hovering with the mouse",
           showWhen: { hoverToFocus: true }
+        },
+        readerModeFontSize: {
+          label: "Reader mode font size (px)",
+          type: "number",
+          default: 16,
+          min: 10,
+          max: 32,
+          help: "Font size for reader mode (V key)"
         }
       }
     },
@@ -48603,7 +48611,9 @@ div.item-banner {
    ========================================================================== */
 
 .post-view-modal-content-reader {
-  max-width: 800px;
+  max-width: 95vw;
+  width: 95vw;
+  max-height: 95vh;
 }
 
 .post-view-modal-body-reader {
@@ -48615,6 +48625,96 @@ div.item-banner {
   overflow-y: auto;
   padding: 20px;
   font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Reader mode font size controls */
+.reader-mode-font-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 16px;
+}
+
+.reader-mode-font-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.reader-mode-font-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.reader-mode-font-btn:active {
+  background: #e5e7eb;
+}
+
+.reader-mode-font-input {
+  width: 48px;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 14px;
+  color: #374151;
+  background: white;
+}
+
+.reader-mode-font-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Hide number input spinners */
+.reader-mode-font-input::-webkit-outer-spin-button,
+.reader-mode-font-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.reader-mode-font-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+@media (prefers-color-scheme: dark) {
+  .reader-mode-font-btn {
+    background: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .reader-mode-font-btn:hover {
+    background: #4b5563;
+    border-color: #6b7280;
+  }
+
+  .reader-mode-font-btn:active {
+    background: #1f2937;
+  }
+
+  .reader-mode-font-input {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .reader-mode-font-input:focus {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+  }
 }
 
 .reader-mode-thread {
@@ -48658,7 +48758,7 @@ div.item-banner {
 }
 
 .reader-mode-post-content {
-  font-size: 15px;
+  font-size: inherit;
   line-height: 1.6;
   color: #111827;
 }
@@ -49017,6 +49117,34 @@ div.item-banner {
 /* Thread icon is taller SVG - constrain to match others */
 .feed-map-icon-stack img[alt="thread"] {
   height: 40%;
+}
+
+/* Thread progress bar for unrolled threads */
+.feed-map-segment-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.feed-map-segment-progress-fill {
+  height: 100%;
+  background-color: #3b82f6;
+  transition: width 0.15s ease-out;
+}
+
+/* Theme-specific progress bar colors */
+.feed-map-theme-campfire .feed-map-segment-progress-fill { background-color: #f59e0b; }
+.feed-map-theme-ocean .feed-map-segment-progress-fill { background-color: #0ea5e9; }
+.feed-map-theme-forest .feed-map-segment-progress-fill { background-color: #22c55e; }
+.feed-map-theme-monochrome .feed-map-segment-progress-fill { background-color: #6b7280; }
+
+/* Progress bar in zoom segments - slightly taller for visibility */
+.feed-map-segment-zoom .feed-map-segment-progress {
+  height: 4px;
 }
 
 .feed-map-segment {
@@ -68011,15 +68139,21 @@ div#statusBar.has-feed-map {
       modal.setAttribute("role", "dialog");
       modal.setAttribute("aria-modal", "true");
       modal.setAttribute("aria-labelledby", "post-view-modal-title");
+      const fontSize2 = this.config.get("readerModeFontSize") || 16;
       modal.innerHTML = `
       <div class="post-view-modal-backdrop"></div>
       <div class="post-view-modal-content post-view-modal-content-reader">
         <div class="post-view-modal-header">
           <h2 id="post-view-modal-title">${title}</h2>
+          <div class="reader-mode-font-controls">
+            <button class="reader-mode-font-btn" data-action="decrease" aria-label="Decrease font size">\u2212</button>
+            <input type="number" class="reader-mode-font-input" value="${fontSize2}" min="10" max="32" aria-label="Font size">
+            <button class="reader-mode-font-btn" data-action="increase" aria-label="Increase font size">+</button>
+          </div>
           <button class="post-view-modal-close" aria-label="Close">\xD7</button>
         </div>
         <div class="post-view-modal-body post-view-modal-body-reader">
-          <div class="post-view-modal-reader-content">
+          <div class="post-view-modal-reader-content" style="font-size: ${fontSize2}px;">
             ${contentHtml || '<div class="post-view-modal-loading">Loading thread...</div>'}
           </div>
         </div>
@@ -68027,6 +68161,30 @@ div#statusBar.has-feed-map {
     `;
       modal.querySelector(".post-view-modal-backdrop").addEventListener("click", () => this.hide());
       modal.querySelector(".post-view-modal-close").addEventListener("click", () => this.hide());
+      const fontInput = modal.querySelector(".reader-mode-font-input");
+      const contentEl = modal.querySelector(".post-view-modal-reader-content");
+      modal.querySelectorAll(".reader-mode-font-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const action = btn.dataset.action;
+          let newSize = parseInt(fontInput.value, 10);
+          if (action === "increase") {
+            newSize = Math.min(32, newSize + 1);
+          } else {
+            newSize = Math.max(10, newSize - 1);
+          }
+          fontInput.value = newSize;
+          contentEl.style.fontSize = `${newSize}px`;
+          this.config.set("readerModeFontSize", newSize);
+          announceToScreenReader$2(`Font size: ${newSize} pixels`);
+        });
+      });
+      fontInput.addEventListener("change", () => {
+        let newSize = parseInt(fontInput.value, 10);
+        newSize = Math.max(10, Math.min(32, newSize));
+        fontInput.value = newSize;
+        contentEl.style.fontSize = `${newSize}px`;
+        this.config.set("readerModeFontSize", newSize);
+      });
       return modal;
     }
     /**
@@ -72836,7 +72994,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $segment.removeClass(
           "feed-map-segment-read feed-map-segment-current feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8"
         );
-        $segment.find(".feed-map-segment-icon").remove();
+        $segment.find(".feed-map-segment-icon, .feed-map-segment-progress").remove();
         if (isRead) {
           $segment.addClass("feed-map-segment-read");
         }
@@ -72856,6 +73014,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (icon) {
             $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
           }
+        }
+        if (isAdvancedStyle && engagementData[actualIndex]?.engagement?.unrolledCount > 0) {
+          const unrolledCount = engagementData[actualIndex].engagement.unrolledCount;
+          const totalPosts = unrolledCount + 1;
+          let progressPercent = 0;
+          if (isCurrent && this.threadIndex != null) {
+            progressPercent = (this.threadIndex + 1) / totalPosts * 100;
+          }
+          $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
         }
       });
       if (showIcons && total > 0) {
@@ -72970,11 +73137,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (postId && this.selfThreadCache && this.selfThreadCache[postId]) {
         isSelfThread = true;
       }
+      let unrolledCount = 0;
       if (!isSelfThread) {
         const unrolledInItem = $item.find(".unrolled-replies");
         const unrolledInThread = $thread.length ? $thread.find(".unrolled-replies") : $();
         if (unrolledInItem.length > 0 || unrolledInThread.length > 0) {
           isSelfThread = true;
+          const unrolledReplies = (unrolledInItem.length > 0 ? unrolledInItem : unrolledInThread).find(".unrolled-reply");
+          unrolledCount = unrolledReplies.length;
         } else {
           const unrolledGlobal = $(".unrolled-replies");
           if (unrolledGlobal.length > 0) {
@@ -72982,8 +73152,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const unrolledPostId = unrolledParent.length ? this.postIdForItem(unrolledParent) : null;
             if (unrolledPostId === postId) {
               isSelfThread = true;
+              unrolledCount = unrolledGlobal.find(".unrolled-reply").length;
             }
           }
+        }
+      } else {
+        const unrolledInItem = $item.find(".unrolled-replies");
+        const unrolledInThread = $thread.length ? $thread.find(".unrolled-replies") : $();
+        if (unrolledInItem.length > 0) {
+          unrolledCount = unrolledInItem.find(".unrolled-reply").length;
+        } else if (unrolledInThread.length > 0) {
+          unrolledCount = unrolledInThread.find(".unrolled-reply").length;
         }
       }
       if (!isSelfThread && !isReply && !isRepost) {
@@ -73030,7 +73209,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         isSelfThread,
         isRatioed,
         avatarUrl,
-        handle: handle2
+        handle: handle2,
+        unrolledCount
+        // Number of unrolled replies (0 if not unrolled)
       };
     }
     /**
@@ -73270,7 +73451,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $segment.removeClass(
           "feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8"
         );
-        $segment.find(".feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time").remove();
+        $segment.find(".feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time, .feed-map-segment-progress").remove();
         if (!hasItem) {
           $segment.addClass("feed-map-segment-empty");
           return;
@@ -73324,6 +73505,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             }
             $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
           }
+        }
+        if (engData?.engagement?.unrolledCount > 0) {
+          const unrolledCount = engData.engagement.unrolledCount;
+          const totalPosts = unrolledCount + 1;
+          let progressPercent = 0;
+          if (isCurrent && this.threadIndex != null) {
+            progressPercent = (this.threadIndex + 1) / totalPosts * 100;
+          }
+          $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
         }
       });
       this.updateFeedMapZoomLabels(windowStart, windowEnd);
@@ -73425,7 +73615,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $segment.removeClass(
           "feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8"
         );
-        $segment.find(".feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time").remove();
+        $segment.find(".feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time, .feed-map-segment-progress").remove();
         if (!hasItem) {
           $segment.addClass("feed-map-segment-empty");
           return;
@@ -73488,6 +73678,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             }
             $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
           }
+        }
+        if (engagementData[actualIndex]?.engagement?.unrolledCount > 0) {
+          const unrolledCount = engagementData[actualIndex].engagement.unrolledCount;
+          const totalPosts = unrolledCount + 1;
+          let progressPercent = 0;
+          if (isCurrent && this.threadIndex != null) {
+            progressPercent = (this.threadIndex + 1) / totalPosts * 100;
+          }
+          $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
         }
       });
       zoomIndicator.css("--feed-map-icon-display", "flex");

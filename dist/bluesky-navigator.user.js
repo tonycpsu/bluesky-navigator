@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+477.5deab77e
+// @version     1.0.31+478.a23a8a04
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -70399,7 +70399,8 @@ div#statusBar.has-feed-map {
       if (tabBar.length) {
         height += tabBar.outerHeight(true) || 0;
       }
-      return Math.max(height, 60);
+      const focusRingSpace = 4;
+      return Math.max(height, 60) + focusRingSpace;
     }
     /**
      * Get the height of the status bar at the bottom

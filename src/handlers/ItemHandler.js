@@ -2563,8 +2563,11 @@ export class ItemHandler extends Handler {
       height += tabBar.outerHeight(true) || 0;
     }
 
+    // Add space for the focus ring outline (2px) plus a small buffer
+    const focusRingSpace = 4;
+
     // Return at least a minimum height
-    return Math.max(height, 60);
+    return Math.max(height, 60) + focusRingSpace;
   }
 
   /**

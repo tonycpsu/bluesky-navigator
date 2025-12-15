@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+480.0b6d571e
+// @version     1.0.31+481.8760a463
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -72586,9 +72586,23 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.statusBar.remove();
         this.statusBar = null;
       }
+      this.statusBarLeft = null;
+      this.statusBarCenter = null;
+      this.statusBarRight = null;
+      this.infoIndicator = null;
+      this.preferencesIcon = null;
+      this.bottomLoadIndicator = null;
       this.feedMap = null;
       this.feedMapWrapper = null;
       this.feedMapZoom = null;
+      this.feedMapContainer = null;
+      this.feedMapConnector = null;
+      this.feedMapZoomContainer = null;
+      this.feedMapZoomHighlight = null;
+      this.feedMapLabelStart = null;
+      this.feedMapLabelEnd = null;
+      this.feedMapZoomLabelStart = null;
+      this.feedMapZoomLabelEnd = null;
     }
     _throttledScrollUpdate() {
       if (this._scrollUpdatePending) return;
@@ -72717,7 +72731,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar {
+            #statusBar,
+            #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthFull + gap}px !important;
               margin-right: auto !important;
@@ -72733,7 +72748,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar {
+            #statusBar,
+            #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthCollapsed + gap}px !important;
               margin-right: auto !important;
@@ -72783,7 +72799,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           main[role="main"] [data-testid^="profile"] {
             max-width: ${contentWidth}px !important;
           }
-          #statusBar {
+          #statusBar,
+          #bsky-navigator-global-statusbar {
             max-width: ${contentWidth}px !important;
             transform: translateX(${shiftRight}px) !important;
           }
@@ -75147,8 +75164,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const match2 = path.match(/\/profile\/([^/]+)/);
       if (match2) {
         const handle2 = match2[1];
-        const displayName = handle2.startsWith("did:") ? "Profile" : `@${handle2}`;
-        this.uiManager.setInfoText(displayName);
+        const displayName = handle2.startsWith("did:") ? "" : `@${handle2}`;
+        this.uiManager.setInfoText(`Profile: ${displayName}`.trim());
       } else {
         this.uiManager.setInfoText("Profile");
       }
@@ -75358,7 +75375,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar {
+            #statusBar,
+            #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthFull + gap}px !important;
               margin-right: auto !important;
@@ -75374,7 +75392,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar {
+            #statusBar,
+            #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthCollapsed + gap}px !important;
               margin-right: auto !important;
@@ -75403,7 +75422,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           div[data-testid="homeScreenFeedTabs"] {
             width: 100% !important;
           }
-          #statusBar {
+          #statusBar,
+          #bsky-navigator-global-statusbar {
             max-width: ${contentWidth}px !important;
             transform: translateX(${shiftRight}px) !important;
           }

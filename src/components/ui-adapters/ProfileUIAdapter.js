@@ -57,8 +57,8 @@ class ProfileUIAdapter {
     if (match) {
       const handle = match[1];
       // Handle might be a DID or a username
-      const displayName = handle.startsWith('did:') ? 'Profile' : `@${handle}`;
-      this.uiManager.setInfoText(displayName);
+      const displayName = handle.startsWith('did:') ? '' : `@${handle}`;
+      this.uiManager.setInfoText(`Profile: ${displayName}`.trim());
     } else {
       this.uiManager.setInfoText('Profile');
     }

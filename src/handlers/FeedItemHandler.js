@@ -1000,10 +1000,25 @@ export class FeedItemHandler extends ItemHandler {
       this.statusBar.remove();
       this.statusBar = null;
     }
+    // Clear status bar section references so they get re-created on activate
+    this.statusBarLeft = null;
+    this.statusBarCenter = null;
+    this.statusBarRight = null;
+    this.infoIndicator = null;
+    this.preferencesIcon = null;
+    this.bottomLoadIndicator = null;
     // Clear feed map references
     this.feedMap = null;
     this.feedMapWrapper = null;
     this.feedMapZoom = null;
+    this.feedMapContainer = null;
+    this.feedMapConnector = null;
+    this.feedMapZoomContainer = null;
+    this.feedMapZoomHighlight = null;
+    this.feedMapLabelStart = null;
+    this.feedMapLabelEnd = null;
+    this.feedMapZoomLabelStart = null;
+    this.feedMapZoomLabelEnd = null;
   }
 
   _throttledScrollUpdate() {
@@ -1174,7 +1189,8 @@ export class FeedItemHandler extends ItemHandler {
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar {
+            #statusBar,
+            #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthFull + gap}px !important;
               margin-right: auto !important;
@@ -1190,7 +1206,8 @@ export class FeedItemHandler extends ItemHandler {
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar {
+            #statusBar,
+            #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthCollapsed + gap}px !important;
               margin-right: auto !important;
@@ -1241,7 +1258,8 @@ export class FeedItemHandler extends ItemHandler {
           main[role="main"] [data-testid^="profile"] {
             max-width: ${contentWidth}px !important;
           }
-          #statusBar {
+          #statusBar,
+          #bsky-navigator-global-statusbar {
             max-width: ${contentWidth}px !important;
             transform: translateX(${shiftRight}px) !important;
           }

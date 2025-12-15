@@ -310,7 +310,8 @@ function getScreenFromElement(element) {
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar {
+            #statusBar,
+            #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthFull + gap}px !important;
               margin-right: auto !important;
@@ -326,7 +327,8 @@ function getScreenFromElement(element) {
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar {
+            #statusBar,
+            #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthCollapsed + gap}px !important;
               margin-right: auto !important;
@@ -356,7 +358,8 @@ function getScreenFromElement(element) {
           div[data-testid="homeScreenFeedTabs"] {
             width: 100% !important;
           }
-          #statusBar {
+          #statusBar,
+          #bsky-navigator-global-statusbar {
             max-width: ${contentWidth}px !important;
             transform: translateX(${shiftRight}px) !important;
           }

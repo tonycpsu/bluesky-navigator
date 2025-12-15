@@ -2852,8 +2852,7 @@ export class ItemHandler extends Handler {
           }
         </div>
         <div class="bsky-nav-rules-dropdown-footer">
-          <input type="text" class="bsky-nav-rules-num-input" placeholder="#" readonly>
-          <input type="text" class="bsky-nav-rules-new-category" placeholder="${categories.length > 0 ? 'New category...' : 'Create first category...'}">
+          <input type="text" class="bsky-nav-rules-quick-filter" placeholder="${categories.length > 0 ? 'Type # or name...' : 'Create first category...'}" autocomplete="off" spellcheck="false">
           <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
         </div>
       </div>
@@ -2895,24 +2894,16 @@ export class ItemHandler extends Handler {
       closeDropdown();
     });
 
-    // Create new category handler
+    // Quick filter input reference
+    const quickFilterInput = dropdown.find('.bsky-nav-rules-quick-filter');
+
+    // Create new category handler (uses quick filter input value)
     dropdown.find('.bsky-nav-rules-create-btn').on('click', () => {
-      const input = dropdown.find('.bsky-nav-rules-new-category');
-      const newCategory = input.val().trim();
-      if (newCategory) {
+      const newCategory = quickFilterInput.val().trim();
+      // Only create if it's not purely numeric and not empty
+      if (newCategory && !/^\d+$/.test(newCategory)) {
         this.addAuthorToRules(handle, newCategory, selectedAction);
         closeDropdown();
-      }
-    });
-
-    // Enter key in input creates category
-    dropdown.find('.bsky-nav-rules-new-category').on('keypress', (e) => {
-      if (e.key === 'Enter') {
-        const newCategory = $(e.target).val().trim();
-        if (newCategory) {
-          this.addAuthorToRules(handle, newCategory, selectedAction);
-          closeDropdown();
-        }
       }
     });
 
@@ -2932,64 +2923,101 @@ export class ItemHandler extends Handler {
       $(document).on('mousedown', closeHandler);
     }, 100);
 
-    // Keyboard handler for numeric selection (supports two-digit entry)
+    // Keyboard handler for quick filter (supports both number and text entry)
     const categoryButtons = dropdown.find('.bsky-nav-rules-category-btn');
-    const numInput = dropdown.find('.bsky-nav-rules-num-input');
-    let numBuffer = '';
     let numTimeout = null;
 
     const selectCategory = (index) => {
-      if (index >= 0 && index < categoryButtons.length) {
+      if (index >= 0 && index < categoryButtons.filter(':visible').length) {
         categoryButtons.removeClass('selected');
-        const selected = categoryButtons.eq(index);
+        const visibleButtons = categoryButtons.filter(':visible');
+        const selected = visibleButtons.eq(index);
         selected.addClass('selected');
         selected[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
     };
 
-    const updateNumDisplay = () => {
-      numInput.val(numBuffer);
+    const filterCategories = (filterText) => {
+      const lowerFilter = filterText.toLowerCase();
+      let visibleCount = 0;
+      let firstVisible = null;
+
+      categoryButtons.each(function() {
+        const btn = $(this);
+        const category = btn.data('category').toLowerCase();
+        const matches = category.includes(lowerFilter);
+        btn.toggle(matches);
+        if (matches) {
+          visibleCount++;
+          if (!firstVisible) firstVisible = btn;
+        }
+      });
+
+      // Auto-select first visible match
+      if (firstVisible) {
+        categoryButtons.removeClass('selected');
+        firstVisible.addClass('selected');
+      }
+
+      // Update create button visibility - show if filter could be a new category
+      const createBtn = dropdown.find('.bsky-nav-rules-create-btn');
+      const isNewCategory = filterText && !/^\d+$/.test(filterText) &&
+        !categories.some(cat => cat.toLowerCase() === lowerFilter);
+      createBtn.toggle(isNewCategory);
+
+      return { visibleCount, firstVisible };
     };
 
-    const keyHandler = (e) => {
-      // Skip if focus is in text input (except the readonly num input)
-      if ($(e.target).is('input') && !$(e.target).hasClass('bsky-nav-rules-num-input')) return;
+    const processInput = () => {
+      const val = quickFilterInput.val();
 
-      // Number keys 0-9 for category selection
-      if (/^[0-9]$/.test(e.key)) {
+      // Pure numeric input - select by number
+      if (/^\d+$/.test(val)) {
+        const num = parseInt(val);
+        // Show all categories when doing numeric selection
+        categoryButtons.show();
+        if (num > 0 && num <= categoryButtons.length) {
+          selectCategory(num - 1);
+        }
+        // Hide create button for pure numbers
+        dropdown.find('.bsky-nav-rules-create-btn').hide();
+      } else if (val) {
+        // Text input - filter categories
+        filterCategories(val);
+      } else {
+        // Empty - show all
+        categoryButtons.show();
+        dropdown.find('.bsky-nav-rules-create-btn').show();
+      }
+    };
+
+    // Input event handler for real-time filtering
+    quickFilterInput.on('input', () => {
+      // Clear any pending number timeout
+      if (numTimeout) clearTimeout(numTimeout);
+      processInput();
+    });
+
+    // Focus the input when dropdown opens
+    setTimeout(() => quickFilterInput.focus(), 50);
+
+    const keyHandler = (e) => {
+      // Handle Enter key
+      if (e.key === 'Enter') {
         e.preventDefault();
         e.stopPropagation();
 
-        // Clear previous timeout
-        if (numTimeout) clearTimeout(numTimeout);
+        const val = quickFilterInput.val().trim();
+        const selected = dropdown.find('.bsky-nav-rules-category-btn.selected:visible');
 
-        // Append to buffer
-        numBuffer += e.key;
-        updateNumDisplay();
-
-        // Try to select immediately
-        const num = parseInt(numBuffer);
-        if (num > 0) {
-          selectCategory(num - 1);
-        }
-
-        // Set timeout to clear buffer (500ms for second digit)
-        numTimeout = setTimeout(() => {
-          numBuffer = '';
-          updateNumDisplay();
-        }, 500);
-
-        return;
-      }
-
-      // Enter confirms selected category
-      if (e.key === 'Enter') {
-        const selected = dropdown.find('.bsky-nav-rules-category-btn.selected');
         if (selected.length) {
-          e.preventDefault();
-          e.stopPropagation();
+          // Select the highlighted category
           const category = selected.data('category');
           this.addAuthorToRules(handle, category, selectedAction);
+          closeDropdown();
+        } else if (val && !/^\d+$/.test(val)) {
+          // Create new category if text entered and no match
+          this.addAuthorToRules(handle, val, selectedAction);
           closeDropdown();
         }
         return;
@@ -3000,6 +3028,47 @@ export class ItemHandler extends Handler {
         e.preventDefault();
         e.stopPropagation();
         closeDropdown();
+        return;
+      }
+
+      // Arrow keys for navigation
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const visibleButtons = categoryButtons.filter(':visible');
+        if (visibleButtons.length === 0) return;
+
+        const currentSelected = visibleButtons.filter('.selected');
+        let currentIndex = currentSelected.length ? visibleButtons.index(currentSelected) : -1;
+
+        if (e.key === 'ArrowDown') {
+          currentIndex = (currentIndex + 1) % visibleButtons.length;
+        } else {
+          currentIndex = currentIndex <= 0 ? visibleButtons.length - 1 : currentIndex - 1;
+        }
+
+        categoryButtons.removeClass('selected');
+        visibleButtons.eq(currentIndex).addClass('selected');
+        visibleButtons[currentIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        return;
+      }
+
+      // Tab to toggle allow/deny
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        e.stopPropagation();
+        const allowBtn = dropdown.find('.bsky-nav-rules-allow');
+        const denyBtn = dropdown.find('.bsky-nav-rules-deny');
+        if (allowBtn.hasClass('selected')) {
+          allowBtn.removeClass('selected');
+          denyBtn.addClass('selected');
+          selectedAction = 'deny';
+        } else {
+          denyBtn.removeClass('selected');
+          allowBtn.addClass('selected');
+          selectedAction = 'allow';
+        }
         return;
       }
     };

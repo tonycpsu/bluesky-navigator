@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+479.3b6824bf
+// @version     1.0.31+480.0b6d571e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -51705,31 +51705,25 @@ div#statusBar.has-feed-map {
   background: #f9fafb;
 }
 
-.bsky-nav-rules-num-input {
-  width: 36px;
-  padding: 6px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  text-align: center;
-  background: white;
-  color: #374151;
-  outline: none;
-}
-
-.bsky-nav-rules-new-category {
+.bsky-nav-rules-quick-filter {
   flex: 1;
   padding: 6px 10px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
+  background: white;
+  color: #374151;
 }
 
-.bsky-nav-rules-new-category:focus {
+.bsky-nav-rules-quick-filter:focus {
   border-color: #3b82f6;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.bsky-nav-rules-quick-filter::placeholder {
+  color: #9ca3af;
+  font-size: 12px;
 }
 
 .bsky-nav-rules-create-btn {
@@ -51861,20 +51855,18 @@ div#statusBar.has-feed-map {
     border-top-color: #374151;
   }
 
-  .bsky-nav-rules-num-input {
+  .bsky-nav-rules-quick-filter {
     background: #374151;
     border-color: #4b5563;
     color: #f3f4f6;
   }
 
-  .bsky-nav-rules-new-category {
-    background: #374151;
-    border-color: #4b5563;
-    color: #f3f4f6;
-  }
-
-  .bsky-nav-rules-new-category:focus {
+  .bsky-nav-rules-quick-filter:focus {
     border-color: #3b82f6;
+  }
+
+  .bsky-nav-rules-quick-filter::placeholder {
+    color: #9ca3af;
   }
 
   .bsky-nav-rule-notification {
@@ -70677,8 +70669,7 @@ div#statusBar.has-feed-map {
       }).join("") : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings \u2192 Rules.</div>'}
         </div>
         <div class="bsky-nav-rules-dropdown-footer">
-          <input type="text" class="bsky-nav-rules-num-input" placeholder="#" readonly>
-          <input type="text" class="bsky-nav-rules-new-category" placeholder="${categories.length > 0 ? "New category..." : "Create first category..."}">
+          <input type="text" class="bsky-nav-rules-quick-filter" placeholder="${categories.length > 0 ? "Type # or name..." : "Create first category..."}" autocomplete="off" spellcheck="false">
           <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
         </div>
       </div>
@@ -70708,21 +70699,12 @@ div#statusBar.has-feed-map {
         this.addAuthorToRules(handle2, category, selectedAction);
         closeDropdown();
       });
+      const quickFilterInput = dropdown.find(".bsky-nav-rules-quick-filter");
       dropdown.find(".bsky-nav-rules-create-btn").on("click", () => {
-        const input = dropdown.find(".bsky-nav-rules-new-category");
-        const newCategory = input.val().trim();
-        if (newCategory) {
+        const newCategory = quickFilterInput.val().trim();
+        if (newCategory && !/^\d+$/.test(newCategory)) {
           this.addAuthorToRules(handle2, newCategory, selectedAction);
           closeDropdown();
-        }
-      });
-      dropdown.find(".bsky-nav-rules-new-category").on("keypress", (e2) => {
-        if (e2.key === "Enter") {
-          const newCategory = $(e2.target).val().trim();
-          if (newCategory) {
-            this.addAuthorToRules(handle2, newCategory, selectedAction);
-            closeDropdown();
-          }
         }
       });
       dropdown.on("mousedown mouseup click", (e2) => {
@@ -70737,45 +70719,70 @@ div#statusBar.has-feed-map {
         $(document).on("mousedown", closeHandler);
       }, 100);
       const categoryButtons = dropdown.find(".bsky-nav-rules-category-btn");
-      const numInput = dropdown.find(".bsky-nav-rules-num-input");
-      let numBuffer = "";
-      let numTimeout = null;
       const selectCategory = (index) => {
-        if (index >= 0 && index < categoryButtons.length) {
+        if (index >= 0 && index < categoryButtons.filter(":visible").length) {
           categoryButtons.removeClass("selected");
-          const selected = categoryButtons.eq(index);
+          const visibleButtons = categoryButtons.filter(":visible");
+          const selected = visibleButtons.eq(index);
           selected.addClass("selected");
           selected[0].scrollIntoView({ block: "nearest", behavior: "smooth" });
         }
       };
-      const updateNumDisplay = () => {
-        numInput.val(numBuffer);
+      const filterCategories = (filterText) => {
+        const lowerFilter = filterText.toLowerCase();
+        let visibleCount = 0;
+        let firstVisible = null;
+        categoryButtons.each(function() {
+          const btn = $(this);
+          const category = btn.data("category").toLowerCase();
+          const matches = category.includes(lowerFilter);
+          btn.toggle(matches);
+          if (matches) {
+            visibleCount++;
+            if (!firstVisible) firstVisible = btn;
+          }
+        });
+        if (firstVisible) {
+          categoryButtons.removeClass("selected");
+          firstVisible.addClass("selected");
+        }
+        const createBtn = dropdown.find(".bsky-nav-rules-create-btn");
+        const isNewCategory = filterText && !/^\d+$/.test(filterText) && !categories.some((cat) => cat.toLowerCase() === lowerFilter);
+        createBtn.toggle(isNewCategory);
+        return { visibleCount, firstVisible };
       };
-      const keyHandler = (e2) => {
-        if ($(e2.target).is("input") && !$(e2.target).hasClass("bsky-nav-rules-num-input")) return;
-        if (/^[0-9]$/.test(e2.key)) {
-          e2.preventDefault();
-          e2.stopPropagation();
-          if (numTimeout) clearTimeout(numTimeout);
-          numBuffer += e2.key;
-          updateNumDisplay();
-          const num = parseInt(numBuffer);
-          if (num > 0) {
+      const processInput = () => {
+        const val = quickFilterInput.val();
+        if (/^\d+$/.test(val)) {
+          const num = parseInt(val);
+          categoryButtons.show();
+          if (num > 0 && num <= categoryButtons.length) {
             selectCategory(num - 1);
           }
-          numTimeout = setTimeout(() => {
-            numBuffer = "";
-            updateNumDisplay();
-          }, 500);
-          return;
+          dropdown.find(".bsky-nav-rules-create-btn").hide();
+        } else if (val) {
+          filterCategories(val);
+        } else {
+          categoryButtons.show();
+          dropdown.find(".bsky-nav-rules-create-btn").show();
         }
+      };
+      quickFilterInput.on("input", () => {
+        processInput();
+      });
+      setTimeout(() => quickFilterInput.focus(), 50);
+      const keyHandler = (e2) => {
         if (e2.key === "Enter") {
-          const selected = dropdown.find(".bsky-nav-rules-category-btn.selected");
+          e2.preventDefault();
+          e2.stopPropagation();
+          const val = quickFilterInput.val().trim();
+          const selected = dropdown.find(".bsky-nav-rules-category-btn.selected:visible");
           if (selected.length) {
-            e2.preventDefault();
-            e2.stopPropagation();
             const category = selected.data("category");
             this.addAuthorToRules(handle2, category, selectedAction);
+            closeDropdown();
+          } else if (val && !/^\d+$/.test(val)) {
+            this.addAuthorToRules(handle2, val, selectedAction);
             closeDropdown();
           }
           return;
@@ -70784,6 +70791,39 @@ div#statusBar.has-feed-map {
           e2.preventDefault();
           e2.stopPropagation();
           closeDropdown();
+          return;
+        }
+        if (e2.key === "ArrowDown" || e2.key === "ArrowUp") {
+          e2.preventDefault();
+          e2.stopPropagation();
+          const visibleButtons = categoryButtons.filter(":visible");
+          if (visibleButtons.length === 0) return;
+          const currentSelected = visibleButtons.filter(".selected");
+          let currentIndex = currentSelected.length ? visibleButtons.index(currentSelected) : -1;
+          if (e2.key === "ArrowDown") {
+            currentIndex = (currentIndex + 1) % visibleButtons.length;
+          } else {
+            currentIndex = currentIndex <= 0 ? visibleButtons.length - 1 : currentIndex - 1;
+          }
+          categoryButtons.removeClass("selected");
+          visibleButtons.eq(currentIndex).addClass("selected");
+          visibleButtons[currentIndex].scrollIntoView({ block: "nearest", behavior: "smooth" });
+          return;
+        }
+        if (e2.key === "Tab") {
+          e2.preventDefault();
+          e2.stopPropagation();
+          const allowBtn = dropdown.find(".bsky-nav-rules-allow");
+          const denyBtn = dropdown.find(".bsky-nav-rules-deny");
+          if (allowBtn.hasClass("selected")) {
+            allowBtn.removeClass("selected");
+            denyBtn.addClass("selected");
+            selectedAction = "deny";
+          } else {
+            denyBtn.removeClass("selected");
+            allowBtn.addClass("selected");
+            selectedAction = "allow";
+          }
           return;
         }
       };

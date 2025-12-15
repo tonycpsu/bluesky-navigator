@@ -4910,31 +4910,25 @@ div#statusBar.has-feed-map {
   background: #f9fafb;
 }
 
-.bsky-nav-rules-num-input {
-  width: 36px;
-  padding: 6px 8px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  text-align: center;
-  background: white;
-  color: #374151;
-  outline: none;
-}
-
-.bsky-nav-rules-new-category {
+.bsky-nav-rules-quick-filter {
   flex: 1;
   padding: 6px 10px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
+  background: white;
+  color: #374151;
 }
 
-.bsky-nav-rules-new-category:focus {
+.bsky-nav-rules-quick-filter:focus {
   border-color: #3b82f6;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.bsky-nav-rules-quick-filter::placeholder {
+  color: #9ca3af;
+  font-size: 12px;
 }
 
 .bsky-nav-rules-create-btn {
@@ -5066,20 +5060,18 @@ div#statusBar.has-feed-map {
     border-top-color: #374151;
   }
 
-  .bsky-nav-rules-num-input {
+  .bsky-nav-rules-quick-filter {
     background: #374151;
     border-color: #4b5563;
     color: #f3f4f6;
   }
 
-  .bsky-nav-rules-new-category {
-    background: #374151;
-    border-color: #4b5563;
-    color: #f3f4f6;
-  }
-
-  .bsky-nav-rules-new-category:focus {
+  .bsky-nav-rules-quick-filter:focus {
     border-color: #3b82f6;
+  }
+
+  .bsky-nav-rules-quick-filter::placeholder {
+    color: #9ca3af;
   }
 
   .bsky-nav-rule-notification {

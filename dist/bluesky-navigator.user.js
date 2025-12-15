@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+481.8760a463
+// @version     1.0.31+482.1f43d0f1
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -70691,8 +70691,8 @@ div#statusBar.has-feed-map {
       const closeDropdown = () => {
         dropdown.remove();
         this.rulesDropdownActive = false;
-        $(document).off("mousedown", closeHandler);
-        $(document).off("keydown", keyHandler);
+        $(document).off("mousedown.rulesDropdown");
+        $(document).off("keydown.rulesDropdown");
       };
       dropdown.find(".bsky-nav-rules-category-btn").on("click", (e2) => {
         const category = $(e2.target).data("category");
@@ -70716,7 +70716,7 @@ div#statusBar.has-feed-map {
         }
       };
       setTimeout(() => {
-        $(document).on("mousedown", closeHandler);
+        $(document).on("mousedown.rulesDropdown", closeHandler);
       }, 100);
       const categoryButtons = dropdown.find(".bsky-nav-rules-category-btn");
       const selectCategory = (index) => {
@@ -70827,7 +70827,7 @@ div#statusBar.has-feed-map {
           return;
         }
       };
-      $(document).on("keydown", keyHandler);
+      $(document).on("keydown.rulesDropdown", keyHandler);
     }
     /**
      * Parse rule categories from config text
@@ -76025,7 +76025,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (typeof target2.tagName === "undefined") {
           return false;
         }
-        if ($(target2).closest("#bsky-navigator-toolbar").length) {
+        if ($(target2).closest("#bsky-navigator-toolbar, .bsky-nav-rules-dropdown").length) {
           return;
         }
         const targetTagName = target2.tagName.toLowerCase();

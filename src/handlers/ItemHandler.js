@@ -2883,8 +2883,8 @@ export class ItemHandler extends Handler {
     const closeDropdown = () => {
       dropdown.remove();
       this.rulesDropdownActive = false;
-      $(document).off('mousedown', closeHandler);
-      $(document).off('keydown', keyHandler);
+      $(document).off('mousedown.rulesDropdown');
+      $(document).off('keydown.rulesDropdown');
     };
 
     // Category button handlers
@@ -2920,7 +2920,7 @@ export class ItemHandler extends Handler {
       }
     };
     setTimeout(() => {
-      $(document).on('mousedown', closeHandler);
+      $(document).on('mousedown.rulesDropdown', closeHandler);
     }, 100);
 
     // Keyboard handler for quick filter (supports both number and text entry)
@@ -3072,7 +3072,7 @@ export class ItemHandler extends Handler {
         return;
       }
     };
-    $(document).on('keydown', keyHandler);
+    $(document).on('keydown.rulesDropdown', keyHandler);
   }
 
   /**

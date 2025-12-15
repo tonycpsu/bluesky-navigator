@@ -1156,8 +1156,8 @@ function getScreenFromElement(element) {
       if (typeof target.tagName === 'undefined') {
         return false;
       }
-      // Ignore focus events on our toolbar elements - don't switch context
-      if ($(target).closest('#bsky-navigator-toolbar').length) {
+      // Ignore focus events on our UI elements - don't switch context
+      if ($(target).closest('#bsky-navigator-toolbar, .bsky-nav-rules-dropdown').length) {
         return;
       }
       const targetTagName = target.tagName.toLowerCase();

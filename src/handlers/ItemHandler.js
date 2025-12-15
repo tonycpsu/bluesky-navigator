@@ -2644,11 +2644,14 @@ export class ItemHandler extends Handler {
         console.log('[scroll] post almost fits (top gap:', topGap, 'bottom overlap:', bottomOverlap, ') - skipping');
         return false;
       }
-      // If post fits in viewport, align top with toolbar; otherwise just show more of bottom
-      const scrollToShowTop = rect.top - toolbarHeight - 10;
-      const scrollToShowBottom = rect.bottom - viewportBottom + 10;
-      // Use whichever scroll amount actually moves the viewport
-      scrollAmount = Math.max(scrollToShowTop, scrollToShowBottom);
+      // Scroll minimally based on direction to avoid oscillation
+      if (direction > 0) {
+        // Going down: scroll just enough to show the bottom
+        scrollAmount = rect.bottom - viewportBottom + 10;
+      } else {
+        // Going up: align top with toolbar (unusual case - post is below but navigating up)
+        scrollAmount = rect.top - toolbarHeight - 10;
+      }
     } else {
       // Already visible, shouldn't happen but handle gracefully
       return true;

@@ -1,6 +1,12 @@
 // ProfileItemHandler.js - Handler for user profile pages
 
 import { FeedItemHandler } from './FeedItemHandler.js';
+import {
+  getFeedMapConfig,
+  createFeedMapElements,
+  attachFeedMapToHandler,
+  setupFeedMapHandlers,
+} from './feedMapUtils.js';
 
 /**
  * Handler for profile pages with profile-specific actions (follow, mute, block, etc.).
@@ -15,43 +21,38 @@ export class ProfileItemHandler extends FeedItemHandler {
 
   /**
    * Called by ProfileUIAdapter to provide UIManager's status bar
-   * This is called after activate(), so we need to setup feed map here
+   * This is called after activate(), and also when navigating between profiles
+   * (where context doesn't change but URL does)
    */
   setUIManagerStatusBar(statusBar, statusBarLeft) {
     this.uiManagerStatusBar = statusBar;
     this.uiManagerStatusBarLeft = statusBarLeft;
 
-    // Now that we have UIManager's status bar, setup the feed map
-    if (!statusBar.find('.feed-map-wrapper').length) {
-      this.addFeedMapToStatusBar(statusBar);
+    // Ensure status bar is in DOM and visible (may have been removed during SPA navigation)
+    if (!$.contains(document, statusBar[0])) {
+      // Status bar not in DOM - need to wait for UIManager to re-insert it
+      setTimeout(() => this.setUIManagerStatusBar(statusBar, statusBarLeft), 100);
+      return;
+    }
+    statusBar.show();
+
+    // Remove any stale feed map wrapper and create fresh
+    // (important for SPA navigation where previous wrapper might exist)
+    statusBar.find('.feed-map-wrapper').remove();
+    statusBar.removeClass('has-feed-map');
+    this.addFeedMapToStatusBar(statusBar);
+
+    // Check if toolbar needs refresh (for profile-to-profile navigation where
+    // context doesn't change but DOM may have been updated by React)
+    // Must check isConnected AND offsetParent to detect stale React elements
+    const toolbarEl = this.toolbarDiv ? this.toolbarDiv[0] : null;
+    const toolbarValid = toolbarEl && toolbarEl.isConnected && toolbarEl.offsetParent !== null;
+    if (!toolbarValid) {
+      this.refreshToolbars();
     }
 
     // Load items with retry - profile feed takes time to render
     this.loadItemsWithRetry();
-  }
-
-  /**
-   * Load items with retry for profile pages where feed loads asynchronously
-   */
-  loadItemsWithRetry() {
-    let retryCount = 0;
-    const maxRetries = 10;
-
-    const tryLoad = () => {
-      this.loadItems();
-      const itemCount = this.items?.length || 0;
-
-      if (itemCount === 0 && retryCount < maxRetries) {
-        retryCount++;
-        setTimeout(tryLoad, 300);
-      } else if (itemCount > 0) {
-        // Items found - update feed map
-        this.updateScrollPosition(true);
-      }
-    };
-
-    // Initial delay to let profile feed render
-    setTimeout(tryLoad, 500);
   }
 
   activate() {
@@ -211,23 +212,30 @@ export class ProfileItemHandler extends FeedItemHandler {
       return;
     }
 
-    // If we already have a toolbar reference and it's in the DOM, we're done
-    if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+    // If we already have a toolbar reference and it's valid, we're done
+    // Must check isConnected AND offsetParent to detect stale React elements
+    const toolbarEl = this.toolbarDiv ? this.toolbarDiv[0] : null;
+    const toolbarValid = toolbarEl && toolbarEl.isConnected && toolbarEl.offsetParent !== null;
+    if (toolbarValid) {
       this.setSortIcons();
       return;
     }
 
     // Remove any existing toolbar (stale from previous handler)
     $('#bsky-navigator-toolbar').remove();
+    this.toolbarDiv = null;
 
     // Try to insert immediately if element exists
-    const profileFeedTabs = $('div[data-testid="profilePager"]').first();
-    if (profileFeedTabs.length) {
+    // Use native DOM to filter to only visible, connected elements (avoid stale React elements)
+    const profileFeedTabs = this._findVisibleProfilePager();
+    if (profileFeedTabs) {
       this._settingUpToolbars = true;
       this.addToolbar(profileFeedTabs);
       this._settingUpToolbars = false;
       this.setSortIcons();
       this.applyProfileWidth();
+      // Load items to populate feed map (for 'Top toolbar' position)
+      this.loadItemsWithRetry();
       return;
     }
 
@@ -238,8 +246,10 @@ export class ProfileItemHandler extends FeedItemHandler {
         return;
       }
 
-      // If we already have a toolbar reference and it's in the DOM, we're done
-      if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+      // If we already have a toolbar reference and it's valid, we're done
+      const toolbarEl = this.toolbarDiv ? this.toolbarDiv[0] : null;
+      const toolbarValid = toolbarEl && toolbarEl.isConnected && toolbarEl.offsetParent !== null;
+      if (toolbarValid) {
         obs.disconnect();
         this._toolbarObserver = null;
         return;
@@ -247,9 +257,11 @@ export class ProfileItemHandler extends FeedItemHandler {
 
       // Remove any existing toolbar (stale)
       $('#bsky-navigator-toolbar').remove();
+      this.toolbarDiv = null;
 
-      const profilePager = $('div[data-testid="profilePager"]').first();
-      if (profilePager.length) {
+      // Use native DOM to filter to only visible, connected elements
+      const profilePager = this._findVisibleProfilePager();
+      if (profilePager) {
         obs.disconnect();
         this._toolbarObserver = null;
         this._settingUpToolbars = true;
@@ -257,6 +269,8 @@ export class ProfileItemHandler extends FeedItemHandler {
         this._settingUpToolbars = false;
         this.setSortIcons();
         this.applyProfileWidth();
+        // Load items to populate feed map (for 'Top toolbar' position)
+        this.loadItemsWithRetry();
       }
     });
 
@@ -276,65 +290,42 @@ export class ProfileItemHandler extends FeedItemHandler {
   }
 
   /**
+   * Find a visible, connected profilePager element.
+   * During SPA navigation, React may leave stale elements in the DOM,
+   * so we filter to only elements that are connected and visible.
+   * @returns {jQuery|null} - jQuery-wrapped visible profilePager or null
+   */
+  _findVisibleProfilePager() {
+    const allProfilePagers = document.querySelectorAll('div[data-testid="profilePager"]');
+    for (const pager of allProfilePagers) {
+      if (pager.isConnected && pager.offsetParent !== null) {
+        return $(pager);
+      }
+    }
+    return null;
+  }
+
+  /**
    * Add feed map elements to an existing status bar (UIManager's)
    */
   addFeedMapToStatusBar(statusBar) {
-    const indicatorPosition = this.config.get('feedMapPosition');
-    if (indicatorPosition !== 'Bottom status bar') {
+    const feedMapConfig = getFeedMapConfig(this.config);
+    if (feedMapConfig.position !== 'Bottom status bar') {
       return; // Feed map not configured for status bar
     }
 
-    const indicatorStyle = this.config.get('feedMapStyle') || 'Advanced';
-    const isAdvancedStyle = indicatorStyle === 'Advanced';
-    const styleClass = isAdvancedStyle ? 'feed-map-advanced' : 'feed-map-basic';
-    const indicatorTheme = this.config.get('feedMapTheme') || 'Default';
-    const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
-    const indicatorScale = parseInt(this.config.get('feedMapScale'), 10) || 100;
-    const scaleValue = indicatorScale / 100;
-    const animationInterval = parseInt(this.config.get('feedMapAnimationSpeed'), 10);
-    const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
-    const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
+    // Create feed map elements using shared utility
+    const elements = createFeedMapElements(feedMapConfig, { isToolbar: false });
 
-    // Create feed map elements (same as FeedItemHandler.addStatusBar)
-    this.feedMapContainer = $(`<div class="feed-map-container"></div>`);
-    this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-    this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-    this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
-    this.feedMapContainer.append(this.feedMapLabelStart);
-    this.feedMapContainer.append(this.feedMap);
-    this.feedMapContainer.append(this.feedMapLabelEnd);
-
-    this.feedMapZoomHighlight = this.feedMap.find('.feed-map-position-zoom-highlight');
-    this.feedMapWrapper = $(`<div class="feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-    this.feedMapWrapper.append(this.feedMapContainer);
-
-    this.feedMapConnector = $(`<div class="feed-map-connector">
-      <svg class="feed-map-connector-svg" preserveAspectRatio="none">
-        <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
-        <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
-      </svg>
-    </div>`);
-    this.feedMapWrapper.append(this.feedMapConnector);
-
-    this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
-    this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-    this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-    this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
-    this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
-    this.feedMapZoomContainer.append(this.feedMapZoom);
-    this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
-    this.feedMapWrapper.append(this.feedMapZoomContainer);
+    // Attach elements to handler properties
+    attachFeedMapToHandler(this, elements);
 
     // Prepend to status bar (before other sections)
-    statusBar.prepend(this.feedMapWrapper);
+    statusBar.prepend(elements.wrapper);
     statusBar.addClass('has-feed-map');
 
     // Setup event handlers
-    this.setupScrollIndicatorZoomClick();
-    this.setupScrollIndicatorClick();
-    this.setupScrollIndicatorScroll();
-    this.setupFeedMapTooltipHandlers(this.feedMap);
-    this.setupFeedMapTooltipHandlers(this.feedMapZoom);
+    setupFeedMapHandlers(this, elements.map, elements.zoom);
 
     // Store reference to status bar for other operations
     this.statusBar = statusBar;

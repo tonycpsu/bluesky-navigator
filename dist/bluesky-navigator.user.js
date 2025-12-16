@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+491.b5190c62
+// @version     1.0.31+492.eae675f0
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -68695,6 +68695,71 @@ div#statusBar.has-feed-map {
       return this.threadNavList;
     }
     /**
+     * Create or get the main NavigableList for feed item navigation
+     */
+    getMainNavList() {
+      if (!this.mainNavList) {
+        this.mainNavList = new NavigableList({
+          getItems: () => this.items ? this.items.toArray() : [],
+          selectedClass: "item-selection-active",
+          autoScroll: false,
+          // We handle scrolling ourselves
+          onSelect: (item, newIndex, oldIndex) => {
+            this._onMainItemSelected(item, newIndex, oldIndex);
+          },
+          onDeselect: (item, index) => {
+            this._onMainItemDeselected(item, index);
+          }
+        });
+      }
+      return this.mainNavList;
+    }
+    /**
+     * Called when a main feed item is selected via NavigableList
+     * @private
+     */
+    _onMainItemSelected(item, newIndex, oldIndex) {
+      this._index = newIndex;
+      this._threadIndex = null;
+      this._replyIndex = null;
+      this.sidecarNavList = null;
+      this.threadNavList = null;
+      this.postId = this.postIdForItem($(item));
+      this.updateInfoIndicator();
+      if (item && document.contains(item)) {
+        this.applyItemStyle(item, true);
+      }
+      if (!this._skipSidecar) {
+        this.expandItem($(item));
+      }
+      $(item).find("video").each((_i, video2) => {
+        const playbackMode = this.config.get("videoPreviewPlayback");
+        if (playbackMode === "Pause all") {
+          this.pauseVideo(video2);
+        } else if (playbackMode === "Play selected") {
+          this.playVideo(video2);
+        }
+        if (this.config.get("videoDisableLoop")) {
+          video2.removeAttribute("autoplay");
+          video2.addEventListener("ended", function() {
+            video2.load();
+          });
+        }
+      });
+    }
+    /**
+     * Called when a main feed item is deselected via NavigableList
+     * @private
+     */
+    _onMainItemDeselected(item, index) {
+      if (this._markOnDeselect && index != null) {
+        this.markItemRead(index, true);
+      }
+      if (item && document.contains(item)) {
+        this.applyItemStyle(item, false);
+      }
+    }
+    /**
      * Get unrolled thread posts (main post + unrolled replies) for navigation
      */
     getUnrolledThreadPosts() {
@@ -68862,47 +68927,22 @@ div#statusBar.has-feed-map {
       return $(this.getThreadNavList().getSelectedItem());
     }
     setIndex(index, mark, update, skipSidecar = false) {
-      const oldIndex = this.index;
-      if (index == oldIndex) {
+      if (index < 0 || !this.items || index >= this.items.length) {
         return;
       }
-      if (oldIndex != null) {
-        if (mark) {
-          this.markItemRead(oldIndex, true);
-        }
-      }
-      if (index < 0 || index >= this.items.length) {
+      if (index === this.index) {
         return;
       }
-      const oldItem = this.items[oldIndex];
-      if (oldItem && document.contains(oldItem)) {
-        this.applyItemStyle(oldItem, false);
-      }
-      this.index = index;
-      if (this.selectedItem && document.contains($(this.selectedItem)[0])) {
-        this.applyItemStyle(this.selectedItem, true);
-      }
-      if (!skipSidecar) {
-        this.expandItem(this.selectedItem);
-      }
-      $(this.selectedItem).find("video").each((_i, video2) => {
-        const playbackMode = this.config.get("videoPreviewPlayback");
-        if (playbackMode === "Pause all") {
-          this.pauseVideo(video2);
-        } else if (playbackMode === "Play selected") {
-          this.playVideo(video2);
-        }
-        if (this.config.get("videoDisableLoop")) {
-          video2.removeAttribute("autoplay");
-          video2.addEventListener("ended", function() {
-            video2.load();
-          });
-        }
-      });
+      this._markOnDeselect = mark;
+      this._skipSidecar = skipSidecar;
+      const navList = this.getMainNavList();
+      const moved = navList.jumpTo(index);
+      this._markOnDeselect = false;
+      this._skipSidecar = false;
       if (update) {
         this.updateItems();
       }
-      return true;
+      return moved;
     }
     getIndexFromItem(item) {
       return $(this.items).index(item);
@@ -69327,12 +69367,18 @@ div#statusBar.has-feed-map {
             if (threadEl.hasClass("unrolled-view-full-thread-hidden")) return;
             const items = threadEl.find('[role="link"]');
             const realPosts = items.filter(function() {
-              const testId = $(this).attr("data-testid") || "";
-              return testId.startsWith("feedItem-by-") || testId.startsWith("postThreadItem-by-");
+              const $item = $(this);
+              const testId = $item.attr("data-testid") || "";
+              const ariaLabel = $item.attr("aria-label") || "";
+              const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+              return testId.startsWith("feedItem-by-") || testId.startsWith("postThreadItem-by-") || ariaLabel.startsWith("Post by ") || hasPostUI;
             });
             const viewFullThreadItems = items.filter(function() {
-              const testId = $(this).attr("data-testid") || "";
-              return !testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-");
+              const $item = $(this);
+              const testId = $item.attr("data-testid") || "";
+              const ariaLabel = $item.attr("aria-label") || "";
+              const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+              return !testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-") && !ariaLabel.startsWith("Post by ") && !hasPostUI;
             });
             if (viewFullThreadItems.length > 0 && realPosts.length === 0) {
               const links = threadEl.find('a[href*="/post/"]');
@@ -71737,6 +71783,27 @@ ${rule}`;
       $("body").addClass("bsky-nav-feed-ready");
       $("#feedLoadingIndicator").remove();
     }
+    /**
+     * Load items with retry for pages where feed loads asynchronously.
+     * Used by Profile and Saved handlers.
+     * @param {number} maxRetries - Maximum number of retry attempts (default: 10)
+     * @param {number} retryDelay - Delay between retries in ms (default: 300)
+     * @param {number} initialDelay - Initial delay before first attempt in ms (default: 500)
+     */
+    loadItemsWithRetry(maxRetries = 10, retryDelay = 300, initialDelay = 500) {
+      let retryCount = 0;
+      const tryLoad = () => {
+        this.loadItems();
+        const itemCount = this.items?.length || 0;
+        if (itemCount === 0 && retryCount < maxRetries) {
+          retryCount++;
+          setTimeout(tryLoad, retryDelay);
+        } else if (itemCount > 0) {
+          this.updateScrollPosition(true);
+        }
+      };
+      setTimeout(tryLoad, initialDelay);
+    }
     loadItems(focusedPostId) {
       this.perfLog("loadItems called");
       this.showFeedLoading();
@@ -71806,11 +71873,17 @@ ${rule}`;
       this.sortItems();
       this.filterItems();
       this.items = $(this.selector).filter(":visible").filter((i2, item) => {
+        if (!item.isConnected || item.offsetParent === null) return false;
         if ($(item).parents(this.selector).length > 0) return false;
         const testId = $(item).attr("data-testid") || "";
-        if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-")) return false;
+        const ariaLabel = $(item).attr("aria-label") || "";
+        const hasPostUI = $(item).find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+        if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-") && !ariaLabel.startsWith("Post by ") && !hasPostUI) return false;
         return true;
       });
+      if (this.mainNavList) {
+        this.mainNavList.setIndexSilent(this._index ?? 0);
+      }
       this.visibleItems = [];
       this.setupIntersectionObserver();
       this.itemStats.oldest = this.itemStats.newest = null;
@@ -72050,11 +72123,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     onFeedChange() {
       this.perfLog("onFeedChange");
       this.showFeedLoading();
-      const indicator = $("#feed-map-position-indicator");
-      if (indicator.length) {
-        indicator.find(".feed-map-segment").remove();
-        indicator.find(".feed-map-viewport-indicator").remove();
-        indicator.find(".feed-map-empty").remove();
+      if (this.feedMap && this.feedMap.length) {
+        this.feedMap.find(".feed-map-segment").remove();
+        this.feedMap.find(".feed-map-viewport-indicator").remove();
+        this.feedMap.find(".feed-map-empty").remove();
       }
       if (this.feedMapZoom) {
         this.feedMapZoom.find(".feed-map-segment-zoom").remove();
@@ -72750,8 +72822,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this._scrollUpdatePending) return;
       this._scrollUpdatePending = true;
       requestAnimationFrame(() => {
-        const indicator = $("#feed-map-position-indicator");
-        if (indicator.length && this.items.length) {
+        const indicator = this.feedMap;
+        if (indicator && indicator.length && this.items.length) {
           this.updateViewportIndicator(indicator, this.items.length);
           if (this.feedMapZoom) {
             const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
@@ -72763,10 +72835,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const showTimestamps = isAdvancedStyle ? this.config.get("feedMapTimestamps") !== false : false;
             const showHandles = isAdvancedStyle ? this.config.get("feedMapHandles") !== false : false;
             const showRuleColors = isAdvancedStyle && this.config.get("ruleColorCoding");
-            const allItems = $(".item").filter((i2, item) => {
-              if ($(item).parents(".item").length > 0) return false;
-              const testId = $(item).attr("data-testid") || "";
-              if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-")) return false;
+            const allItems = $(this.selector).filter((i2, item) => {
+              if (!item.isConnected || item.offsetParent === null) return false;
+              const $item = $(item);
+              if ($item.parents(this.selector).length > 0) return false;
+              const testId = $item.attr("data-testid") || "";
+              const ariaLabel = $item.attr("aria-label") || "";
+              const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+              if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-") && !ariaLabel.startsWith("Post by ") && !hasPostUI) return false;
               return true;
             }).toArray();
             let displayItems = [];
@@ -73309,9 +73385,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.refreshItems();
       this.updateInfoIndicator();
       this.items = $(this.selector).filter(":visible").filter((i2, item) => {
-        if ($(item).parents(this.selector).length > 0) return false;
-        const testId = $(item).attr("data-testid") || "";
-        if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-")) return false;
+        if (!item.isConnected || item.offsetParent === null) return false;
+        const $item = $(item);
+        if ($item.parents(this.selector).length > 0) return false;
+        const testId = $item.attr("data-testid") || "";
+        const ariaLabel = $item.attr("aria-label") || "";
+        const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+        if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-") && !ariaLabel.startsWith("Post by ") && !hasPostUI) return false;
         return true;
       });
       this.updateScrollPosition(true);
@@ -73398,15 +73478,18 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return div.innerHTML;
     }
     updateScrollPosition(forceRebuild = false) {
-      const indicator = $("#feed-map-position-indicator");
-      if (!indicator.length) return;
+      const indicator = this.feedMap;
+      if (!indicator || !indicator.length) return;
       const allItems = this.items.toArray ? this.items.toArray() : Array.from(this.items);
       let displayItems = [];
       let displayIndices = [];
       allItems.forEach((item, i2) => {
         if (!$(item).hasClass("filtered")) {
-          const testId = $(item).attr("data-testid") || "";
-          if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-")) {
+          const $item = $(item);
+          const testId = $item.attr("data-testid") || "";
+          const ariaLabel = $item.attr("aria-label") || "";
+          const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+          if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-") && !ariaLabel.startsWith("Post by ") && !hasPostUI) {
             return;
           }
           displayItems.push(item);
@@ -74547,6 +74630,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      */
     setupFeedMapTooltipHandlers(indicator) {
       if (!indicator) return;
+      indicator.off("mouseenter", ".feed-map-segment");
+      indicator.off("mouseleave", ".feed-map-segment");
+      indicator.off("mouseleave");
       indicator.on("mouseenter", ".feed-map-segment", (e2) => {
         const segment = e2.currentTarget;
         const itemIndex = $(segment).data("index");
@@ -74646,6 +74732,104 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
   }
+  function getFeedMapConfig(config2) {
+    const position2 = config2.get("feedMapPosition");
+    const style2 = config2.get("feedMapStyle") || "Advanced";
+    const isAdvanced = style2 === "Advanced";
+    const theme = config2.get("feedMapTheme") || "Default";
+    const scale = parseInt(config2.get("feedMapScale"), 10) || 100;
+    const animationSpeed = parseInt(config2.get("feedMapAnimationSpeed"), 10);
+    return {
+      position: position2,
+      style: style2,
+      isAdvanced,
+      styleClass: isAdvanced ? "feed-map-advanced" : "feed-map-basic",
+      theme,
+      themeClass: `feed-map-theme-${theme.toLowerCase()}`,
+      scale,
+      scaleValue: scale / 100,
+      animationSpeed: isNaN(animationSpeed) ? 100 : animationSpeed,
+      animationSpeedValue: (isNaN(animationSpeed) ? 100 : animationSpeed) / 100,
+      customPropsStyle: `--indicator-scale: ${scale / 100}; --zoom-animation-speed: ${(isNaN(animationSpeed) ? 100 : animationSpeed) / 100};`
+    };
+  }
+  function createFeedMapElements(feedMapConfig, options = {}) {
+    const { styleClass, themeClass, customPropsStyle } = feedMapConfig;
+    const { isToolbar = false } = options;
+    const containerClass = isToolbar ? "feed-map-container feed-map-container-toolbar" : "feed-map-container";
+    const zoomContainerClass = isToolbar ? "feed-map-container feed-map-container-toolbar feed-map-zoom-container" : "feed-map-container feed-map-zoom-container";
+    const container = $(`<div class="${containerClass}"></div>`);
+    const labelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+    const labelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+    const map = $(
+      `<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`
+    );
+    container.append(labelStart);
+    container.append(map);
+    container.append(labelEnd);
+    const zoomHighlight = map.find(".feed-map-position-zoom-highlight");
+    const wrapperClass = isToolbar ? `feed-map-wrapper ${styleClass} ${themeClass}` : `feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}`;
+    const wrapper = $(`<div class="${wrapperClass}" style="${customPropsStyle}"></div>`);
+    wrapper.append(container);
+    const connector = $(`<div class="feed-map-connector">
+    <svg class="feed-map-connector-svg" preserveAspectRatio="none">
+      <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
+      <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
+    </svg>
+  </div>`);
+    wrapper.append(connector);
+    const zoomContainer = $(`<div class="${zoomContainerClass}"></div>`);
+    const zoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+    const zoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+    const zoom = $(
+      `<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`
+    );
+    let zoomInner = null;
+    if (isToolbar) {
+      zoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
+      zoom.append(zoomInner);
+    }
+    zoomContainer.append(zoomLabelStart);
+    zoomContainer.append(zoom);
+    zoomContainer.append(zoomLabelEnd);
+    wrapper.append(zoomContainer);
+    return {
+      container,
+      labelStart,
+      labelEnd,
+      map,
+      wrapper,
+      connector,
+      zoomContainer,
+      zoomLabelStart,
+      zoomLabelEnd,
+      zoom,
+      zoomInner,
+      zoomHighlight
+    };
+  }
+  function attachFeedMapToHandler(handler, elements) {
+    handler.feedMapContainer = elements.container;
+    handler.feedMapLabelStart = elements.labelStart;
+    handler.feedMapLabelEnd = elements.labelEnd;
+    handler.feedMap = elements.map;
+    handler.feedMapWrapper = elements.wrapper;
+    handler.feedMapConnector = elements.connector;
+    handler.feedMapZoomContainer = elements.zoomContainer;
+    handler.feedMapZoomLabelStart = elements.zoomLabelStart;
+    handler.feedMapZoomLabelEnd = elements.zoomLabelEnd;
+    handler.feedMapZoom = elements.zoom;
+    handler.feedMapZoomInner = elements.zoomInner;
+    handler.feedMapZoomHighlight = elements.zoomHighlight;
+    handler.zoomWindowStart = null;
+  }
+  function setupFeedMapHandlers(handler, feedMap, feedMapZoom) {
+    handler.setupScrollIndicatorZoomClick();
+    handler.setupScrollIndicatorClick();
+    handler.setupScrollIndicatorScroll();
+    handler.setupFeedMapTooltipHandlers(feedMap);
+    handler.setupFeedMapTooltipHandlers(feedMapZoom);
+  }
   class ProfileItemHandler extends FeedItemHandler {
     constructor(name, config2, state2, api, selector) {
       super(name, config2, state2, api, selector);
@@ -74655,33 +74839,26 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     /**
      * Called by ProfileUIAdapter to provide UIManager's status bar
-     * This is called after activate(), so we need to setup feed map here
+     * This is called after activate(), and also when navigating between profiles
+     * (where context doesn't change but URL does)
      */
     setUIManagerStatusBar(statusBar, statusBarLeft) {
       this.uiManagerStatusBar = statusBar;
       this.uiManagerStatusBarLeft = statusBarLeft;
-      if (!statusBar.find(".feed-map-wrapper").length) {
-        this.addFeedMapToStatusBar(statusBar);
+      if (!$.contains(document, statusBar[0])) {
+        setTimeout(() => this.setUIManagerStatusBar(statusBar, statusBarLeft), 100);
+        return;
+      }
+      statusBar.show();
+      statusBar.find(".feed-map-wrapper").remove();
+      statusBar.removeClass("has-feed-map");
+      this.addFeedMapToStatusBar(statusBar);
+      const toolbarEl = this.toolbarDiv ? this.toolbarDiv[0] : null;
+      const toolbarValid = toolbarEl && toolbarEl.isConnected && toolbarEl.offsetParent !== null;
+      if (!toolbarValid) {
+        this.refreshToolbars();
       }
       this.loadItemsWithRetry();
-    }
-    /**
-     * Load items with retry for profile pages where feed loads asynchronously
-     */
-    loadItemsWithRetry() {
-      let retryCount = 0;
-      const maxRetries = 10;
-      const tryLoad = () => {
-        this.loadItems();
-        const itemCount = this.items?.length || 0;
-        if (itemCount === 0 && retryCount < maxRetries) {
-          retryCount++;
-          setTimeout(tryLoad, 300);
-        } else if (itemCount > 0) {
-          this.updateScrollPosition(true);
-        }
-      };
-      setTimeout(tryLoad, 500);
     }
     activate() {
       this.setIndex(0);
@@ -74789,32 +74966,39 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this._settingUpToolbars) {
         return;
       }
-      if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+      const toolbarEl = this.toolbarDiv ? this.toolbarDiv[0] : null;
+      const toolbarValid = toolbarEl && toolbarEl.isConnected && toolbarEl.offsetParent !== null;
+      if (toolbarValid) {
         this.setSortIcons();
         return;
       }
       $("#bsky-navigator-toolbar").remove();
-      const profileFeedTabs = $('div[data-testid="profilePager"]').first();
-      if (profileFeedTabs.length) {
+      this.toolbarDiv = null;
+      const profileFeedTabs = this._findVisibleProfilePager();
+      if (profileFeedTabs) {
         this._settingUpToolbars = true;
         this.addToolbar(profileFeedTabs);
         this._settingUpToolbars = false;
         this.setSortIcons();
         this.applyProfileWidth();
+        this.loadItemsWithRetry();
         return;
       }
       this._toolbarObserver = new MutationObserver((mutations, obs) => {
         if (this._settingUpToolbars) {
           return;
         }
-        if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+        const toolbarEl2 = this.toolbarDiv ? this.toolbarDiv[0] : null;
+        const toolbarValid2 = toolbarEl2 && toolbarEl2.isConnected && toolbarEl2.offsetParent !== null;
+        if (toolbarValid2) {
           obs.disconnect();
           this._toolbarObserver = null;
           return;
         }
         $("#bsky-navigator-toolbar").remove();
-        const profilePager = $('div[data-testid="profilePager"]').first();
-        if (profilePager.length) {
+        this.toolbarDiv = null;
+        const profilePager = this._findVisibleProfilePager();
+        if (profilePager) {
           obs.disconnect();
           this._toolbarObserver = null;
           this._settingUpToolbars = true;
@@ -74822,6 +75006,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           this._settingUpToolbars = false;
           this.setSortIcons();
           this.applyProfileWidth();
+          this.loadItemsWithRetry();
         }
       });
       this._toolbarObserver.observe(document.body, {
@@ -74836,55 +75021,33 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }, 1e4);
     }
     /**
+     * Find a visible, connected profilePager element.
+     * During SPA navigation, React may leave stale elements in the DOM,
+     * so we filter to only elements that are connected and visible.
+     * @returns {jQuery|null} - jQuery-wrapped visible profilePager or null
+     */
+    _findVisibleProfilePager() {
+      const allProfilePagers = document.querySelectorAll('div[data-testid="profilePager"]');
+      for (const pager of allProfilePagers) {
+        if (pager.isConnected && pager.offsetParent !== null) {
+          return $(pager);
+        }
+      }
+      return null;
+    }
+    /**
      * Add feed map elements to an existing status bar (UIManager's)
      */
     addFeedMapToStatusBar(statusBar) {
-      const indicatorPosition = this.config.get("feedMapPosition");
-      if (indicatorPosition !== "Bottom status bar") {
+      const feedMapConfig = getFeedMapConfig(this.config);
+      if (feedMapConfig.position !== "Bottom status bar") {
         return;
       }
-      const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
-      const isAdvancedStyle = indicatorStyle === "Advanced";
-      const styleClass = isAdvancedStyle ? "feed-map-advanced" : "feed-map-basic";
-      const indicatorTheme = this.config.get("feedMapTheme") || "Default";
-      const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
-      const indicatorScale = parseInt(this.config.get("feedMapScale"), 10) || 100;
-      const scaleValue = indicatorScale / 100;
-      const animationInterval = parseInt(this.config.get("feedMapAnimationSpeed"), 10);
-      const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
-      const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
-      this.feedMapContainer = $(`<div class="feed-map-container"></div>`);
-      this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-      this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-      this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
-      this.feedMapContainer.append(this.feedMapLabelStart);
-      this.feedMapContainer.append(this.feedMap);
-      this.feedMapContainer.append(this.feedMapLabelEnd);
-      this.feedMapZoomHighlight = this.feedMap.find(".feed-map-position-zoom-highlight");
-      this.feedMapWrapper = $(`<div class="feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-      this.feedMapWrapper.append(this.feedMapContainer);
-      this.feedMapConnector = $(`<div class="feed-map-connector">
-      <svg class="feed-map-connector-svg" preserveAspectRatio="none">
-        <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
-        <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
-      </svg>
-    </div>`);
-      this.feedMapWrapper.append(this.feedMapConnector);
-      this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
-      this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-      this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-      this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
-      this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
-      this.feedMapZoomContainer.append(this.feedMapZoom);
-      this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
-      this.feedMapWrapper.append(this.feedMapZoomContainer);
-      statusBar.prepend(this.feedMapWrapper);
+      const elements = createFeedMapElements(feedMapConfig, { isToolbar: false });
+      attachFeedMapToHandler(this, elements);
+      statusBar.prepend(elements.wrapper);
       statusBar.addClass("has-feed-map");
-      this.setupScrollIndicatorZoomClick();
-      this.setupScrollIndicatorClick();
-      this.setupScrollIndicatorScroll();
-      this.setupFeedMapTooltipHandlers(this.feedMap);
-      this.setupFeedMapTooltipHandlers(this.feedMapZoom);
+      setupFeedMapHandlers(this, elements.map, elements.zoom);
       this.statusBar = statusBar;
     }
     /**
@@ -74932,6 +75095,169 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           $("div[data-testid='profileHeaderDropdownReportBtn']").click();
         }, 200);
       }
+    }
+  }
+  class SavedItemHandler extends FeedItemHandler {
+    constructor(name, config2, state2, api, selector) {
+      super(name, config2, state2, api, selector);
+      this.uiManagerStatusBar = null;
+      this.uiManagerStatusBarLeft = null;
+    }
+    /**
+     * Called by SavedUIAdapter to provide UIManager's status bar
+     * This is called after activate(), so we setup feed map here
+     */
+    setUIManagerStatusBar(statusBar, statusBarLeft) {
+      this.uiManagerStatusBar = statusBar;
+      this.uiManagerStatusBarLeft = statusBarLeft;
+      if (!$.contains(document, statusBar[0])) {
+        setTimeout(() => this.setUIManagerStatusBar(statusBar, statusBarLeft), 100);
+        return;
+      }
+      statusBar.show();
+      statusBar.find(".feed-map-wrapper").remove();
+      statusBar.removeClass("has-feed-map");
+      this.addFeedMapToStatusBar(statusBar);
+      this.loadItemsWithRetry();
+    }
+    /**
+     * Add feed map elements to UIManager's status bar
+     */
+    addFeedMapToStatusBar(statusBar) {
+      const feedMapConfig = getFeedMapConfig(this.config);
+      if (feedMapConfig.position !== "Bottom status bar") {
+        return;
+      }
+      const elements = createFeedMapElements(feedMapConfig, { isToolbar: false });
+      attachFeedMapToHandler(this, elements);
+      statusBar.prepend(elements.wrapper);
+      statusBar.addClass("has-feed-map");
+      setupFeedMapHandlers(this, elements.map, elements.zoom);
+      this.statusBar = statusBar;
+    }
+    isActive() {
+      const path = window.location.pathname;
+      return path.includes("/saved") || path.includes("/bookmarks") || document.querySelector('div[data-testid="bookmarksScreen"]') !== null;
+    }
+    /**
+     * Override refreshToolbars to use saved-page-specific selectors.
+     * The saved page doesn't have homeScreenFeedTabs, so we find the
+     * feed container and insert the toolbar at the top.
+     * Note: Status bar is handled by UIManager via SavedUIAdapter.
+     */
+    refreshToolbars() {
+      if (this._toolbarObserver) {
+        this._toolbarObserver.disconnect();
+        this._toolbarObserver = null;
+      }
+      if (this._settingUpToolbars) {
+        return;
+      }
+      if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+        return;
+      }
+      $("#bsky-navigator-toolbar").remove();
+      const insertPoint = this._findToolbarInsertPoint();
+      if (insertPoint) {
+        this._settingUpToolbars = true;
+        this.addToolbar(insertPoint);
+        this._settingUpToolbars = false;
+        this._hideSavedPageControls();
+        return;
+      }
+      this._toolbarObserver = new MutationObserver(() => {
+        if (this._settingUpToolbars) {
+          return;
+        }
+        if (this.toolbarDiv && $.contains(document, this.toolbarDiv[0])) {
+          this._toolbarObserver.disconnect();
+          this._toolbarObserver = null;
+          return;
+        }
+        $("#bsky-navigator-toolbar").remove();
+        const point = this._findToolbarInsertPoint();
+        if (point) {
+          this._toolbarObserver.disconnect();
+          this._toolbarObserver = null;
+          this._settingUpToolbars = true;
+          this.addToolbar(point);
+          this._settingUpToolbars = false;
+          this._hideSavedPageControls();
+        }
+      });
+      this._toolbarObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+    /**
+     * Find the correct insertion point for the toolbar on the saved page.
+     * Insert inside the max-width container to inherit correct width styling.
+     * Uses native DOM to filter to visible, connected elements (avoid stale React elements).
+     */
+    _findToolbarInsertPoint() {
+      const allScreens = document.querySelectorAll('div[data-testid="bookmarksScreen"]');
+      let bookmarksScreen = null;
+      for (const screen of allScreens) {
+        if (screen.isConnected && screen.offsetParent !== null) {
+          bookmarksScreen = $(screen);
+          break;
+        }
+      }
+      if (!bookmarksScreen) {
+        return null;
+      }
+      const feedContainer = bookmarksScreen.find('div[style*="max-width"]').first();
+      if (feedContainer.length && feedContainer[0].isConnected) {
+        const firstChild2 = feedContainer.children().first();
+        if (firstChild2.length && firstChild2[0].isConnected) {
+          return firstChild2;
+        }
+      }
+      const firstPost = bookmarksScreen.find('div[role="link"][tabindex="0"]').first();
+      if (firstPost.length && firstPost[0].isConnected) {
+        return firstPost;
+      }
+      const firstChild = bookmarksScreen.children().first();
+      if (firstChild.length && firstChild[0].isConnected) {
+        const firstGrandchild = firstChild.children().first();
+        if (firstGrandchild.length && firstGrandchild[0].isConnected) {
+          return firstGrandchild;
+        }
+        return firstChild;
+      }
+      return null;
+    }
+    /**
+     * Hide controls that don't apply to the saved page
+     */
+    _hideSavedPageControls() {
+      if (!this.toolbarDiv) return;
+      this.toolbarDiv.find(".sort-order-btn").hide();
+      this.toolbarDiv.find("#sortIndicator").hide();
+      this.toolbarDiv.find("#bsky-navigator-new-posts-pill").hide();
+      this.toolbarDiv.find(".saved-searches-btn").hide();
+      this.toolbarDiv.find("#topLoadIndicator").hide();
+      this.toolbarDiv.find("#bottomLoadIndicator").hide();
+    }
+    /**
+     * Override activate to load items with retry since saved page loads async
+     */
+    activate() {
+      super.activate();
+      this.loadItemsWithRetry();
+    }
+    deactivate() {
+      if (this._toolbarObserver) {
+        this._toolbarObserver.disconnect();
+        this._toolbarObserver = null;
+      }
+      this.feedMap = null;
+      this.feedMapWrapper = null;
+      this.feedMapZoom = null;
+      super.deactivate();
+      this.uiManagerStatusBar = null;
+      this.uiManagerStatusBarLeft = null;
     }
   }
   class UIManager {
@@ -75012,7 +75338,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     /**
      * Insert toolbar and status bar into the DOM
      */
-    async insertIntoDOM() {
+    insertIntoDOM() {
       const main = $(constants.MAIN_SELECTOR);
       if (!main.length) {
         console.warn('[UIManager] main[role="main"] not found');
@@ -75031,8 +75357,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * @param {object} handler - The handler for this context (optional)
      */
     setContext(contextName, handler = null) {
-      if (this.initialized && !$.contains(document, this.toolbarDiv[0])) {
-        this.insertIntoDOM();
+      if (this.initialized) {
+        const toolbarInDOM = $.contains(document, this.toolbarDiv[0]);
+        const statusBarInDOM = $.contains(document, this.statusBar[0]);
+        if (!toolbarInDOM || !statusBarInDOM) {
+          this.insertIntoDOM();
+        }
       }
       if (this.currentAdapter) {
         this.currentAdapter.deactivate();
@@ -75315,6 +75645,43 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     /**
      * Deactivate this adapter - called when switching away from profile context
+     */
+    deactivate() {
+      const statusBar = this.uiManager.getStatusBar();
+      statusBar.find(".feed-map-wrapper").remove();
+      statusBar.removeClass("has-feed-map");
+      this.uiManager.getToolbarDiv().show();
+      this.uiManager.getStatusBar().show();
+      this.handler = null;
+    }
+  }
+  class SavedUIAdapter {
+    constructor() {
+      this.uiManager = null;
+      this.handler = null;
+    }
+    /**
+     * Set reference to UIManager
+     */
+    setUIManager(uiManager) {
+      this.uiManager = uiManager;
+    }
+    /**
+     * Activate this adapter - called when switching to saved context
+     * @param {object} handler - The SavedItemHandler instance
+     */
+    activate(handler) {
+      this.handler = handler;
+      this.uiManager.getToolbarDiv().hide();
+      this.uiManager.getStatusBar().show();
+      this.uiManager.getStatusBarLeft().empty();
+      this.uiManager.setInfoText("Saved Posts");
+      if (handler && handler.setUIManagerStatusBar) {
+        handler.setUIManagerStatusBar(this.uiManager.getStatusBar(), this.uiManager.getStatusBarLeft());
+      }
+    }
+    /**
+     * Deactivate this adapter - called when switching away from saved context
      */
     deactivate() {
       const statusBar = this.uiManager.getStatusBar();
@@ -75886,6 +76253,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         feed: new FeedItemHandler("feed", config, state, api, constants.FEED_ITEM_SELECTOR),
         post: new PostItemHandler("post", config, state, api, constants.POST_ITEM_SELECTOR),
         profile: new ProfileItemHandler("profile", config, state, api, constants.FEED_ITEM_SELECTOR),
+        saved: new SavedItemHandler("saved", config, state, api, constants.FEED_ITEM_SELECTOR),
         input: new Handler("input", config, state, api)
       };
       if (state.rulesConfig) {
@@ -75898,9 +76266,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const feedAdapter = new FeedUIAdapter();
       const postAdapter = new PostUIAdapter();
       const profileAdapter = new ProfileUIAdapter();
+      const savedAdapter = new SavedUIAdapter();
       uiManager.registerAdapter("default", defaultAdapter);
       uiManager.registerAdapter("input", defaultAdapter);
       uiManager.registerAdapter("feed", feedAdapter);
+      uiManager.registerAdapter("saved", savedAdapter);
       uiManager.registerAdapter("post", postAdapter);
       uiManager.registerAdapter("profile", profileAdapter);
       uiManager.initialize().then(() => {

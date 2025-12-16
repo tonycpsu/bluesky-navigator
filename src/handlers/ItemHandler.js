@@ -289,6 +289,86 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Create or get the main NavigableList for feed item navigation
+   */
+  getMainNavList() {
+    if (!this.mainNavList) {
+      this.mainNavList = new NavigableList({
+        getItems: () => (this.items ? this.items.toArray() : []),
+        selectedClass: 'item-selection-active',
+        autoScroll: false, // We handle scrolling ourselves
+        onSelect: (item, newIndex, oldIndex) => {
+          this._onMainItemSelected(item, newIndex, oldIndex);
+        },
+        onDeselect: (item, index) => {
+          this._onMainItemDeselected(item, index);
+        },
+      });
+    }
+    return this.mainNavList;
+  }
+
+  /**
+   * Called when a main feed item is selected via NavigableList
+   * @private
+   */
+  _onMainItemSelected(item, newIndex, oldIndex) {
+    // Update internal index state (without triggering setter's side effects twice)
+    this._index = newIndex;
+    this._threadIndex = null;
+    this._replyIndex = null;
+    this.sidecarNavList = null;
+    this.threadNavList = null;
+    this.postId = this.postIdForItem($(item));
+    this.updateInfoIndicator();
+
+    // Apply visual styling
+    if (item && document.contains(item)) {
+      this.applyItemStyle(item, true);
+    }
+
+    // Expand sidecar for new item (unless skipSidecar was set)
+    if (!this._skipSidecar) {
+      this.expandItem($(item));
+    }
+
+    // Handle video playback
+    $(item)
+      .find('video')
+      .each((_i, video) => {
+        const playbackMode = this.config.get('videoPreviewPlayback');
+        if (playbackMode === 'Pause all') {
+          this.pauseVideo(video);
+        } else if (playbackMode === 'Play selected') {
+          this.playVideo(video);
+        }
+
+        if (this.config.get('videoDisableLoop')) {
+          video.removeAttribute('autoplay');
+          video.addEventListener('ended', function () {
+            video.load();
+          });
+        }
+      });
+  }
+
+  /**
+   * Called when a main feed item is deselected via NavigableList
+   * @private
+   */
+  _onMainItemDeselected(item, index) {
+    // Mark as read if requested
+    if (this._markOnDeselect && index != null) {
+      this.markItemRead(index, true);
+    }
+
+    // Remove visual styling
+    if (item && document.contains(item)) {
+      this.applyItemStyle(item, false);
+    }
+  }
+
+  /**
    * Get unrolled thread posts (main post + unrolled replies) for navigation
    */
   getUnrolledThreadPosts() {
@@ -507,55 +587,34 @@ export class ItemHandler extends Handler {
   }
 
   setIndex(index, mark, update, skipSidecar = false) {
-    const oldIndex = this.index;
-    if (index == oldIndex) {
+    // Validate index before navigating
+    if (index < 0 || !this.items || index >= this.items.length) {
       return;
     }
-    if (oldIndex != null) {
-      if (mark) {
-        this.markItemRead(oldIndex, true);
-      }
-    }
-    if (index < 0 || index >= this.items.length) {
+
+    // Skip if already at this index
+    if (index === this.index) {
       return;
     }
-    // Be defensive - old item may have been removed from DOM by React
-    const oldItem = this.items[oldIndex];
-    if (oldItem && document.contains(oldItem)) {
-      this.applyItemStyle(oldItem, false);
-    }
-    this.index = index;
-    // Also check new item is in DOM (should always be, but be safe)
-    if (this.selectedItem && document.contains($(this.selectedItem)[0])) {
-      this.applyItemStyle(this.selectedItem, true);
-    }
 
-    if (!skipSidecar) {
-      this.expandItem(this.selectedItem);
-    }
+    // Set flags for NavigableList callbacks
+    this._markOnDeselect = mark;
+    this._skipSidecar = skipSidecar;
 
-    $(this.selectedItem)
-      .find('video')
-      .each((_i, video) => {
-        const playbackMode = this.config.get('videoPreviewPlayback');
-        if (playbackMode === 'Pause all') {
-          this.pauseVideo(video);
-        } else if (playbackMode === 'Play selected') {
-          this.playVideo(video);
-        }
+    // Use NavigableList for navigation (handles deselect + select callbacks)
+    const navList = this.getMainNavList();
+    const moved = navList.jumpTo(index);
 
-        if (this.config.get('videoDisableLoop')) {
-          video.removeAttribute('autoplay');
-          video.addEventListener('ended', function () {
-            video.load();
-          });
-        }
-      });
+    // Clear flags
+    this._markOnDeselect = false;
+    this._skipSidecar = false;
 
+    // Update items if requested
     if (update) {
       this.updateItems();
     }
-    return true;
+
+    return moved;
   }
 
   getIndexFromItem(item) {
@@ -1104,14 +1163,27 @@ export class ItemHandler extends Handler {
           if (threadEl.hasClass('unrolled-view-full-thread-hidden')) return;
 
           // Look for items with and without feedItem-by- testid
+          // Also detect saved page items by aria-label or post UI elements
           const items = threadEl.find('[role="link"]');
           const realPosts = items.filter(function () {
-            const testId = $(this).attr('data-testid') || '';
-            return testId.startsWith('feedItem-by-') || testId.startsWith('postThreadItem-by-');
+            const $item = $(this);
+            const testId = $item.attr('data-testid') || '';
+            const ariaLabel = $item.attr('aria-label') || '';
+            const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+            return testId.startsWith('feedItem-by-') ||
+                   testId.startsWith('postThreadItem-by-') ||
+                   ariaLabel.startsWith('Post by ') ||
+                   hasPostUI;
           });
           const viewFullThreadItems = items.filter(function () {
-            const testId = $(this).attr('data-testid') || '';
-            return !testId.startsWith('feedItem-by-') && !testId.startsWith('postThreadItem-by-');
+            const $item = $(this);
+            const testId = $item.attr('data-testid') || '';
+            const ariaLabel = $item.attr('aria-label') || '';
+            const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+            return !testId.startsWith('feedItem-by-') &&
+                   !testId.startsWith('postThreadItem-by-') &&
+                   !ariaLabel.startsWith('Post by ') &&
+                   !hasPostUI;
           });
 
           // Only hide threads that ONLY contain "View full thread" (no real posts)
@@ -4223,6 +4295,33 @@ export class ItemHandler extends Handler {
     $('#feedLoadingIndicator').remove();
   }
 
+  /**
+   * Load items with retry for pages where feed loads asynchronously.
+   * Used by Profile and Saved handlers.
+   * @param {number} maxRetries - Maximum number of retry attempts (default: 10)
+   * @param {number} retryDelay - Delay between retries in ms (default: 300)
+   * @param {number} initialDelay - Initial delay before first attempt in ms (default: 500)
+   */
+  loadItemsWithRetry(maxRetries = 10, retryDelay = 300, initialDelay = 500) {
+    let retryCount = 0;
+
+    const tryLoad = () => {
+      this.loadItems();
+      const itemCount = this.items?.length || 0;
+
+      if (itemCount === 0 && retryCount < maxRetries) {
+        retryCount++;
+        setTimeout(tryLoad, retryDelay);
+      } else if (itemCount > 0) {
+        // Items found - update feed map
+        this.updateScrollPosition(true);
+      }
+    };
+
+    // Initial delay to let feed render
+    setTimeout(tryLoad, initialDelay);
+  }
+
   loadItems(focusedPostId) {
     this.perfLog('loadItems called');
 
@@ -4328,14 +4427,30 @@ export class ItemHandler extends Handler {
 
     // Filter out embedded posts (posts that are inside another post)
     // Also filter out "View full thread" placeholders (they match selector but have no data-testid)
+    // And filter out stale React elements that are disconnected or hidden
     this.items = $(this.selector).filter(':visible').filter((i, item) => {
+      // Exclude stale React elements - check both isConnected and offsetParent
+      // (offsetParent is null for hidden/detached elements)
+      if (!item.isConnected || item.offsetParent === null) return false;
       // Check if this item is inside another item matching the selector
       if ($(item).parents(this.selector).length > 0) return false;
       // Exclude "View full thread" elements - real posts have data-testid="feedItem-by-..."
+      // Also accept items with aria-label="Post by ..." or containing post UI elements
+      // (saved/bookmarks page items lack testid but contain postText/likeBtn)
       const testId = $(item).attr('data-testid') || '';
-      if (!testId.startsWith('feedItem-by-') && !testId.startsWith('postThreadItem-by-')) return false;
+      const ariaLabel = $(item).attr('aria-label') || '';
+      const hasPostUI = $(item).find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+      if (!testId.startsWith('feedItem-by-') &&
+          !testId.startsWith('postThreadItem-by-') &&
+          !ariaLabel.startsWith('Post by ') &&
+          !hasPostUI) return false;
       return true;
     });
+
+    // Update mainNavList selection to stay in sync with items
+    if (this.mainNavList) {
+      this.mainNavList.setIndexSilent(this._index ?? 0);
+    }
 
     // Re-setup intersection observer for the new items
     this.visibleItems = [];

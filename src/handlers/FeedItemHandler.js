@@ -77,11 +77,10 @@ export class FeedItemHandler extends ItemHandler {
     this.showFeedLoading();
 
     // Clear the feed map segments to force rebuild
-    const indicator = $('#feed-map-position-indicator');
-    if (indicator.length) {
-      indicator.find('.feed-map-segment').remove();
-      indicator.find('.feed-map-viewport-indicator').remove();
-      indicator.find('.feed-map-empty').remove();
+    if (this.feedMap && this.feedMap.length) {
+      this.feedMap.find('.feed-map-segment').remove();
+      this.feedMap.find('.feed-map-viewport-indicator').remove();
+      this.feedMap.find('.feed-map-empty').remove();
     }
 
     // Clear feed map zoom if present
@@ -1029,8 +1028,8 @@ export class FeedItemHandler extends ItemHandler {
     this._scrollUpdatePending = true;
 
     requestAnimationFrame(() => {
-      const indicator = $('#feed-map-position-indicator');
-      if (indicator.length && this.items.length) {
+      const indicator = this.feedMap;
+      if (indicator && indicator.length && this.items.length) {
         this.updateViewportIndicator(indicator, this.items.length);
 
         // Also update feed map zoom if present (Advanced mode only)
@@ -1045,13 +1044,22 @@ export class FeedItemHandler extends ItemHandler {
           const showHandles = isAdvancedStyle ? (this.config.get('feedMapHandles') !== false) : false;
           const showRuleColors = isAdvancedStyle && this.config.get('ruleColorCoding');
 
-          // Get all items excluding filtered ones and non-post placeholders
-          const allItems = $('.item').filter((i, item) => {
+          // Get all items excluding filtered ones, non-post placeholders, and stale React elements
+          const allItems = $(this.selector).filter((i, item) => {
+            // Exclude stale React elements - check both isConnected and offsetParent
+            if (!item.isConnected || item.offsetParent === null) return false;
+            const $item = $(item);
             // Exclude nested items
-            if ($(item).parents('.item').length > 0) return false;
+            if ($item.parents(this.selector).length > 0) return false;
             // Exclude "View full thread" and other non-post elements
-            const testId = $(item).attr('data-testid') || '';
-            if (!testId.startsWith('feedItem-by-') && !testId.startsWith('postThreadItem-by-')) return false;
+            // Accept items with data-testid, aria-label="Post by ...", or post UI elements
+            const testId = $item.attr('data-testid') || '';
+            const ariaLabel = $item.attr('aria-label') || '';
+            const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+            if (!testId.startsWith('feedItem-by-') &&
+                !testId.startsWith('postThreadItem-by-') &&
+                !ariaLabel.startsWith('Post by ') &&
+                !hasPostUI) return false;
             return true;
           }).toArray();
 
@@ -1725,10 +1733,20 @@ export class FeedItemHandler extends ItemHandler {
     this.updateInfoIndicator();
 
     // Rebuild this.items to include newly visible items (after filter cleared)
+    // Filter out stale React elements that are disconnected or hidden
     this.items = $(this.selector).filter(':visible').filter((i, item) => {
-      if ($(item).parents(this.selector).length > 0) return false;
-      const testId = $(item).attr('data-testid') || '';
-      if (!testId.startsWith('feedItem-by-') && !testId.startsWith('postThreadItem-by-')) return false;
+      // Exclude stale React elements - check both isConnected and offsetParent
+      if (!item.isConnected || item.offsetParent === null) return false;
+      const $item = $(item);
+      if ($item.parents(this.selector).length > 0) return false;
+      // Accept items with data-testid, aria-label="Post by ...", or post UI elements
+      const testId = $item.attr('data-testid') || '';
+      const ariaLabel = $item.attr('aria-label') || '';
+      const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+      if (!testId.startsWith('feedItem-by-') &&
+          !testId.startsWith('postThreadItem-by-') &&
+          !ariaLabel.startsWith('Post by ') &&
+          !hasPostUI) return false;
       return true;
     });
 
@@ -1845,8 +1863,9 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   updateScrollPosition(forceRebuild = false) {
-    const indicator = $('#feed-map-position-indicator');
-    if (!indicator.length) return;
+    // Use instance reference instead of global selector to avoid finding stale elements
+    const indicator = this.feedMap;
+    if (!indicator || !indicator.length) return;
 
     // Use this.items which is properly filtered by loadItems()
     // This ensures we only show items from the current feed
@@ -1858,8 +1877,16 @@ export class FeedItemHandler extends ItemHandler {
     allItems.forEach((item, i) => {
       if (!$(item).hasClass('filtered')) {
         // Double-check: exclude "View full thread" placeholders that may have slipped through
-        const testId = $(item).attr('data-testid') || '';
-        if (!testId.startsWith('feedItem-by-') && !testId.startsWith('postThreadItem-by-')) {
+        // Accept items with data-testid, aria-label="Post by ...", or post UI elements
+        // (saved/bookmarks page items lack testid but contain postText/likeBtn)
+        const $item = $(item);
+        const testId = $item.attr('data-testid') || '';
+        const ariaLabel = $item.attr('aria-label') || '';
+        const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
+        if (!testId.startsWith('feedItem-by-') &&
+            !testId.startsWith('postThreadItem-by-') &&
+            !ariaLabel.startsWith('Post by ') &&
+            !hasPostUI) {
           return; // Skip non-post items
         }
         displayItems.push(item);
@@ -3456,6 +3483,11 @@ export class FeedItemHandler extends ItemHandler {
    */
   setupFeedMapTooltipHandlers(indicator) {
     if (!indicator) return;
+
+    // Remove any existing handlers to prevent duplicates (important during SPA navigation)
+    indicator.off('mouseenter', '.feed-map-segment');
+    indicator.off('mouseleave', '.feed-map-segment');
+    indicator.off('mouseleave');
 
     indicator.on('mouseenter', '.feed-map-segment', (e) => {
       const segment = e.currentTarget;

@@ -17,6 +17,7 @@ import {
   FeedItemHandler,
   PostItemHandler,
   ProfileItemHandler,
+  SavedItemHandler,
 } from './handlers/index.js';
 
 import UIManager from './components/UIManager.js';
@@ -24,6 +25,7 @@ import DefaultUIAdapter from './components/ui-adapters/DefaultUIAdapter.js';
 import FeedUIAdapter from './components/ui-adapters/FeedUIAdapter.js';
 import PostUIAdapter from './components/ui-adapters/PostUIAdapter.js';
 import ProfileUIAdapter from './components/ui-adapters/ProfileUIAdapter.js';
+import SavedUIAdapter from './components/ui-adapters/SavedUIAdapter.js';
 
 GM_addStyle(style);
 
@@ -812,6 +814,7 @@ function getScreenFromElement(element) {
       feed: new FeedItemHandler('feed', config, state, api, constants.FEED_ITEM_SELECTOR),
       post: new PostItemHandler('post', config, state, api, constants.POST_ITEM_SELECTOR),
       profile: new ProfileItemHandler('profile', config, state, api, constants.FEED_ITEM_SELECTOR),
+      saved: new SavedItemHandler('saved', config, state, api, constants.FEED_ITEM_SELECTOR),
       input: new Handler('input', config, state, api),
     };
 
@@ -832,9 +835,11 @@ function getScreenFromElement(element) {
     const feedAdapter = new FeedUIAdapter();
     const postAdapter = new PostUIAdapter();
     const profileAdapter = new ProfileUIAdapter();
+    const savedAdapter = new SavedUIAdapter();
     uiManager.registerAdapter('default', defaultAdapter);
     uiManager.registerAdapter('input', defaultAdapter); // Use default for input context
     uiManager.registerAdapter('feed', feedAdapter);
+    uiManager.registerAdapter('saved', savedAdapter);
     uiManager.registerAdapter('post', postAdapter);
     uiManager.registerAdapter('profile', profileAdapter);
 

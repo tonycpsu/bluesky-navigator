@@ -112,7 +112,7 @@ class UIManager {
   /**
    * Insert toolbar and status bar into the DOM
    */
-  async insertIntoDOM() {
+  insertIntoDOM() {
     const main = $(constants.MAIN_SELECTOR);
     if (!main.length) {
       console.warn('[UIManager] main[role="main"] not found');
@@ -148,8 +148,13 @@ class UIManager {
    */
   setContext(contextName, handler = null) {
     // Check if our elements are still in the DOM (SPA navigation may remove them)
-    if (this.initialized && !$.contains(document, this.toolbarDiv[0])) {
-      this.insertIntoDOM();
+    // Need to check both toolbar and status bar as they may be removed independently
+    if (this.initialized) {
+      const toolbarInDOM = $.contains(document, this.toolbarDiv[0]);
+      const statusBarInDOM = $.contains(document, this.statusBar[0]);
+      if (!toolbarInDOM || !statusBarInDOM) {
+        this.insertIntoDOM();
+      }
     }
 
     // Deactivate current adapter

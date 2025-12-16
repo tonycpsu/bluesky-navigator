@@ -482,6 +482,15 @@ div:has(> div > .item.filtered) {
     display: block !important;
 }
 
+/* Enable hover cards on embedded/quote post profile links */
+/* The embedded post container captures all clicks, but we want hover to work on profile links */
+div[aria-label^="Post by"] a[aria-label="View profile"],
+div[aria-label^="Post by"] a[aria-label$="'s avatar"] {
+    position: relative;
+    z-index: 1;
+    pointer-events: auto !important;
+}
+
 /* .filter-preview-hidden removed - now using actual hiding instead of gray preview */
 
 #messageContainer {

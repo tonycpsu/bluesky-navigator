@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+489.e37bf0ab
+// @version     1.0.31+490.f3058225
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47279,6 +47279,15 @@ div:has(> div > .item.filtered) {
 /* Use direct child selector to avoid matching nested quote posts */
 .thread:has(> div > .item:not(.filtered)) {
     display: block !important;
+}
+
+/* Enable hover cards on embedded/quote post profile links */
+/* The embedded post container captures all clicks, but we want hover to work on profile links */
+div[aria-label^="Post by"] a[aria-label="View profile"],
+div[aria-label^="Post by"] a[aria-label$="'s avatar"] {
+    position: relative;
+    z-index: 1;
+    pointer-events: auto !important;
 }
 
 /* .filter-preview-hidden removed - now using actual hiding instead of gray preview */

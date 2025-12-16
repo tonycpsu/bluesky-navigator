@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+488.f711b9d0
+// @version     1.0.31+489.e37bf0ab
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -71025,9 +71025,20 @@ ${rule}`;
       }
       const content2 = $(item).find('div[data-testid="postText"]').text();
       if (!content2) return null;
+      return this.getMatchingContentRuleForText(content2);
+    }
+    /**
+     * Get the matching content rule pattern for a text string.
+     * @param {string} text - The text content to check
+     * @returns {{pattern: RegExp, categoryIndex: number}|null} The matching pattern and category index, or null
+     */
+    getMatchingContentRuleForText(text) {
+      if (!text || !this.state.rules) {
+        return null;
+      }
       const categories = Object.keys(this.state.rules);
       for (let i2 = 0; i2 < categories.length; i2++) {
-        const result = this.findMatchingContentPattern(content2, categories[i2]);
+        const result = this.findMatchingContentPattern(text, categories[i2]);
         if (result) {
           return { pattern: result, categoryIndex: i2 };
         }
@@ -71517,6 +71528,66 @@ ${rule}`;
         const color2 = this.getColorForCategoryIndex(categoryIndex);
         this.highlightMatchingText(postText, pattern, color2);
       }
+      this.applyEmbeddedPostHighlighting($el);
+    }
+    /**
+     * Apply rule highlighting to embedded/quote posts within a feed item
+     */
+    applyEmbeddedPostHighlighting($el) {
+      const colorCodingEnabled = this.config.get("ruleColorCoding");
+      $el.find("div[aria-label^='Post by']").each((i2, embedEl) => {
+        const $embed = $(embedEl);
+        const ariaLabel = $embed.attr("aria-label") || "";
+        const handleMatch = ariaLabel.match(/Post by (.+)/);
+        const embedHandle = handleMatch ? handleMatch[1] : null;
+        const embedProfileLink = $embed.find(constants.PROFILE_SELECTOR).first();
+        const embedAvatar = $embed.find('div[data-testid="userAvatarImage"]').first();
+        const embedPostText = $embed.find('div[data-testid="postText"]').first();
+        const embedCategoryIndex = embedHandle ? this.getFilterCategoryIndexForHandle(embedHandle) : -1;
+        if (!colorCodingEnabled) {
+          if (embedProfileLink.length) {
+            embedProfileLink.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
+          }
+          if (embedAvatar.length) embedAvatar.css("box-shadow", "");
+          if (embedPostText.length) {
+            embedPostText.find(".rule-content-highlight").each(function() {
+              $(this).replaceWith($(this).text());
+            });
+          }
+          return;
+        }
+        if (embedCategoryIndex >= 0) {
+          const color2 = this.getColorForCategoryIndex(embedCategoryIndex);
+          if (embedProfileLink.length) {
+            embedProfileLink[0].style.setProperty("background-color", `${color2}55`, "important");
+            embedProfileLink[0].style.setProperty("border", `1px solid ${color2}88`, "important");
+            embedProfileLink[0].style.setProperty("border-radius", "3px", "important");
+            embedProfileLink[0].style.setProperty("padding", "0 2px", "important");
+          }
+          if (embedAvatar.length) {
+            embedAvatar.css({
+              "box-shadow": `0 0 0 3px ${color2}`,
+              "border-radius": "50%"
+            });
+          }
+        } else {
+          if (embedProfileLink.length) {
+            embedProfileLink.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
+          }
+          if (embedAvatar.length) embedAvatar.css("box-shadow", "");
+        }
+        if (embedPostText.length) {
+          embedPostText.find(".rule-content-highlight").each(function() {
+            $(this).replaceWith($(this).text());
+          });
+          const embedMatchResult = this.getMatchingContentRuleForText(embedPostText.text());
+          if (embedMatchResult) {
+            const { pattern, categoryIndex } = embedMatchResult;
+            const color2 = this.getColorForCategoryIndex(categoryIndex);
+            this.highlightMatchingText(embedPostText, pattern, color2);
+          }
+        }
+      });
     }
     /**
      * Called when rules are updated (from config modal or quick filter popup).

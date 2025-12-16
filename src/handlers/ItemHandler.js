@@ -3311,9 +3311,22 @@ export class ItemHandler extends Handler {
     const content = $(item).find('div[data-testid="postText"]').text();
     if (!content) return null;
 
+    return this.getMatchingContentRuleForText(content);
+  }
+
+  /**
+   * Get the matching content rule pattern for a text string.
+   * @param {string} text - The text content to check
+   * @returns {{pattern: RegExp, categoryIndex: number}|null} The matching pattern and category index, or null
+   */
+  getMatchingContentRuleForText(text) {
+    if (!text || !this.state.rules) {
+      return null;
+    }
+
     const categories = Object.keys(this.state.rules);
     for (let i = 0; i < categories.length; i++) {
-      const result = this.findMatchingContentPattern(content, categories[i]);
+      const result = this.findMatchingContentPattern(text, categories[i]);
       if (result) {
         return { pattern: result, categoryIndex: i };
       }
@@ -3939,6 +3952,88 @@ export class ItemHandler extends Handler {
       // Highlight matching text in the post
       this.highlightMatchingText(postText, pattern, color);
     }
+
+    // Apply highlighting to embedded/quote posts
+    this.applyEmbeddedPostHighlighting($el);
+  }
+
+  /**
+   * Apply rule highlighting to embedded/quote posts within a feed item
+   */
+  applyEmbeddedPostHighlighting($el) {
+    const colorCodingEnabled = this.config.get('ruleColorCoding');
+
+    // Find all embedded posts (quote posts) - they have aria-label starting with "Post by"
+    $el.find("div[aria-label^='Post by']").each((i, embedEl) => {
+      const $embed = $(embedEl);
+
+      // Extract handle from aria-label (format: "Post by handle" - no @ prefix)
+      const ariaLabel = $embed.attr('aria-label') || '';
+      const handleMatch = ariaLabel.match(/Post by (.+)/);
+      const embedHandle = handleMatch ? handleMatch[1] : null;
+
+      // Find profile link and avatar within the embedded post
+      const embedProfileLink = $embed.find(constants.PROFILE_SELECTOR).first();
+      const embedAvatar = $embed.find('div[data-testid="userAvatarImage"]').first();
+      const embedPostText = $embed.find('div[data-testid="postText"]').first();
+
+      const embedCategoryIndex = embedHandle ? this.getFilterCategoryIndexForHandle(embedHandle) : -1;
+
+      if (!colorCodingEnabled) {
+        // Clear styles when color coding is disabled
+        if (embedProfileLink.length) {
+          embedProfileLink.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
+        }
+        if (embedAvatar.length) embedAvatar.css('box-shadow', '');
+        if (embedPostText.length) {
+          embedPostText.find('.rule-content-highlight').each(function() {
+            $(this).replaceWith($(this).text());
+          });
+        }
+        return;
+      }
+
+      // Apply author highlighting if matches a rule
+      if (embedCategoryIndex >= 0) {
+        const color = this.getColorForCategoryIndex(embedCategoryIndex);
+
+        if (embedProfileLink.length) {
+          embedProfileLink[0].style.setProperty('background-color', `${color}55`, 'important');
+          embedProfileLink[0].style.setProperty('border', `1px solid ${color}88`, 'important');
+          embedProfileLink[0].style.setProperty('border-radius', '3px', 'important');
+          embedProfileLink[0].style.setProperty('padding', '0 2px', 'important');
+        }
+
+        if (embedAvatar.length) {
+          embedAvatar.css({
+            'box-shadow': `0 0 0 3px ${color}`,
+            'border-radius': '50%'
+          });
+        }
+      } else {
+        // No match - clear styles
+        if (embedProfileLink.length) {
+          embedProfileLink.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
+        }
+        if (embedAvatar.length) embedAvatar.css('box-shadow', '');
+      }
+
+      // Apply content highlighting to embedded post text
+      if (embedPostText.length) {
+        // Clear previous highlights
+        embedPostText.find('.rule-content-highlight').each(function() {
+          $(this).replaceWith($(this).text());
+        });
+
+        // Check for content matches in embedded post
+        const embedMatchResult = this.getMatchingContentRuleForText(embedPostText.text());
+        if (embedMatchResult) {
+          const { pattern, categoryIndex } = embedMatchResult;
+          const color = this.getColorForCategoryIndex(categoryIndex);
+          this.highlightMatchingText(embedPostText, pattern, color);
+        }
+      }
+    });
   }
 
   /**

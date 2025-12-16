@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+493.151b7b53
+// @version     1.0.31+494.170355b1
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69665,6 +69665,7 @@ div#statusBar.has-feed-map {
         return;
       }
       this.ignoreMouseMovement = true;
+      this.userInitiatedScroll = false;
       const pageKeysEnabled = this.config.get("enablePageKeys");
       ["PageDown", "PageUp", "Home", "End"].includes(event.key);
       if (this.keyState.length == 0) {
@@ -70641,7 +70642,8 @@ div#statusBar.has-feed-map {
       const statusBarHeight = this.getStatusBarHeight();
       const viewportTop = toolbarHeight;
       const viewportBottom = window.innerHeight - statusBarHeight;
-      return rect.top >= viewportTop && rect.bottom <= viewportBottom;
+      const tolerance = 2;
+      return rect.top >= viewportTop - tolerance && rect.bottom <= viewportBottom + tolerance;
     }
     onPopupAdd() {
       this.isPopupVisible = true;

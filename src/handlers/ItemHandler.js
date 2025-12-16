@@ -1525,8 +1525,9 @@ export class ItemHandler extends Handler {
     if (this.isPopupVisible) {
       return;
     }
-    // Temporarily suppress mouse hover during keyboard navigation
+    // Temporarily suppress mouse hover and scroll-to-focus during keyboard navigation
     this.ignoreMouseMovement = true;
+    this.userInitiatedScroll = false;
 
     // Check if page/home/end keys should be handled
     const pageKeysEnabled = this.config.get('enablePageKeys');
@@ -2748,8 +2749,11 @@ export class ItemHandler extends Handler {
     const viewportTop = toolbarHeight;
     const viewportBottom = window.innerHeight - statusBarHeight;
 
+    // Allow 2px tolerance for sub-pixel rendering differences after scrolling
+    const tolerance = 2;
+
     // Element is fully visible if entirely within the unobstructed viewport
-    return rect.top >= viewportTop && rect.bottom <= viewportBottom;
+    return rect.top >= viewportTop - tolerance && rect.bottom <= viewportBottom + tolerance;
   }
 
   onPopupAdd() {

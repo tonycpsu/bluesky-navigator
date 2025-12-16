@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+492.eae675f0
+// @version     1.0.31+493.151b7b53
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -28,40 +28,78 @@
 (function() {
   "use strict";
   const constants = {
-    // 32 distinct colors for ruleset/filter list coloring (high saturation, good contrast)
+    // 32 distinct colors for ruleset/filter list coloring
+    // Carefully chosen to maximize perceptual distance between colors
+    // Organized by hue with varying saturation/lightness to avoid similar pairs
     FILTER_LIST_COLORS: [
-      "#e6194b",
-      "#3cb44b",
-      "#ffe119",
-      "#4363d8",
-      "#f58231",
-      "#911eb4",
-      "#46f0f0",
-      "#f032e6",
-      "#bcf60c",
-      "#fabebe",
-      "#008080",
-      "#e6beff",
-      "#9a6324",
-      "#fffac8",
-      "#800000",
-      "#aaffc3",
-      "#808000",
-      "#ffd8b1",
-      "#000075",
-      "#808080",
-      "#ff0000",
-      "#00ff00",
-      "#0000ff",
-      "#ff00ff",
-      "#00ffff",
-      "#ff8000",
-      "#8000ff",
-      "#0080ff",
-      "#ff0080",
-      "#80ff00",
-      "#00ff80",
-      "#ff8080"
+      // Primary and secondary hues (high saturation)
+      "#e41a1c",
+      // red
+      "#ff7f00",
+      // orange
+      "#ffcd00",
+      // golden yellow
+      "#4daf4a",
+      // green
+      "#00a087",
+      // teal
+      "#377eb8",
+      // blue
+      "#6a3d9a",
+      // purple
+      "#e7298a",
+      // magenta/pink
+      // Tertiary hues (medium-high saturation)
+      "#b35806",
+      // burnt orange
+      "#a6d854",
+      // lime green
+      "#33c4b3",
+      // turquoise
+      "#1a75cf",
+      // azure
+      "#984ea3",
+      // violet
+      "#d95f02",
+      // rust
+      "#66c2a5",
+      // seafoam
+      "#7570b3",
+      // periwinkle
+      // Darker variants
+      "#8b0000",
+      // dark red
+      "#8b4513",
+      // saddle brown
+      "#556b2f",
+      // dark olive
+      "#006400",
+      // dark green
+      "#008b8b",
+      // dark cyan
+      "#00008b",
+      // dark blue
+      "#4b0082",
+      // indigo
+      "#8b008b",
+      // dark magenta
+      // Lighter/pastel variants
+      "#fb9a99",
+      // light coral
+      "#fdbf6f",
+      // light orange
+      "#b2df8a",
+      // light green
+      "#a6cee3",
+      // light blue
+      "#cab2d6",
+      // light purple
+      "#bc80bd",
+      // orchid
+      "#80b1d3",
+      // steel blue
+      "#fccde5"
+      // light pink
     ],
     // Timing constants
     DEFAULT_STATE_SAVE_TIMEOUT: 5e3,

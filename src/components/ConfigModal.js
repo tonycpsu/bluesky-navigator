@@ -1248,7 +1248,7 @@ export class ConfigModal {
 
     const categoriesHtml = this.parsedRules.map((category, catIndex) => {
       const isCollapsed = this.collapsedCategories[catIndex];
-      const colorIndex = this.getColorIndexForCategory(category.name, catIndex);
+      const colorIndex = this.getColorIndexForCategory(category.name);
       const color = constants.FILTER_LIST_COLORS[colorIndex];
       return `
         <div class="rules-category" draggable="true" data-category="${catIndex}">
@@ -1376,12 +1376,11 @@ export class ConfigModal {
   }
 
   /**
-   * Get the color index for a category (custom or default)
+   * Get the color index for a category (custom or default based on name hash)
    * @param {string} categoryName - The category name
-   * @param {number} defaultIndex - The default index to use if no custom color
    * @returns {number} The color index
    */
-  getColorIndexForCategory(categoryName, defaultIndex) {
+  getColorIndexForCategory(categoryName) {
     try {
       const rulesetColors = JSON.parse(this.config.get('rulesetColors') || '{}');
       if (categoryName in rulesetColors) {
@@ -1390,7 +1389,13 @@ export class ConfigModal {
     } catch (e) {
       // Invalid JSON, use default
     }
-    return defaultIndex % constants.FILTER_LIST_COLORS.length;
+    // Hash the category name for a stable default color regardless of position
+    let hash = 0;
+    for (let i = 0; i < categoryName.length; i++) {
+      hash = ((hash << 5) - hash) + categoryName.charCodeAt(i);
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash) % constants.FILTER_LIST_COLORS.length;
   }
 
   /**

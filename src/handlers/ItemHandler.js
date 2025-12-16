@@ -2841,7 +2841,7 @@ export class ItemHandler extends Handler {
         <div class="bsky-nav-rules-dropdown-categories">
           ${categories.length > 0
             ? categories.map((cat, index) => {
-                const color = this.getColorForCategory(cat, index);
+                const color = this.getColorForCategory(cat);
                 const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                 const sc = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
                 const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
@@ -3400,12 +3400,25 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Hash a string to get a stable number (for default color assignment)
+   * @param {string} str - The string to hash
+   * @returns {number} A positive integer hash
+   */
+  hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+  }
+
+  /**
    * Get the color for a category by name, using custom color if set
    * @param {string} categoryName - The category name
-   * @param {number} defaultIndex - The default index to use if no custom color
    * @returns {string} The color hex code
    */
-  getColorForCategory(categoryName, defaultIndex) {
+  getColorForCategory(categoryName) {
     try {
       const rulesetColors = JSON.parse(this.config.get('rulesetColors') || '{}');
       if (categoryName in rulesetColors) {
@@ -3415,7 +3428,8 @@ export class ItemHandler extends Handler {
     } catch (e) {
       // Invalid JSON, use default
     }
-    return this.FILTER_LIST_COLORS[defaultIndex % this.FILTER_LIST_COLORS.length];
+    // Hash the category name for a stable default color regardless of position
+    return this.FILTER_LIST_COLORS[this.hashString(categoryName) % this.FILTER_LIST_COLORS.length];
   }
 
   /**
@@ -3430,9 +3444,10 @@ export class ItemHandler extends Handler {
     const categories = Object.keys(this.state.rules);
     if (categoryIndex < categories.length) {
       const categoryName = categories[categoryIndex];
-      return this.getColorForCategory(categoryName, categoryIndex);
+      return this.getColorForCategory(categoryName);
     }
-    return this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+    // Fallback for unknown index - shouldn't happen in practice
+    return this.FILTER_LIST_COLORS[0];
   }
 
   /**

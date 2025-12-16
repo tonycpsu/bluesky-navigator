@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+483.bc320758
+// @version     1.0.31+484.14d3908c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46027,7 +46027,7 @@ if (cid) {
       }
       const categoriesHtml = this.parsedRules.map((category, catIndex) => {
         const isCollapsed = this.collapsedCategories[catIndex];
-        const colorIndex = this.getColorIndexForCategory(category.name, catIndex);
+        const colorIndex = this.getColorIndexForCategory(category.name);
         const color2 = constants.FILTER_LIST_COLORS[colorIndex];
         return `
         <div class="rules-category" draggable="true" data-category="${catIndex}">
@@ -46141,12 +46141,11 @@ if (cid) {
       }
     }
     /**
-     * Get the color index for a category (custom or default)
+     * Get the color index for a category (custom or default based on name hash)
      * @param {string} categoryName - The category name
-     * @param {number} defaultIndex - The default index to use if no custom color
      * @returns {number} The color index
      */
-    getColorIndexForCategory(categoryName, defaultIndex) {
+    getColorIndexForCategory(categoryName) {
       try {
         const rulesetColors = JSON.parse(this.config.get("rulesetColors") || "{}");
         if (categoryName in rulesetColors) {
@@ -46154,7 +46153,12 @@ if (cid) {
         }
       } catch (e2) {
       }
-      return defaultIndex % constants.FILTER_LIST_COLORS.length;
+      let hash = 0;
+      for (let i2 = 0; i2 < categoryName.length; i2++) {
+        hash = (hash << 5) - hash + categoryName.charCodeAt(i2);
+        hash = hash & hash;
+      }
+      return Math.abs(hash) % constants.FILTER_LIST_COLORS.length;
     }
     /**
      * Set the color index for a category
@@ -70659,7 +70663,7 @@ div#statusBar.has-feed-map {
         </div>
         <div class="bsky-nav-rules-dropdown-categories">
           ${categories.length > 0 ? categories.map((cat, index) => {
-        const color2 = this.getColorForCategory(cat, index);
+        const color2 = this.getColorForCategory(cat);
         const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
         const sc = isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.9)";
         const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
@@ -71095,12 +71099,24 @@ ${rule}`;
       return -1;
     }
     /**
+     * Hash a string to get a stable number (for default color assignment)
+     * @param {string} str - The string to hash
+     * @returns {number} A positive integer hash
+     */
+    hashString(str) {
+      let hash = 0;
+      for (let i2 = 0; i2 < str.length; i2++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i2);
+        hash = hash & hash;
+      }
+      return Math.abs(hash);
+    }
+    /**
      * Get the color for a category by name, using custom color if set
      * @param {string} categoryName - The category name
-     * @param {number} defaultIndex - The default index to use if no custom color
      * @returns {string} The color hex code
      */
-    getColorForCategory(categoryName, defaultIndex) {
+    getColorForCategory(categoryName) {
       try {
         const rulesetColors = JSON.parse(this.config.get("rulesetColors") || "{}");
         if (categoryName in rulesetColors) {
@@ -71109,7 +71125,7 @@ ${rule}`;
         }
       } catch (e2) {
       }
-      return this.FILTER_LIST_COLORS[defaultIndex % this.FILTER_LIST_COLORS.length];
+      return this.FILTER_LIST_COLORS[this.hashString(categoryName) % this.FILTER_LIST_COLORS.length];
     }
     /**
      * Get the color for a category by index, using custom color if set
@@ -71123,9 +71139,9 @@ ${rule}`;
       const categories = Object.keys(this.state.rules);
       if (categoryIndex < categories.length) {
         const categoryName = categories[categoryIndex];
-        return this.getColorForCategory(categoryName, categoryIndex);
+        return this.getColorForCategory(categoryName);
       }
-      return this.FILTER_LIST_COLORS[categoryIndex % this.FILTER_LIST_COLORS.length];
+      return this.FILTER_LIST_COLORS[0];
     }
     /**
      * Show notification that rule was added

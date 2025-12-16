@@ -2684,7 +2684,16 @@ export class FeedItemHandler extends ItemHandler {
       // Add avatar
       if (showAvatars && engData?.engagement?.avatarUrl) {
         const avatarHeight = Math.round(32 * (avatarScale / 100));
-        $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+        let avatarStyle = `height: ${avatarHeight}px`;
+        // Apply author rule color border if enabled
+        if (showRuleColors && engData?.engagement?.handle) {
+          const categoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.handle);
+          if (categoryIndex >= 0) {
+            const color = this.getColorForCategoryIndex(categoryIndex);
+            avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
+          }
+        }
+        $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">`);
       }
 
       // Add handle
@@ -2929,7 +2938,16 @@ export class FeedItemHandler extends ItemHandler {
         const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
         // Avatar size in pixels: base 32px scaled by user preference (25-100%)
         const avatarHeight = Math.round(32 * (avatarScale / 100));
-        $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+        let avatarStyle = `height: ${avatarHeight}px`;
+        // Apply author rule color border if enabled
+        if (showRuleColors && engagementData[actualIndex]?.engagement?.handle) {
+          const categoryIndex = this.getFilterCategoryIndexForHandle(engagementData[actualIndex].engagement.handle);
+          if (categoryIndex >= 0) {
+            const color = this.getColorForCategoryIndex(categoryIndex);
+            avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
+          }
+        }
+        $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">`);
       }
 
       // Add handle if enabled (appears below avatar)

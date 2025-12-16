@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+490.f3058225
+// @version     1.0.31+491.b5190c62
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -73994,7 +73994,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         if (showAvatars && engData?.engagement?.avatarUrl) {
           const avatarHeight = Math.round(32 * (avatarScale / 100));
-          $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+          let avatarStyle = `height: ${avatarHeight}px`;
+          if (showRuleColors && engData?.engagement?.handle) {
+            const categoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.handle);
+            if (categoryIndex >= 0) {
+              const color2 = this.getColorForCategoryIndex(categoryIndex);
+              avatarStyle += `; box-shadow: 0 0 0 2px ${color2}; border-radius: 50%`;
+            }
+          }
+          $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">`);
         }
         if (showHandles && engData?.engagement?.handle) {
           const handle2 = engData.engagement.handle;
@@ -74162,7 +74170,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
           const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
           const avatarHeight = Math.round(32 * (avatarScale / 100));
-          $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="height: ${avatarHeight}px">`);
+          let avatarStyle = `height: ${avatarHeight}px`;
+          if (showRuleColors && engagementData[actualIndex]?.engagement?.handle) {
+            const categoryIndex = this.getFilterCategoryIndexForHandle(engagementData[actualIndex].engagement.handle);
+            if (categoryIndex >= 0) {
+              const color2 = this.getColorForCategoryIndex(categoryIndex);
+              avatarStyle += `; box-shadow: 0 0 0 2px ${color2}; border-radius: 50%`;
+            }
+          }
+          $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">`);
         }
         if (showHandles && engagementData[actualIndex]?.engagement?.handle) {
           const handle2 = engagementData[actualIndex].engagement.handle;

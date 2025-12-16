@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+486.693a3c3e
+// @version     1.0.31+487.40082bcb
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -68549,15 +68549,8 @@ div#statusBar.has-feed-map {
       this._perfCallCounts[label] = (this._perfCallCounts[label] || 0) + 1;
       this._perfLog.push(entry);
       if (this._perfLog.length > 500) this._perfLog.shift();
-      if (durationMs !== null) {
-        console.log(`[perf] ${label}: ${durationMs.toFixed(1)}ms`);
-      } else {
-        console.log(`[perf] ${label} (count: ${this._perfCallCounts[label]})`);
-      }
       if (now - this._perfLastReport > 1e4) {
         this._perfLastReport = now;
-        const summary = Object.entries(this._perfCallCounts).sort((a2, b) => b[1] - a2[1]).slice(0, 10).map(([k, v]) => `${k}: ${v}`).join(", ");
-        console.log(`[perf] === 10s summary === ${summary}`);
         Object.entries(this._perfCallCounts).forEach(([k, v]) => {
           if (v > 100) {
             console.warn(`[perf] WARNING: ${k} called ${v} times in 10s - possible runaway loop!`);
@@ -69316,10 +69309,8 @@ div#statusBar.has-feed-map {
           this.selectedPost.addClass("reply-selection-active");
         }
         const rootPostId = thread.post.uri?.split("/").slice(-1)[0];
-        console.log("[hideViewFullThread] rootPostId:", rootPostId, "unrolledIds:", unrolledIds);
         if (rootPostId) {
           const threadPostIds = /* @__PURE__ */ new Set([rootPostId, ...unrolledIds]);
-          console.log("[hideViewFullThread] threadPostIds:", [...threadPostIds]);
           const unrolledThread = $(item).closest(".thread")[0];
           $("div.thread").each(function() {
             const threadEl = $(this);
@@ -69335,17 +69326,13 @@ div#statusBar.has-feed-map {
               return !testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-");
             });
             if (viewFullThreadItems.length > 0 && realPosts.length === 0) {
-              console.log("[hideViewFullThread] Found View full thread only element:", threadEl[0]);
               const links = threadEl.find('a[href*="/post/"]');
-              console.log("[hideViewFullThread] Links found:", links.toArray().map((l) => $(l).attr("href")));
               const matchesThread = links.toArray().some((link) => {
                 const href = $(link).attr("href");
                 const linkPostId = href?.split("/post/")[1]?.split("?")[0];
-                console.log("[hideViewFullThread] Checking linkPostId:", linkPostId, "in threadPostIds:", threadPostIds.has(linkPostId));
                 return linkPostId && threadPostIds.has(linkPostId);
               });
               if (matchesThread) {
-                console.log("[hideViewFullThread] HIDING thread:", threadEl[0]);
                 threadEl.addClass("unrolled-view-full-thread-hidden");
               }
             }
@@ -69601,7 +69588,6 @@ div#statusBar.has-feed-map {
             } else if (this.config.get("unrolledPostSelection") && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
               const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
               const isVisible = this.isElementFullyVisible(currentThreadPost);
-              console.log("[thread-nav] j pressed, threadIndex:", this.threadIndex, "unrolledReplies.length:", this.unrolledReplies.length, "isVisible:", isVisible);
               if (!isVisible) {
                 if (!this.scrollElementIntoView(currentThreadPost[0], 1)) {
                   if (this.threadIndex < this.unrolledReplies.length) {
@@ -69612,7 +69598,6 @@ div#statusBar.has-feed-map {
                   }
                 }
               } else if (this.threadIndex < this.unrolledReplies.length) {
-                console.log("[thread-nav] advancing from", this.threadIndex, "to", this.threadIndex + 1);
                 if (event.key == "j") {
                   this.markItemRead(this.index, true);
                 }
@@ -69622,7 +69607,6 @@ div#statusBar.has-feed-map {
               }
             } else {
               const isVisible = this.isElementFullyVisible(this.selectedItem);
-              console.log("[nav] j pressed, isVisible:", isVisible, "selectedItem:", this.selectedItem?.length, this.selectedItem?.[0]);
               if (!isVisible) {
                 if (!this.scrollElementIntoView(this.selectedItem[0], 1)) {
                   moved = this.jumpToNext(event.key == "j");
@@ -70510,14 +70494,12 @@ div#statusBar.has-feed-map {
       if (postHeight > viewportHeight) {
         if (direction2 > 0) {
           if (rect.bottom <= viewportBottom) {
-            console.log("[scroll] tall post bottom visible, jumping to next");
             return false;
           }
           const remaining = rect.bottom - viewportBottom;
           scrollAmount = Math.min(viewportHeight * 0.5, remaining + 10);
         } else {
           if (rect.top >= toolbarHeight) {
-            console.log("[scroll] tall post top visible, jumping to prev");
             return false;
           }
           const remaining = toolbarHeight - rect.top;
@@ -70527,7 +70509,6 @@ div#statusBar.has-feed-map {
         const topOverlap = toolbarHeight - rect.top;
         const bottomOverlap = rect.bottom - viewportBottom;
         if (bottomOverlap > 0 && topOverlap < 20 && bottomOverlap < 20) {
-          console.log("[scroll] post almost fits (top overlap:", topOverlap, "bottom overlap:", bottomOverlap, ") - skipping");
           return false;
         }
         scrollAmount = rect.top - toolbarHeight - 10;
@@ -70535,7 +70516,6 @@ div#statusBar.has-feed-map {
         const bottomOverlap = rect.bottom - viewportBottom;
         const topGap = rect.top - toolbarHeight;
         if (topGap < 20 && bottomOverlap < 20) {
-          console.log("[scroll] post almost fits (top gap:", topGap, "bottom overlap:", bottomOverlap, ") - skipping");
           return false;
         }
         if (direction2 > 0) {
@@ -70546,7 +70526,6 @@ div#statusBar.has-feed-map {
       } else {
         return true;
       }
-      console.log("[scroll] scrolling by", scrollAmount, "postHeight:", postHeight, "viewportHeight:", viewportHeight);
       this.ignoreMouseMovement = true;
       window.scrollBy({
         top: scrollAmount,
@@ -70569,9 +70548,7 @@ div#statusBar.has-feed-map {
       const statusBarHeight = this.getStatusBarHeight();
       const viewportTop = toolbarHeight;
       const viewportBottom = window.innerHeight - statusBarHeight;
-      const isVisible = rect.top >= viewportTop && rect.bottom <= viewportBottom;
-      console.log("[visibility]", { top: rect.top, bottom: rect.bottom, viewportTop, viewportBottom, isVisible });
-      return isVisible;
+      return rect.top >= viewportTop && rect.bottom <= viewportBottom;
     }
     onPopupAdd() {
       this.isPopupVisible = true;
@@ -70917,16 +70894,13 @@ ${rule}`;
       }
       this.config.set("rulesConfig", rulesConfig);
       this.config.save();
-      this.state.rulesConfig = rulesConfig;
       if (this.state.stateManager) {
         this.state.stateManager.saveStateImmediately(true, true);
-      }
-      if (this.state && this.state.rules !== void 0) {
-        this.state.rules = this.parseRulesForState(rulesConfig);
       }
       if (!replacedOpposite) {
         this.showRuleAddedNotification(handle2, category, action);
       }
+      this.onRulesChanged();
     }
     /**
      * Parse rules config into state format (simplified version of main.js parseRulesConfig)
@@ -71545,6 +71519,34 @@ ${rule}`;
       }
     }
     /**
+     * Called when rules are updated (from config modal or quick filter popup).
+     * Re-parses rules and refreshes all UI to reflect changes immediately.
+     */
+    onRulesChanged() {
+      const rulesConfig = this.config.get("rulesConfig") || "";
+      if (this.state && this.state.rules !== void 0) {
+        this.state.rules = this.parseRulesForState(rulesConfig);
+        this.state.rulesConfig = rulesConfig;
+      }
+      if (this.items && this.items.length) {
+        for (let i2 = 0; i2 < this.items.length; i2++) {
+          const item = this.items[i2];
+          if (item) {
+            this.applyItemStyle(item, i2 === this.index);
+          }
+        }
+      }
+      if (typeof this.updateScrollPosition === "function") {
+        this.updateScrollPosition(true);
+      }
+    }
+    /**
+     * @deprecated Use onRulesChanged() instead
+     */
+    applyRuleStylingToAllItems() {
+      this.onRulesChanged();
+    }
+    /**
      * Highlight matching text within an element by wrapping matches in styled spans.
      * @param {jQuery} $container - The container element
      * @param {RegExp} pattern - The pattern to match
@@ -71675,9 +71677,7 @@ ${rule}`;
       const set = [];
       const unrolledRepliesCount = $(".unrolled-replies").not(".post-view-modal *").length;
       const hasUnrolledContent = unrolledRepliesCount > 0;
-      console.log("[_doLoadItemsInner] hasUnrolledContent:", hasUnrolledContent, "count:", unrolledRepliesCount);
       if (!hasUnrolledContent) {
-        console.log("[_doLoadItemsInner] Cleaning up - no unrolled content");
         $(".sidecar-replies").not(".post-view-modal *").each((i2, el) => {
           try {
             if (el.parentNode) {
@@ -71692,13 +71692,9 @@ ${rule}`;
         } catch (e2) {
         }
         try {
-          const hiddenCount = $(".unrolled-view-full-thread-hidden").length;
-          console.log("[_doLoadItemsInner] Unhiding View full thread elements, count:", hiddenCount);
           $(".unrolled-view-full-thread-hidden").removeClass("unrolled-view-full-thread-hidden").show();
         } catch (e2) {
         }
-      } else {
-        console.log("[_doLoadItemsInner] Preserving unrolled state - NOT cleaning up");
       }
       $("div.thread").each((i2, thread) => {
         try {
@@ -74550,18 +74546,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * This is called after activate(), so we need to setup feed map here
      */
     setUIManagerStatusBar(statusBar, statusBarLeft) {
-      console.log("[ProfileItemHandler] setUIManagerStatusBar called", {
-        statusBar: statusBar?.length,
-        statusBarLeft: statusBarLeft?.length,
-        hasFeedMap: statusBar?.find(".feed-map-wrapper").length
-      });
       this.uiManagerStatusBar = statusBar;
       this.uiManagerStatusBarLeft = statusBarLeft;
       if (!statusBar.find(".feed-map-wrapper").length) {
-        console.log("[ProfileItemHandler] Adding feed map to UIManager status bar");
         this.addFeedMapToStatusBar(statusBar);
-      } else {
-        console.log("[ProfileItemHandler] Feed map already exists");
       }
       this.loadItemsWithRetry();
     }
@@ -74574,12 +74562,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const tryLoad = () => {
         this.loadItems();
         const itemCount = this.items?.length || 0;
-        console.log("[ProfileItemHandler] loadItemsWithRetry attempt", retryCount, "found", itemCount, "items");
         if (itemCount === 0 && retryCount < maxRetries) {
           retryCount++;
           setTimeout(tryLoad, 300);
         } else if (itemCount > 0) {
-          console.log("[ProfileItemHandler] Items loaded, updating scroll position");
           this.updateScrollPosition(true);
         }
       };
@@ -74924,13 +74910,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (!contentContainer.length) {
         contentContainer = main;
       }
-      console.log("[UIManager] Inserting into container:", contentContainer[0]);
-      console.log("[UIManager] Container visible:", contentContainer.is(":visible"));
-      console.log("[UIManager] Container dimensions:", contentContainer.width(), "x", contentContainer.height());
       contentContainer.prepend(this.toolbarDiv);
       contentContainer.append(this.statusBar);
-      console.log("[UIManager] Toolbar in DOM:", $.contains(document, this.toolbarDiv[0]));
-      console.log("[UIManager] StatusBar in DOM:", $.contains(document, this.statusBar[0]));
     }
     /**
      * Set the current context and activate appropriate adapter
@@ -74938,9 +74919,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * @param {object} handler - The handler for this context (optional)
      */
     setContext(contextName, handler = null) {
-      console.log("[UIManager] setContext called with:", contextName);
       if (this.initialized && !$.contains(document, this.toolbarDiv[0])) {
-        console.log("[UIManager] Elements removed from DOM, re-inserting...");
         this.insertIntoDOM();
       }
       if (this.currentAdapter) {
@@ -74948,7 +74927,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.currentContext = contextName;
       this.currentAdapter = this.adapters.get(contextName) || this.adapters.get("default");
-      console.log("[UIManager] adapter found:", this.currentAdapter ? "yes" : "no");
       if (this.currentAdapter) {
         this.currentAdapter.activate(handler);
       } else {
@@ -75067,25 +75045,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * @param {object} handler - The handler for this page (may be null)
      */
     activate(handler) {
-      console.log("[DefaultUIAdapter] activate called, handler:", handler ? "yes" : "no");
       this.handler = handler;
       const toolbar = this.uiManager.getToolbarDiv();
       const statusBar = this.uiManager.getStatusBar();
-      console.log("[DefaultUIAdapter] toolbar element:", toolbar.length, "statusBar element:", statusBar.length);
       toolbar.hide();
       statusBar.show();
-      console.log("[DefaultUIAdapter] statusBar display after show():", statusBar.css("display"));
       this.uiManager.hideToolbarRow1();
       this.uiManager.hideToolbarRow2();
       $("#fixed-sidecar-toggle").removeClass("visible");
       $("#fixed-sidecar-panel").removeClass("visible");
       this.uiManager.getStatusBarLeft().empty();
       this.updateInfoText();
-      const sb = this.uiManager.getStatusBar();
-      console.log("[DefaultUIAdapter] StatusBar visible:", sb.is(":visible"));
-      console.log("[DefaultUIAdapter] StatusBar position:", sb.offset());
-      console.log("[DefaultUIAdapter] StatusBar dimensions:", sb.width(), "x", sb.height());
-      console.log("[DefaultUIAdapter] activation complete");
     }
     /**
      * Deactivate this adapter - called when switching away
@@ -75208,17 +75178,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * @param {object} handler - The ProfileItemHandler instance
      */
     activate(handler) {
-      console.log("[ProfileUIAdapter] activate called", { handler: handler?.name, hasMethod: !!handler?.setUIManagerStatusBar });
       this.handler = handler;
       this.uiManager.getToolbarDiv().hide();
       this.uiManager.getStatusBar().show();
       this.uiManager.getStatusBarLeft().empty();
       this.updateInfoText();
       if (handler && handler.setUIManagerStatusBar) {
-        console.log("[ProfileUIAdapter] Calling handler.setUIManagerStatusBar");
         handler.setUIManagerStatusBar(this.uiManager.getStatusBar(), this.uiManager.getStatusBarLeft());
-      } else {
-        console.log("[ProfileUIAdapter] handler or setUIManagerStatusBar not available");
       }
     }
     /**
@@ -75398,20 +75364,21 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       state.init(constants.STATE_KEY, stateManagerConfig, onStateInit);
     }
     function onConfigSave() {
-      state.rulesConfig = config.get("rulesConfig");
       state.stateManager.saveStateImmediately(true, true);
       updateContentWidth();
-      if (handlers) {
-        for (const handler of Object.values(handlers)) {
-          if (handler.isActive() && typeof handler.updateScrollPosition === "function") {
-            handler.updateScrollPosition(true);
-          }
-        }
-      }
       if (config.get("toastNotifications")) {
         createToastContainer();
       }
       config.close();
+      setTimeout(() => {
+        if (handlers) {
+          for (const handler of Object.values(handlers)) {
+            if (handler.isActive() && typeof handler.onRulesChanged === "function") {
+              handler.onRulesChanged();
+            }
+          }
+        }
+      }, 100);
     }
     function updateContentWidth() {
       const hideRightSidebar = config.get("hideRightSidebar");
@@ -75621,7 +75588,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           notification2.action = "joined your starter pack";
           break;
         default:
-          console.log("Unknown notification reason:", reason);
           return null;
       }
       if (apiNotification.record?.text) {
@@ -75762,7 +75728,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     async function fetchAndShowTestNotification() {
       if (!toastApi) {
-        console.log("Toast test: No API available");
         return;
       }
       try {
@@ -75827,7 +75792,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       uiManager.registerAdapter("post", postAdapter);
       uiManager.registerAdapter("profile", profileAdapter);
       uiManager.initialize().then(() => {
-        console.log("[bsky-navigator] UIManager initialized");
         if (context && uiManager.isInitialized()) {
           uiManager.setContext(context, handlers[context] || null);
         }
@@ -76053,7 +76017,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         });
       });
       function setContext(ctx, forceRefresh = false) {
-        console.log("[bsky-navigator] setContext called with:", ctx, "current:", context, "forceRefresh:", forceRefresh);
         const contextChanged = context !== ctx;
         if (contextChanged) {
           context = ctx;
@@ -76065,7 +76028,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         }
         if ((contextChanged || forceRefresh) && uiManager.isInitialized()) {
-          console.log("[bsky-navigator] Calling uiManager.setContext with:", ctx);
           uiManager.setContext(ctx, handlers[ctx] || null);
         }
       }

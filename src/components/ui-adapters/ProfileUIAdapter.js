@@ -24,7 +24,6 @@ class ProfileUIAdapter {
    * @param {object} handler - The ProfileItemHandler instance
    */
   activate(handler) {
-    console.log('[ProfileUIAdapter] activate called', { handler: handler?.name, hasMethod: !!handler?.setUIManagerStatusBar });
     this.handler = handler;
 
     // Hide UIManager's toolbar (ProfileItemHandler has its own for search/filter)
@@ -41,10 +40,7 @@ class ProfileUIAdapter {
 
     // Give handler access to UIManager's status bar
     if (handler && handler.setUIManagerStatusBar) {
-      console.log('[ProfileUIAdapter] Calling handler.setUIManagerStatusBar');
       handler.setUIManagerStatusBar(this.uiManager.getStatusBar(), this.uiManager.getStatusBarLeft());
-    } else {
-      console.log('[ProfileUIAdapter] handler or setUIManagerStatusBar not available');
     }
   }
 

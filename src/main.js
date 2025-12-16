@@ -258,23 +258,25 @@ function getScreenFromElement(element) {
   }
 
   function onConfigSave() {
-    state.rulesConfig = config.get('rulesConfig');
     state.stateManager.saveStateImmediately(true, true);
     // Update content width dynamically
     updateContentWidth();
-    // Trigger feed map update for active handler
-    if (handlers) {
-      for (const handler of Object.values(handlers)) {
-        if (handler.isActive() && typeof handler.updateScrollPosition === 'function') {
-          handler.updateScrollPosition(true);
-        }
-      }
-    }
     // Recreate toast container with new position
     if (config.get('toastNotifications')) {
       createToastContainer();
     }
     config.close();
+
+    // Refresh rules UI after modal closes
+    setTimeout(() => {
+      if (handlers) {
+        for (const handler of Object.values(handlers)) {
+          if (handler.isActive() && typeof handler.onRulesChanged === 'function') {
+            handler.onRulesChanged();
+          }
+        }
+      }
+    }, 100);
   }
 
   // Update content width CSS - can be called on config save
@@ -532,7 +534,6 @@ function getScreenFromElement(element) {
         notification.action = 'joined your starter pack';
         break;
       default:
-        console.log('Unknown notification reason:', reason);
         return null; // Unknown notification type
     }
 
@@ -743,7 +744,6 @@ function getScreenFromElement(element) {
    */
   async function fetchAndShowTestNotification() {
     if (!toastApi) {
-      console.log('Toast test: No API available');
       return;
     }
 
@@ -840,7 +840,6 @@ function getScreenFromElement(element) {
 
     // Initialize UIManager once main element is available
     uiManager.initialize().then(() => {
-      console.log('[bsky-navigator] UIManager initialized');
       // Set initial context based on current URL/page
       if (context && uiManager.isInitialized()) {
         uiManager.setContext(context, handlers[context] || null);
@@ -1108,8 +1107,6 @@ function getScreenFromElement(element) {
     });
 
     function setContext(ctx, forceRefresh = false) {
-      console.log('[bsky-navigator] setContext called with:', ctx, 'current:', context, 'forceRefresh:', forceRefresh);
-
       const contextChanged = context !== ctx;
 
       if (contextChanged) {
@@ -1125,7 +1122,6 @@ function getScreenFromElement(element) {
       // Always notify UIManager if context changed OR forceRefresh requested
       // This handles URL changes within the same context (e.g., notifications -> search)
       if ((contextChanged || forceRefresh) && uiManager.isInitialized()) {
-        console.log('[bsky-navigator] Calling uiManager.setContext with:', ctx);
         uiManager.setContext(ctx, handlers[ctx] || null);
       }
     }

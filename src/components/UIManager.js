@@ -134,18 +134,11 @@ class UIManager {
       contentContainer = main;
     }
 
-    console.log('[UIManager] Inserting into container:', contentContainer[0]);
-    console.log('[UIManager] Container visible:', contentContainer.is(':visible'));
-    console.log('[UIManager] Container dimensions:', contentContainer.width(), 'x', contentContainer.height());
-
     // Insert toolbar at the start of the content
     contentContainer.prepend(this.toolbarDiv);
 
     // Insert status bar at the end (will be sticky positioned at bottom)
     contentContainer.append(this.statusBar);
-
-    console.log('[UIManager] Toolbar in DOM:', $.contains(document, this.toolbarDiv[0]));
-    console.log('[UIManager] StatusBar in DOM:', $.contains(document, this.statusBar[0]));
   }
 
   /**
@@ -154,11 +147,8 @@ class UIManager {
    * @param {object} handler - The handler for this context (optional)
    */
   setContext(contextName, handler = null) {
-    console.log('[UIManager] setContext called with:', contextName);
-
     // Check if our elements are still in the DOM (SPA navigation may remove them)
     if (this.initialized && !$.contains(document, this.toolbarDiv[0])) {
-      console.log('[UIManager] Elements removed from DOM, re-inserting...');
       this.insertIntoDOM();
     }
 
@@ -171,7 +161,6 @@ class UIManager {
 
     // Get adapter for this context, fallback to default
     this.currentAdapter = this.adapters.get(contextName) || this.adapters.get('default');
-    console.log('[UIManager] adapter found:', this.currentAdapter ? 'yes' : 'no');
 
     if (this.currentAdapter) {
       this.currentAdapter.activate(handler);

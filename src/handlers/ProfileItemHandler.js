@@ -18,20 +18,12 @@ export class ProfileItemHandler extends FeedItemHandler {
    * This is called after activate(), so we need to setup feed map here
    */
   setUIManagerStatusBar(statusBar, statusBarLeft) {
-    console.log('[ProfileItemHandler] setUIManagerStatusBar called', {
-      statusBar: statusBar?.length,
-      statusBarLeft: statusBarLeft?.length,
-      hasFeedMap: statusBar?.find('.feed-map-wrapper').length,
-    });
     this.uiManagerStatusBar = statusBar;
     this.uiManagerStatusBarLeft = statusBarLeft;
 
     // Now that we have UIManager's status bar, setup the feed map
     if (!statusBar.find('.feed-map-wrapper').length) {
-      console.log('[ProfileItemHandler] Adding feed map to UIManager status bar');
       this.addFeedMapToStatusBar(statusBar);
-    } else {
-      console.log('[ProfileItemHandler] Feed map already exists');
     }
 
     // Load items with retry - profile feed takes time to render
@@ -48,14 +40,12 @@ export class ProfileItemHandler extends FeedItemHandler {
     const tryLoad = () => {
       this.loadItems();
       const itemCount = this.items?.length || 0;
-      console.log('[ProfileItemHandler] loadItemsWithRetry attempt', retryCount, 'found', itemCount, 'items');
 
       if (itemCount === 0 && retryCount < maxRetries) {
         retryCount++;
         setTimeout(tryLoad, 300);
       } else if (itemCount > 0) {
         // Items found - update feed map
-        console.log('[ProfileItemHandler] Items loaded, updating scroll position');
         this.updateScrollPosition(true);
       }
     };

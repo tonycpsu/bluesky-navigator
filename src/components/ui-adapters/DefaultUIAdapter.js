@@ -24,17 +24,14 @@ class DefaultUIAdapter {
    * @param {object} handler - The handler for this page (may be null)
    */
   activate(handler) {
-    console.log('[DefaultUIAdapter] activate called, handler:', handler ? 'yes' : 'no');
     this.handler = handler;
 
     // Show status bar, hide toolbar (minimal UI)
     const toolbar = this.uiManager.getToolbarDiv();
     const statusBar = this.uiManager.getStatusBar();
-    console.log('[DefaultUIAdapter] toolbar element:', toolbar.length, 'statusBar element:', statusBar.length);
 
     toolbar.hide();
     statusBar.show();
-    console.log('[DefaultUIAdapter] statusBar display after show():', statusBar.css('display'));
 
     // Hide toolbar rows
     this.uiManager.hideToolbarRow1();
@@ -49,13 +46,6 @@ class DefaultUIAdapter {
 
     // Set simple info text based on page
     this.updateInfoText();
-
-    // Debug: check status bar visibility
-    const sb = this.uiManager.getStatusBar();
-    console.log('[DefaultUIAdapter] StatusBar visible:', sb.is(':visible'));
-    console.log('[DefaultUIAdapter] StatusBar position:', sb.offset());
-    console.log('[DefaultUIAdapter] StatusBar dimensions:', sb.width(), 'x', sb.height());
-    console.log('[DefaultUIAdapter] activation complete');
   }
 
   /**

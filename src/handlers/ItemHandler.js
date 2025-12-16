@@ -120,22 +120,9 @@ export class ItemHandler extends Handler {
     this._perfLog.push(entry);
     if (this._perfLog.length > 500) this._perfLog.shift();
 
-    // Log to console
-    if (durationMs !== null) {
-      console.log(`[perf] ${label}: ${durationMs.toFixed(1)}ms`);
-    } else {
-      console.log(`[perf] ${label} (count: ${this._perfCallCounts[label]})`);
-    }
-
     // Periodic summary every 10 seconds
     if (now - this._perfLastReport > 10000) {
       this._perfLastReport = now;
-      const summary = Object.entries(this._perfCallCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(', ');
-      console.log(`[perf] === 10s summary === ${summary}`);
 
       // Warn if any function called excessively (>100 times in 10s)
       Object.entries(this._perfCallCounts).forEach(([k, v]) => {
@@ -1099,11 +1086,9 @@ export class ItemHandler extends Handler {
       // Hide "View full thread" element that follows unrolled threads (it's redundant)
       // Get the root post ID from the unrolled thread
       const rootPostId = thread.post.uri?.split('/').slice(-1)[0];
-      console.log('[hideViewFullThread] rootPostId:', rootPostId, 'unrolledIds:', unrolledIds);
       if (rootPostId) {
         // Collect all post IDs in this thread (root + all unrolled replies)
         const threadPostIds = new Set([rootPostId, ...unrolledIds]);
-        console.log('[hideViewFullThread] threadPostIds:', [...threadPostIds]);
 
         // Get the thread containing the unrolled item - we must NOT hide this one
         const unrolledThread = $(item).closest('.thread')[0];
@@ -1131,19 +1116,15 @@ export class ItemHandler extends Handler {
 
           // Only hide threads that ONLY contain "View full thread" (no real posts)
           if (viewFullThreadItems.length > 0 && realPosts.length === 0) {
-            console.log('[hideViewFullThread] Found View full thread only element:', threadEl[0]);
             // Check if any link in this thread points to one of our thread's posts
             const links = threadEl.find('a[href*="/post/"]');
-            console.log('[hideViewFullThread] Links found:', links.toArray().map(l => $(l).attr('href')));
             const matchesThread = links.toArray().some((link) => {
               const href = $(link).attr('href');
               const linkPostId = href?.split('/post/')[1]?.split('?')[0];
-              console.log('[hideViewFullThread] Checking linkPostId:', linkPostId, 'in threadPostIds:', threadPostIds.has(linkPostId));
               return linkPostId && threadPostIds.has(linkPostId);
             });
 
             if (matchesThread) {
-              console.log('[hideViewFullThread] HIDING thread:', threadEl[0]);
               threadEl.addClass('unrolled-view-full-thread-hidden');
               // CSS rule handles hiding with !important
             }
@@ -1496,7 +1477,6 @@ export class ItemHandler extends Handler {
             // In unrolled thread (threadIndex is set)
             const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
             const isVisible = this.isElementFullyVisible(currentThreadPost);
-            console.log('[thread-nav] j pressed, threadIndex:', this.threadIndex, 'unrolledReplies.length:', this.unrolledReplies.length, 'isVisible:', isVisible);
             if (!isVisible) {
               // Scroll current thread post into view (direction: down)
               // If scrollElementIntoView returns false, post scrolled past - continue to next
@@ -1511,7 +1491,6 @@ export class ItemHandler extends Handler {
               }
             } else if (this.threadIndex < this.unrolledReplies.length) {
               // More posts in thread - go to next (setter handles scrolling)
-              console.log('[thread-nav] advancing from', this.threadIndex, 'to', this.threadIndex + 1);
               if (event.key == 'j') {
                 this.markItemRead(this.index, true);
               }
@@ -1523,7 +1502,6 @@ export class ItemHandler extends Handler {
           } else {
             // Normal post - check visibility first
             const isVisible = this.isElementFullyVisible(this.selectedItem);
-            console.log('[nav] j pressed, isVisible:', isVisible, 'selectedItem:', this.selectedItem?.length, this.selectedItem?.[0]);
             if (!isVisible) {
               // Scroll to make the post visible (direction: down)
               // If scrollElementIntoView returns false, post scrolled past - jump to next
@@ -2622,7 +2600,6 @@ export class ItemHandler extends Handler {
         // Going down: check if bottom is visible
         if (rect.bottom <= viewportBottom) {
           // Bottom is visible - jump to next post
-          console.log('[scroll] tall post bottom visible, jumping to next');
           return false;
         }
         // Scroll down to show more of the post (by half viewport or remaining distance)
@@ -2632,7 +2609,6 @@ export class ItemHandler extends Handler {
         // Going up: check if top is visible
         if (rect.top >= toolbarHeight) {
           // Top is visible - jump to prev post
-          console.log('[scroll] tall post top visible, jumping to prev');
           return false;
         }
         // Scroll up to show more of the post (by half viewport or remaining distance)
@@ -2646,7 +2622,6 @@ export class ItemHandler extends Handler {
       const bottomOverlap = rect.bottom - viewportBottom;
       if (bottomOverlap > 0 && topOverlap < 20 && bottomOverlap < 20) {
         // Post almost fits, both edges just slightly off - consider visible
-        console.log('[scroll] post almost fits (top overlap:', topOverlap, 'bottom overlap:', bottomOverlap, ') - skipping');
         return false;
       }
       scrollAmount = rect.top - toolbarHeight - 10;
@@ -2657,7 +2632,6 @@ export class ItemHandler extends Handler {
       const topGap = rect.top - toolbarHeight;
       if (topGap < 20 && bottomOverlap < 20) {
         // Post almost fits, both edges just slightly off - consider visible
-        console.log('[scroll] post almost fits (top gap:', topGap, 'bottom overlap:', bottomOverlap, ') - skipping');
         return false;
       }
       // Scroll minimally based on direction to avoid oscillation
@@ -2672,8 +2646,6 @@ export class ItemHandler extends Handler {
       // Already visible, shouldn't happen but handle gracefully
       return true;
     }
-
-    console.log('[scroll] scrolling by', scrollAmount, 'postHeight:', postHeight, 'viewportHeight:', viewportHeight);
 
     this.ignoreMouseMovement = true;
     window.scrollBy({
@@ -2704,11 +2676,8 @@ export class ItemHandler extends Handler {
     const viewportTop = toolbarHeight;
     const viewportBottom = window.innerHeight - statusBarHeight;
 
-    const isVisible = rect.top >= viewportTop && rect.bottom <= viewportBottom;
-    console.log('[visibility]', { top: rect.top, bottom: rect.bottom, viewportTop, viewportBottom, isVisible });
-
     // Element is fully visible if entirely within the unobstructed viewport
-    return isVisible;
+    return rect.top >= viewportTop && rect.bottom <= viewportBottom;
   }
 
   onPopupAdd() {
@@ -3184,21 +3153,18 @@ export class ItemHandler extends Handler {
     this.config.set('rulesConfig', rulesConfig);
     this.config.save();
 
-    // Also update state.rulesConfig so it syncs and doesn't overwrite on reload
-    this.state.rulesConfig = rulesConfig;
+    // Sync state for remote storage
     if (this.state.stateManager) {
       this.state.stateManager.saveStateImmediately(true, true);
-    }
-
-    // Re-parse rules and apply filter
-    if (this.state && this.state.rules !== undefined) {
-      this.state.rules = this.parseRulesForState(rulesConfig);
     }
 
     // Show confirmation (unless we already showed an "Updated" message)
     if (!replacedOpposite) {
       this.showRuleAddedNotification(handle, category, action);
     }
+
+    // Refresh UI with new rules
+    this.onRulesChanged();
   }
 
   /**
@@ -3976,6 +3942,41 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Called when rules are updated (from config modal or quick filter popup).
+   * Re-parses rules and refreshes all UI to reflect changes immediately.
+   */
+  onRulesChanged() {
+    // Re-parse rules from config
+    const rulesConfig = this.config.get('rulesConfig') || '';
+    if (this.state && this.state.rules !== undefined) {
+      this.state.rules = this.parseRulesForState(rulesConfig);
+      this.state.rulesConfig = rulesConfig;
+    }
+
+    // Re-apply styling to all items
+    if (this.items && this.items.length) {
+      for (let i = 0; i < this.items.length; i++) {
+        const item = this.items[i];
+        if (item) {
+          this.applyItemStyle(item, i === this.index);
+        }
+      }
+    }
+
+    // Update feed map if available
+    if (typeof this.updateScrollPosition === 'function') {
+      this.updateScrollPosition(true);
+    }
+  }
+
+  /**
+   * @deprecated Use onRulesChanged() instead
+   */
+  applyRuleStylingToAllItems() {
+    this.onRulesChanged();
+  }
+
+  /**
    * Highlight matching text within an element by wrapping matches in styled spans.
    * @param {jQuery} $container - The container element
    * @param {RegExp} pattern - The pattern to match
@@ -4155,12 +4156,10 @@ export class ItemHandler extends Handler {
     // Check if there are unrolled threads BEFORE cleanup - we want to preserve their state
     const unrolledRepliesCount = $('.unrolled-replies').not('.post-view-modal *').length;
     const hasUnrolledContent = unrolledRepliesCount > 0;
-    console.log('[_doLoadItemsInner] hasUnrolledContent:', hasUnrolledContent, 'count:', unrolledRepliesCount);
 
     // Only clean up unrolled content if the user has navigated away (no unrolled content visible)
     // If there's still unrolled content, preserve it and its hidden "View full thread" elements
     if (!hasUnrolledContent) {
-      console.log('[_doLoadItemsInner] Cleaning up - no unrolled content');
       // Clean up unrolled replies and sidecar containers from previous load
       // These are elements WE created and appended to React containers
       // Use individual try-catch per element since React may have removed parents
@@ -4185,14 +4184,10 @@ export class ItemHandler extends Handler {
       }
       // Show any hidden "View full thread" elements
       try {
-        const hiddenCount = $('.unrolled-view-full-thread-hidden').length;
-        console.log('[_doLoadItemsInner] Unhiding View full thread elements, count:', hiddenCount);
         $('.unrolled-view-full-thread-hidden').removeClass('unrolled-view-full-thread-hidden').show();
       } catch (e) {
         // Ignore - elements may have been removed
       }
-    } else {
-      console.log('[_doLoadItemsInner] Preserving unrolled state - NOT cleaning up');
     }
 
     // Hide empty thread containers (threads with no visible items)

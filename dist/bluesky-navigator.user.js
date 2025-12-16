@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+484.14d3908c
+// @version     1.0.31+485.be6b3a40
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -71457,11 +71457,29 @@ ${rule}`;
         }
       }
       const authorCategoryIndex = handle2 ? this.getFilterCategoryIndexForHandle(handle2) : -1;
+      const $thread = $el.closest(".thread");
+      const repostLink = $thread.find('a[aria-label*="Reposted by"]').first();
+      let reposterHandle = null;
+      let reposterCategoryIndex = -1;
+      if (repostLink.length) {
+        const href = repostLink.attr("href") || "";
+        const reposterMatch = href.match(/\/profile\/([^/]+)/);
+        if (reposterMatch) {
+          reposterHandle = reposterMatch[1];
+          reposterCategoryIndex = this.getFilterCategoryIndexForHandle(reposterHandle);
+        }
+      }
       if (!this.config.get("ruleColorCoding")) {
         if (profileLink.length) {
           profileLink.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
         }
         if (avatar.length) avatar.css("box-shadow", "");
+        if (repostLink.length) {
+          const repostText = repostLink.find('div[dir="auto"]').first();
+          if (repostText.length) {
+            repostText.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
+          }
+        }
         postText.find(".rule-content-highlight").each(function() {
           $(this).replaceWith($(this).text());
         });
@@ -71486,6 +71504,21 @@ ${rule}`;
           profileLink.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
         }
         if (avatar.length) avatar.css("box-shadow", "");
+      }
+      if (reposterCategoryIndex >= 0 && repostLink.length) {
+        const color2 = this.getColorForCategoryIndex(reposterCategoryIndex);
+        const repostText = repostLink.find('div[dir="auto"]').first();
+        if (repostText.length) {
+          repostText[0].style.setProperty("background-color", `${color2}55`, "important");
+          repostText[0].style.setProperty("border", `1px solid ${color2}88`, "important");
+          repostText[0].style.setProperty("border-radius", "3px", "important");
+          repostText[0].style.setProperty("padding", "0 2px", "important");
+        }
+      } else if (repostLink.length) {
+        const repostText = repostLink.find('div[dir="auto"]').first();
+        if (repostText.length) {
+          repostText.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
+        }
       }
       postText.find(".rule-content-highlight").each(function() {
         $(this).replaceWith($(this).text());

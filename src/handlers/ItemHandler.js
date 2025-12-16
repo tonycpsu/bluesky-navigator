@@ -3865,6 +3865,20 @@ export class ItemHandler extends Handler {
 
     const authorCategoryIndex = handle ? this.getFilterCategoryIndexForHandle(handle) : -1;
 
+    // Check for reposter - look in parent thread for "Reposted by" link
+    const $thread = $el.closest('.thread');
+    const repostLink = $thread.find('a[aria-label*="Reposted by"]').first();
+    let reposterHandle = null;
+    let reposterCategoryIndex = -1;
+    if (repostLink.length) {
+      const href = repostLink.attr('href') || '';
+      const reposterMatch = href.match(/\/profile\/([^/]+)/);
+      if (reposterMatch) {
+        reposterHandle = reposterMatch[1];
+        reposterCategoryIndex = this.getFilterCategoryIndexForHandle(reposterHandle);
+      }
+    }
+
     // Check if color-coding is enabled
     if (!this.config.get('ruleColorCoding')) {
       // Clear any added styles
@@ -3872,6 +3886,13 @@ export class ItemHandler extends Handler {
         profileLink.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
       }
       if (avatar.length) avatar.css('box-shadow', '');
+      // Clear reposter styles
+      if (repostLink.length) {
+        const repostText = repostLink.find('div[dir="auto"]').first();
+        if (repostText.length) {
+          repostText.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
+        }
+      }
       // Clear content highlights
       postText.find('.rule-content-highlight').each(function() {
         $(this).replaceWith($(this).text());
@@ -3902,6 +3923,24 @@ export class ItemHandler extends Handler {
         profileLink.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
       }
       if (avatar.length) avatar.css('box-shadow', '');
+    }
+
+    // Color by reposter rules (the "Reposted by X" text)
+    if (reposterCategoryIndex >= 0 && repostLink.length) {
+      const color = this.getColorForCategoryIndex(reposterCategoryIndex);
+      const repostText = repostLink.find('div[dir="auto"]').first();
+      if (repostText.length) {
+        repostText[0].style.setProperty('background-color', `${color}55`, 'important');
+        repostText[0].style.setProperty('border', `1px solid ${color}88`, 'important');
+        repostText[0].style.setProperty('border-radius', '3px', 'important');
+        repostText[0].style.setProperty('padding', '0 2px', 'important');
+      }
+    } else if (repostLink.length) {
+      // No reposter match - clear styles
+      const repostText = repostLink.find('div[dir="auto"]').first();
+      if (repostText.length) {
+        repostText.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
+      }
     }
 
     // Highlight matching content phrases by content rules

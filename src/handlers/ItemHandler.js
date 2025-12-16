@@ -1447,6 +1447,14 @@ export class ItemHandler extends Handler {
         this.openAddToRulesForItem(item);
         break;
 
+      case 's':
+        this.savePost(item);
+        break;
+
+      case 'S':
+        this.openShareMenu(item);
+        break;
+
       default:
         if (!isNaN(parseInt(event.key))) {
           this.switchToTab(parseInt(event.key) - 1);
@@ -1707,6 +1715,14 @@ export class ItemHandler extends Handler {
     setTimeout(() => {
       $("div[aria-label^='Repost'][role='menuitem']").click();
     }, constants.REPOST_MENU_DELAY);
+  }
+
+  savePost(item) {
+    $(item).find("button[data-testid='postBookmarkBtn']").click();
+  }
+
+  openShareMenu(item) {
+    $(item).find("button[data-testid='postShareBtn']").click();
   }
 
   switchToTab(tabIndex) {

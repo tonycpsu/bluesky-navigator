@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+485.be6b3a40
+// @version     1.0.31+486.693a3c3e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -52228,6 +52228,8 @@ div#statusBar.has-feed-map {
       { keys: ["P"], description: "Repost immediately" },
       { keys: ["r"], description: "Reply" },
       { keys: ["R"], description: "Add author to rules" },
+      { keys: ["s"], description: "Save/Unsave post" },
+      { keys: ["S"], description: "Share menu" },
       { keys: ["i"], description: "Open first link" },
       { keys: ["m"], description: "Toggle media/video" },
       { keys: ["c"], description: "Screenshot to clipboard" },
@@ -69561,6 +69563,12 @@ div#statusBar.has-feed-map {
         case "+":
           this.openAddToRulesForItem(item);
           break;
+        case "s":
+          this.savePost(item);
+          break;
+        case "S":
+          this.openShareMenu(item);
+          break;
         default:
           if (!isNaN(parseInt(event.key))) {
             this.switchToTab(parseInt(event.key) - 1);
@@ -69786,6 +69794,12 @@ div#statusBar.has-feed-map {
       setTimeout(() => {
         $("div[aria-label^='Repost'][role='menuitem']").click();
       }, constants.REPOST_MENU_DELAY);
+    }
+    savePost(item) {
+      $(item).find("button[data-testid='postBookmarkBtn']").click();
+    }
+    openShareMenu(item) {
+      $(item).find("button[data-testid='postShareBtn']").click();
     }
     switchToTab(tabIndex) {
       const tabs = $("div[role='tablist'] > div > div > div").filter(":visible");

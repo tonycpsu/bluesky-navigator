@@ -39,6 +39,8 @@ const SHORTCUTS = {
     { keys: ['P'], description: 'Repost immediately' },
     { keys: ['r'], description: 'Reply' },
     { keys: ['R'], description: 'Add author to rules' },
+    { keys: ['s'], description: 'Save/Unsave post' },
+    { keys: ['S'], description: 'Share menu' },
     { keys: ['i'], description: 'Open first link' },
     { keys: ['m'], description: 'Toggle media/video' },
     { keys: ['c'], description: 'Screenshot to clipboard' },

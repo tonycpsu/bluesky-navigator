@@ -95,9 +95,12 @@ Press `?` to show the keyboard shortcuts overlay at any time.
  | l            | like/unlike post                                   |
  | p            | open repost menu                                   |
  | P            | repost immediately                                 |
+ | s            | save/unsave post                                   |
+ | S            | open share menu                                    |
  | c            | capture screenshot to clipboard                    |
  | v            | open full-screen post view with sidecar            |
  | V            | open reader mode (full thread)                     |
+ | t            | toggle thread context panel                        |
 
 ### Feed Controls
 

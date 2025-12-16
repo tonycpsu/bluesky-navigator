@@ -1012,6 +1012,9 @@ export class FeedItemHandler extends ItemHandler {
     this.feedMapWrapper = null;
     this.feedMapZoom = null;
     this.feedMapContainer = null;
+
+    // Hide and clean up feed map tooltip
+    this.hideFeedMapTooltip();
     this.feedMapConnector = null;
     this.feedMapZoomContainer = null;
     this.feedMapZoomHighlight = null;
@@ -3220,6 +3223,12 @@ export class FeedItemHandler extends ItemHandler {
   showFeedMapTooltip(item, segment) {
     if (!item) return;
 
+    // Clear any pending hide timer to prevent race conditions
+    if (this._tooltipHideTimer) {
+      clearTimeout(this._tooltipHideTimer);
+      this._tooltipHideTimer = null;
+    }
+
     const tooltip = this.getFeedMapTooltip();
     const $item = $(item);
 
@@ -3299,6 +3308,16 @@ export class FeedItemHandler extends ItemHandler {
    * Hide the feed map tooltip
    */
   hideFeedMapTooltip() {
+    // Clear any pending timers
+    if (this._tooltipTimer) {
+      clearTimeout(this._tooltipTimer);
+      this._tooltipTimer = null;
+    }
+    if (this._tooltipHideTimer) {
+      clearTimeout(this._tooltipHideTimer);
+      this._tooltipHideTimer = null;
+    }
+
     if (this._feedMapTooltip) {
       this._feedMapTooltip.removeClass('visible');
     }
@@ -3461,6 +3480,11 @@ export class FeedItemHandler extends ItemHandler {
       this._tooltipHideTimer = setTimeout(() => {
         this.hideFeedMapTooltip();
       }, 100);
+    });
+
+    // Also hide immediately when leaving the feed map container entirely
+    indicator.on('mouseleave', () => {
+      this.hideFeedMapTooltip();
     });
   }
 

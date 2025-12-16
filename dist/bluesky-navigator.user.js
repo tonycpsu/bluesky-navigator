@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+487.40082bcb
+// @version     1.0.31+488.f711b9d0
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -72657,6 +72657,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.feedMapWrapper = null;
       this.feedMapZoom = null;
       this.feedMapContainer = null;
+      this.hideFeedMapTooltip();
       this.feedMapConnector = null;
       this.feedMapZoomContainer = null;
       this.feedMapZoomHighlight = null;
@@ -74292,6 +74293,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      */
     showFeedMapTooltip(item, segment) {
       if (!item) return;
+      if (this._tooltipHideTimer) {
+        clearTimeout(this._tooltipHideTimer);
+        this._tooltipHideTimer = null;
+      }
       const tooltip = this.getFeedMapTooltip();
       const $item = $(item);
       let handle2 = this.handleFromItem(item);
@@ -74343,6 +74348,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * Hide the feed map tooltip
      */
     hideFeedMapTooltip() {
+      if (this._tooltipTimer) {
+        clearTimeout(this._tooltipTimer);
+        this._tooltipTimer = null;
+      }
+      if (this._tooltipHideTimer) {
+        clearTimeout(this._tooltipHideTimer);
+        this._tooltipHideTimer = null;
+      }
       if (this._feedMapTooltip) {
         this._feedMapTooltip.removeClass("visible");
       }
@@ -74467,6 +74480,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this._tooltipHideTimer = setTimeout(() => {
           this.hideFeedMapTooltip();
         }, 100);
+      });
+      indicator.on("mouseleave", () => {
+        this.hideFeedMapTooltip();
       });
     }
     handleInput(event) {

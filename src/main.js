@@ -818,6 +818,18 @@ function getScreenFromElement(element) {
       input: new Handler('input', config, state, api),
     };
 
+    // Immediately hide loading indicator if no feed/item handler matches current URL
+    // This handles pages like notifications, lists, search, settings
+    // Exclude 'input' handler as it always returns true
+    const hasActiveItemHandler = ['feed', 'post', 'profile', 'saved']
+      .some(name => handlers[name]?.isActive());
+    if (!hasActiveItemHandler) {
+      const indicator = document.getElementById('feedLoadingIndicator');
+      if (indicator) indicator.remove();
+      document.body.classList.remove('bsky-nav-loading-enabled');
+      document.body.classList.add('bsky-nav-feed-ready');
+    }
+
     // FIXME: find a better place for this
     if (state.rulesConfig) {
       config.set('rulesConfig', state.rulesConfig);
@@ -1137,7 +1149,9 @@ function getScreenFromElement(element) {
       current_url = newUrl;
 
       let matched = false;
+      // Check URL-based handlers (exclude 'input' which is focus-based, not URL-based)
       for (const [name, handler] of Object.entries(handlers)) {
+        if (name === 'input') continue;
         if (handler.isActive()) {
           setContext(name, urlChanged);
           matched = true;
@@ -1149,6 +1163,11 @@ function getScreenFromElement(element) {
       // (notifications, search, settings, etc.)
       if (!matched) {
         setContext('default', urlChanged);
+        // Hide loading indicator since these pages don't process feed items
+        const indicator = document.getElementById('feedLoadingIndicator');
+        if (indicator) indicator.remove();
+        document.body.classList.remove('bsky-nav-loading-enabled');
+        document.body.classList.add('bsky-nav-feed-ready');
       }
     }
 

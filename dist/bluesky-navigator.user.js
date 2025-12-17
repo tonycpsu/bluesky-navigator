@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+499.3b5f94f7
+// @version     1.0.31+500.726ee15b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -76825,6 +76825,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         saved: new SavedItemHandler("saved", config, state, api, constants.FEED_ITEM_SELECTOR),
         input: new Handler("input", config, state, api)
       };
+      const hasActiveItemHandler = ["feed", "post", "profile", "saved"].some((name) => handlers[name]?.isActive());
+      if (!hasActiveItemHandler) {
+        const indicator = document.getElementById("feedLoadingIndicator");
+        if (indicator) indicator.remove();
+        document.body.classList.remove("bsky-nav-loading-enabled");
+        document.body.classList.add("bsky-nav-feed-ready");
+      }
       if (state.rulesConfig) {
         config.set("rulesConfig", state.rulesConfig);
       }
@@ -77088,6 +77095,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         current_url = newUrl;
         let matched = false;
         for (const [name, handler] of Object.entries(handlers)) {
+          if (name === "input") continue;
           if (handler.isActive()) {
             setContext(name, urlChanged);
             matched = true;
@@ -77096,6 +77104,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         if (!matched) {
           setContext("default", urlChanged);
+          const indicator = document.getElementById("feedLoadingIndicator");
+          if (indicator) indicator.remove();
+          document.body.classList.remove("bsky-nav-loading-enabled");
+          document.body.classList.add("bsky-nav-feed-ready");
         }
       }
       function onFocus(e2) {

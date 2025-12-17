@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+504.bba7bc6e
+// @version     1.0.31+505.6356d0a5
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -70214,14 +70214,25 @@ div#statusBar.has-feed-map {
       const items = [];
       let selectedIndex = 0;
       let cleanedUp = false;
+      let menuObserver = null;
+      const originalMenuItem = repostItem.length ? repostItem[0] : quoteItem[0];
       const cleanup = () => {
         if (cleanedUp) return;
         cleanedUp = true;
+        if (menuObserver) menuObserver.disconnect();
         $(document).off("click.repostMenuFeedback");
         $(document).off("keydown.repostMenuFeedback");
         $feedback.removeClass("visible");
         setTimeout(() => $feedback.remove(), 200);
       };
+      if (originalMenuItem) {
+        menuObserver = new MutationObserver(() => {
+          if (!document.contains(originalMenuItem)) {
+            cleanup();
+          }
+        });
+        menuObserver.observe(document.body, { childList: true, subtree: true });
+      }
       const closeHandler = (e2) => {
         if (!$(e2.target).closest(".bsky-nav-menu-feedback-menu").length) {
           cleanup();
@@ -70266,7 +70277,6 @@ div#statusBar.has-feed-map {
         $repost.attr("data-index", items.length);
         $repost.on("click", () => {
           repostItem.click();
-          cleanup();
         });
         $menu.append($repost);
         items.push({ $el: $repost, original: repostItem });
@@ -70276,7 +70286,6 @@ div#statusBar.has-feed-map {
         $quote.attr("data-index", items.length);
         $quote.on("click", () => {
           quoteItem.click();
-          cleanup();
         });
         $menu.append($quote);
         items.push({ $el: $quote, original: quoteItem });

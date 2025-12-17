@@ -1838,15 +1838,30 @@ export class ItemHandler extends Handler {
     let selectedIndex = 0;
     let cleanedUp = false;
 
+    // Watch for Bluesky's native menu to be removed from DOM
+    let menuObserver = null;
+    const originalMenuItem = repostItem.length ? repostItem[0] : quoteItem[0];
+
     // Define handlers first so they can reference each other
     const cleanup = () => {
       if (cleanedUp) return;
       cleanedUp = true;
+      if (menuObserver) menuObserver.disconnect();
       $(document).off('click.repostMenuFeedback');
       $(document).off('keydown.repostMenuFeedback');
       $feedback.removeClass('visible');
       setTimeout(() => $feedback.remove(), 200);
     };
+
+    // Observe when Bluesky's menu is removed (after selection)
+    if (originalMenuItem) {
+      menuObserver = new MutationObserver(() => {
+        if (!document.contains(originalMenuItem)) {
+          cleanup();
+        }
+      });
+      menuObserver.observe(document.body, { childList: true, subtree: true });
+    }
 
     const closeHandler = (e) => {
       if (!$(e.target).closest('.bsky-nav-menu-feedback-menu').length) {
@@ -1896,7 +1911,7 @@ export class ItemHandler extends Handler {
       $repost.attr('data-index', items.length);
       $repost.on('click', () => {
         repostItem.click();
-        cleanup();
+        // MutationObserver will cleanup when Bluesky's menu is removed
       });
       $menu.append($repost);
       items.push({ $el: $repost, original: repostItem });
@@ -1907,7 +1922,7 @@ export class ItemHandler extends Handler {
       $quote.attr('data-index', items.length);
       $quote.on('click', () => {
         quoteItem.click();
-        cleanup();
+        // MutationObserver will cleanup when Bluesky's menu is removed
       });
       $menu.append($quote);
       items.push({ $el: $quote, original: quoteItem });

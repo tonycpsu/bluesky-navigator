@@ -3085,12 +3085,26 @@ export class ItemHandler extends Handler {
   }
 
   /**
-   * Open Add to Rules dropdown for the author of the selected item
+   * Open Add to Rules dropdown for the author of the selected item,
+   * or for selected text if any text is selected.
    * @param {jQuery} item - The selected item
    */
   openAddToRulesForItem(item) {
     if (!item || !item.length) return;
 
+    // Check if there's selected text - if so, add a content rule instead of author rule
+    const selection = window.getSelection();
+    const selectedText = selection ? selection.toString().trim() : '';
+
+    if (selectedText) {
+      // Position near the selection
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      this.showAddToRulesDropdown(rect, { selectedText });
+      return;
+    }
+
+    // No text selected - add author rule
     let handle = this.handleFromItem(item);
 
     // Fallback: try data-testid
@@ -3112,22 +3126,27 @@ export class ItemHandler extends Handler {
       rect = authorElement.getBoundingClientRect();
       // Check if rect is valid (not at 0,0 or off-screen)
       if (rect.top > 0 && rect.left > 0) {
-        this.showAddToRulesDropdown(rect, handle);
+        this.showAddToRulesDropdown(rect, { handle });
         return;
       }
     }
 
     // Fallback: position near the top of the item
     rect = item[0].getBoundingClientRect();
-    this.showAddToRulesDropdown(rect, handle);
+    this.showAddToRulesDropdown(rect, { handle });
   }
 
   /**
-   * Show dropdown to select which rule category to add the author to
+   * Show dropdown to select which rule category to add a rule to
    * @param {DOMRect} buttonRect - The bounding rect of the button (captured before hover card disappears)
-   * @param {string} handle - The user handle to add to rules
+   * @param {Object} options - Either { handle } for author rule or { selectedText } for content rule
    */
-  showAddToRulesDropdown(buttonRect, handle) {
+  showAddToRulesDropdown(buttonRect, options) {
+    // Support both old signature (string handle) and new signature (object with handle or selectedText)
+    const isContentRule = typeof options === 'object' && options.selectedText;
+    const handle = typeof options === 'string' ? options : options.handle;
+    const selectedText = isContentRule ? options.selectedText : null;
+
     // Remove any existing dropdown
     $('.bsky-nav-rules-dropdown').remove();
 
@@ -3143,10 +3162,15 @@ export class ItemHandler extends Handler {
     const activeRuleMatch = activeFilter.match(/\$(\S+)/);
     const activeCategory = activeRuleMatch ? activeRuleMatch[1] : null;
 
+    // Determine header text based on rule type
+    const headerText = isContentRule
+      ? `Add "${selectedText.length > 30 ? selectedText.substring(0, 30) + '...' : selectedText}" to:`
+      : `Add @${handle} to:`;
+
     // Create dropdown
     const dropdown = $(`
       <div class="bsky-nav-rules-dropdown">
-        <div class="bsky-nav-rules-dropdown-header">Add @${handle} to:</div>
+        <div class="bsky-nav-rules-dropdown-header">${headerText}</div>
         <div class="bsky-nav-rules-dropdown-actions">
           <button class="bsky-nav-rules-action-btn bsky-nav-rules-allow" data-action="allow">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -3213,10 +3237,19 @@ export class ItemHandler extends Handler {
       $(document).off('keydown.rulesDropdown');
     };
 
+    // Helper to add the appropriate rule type
+    const addRule = (category, action) => {
+      if (isContentRule) {
+        this.addContentToRules(selectedText, category, action);
+      } else {
+        this.addAuthorToRules(handle, category, action);
+      }
+    };
+
     // Category button handlers
     dropdown.find('.bsky-nav-rules-category-btn').on('click', (e) => {
       const category = $(e.target).data('category');
-      this.addAuthorToRules(handle, category, selectedAction);
+      addRule(category, selectedAction);
       closeDropdown();
     });
 
@@ -3228,7 +3261,7 @@ export class ItemHandler extends Handler {
       const newCategory = quickFilterInput.val().trim();
       // Only create if it's not purely numeric and not empty
       if (newCategory && !/^\d+$/.test(newCategory)) {
-        this.addAuthorToRules(handle, newCategory, selectedAction);
+        addRule(newCategory, selectedAction);
         closeDropdown();
       }
     });
@@ -3339,11 +3372,11 @@ export class ItemHandler extends Handler {
         if (selected.length) {
           // Select the highlighted category
           const category = selected.data('category');
-          this.addAuthorToRules(handle, category, selectedAction);
+          addRule(category, selectedAction);
           closeDropdown();
         } else if (val && !/^\d+$/.test(val)) {
           // Create new category if text entered and no match
-          this.addAuthorToRules(handle, val, selectedAction);
+          addRule(val, selectedAction);
           closeDropdown();
         }
         return;
@@ -3506,6 +3539,104 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Add content text to the rules config with word boundary matching
+   * @param {string} text - The text to match
+   * @param {string} category - The category to add the rule to
+   * @param {string} action - Either 'allow' or 'deny'
+   */
+  addContentToRules(text, category, action) {
+    let rulesConfig = this.config.get('rulesConfig') || '';
+
+    // Escape special regex characters in the text
+    const escapedText = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Wrap with word boundaries so "cat" doesn't match "scat" or "cats"
+    const ruleValue = `\\b${escapedText}\\b`;
+
+    // Format the rule (use explicit syntax since value contains regex)
+    const rule = `${action} content "${ruleValue}"`;
+
+    // Check if this exact rule already exists anywhere in config
+    if (rulesConfig.includes(rule)) {
+      this.showRuleAddedNotification(`"${text}" already has this rule`);
+      return;
+    }
+
+    // Check if content already has a rule in this category (with different action)
+    const oppositeAction = action === 'allow' ? 'deny' : 'allow';
+    const oppositeRule = `${oppositeAction} content "${ruleValue}"`;
+
+    // Check if category exists
+    const categoryHeader = `[${category}]`;
+    let replacedOpposite = false;
+
+    if (rulesConfig.includes(categoryHeader)) {
+      // Add rule under existing category
+      const lines = rulesConfig.split('\n');
+      const newLines = [];
+      let inCategory = false;
+      let ruleAdded = false;
+
+      for (const line of lines) {
+        // Check if this line is the opposite rule in this category - replace it
+        if (inCategory && line.trim() === oppositeRule) {
+          newLines.push(rule);
+          ruleAdded = true;
+          replacedOpposite = true;
+          continue;
+        }
+
+        newLines.push(line);
+        if (line.trim() === categoryHeader) {
+          inCategory = true;
+        } else if (line.trim().startsWith('[')) {
+          // Hit next category
+          if (inCategory && !ruleAdded) {
+            // Add rule before this category header
+            newLines.splice(newLines.length - 1, 0, rule);
+            ruleAdded = true;
+          }
+          inCategory = false;
+        }
+      }
+
+      // If still in category at end, add rule
+      if (inCategory && !ruleAdded) {
+        newLines.push(rule);
+      }
+
+      rulesConfig = newLines.join('\n');
+
+      if (replacedOpposite) {
+        this.showRuleAddedNotification(`Updated "${text}" to ${action} in ${category}`);
+      }
+    } else {
+      // Create new category with rule
+      if (rulesConfig && !rulesConfig.endsWith('\n')) {
+        rulesConfig += '\n';
+      }
+      rulesConfig += `\n${categoryHeader}\n${rule}`;
+    }
+
+    // Save config
+    this.config.set('rulesConfig', rulesConfig);
+    this.config.save();
+
+    // Sync state for remote storage
+    if (this.state.stateManager) {
+      this.state.stateManager.saveStateImmediately(true, true);
+    }
+
+    // Show confirmation (unless we already showed an "Updated" message)
+    if (!replacedOpposite) {
+      this.showRuleAddedNotification(`"${text}"`, category, action);
+    }
+
+    // Refresh UI with new rules
+    this.onRulesChanged();
+  }
+
+  /**
    * Parse rules config into state format (simplified version of main.js parseRulesConfig)
    */
   parseRulesForState(configText) {
@@ -3655,21 +3786,32 @@ export class ItemHandler extends Handler {
   /**
    * Get the matching content rule pattern for a text string.
    * @param {string} text - The text content to check
-   * @returns {{pattern: RegExp, categoryIndex: number}|null} The matching pattern and category index, or null
+   * @returns {{pattern: RegExp, categoryIndex: number}|null} The first matching pattern and category index, or null
    */
   getMatchingContentRuleForText(text) {
+    const results = this.getAllMatchingContentRulesForText(text);
+    return results.length > 0 ? results[0] : null;
+  }
+
+  /**
+   * Get ALL matching content rule patterns for a text string.
+   * @param {string} text - The text content to check
+   * @returns {Array<{pattern: RegExp, categoryIndex: number}>} All matching patterns with their category indices
+   */
+  getAllMatchingContentRulesForText(text) {
     if (!text || !this.state.rules) {
-      return null;
+      return [];
     }
 
+    const results = [];
     const categories = Object.keys(this.state.rules);
     for (let i = 0; i < categories.length; i++) {
-      const result = this.findMatchingContentPattern(text, categories[i]);
-      if (result) {
-        return { pattern: result, categoryIndex: i };
+      const patterns = this.findAllMatchingContentPatterns(text, categories[i]);
+      for (const pattern of patterns) {
+        results.push({ pattern, categoryIndex: i });
       }
     }
-    return null;
+    return results;
   }
 
   /**
@@ -3681,32 +3823,46 @@ export class ItemHandler extends Handler {
    * @private
    */
   findMatchingContentPattern(content, categoryName, visited = new Set()) {
+    const patterns = this.findAllMatchingContentPatterns(content, categoryName, visited);
+    return patterns.length > 0 ? patterns[0] : null;
+  }
+
+  /**
+   * Find ALL matching content patterns in a category (including via includes).
+   * @param {string} content - The content to check
+   * @param {string} categoryName - The category to check
+   * @param {Set} [visited] - Set of visited categories for circular dependency detection
+   * @returns {RegExp[]} All matching patterns
+   * @private
+   */
+  findAllMatchingContentPatterns(content, categoryName, visited = new Set()) {
     if (visited.has(categoryName)) {
-      return null;
+      return [];
     }
 
     const rules = this.state.rules?.[categoryName];
-    if (!rules) return null;
+    if (!rules) return [];
 
     visited.add(categoryName);
+    const patterns = [];
 
     for (const rule of rules) {
       if (rule.type === 'content') {
         try {
           const pattern = new RegExp(rule.value, 'gi');
           if (pattern.test(content)) {
-            return new RegExp(rule.value, 'gi'); // Return fresh regex
+            patterns.push(new RegExp(rule.value, 'gi')); // Add fresh regex
           }
         } catch (e) {
           // Invalid regex, skip
         }
       }
       if (rule.type === 'include') {
-        const result = this.findMatchingContentPattern(content, rule.value, visited);
-        if (result) return result;
+        const includedPatterns = this.findAllMatchingContentPatterns(content, rule.value, new Set(visited));
+        patterns.push(...includedPatterns);
       }
     }
-    return null;
+    return patterns;
   }
 
   /**
@@ -4248,7 +4404,7 @@ export class ItemHandler extends Handler {
       const color = this.getColorForCategoryIndex(authorCategoryIndex);
 
       if (profileLink.length) {
-        profileLink[0].style.setProperty('background-color', `${color}55`, 'important');
+        profileLink[0].style.setProperty('background-color', `${color}80`, 'important');
         profileLink[0].style.setProperty('border', `1px solid ${color}88`, 'important');
         profileLink[0].style.setProperty('border-radius', '3px', 'important');
         profileLink[0].style.setProperty('padding', '0 2px', 'important');
@@ -4273,7 +4429,7 @@ export class ItemHandler extends Handler {
       const color = this.getColorForCategoryIndex(reposterCategoryIndex);
       const repostText = repostLink.find('div[dir="auto"]').first();
       if (repostText.length) {
-        repostText[0].style.setProperty('background-color', `${color}55`, 'important');
+        repostText[0].style.setProperty('background-color', `${color}80`, 'important');
         repostText[0].style.setProperty('border', `1px solid ${color}88`, 'important');
         repostText[0].style.setProperty('border-radius', '3px', 'important');
         repostText[0].style.setProperty('padding', '0 2px', 'important');
@@ -4287,22 +4443,30 @@ export class ItemHandler extends Handler {
     }
 
     // Highlight matching content phrases by content rules
-    // Clear any previous content highlights
-    postText.find('.rule-content-highlight').each(function() {
-      $(this).replaceWith($(this).text());
-    });
-
-    const matchResult = this.getMatchingContentRule(element);
-    if (matchResult) {
-      const { pattern, categoryIndex } = matchResult;
-      const color = this.getColorForCategoryIndex(categoryIndex);
-
-      // Highlight matching text in the post
-      this.highlightMatchingText(postText, pattern, color);
-    }
+    this.applyAllContentHighlights(postText);
 
     // Apply highlighting to embedded/quote posts
     this.applyEmbeddedPostHighlighting($el);
+  }
+
+  /**
+   * Apply all matching content rule highlights to a text container.
+   * Clears previous highlights first, then applies all matching patterns.
+   * @param {jQuery} $textContainer - The container element with text to highlight
+   */
+  applyAllContentHighlights($textContainer) {
+    // Clear any previous content highlights
+    $textContainer.find('.rule-content-highlight').each(function() {
+      $(this).replaceWith($(this).text());
+    });
+
+    // Get ALL matching content rules and highlight each one
+    const content = $textContainer.text();
+    const allMatches = this.getAllMatchingContentRulesForText(content);
+    for (const { pattern, categoryIndex } of allMatches) {
+      const color = this.getColorForCategoryIndex(categoryIndex);
+      this.highlightMatchingText($textContainer, pattern, color);
+    }
   }
 
   /**
@@ -4347,12 +4511,15 @@ export class ItemHandler extends Handler {
         return;
       }
 
+      // Apply content highlighting to embedded post text
+      this.applyAllContentHighlights($embedText);
+
       // Apply author highlighting if matches a rule
       if (embedCategoryIndex >= 0) {
         const color = this.getColorForCategoryIndex(embedCategoryIndex);
 
         if (embedProfileLink.length) {
-          embedProfileLink[0].style.setProperty('background-color', `${color}55`, 'important');
+          embedProfileLink[0].style.setProperty('background-color', `${color}80`, 'important');
           embedProfileLink[0].style.setProperty('border', `1px solid ${color}88`, 'important');
           embedProfileLink[0].style.setProperty('border-radius', '3px', 'important');
           embedProfileLink[0].style.setProperty('padding', '0 2px', 'important');
@@ -4370,21 +4537,6 @@ export class ItemHandler extends Handler {
           embedProfileLink.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
         }
         if (embedAvatar.length) embedAvatar.css('box-shadow', '');
-      }
-
-      // Apply content highlighting to embedded post text
-      // Clear previous highlights first
-      $embedText.find('.rule-content-highlight').each(function() {
-        $(this).replaceWith($(this).text());
-      });
-
-      // Check for content matches in embedded post
-      const embedTextContent = $embedText.text();
-      const embedMatchResult = this.getMatchingContentRuleForText(embedTextContent);
-      if (embedMatchResult) {
-        const { pattern, categoryIndex } = embedMatchResult;
-        const color = this.getColorForCategoryIndex(categoryIndex);
-        this.highlightMatchingText($embedText, pattern, color);
       }
     });
   }
@@ -4433,7 +4585,7 @@ export class ItemHandler extends Handler {
   highlightMatchingText($container, pattern, color) {
     if (!$container.length) return;
 
-    const highlightStyle = `background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;`;
+    const highlightStyle = `background-color: ${color}33; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;`;
 
     // Process text nodes recursively
     const processNode = (node) => {

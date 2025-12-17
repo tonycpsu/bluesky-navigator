@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+502.791c7a61
+// @version     1.0.31+503.83ff1f96
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -71182,11 +71182,20 @@ div#statusBar.has-feed-map {
     onProfileHoverCardRemove() {
     }
     /**
-     * Open Add to Rules dropdown for the author of the selected item
+     * Open Add to Rules dropdown for the author of the selected item,
+     * or for selected text if any text is selected.
      * @param {jQuery} item - The selected item
      */
     openAddToRulesForItem(item) {
       if (!item || !item.length) return;
+      const selection = window.getSelection();
+      const selectedText = selection ? selection.toString().trim() : "";
+      if (selectedText) {
+        const range = selection.getRangeAt(0);
+        const rect2 = range.getBoundingClientRect();
+        this.showAddToRulesDropdown(rect2, { selectedText });
+        return;
+      }
       let handle2 = this.handleFromItem(item);
       if (!handle2) {
         const testId = $(item).attr("data-testid") || "";
@@ -71201,19 +71210,22 @@ div#statusBar.has-feed-map {
       if (authorElement) {
         rect = authorElement.getBoundingClientRect();
         if (rect.top > 0 && rect.left > 0) {
-          this.showAddToRulesDropdown(rect, handle2);
+          this.showAddToRulesDropdown(rect, { handle: handle2 });
           return;
         }
       }
       rect = item[0].getBoundingClientRect();
-      this.showAddToRulesDropdown(rect, handle2);
+      this.showAddToRulesDropdown(rect, { handle: handle2 });
     }
     /**
-     * Show dropdown to select which rule category to add the author to
+     * Show dropdown to select which rule category to add a rule to
      * @param {DOMRect} buttonRect - The bounding rect of the button (captured before hover card disappears)
-     * @param {string} handle - The user handle to add to rules
+     * @param {Object} options - Either { handle } for author rule or { selectedText } for content rule
      */
-    showAddToRulesDropdown(buttonRect, handle2) {
+    showAddToRulesDropdown(buttonRect, options) {
+      const isContentRule = typeof options === "object" && options.selectedText;
+      const handle2 = typeof options === "string" ? options : options.handle;
+      const selectedText = isContentRule ? options.selectedText : null;
       $(".bsky-nav-rules-dropdown").remove();
       this.rulesDropdownActive = true;
       const rulesConfig = this.config.get("rulesConfig") || "";
@@ -71221,9 +71233,10 @@ div#statusBar.has-feed-map {
       const activeFilter = this.state.filter || "";
       const activeRuleMatch = activeFilter.match(/\$(\S+)/);
       const activeCategory = activeRuleMatch ? activeRuleMatch[1] : null;
+      const headerText = isContentRule ? `Add "${selectedText.length > 30 ? selectedText.substring(0, 30) + "..." : selectedText}" to:` : `Add @${handle2} to:`;
       const dropdown = $(`
       <div class="bsky-nav-rules-dropdown">
-        <div class="bsky-nav-rules-dropdown-header">Add @${handle2} to:</div>
+        <div class="bsky-nav-rules-dropdown-header">${headerText}</div>
         <div class="bsky-nav-rules-dropdown-actions">
           <button class="bsky-nav-rules-action-btn bsky-nav-rules-allow" data-action="allow">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -71277,16 +71290,23 @@ div#statusBar.has-feed-map {
         $(document).off("mousedown.rulesDropdown");
         $(document).off("keydown.rulesDropdown");
       };
+      const addRule = (category, action) => {
+        if (isContentRule) {
+          this.addContentToRules(selectedText, category, action);
+        } else {
+          this.addAuthorToRules(handle2, category, action);
+        }
+      };
       dropdown.find(".bsky-nav-rules-category-btn").on("click", (e2) => {
         const category = $(e2.target).data("category");
-        this.addAuthorToRules(handle2, category, selectedAction);
+        addRule(category, selectedAction);
         closeDropdown();
       });
       const quickFilterInput = dropdown.find(".bsky-nav-rules-quick-filter");
       dropdown.find(".bsky-nav-rules-create-btn").on("click", () => {
         const newCategory = quickFilterInput.val().trim();
         if (newCategory && !/^\d+$/.test(newCategory)) {
-          this.addAuthorToRules(handle2, newCategory, selectedAction);
+          addRule(newCategory, selectedAction);
           closeDropdown();
         }
       });
@@ -71362,10 +71382,10 @@ div#statusBar.has-feed-map {
           const selected = dropdown.find(".bsky-nav-rules-category-btn.selected:visible");
           if (selected.length) {
             const category = selected.data("category");
-            this.addAuthorToRules(handle2, category, selectedAction);
+            addRule(category, selectedAction);
             closeDropdown();
           } else if (val && !/^\d+$/.test(val)) {
-            this.addAuthorToRules(handle2, val, selectedAction);
+            addRule(val, selectedAction);
             closeDropdown();
           }
           return;
@@ -71485,6 +71505,73 @@ ${rule}`;
       }
       if (!replacedOpposite) {
         this.showRuleAddedNotification(handle2, category, action);
+      }
+      this.onRulesChanged();
+    }
+    /**
+     * Add content text to the rules config with word boundary matching
+     * @param {string} text - The text to match
+     * @param {string} category - The category to add the rule to
+     * @param {string} action - Either 'allow' or 'deny'
+     */
+    addContentToRules(text, category, action) {
+      let rulesConfig = this.config.get("rulesConfig") || "";
+      const escapedText = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const ruleValue = `\\b${escapedText}\\b`;
+      const rule = `${action} content "${ruleValue}"`;
+      if (rulesConfig.includes(rule)) {
+        this.showRuleAddedNotification(`"${text}" already has this rule`);
+        return;
+      }
+      const oppositeAction = action === "allow" ? "deny" : "allow";
+      const oppositeRule = `${oppositeAction} content "${ruleValue}"`;
+      const categoryHeader = `[${category}]`;
+      let replacedOpposite = false;
+      if (rulesConfig.includes(categoryHeader)) {
+        const lines = rulesConfig.split("\n");
+        const newLines = [];
+        let inCategory = false;
+        let ruleAdded = false;
+        for (const line of lines) {
+          if (inCategory && line.trim() === oppositeRule) {
+            newLines.push(rule);
+            ruleAdded = true;
+            replacedOpposite = true;
+            continue;
+          }
+          newLines.push(line);
+          if (line.trim() === categoryHeader) {
+            inCategory = true;
+          } else if (line.trim().startsWith("[")) {
+            if (inCategory && !ruleAdded) {
+              newLines.splice(newLines.length - 1, 0, rule);
+              ruleAdded = true;
+            }
+            inCategory = false;
+          }
+        }
+        if (inCategory && !ruleAdded) {
+          newLines.push(rule);
+        }
+        rulesConfig = newLines.join("\n");
+        if (replacedOpposite) {
+          this.showRuleAddedNotification(`Updated "${text}" to ${action} in ${category}`);
+        }
+      } else {
+        if (rulesConfig && !rulesConfig.endsWith("\n")) {
+          rulesConfig += "\n";
+        }
+        rulesConfig += `
+${categoryHeader}
+${rule}`;
+      }
+      this.config.set("rulesConfig", rulesConfig);
+      this.config.save();
+      if (this.state.stateManager) {
+        this.state.stateManager.saveStateImmediately(true, true);
+      }
+      if (!replacedOpposite) {
+        this.showRuleAddedNotification(`"${text}"`, category, action);
       }
       this.onRulesChanged();
     }
@@ -71616,20 +71703,30 @@ ${rule}`;
     /**
      * Get the matching content rule pattern for a text string.
      * @param {string} text - The text content to check
-     * @returns {{pattern: RegExp, categoryIndex: number}|null} The matching pattern and category index, or null
+     * @returns {{pattern: RegExp, categoryIndex: number}|null} The first matching pattern and category index, or null
      */
     getMatchingContentRuleForText(text) {
+      const results = this.getAllMatchingContentRulesForText(text);
+      return results.length > 0 ? results[0] : null;
+    }
+    /**
+     * Get ALL matching content rule patterns for a text string.
+     * @param {string} text - The text content to check
+     * @returns {Array<{pattern: RegExp, categoryIndex: number}>} All matching patterns with their category indices
+     */
+    getAllMatchingContentRulesForText(text) {
       if (!text || !this.state.rules) {
-        return null;
+        return [];
       }
+      const results = [];
       const categories = Object.keys(this.state.rules);
       for (let i2 = 0; i2 < categories.length; i2++) {
-        const result = this.findMatchingContentPattern(text, categories[i2]);
-        if (result) {
-          return { pattern: result, categoryIndex: i2 };
+        const patterns = this.findAllMatchingContentPatterns(text, categories[i2]);
+        for (const pattern of patterns) {
+          results.push({ pattern, categoryIndex: i2 });
         }
       }
-      return null;
+      return results;
     }
     /**
      * Find the first matching content pattern in a category (including via includes).
@@ -71640,28 +71737,41 @@ ${rule}`;
      * @private
      */
     findMatchingContentPattern(content2, categoryName, visited = /* @__PURE__ */ new Set()) {
+      const patterns = this.findAllMatchingContentPatterns(content2, categoryName, visited);
+      return patterns.length > 0 ? patterns[0] : null;
+    }
+    /**
+     * Find ALL matching content patterns in a category (including via includes).
+     * @param {string} content - The content to check
+     * @param {string} categoryName - The category to check
+     * @param {Set} [visited] - Set of visited categories for circular dependency detection
+     * @returns {RegExp[]} All matching patterns
+     * @private
+     */
+    findAllMatchingContentPatterns(content2, categoryName, visited = /* @__PURE__ */ new Set()) {
       if (visited.has(categoryName)) {
-        return null;
+        return [];
       }
       const rules = this.state.rules?.[categoryName];
-      if (!rules) return null;
+      if (!rules) return [];
       visited.add(categoryName);
+      const patterns = [];
       for (const rule of rules) {
         if (rule.type === "content") {
           try {
             const pattern = new RegExp(rule.value, "gi");
             if (pattern.test(content2)) {
-              return new RegExp(rule.value, "gi");
+              patterns.push(new RegExp(rule.value, "gi"));
             }
           } catch (e2) {
           }
         }
         if (rule.type === "include") {
-          const result = this.findMatchingContentPattern(content2, rule.value, visited);
-          if (result) return result;
+          const includedPatterns = this.findAllMatchingContentPatterns(content2, rule.value, new Set(visited));
+          patterns.push(...includedPatterns);
         }
       }
-      return null;
+      return patterns;
     }
     /**
      * Get the index of the first filter category that matches post content.
@@ -72082,7 +72192,7 @@ ${rule}`;
       if (authorCategoryIndex >= 0) {
         const color2 = this.getColorForCategoryIndex(authorCategoryIndex);
         if (profileLink.length) {
-          profileLink[0].style.setProperty("background-color", `${color2}55`, "important");
+          profileLink[0].style.setProperty("background-color", `${color2}80`, "important");
           profileLink[0].style.setProperty("border", `1px solid ${color2}88`, "important");
           profileLink[0].style.setProperty("border-radius", "3px", "important");
           profileLink[0].style.setProperty("padding", "0 2px", "important");
@@ -72103,7 +72213,7 @@ ${rule}`;
         const color2 = this.getColorForCategoryIndex(reposterCategoryIndex);
         const repostText = repostLink.find('div[dir="auto"]').first();
         if (repostText.length) {
-          repostText[0].style.setProperty("background-color", `${color2}55`, "important");
+          repostText[0].style.setProperty("background-color", `${color2}80`, "important");
           repostText[0].style.setProperty("border", `1px solid ${color2}88`, "important");
           repostText[0].style.setProperty("border-radius", "3px", "important");
           repostText[0].style.setProperty("padding", "0 2px", "important");
@@ -72114,16 +72224,24 @@ ${rule}`;
           repostText.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
         }
       }
-      postText.find(".rule-content-highlight").each(function() {
+      this.applyAllContentHighlights(postText);
+      this.applyEmbeddedPostHighlighting($el);
+    }
+    /**
+     * Apply all matching content rule highlights to a text container.
+     * Clears previous highlights first, then applies all matching patterns.
+     * @param {jQuery} $textContainer - The container element with text to highlight
+     */
+    applyAllContentHighlights($textContainer) {
+      $textContainer.find(".rule-content-highlight").each(function() {
         $(this).replaceWith($(this).text());
       });
-      const matchResult = this.getMatchingContentRule(element);
-      if (matchResult) {
-        const { pattern, categoryIndex } = matchResult;
+      const content2 = $textContainer.text();
+      const allMatches = this.getAllMatchingContentRulesForText(content2);
+      for (const { pattern, categoryIndex } of allMatches) {
         const color2 = this.getColorForCategoryIndex(categoryIndex);
-        this.highlightMatchingText(postText, pattern, color2);
+        this.highlightMatchingText($textContainer, pattern, color2);
       }
-      this.applyEmbeddedPostHighlighting($el);
     }
     /**
      * Apply rule highlighting to embedded/quote posts within a feed item
@@ -72152,10 +72270,11 @@ ${rule}`;
           });
           return;
         }
+        this.applyAllContentHighlights($embedText);
         if (embedCategoryIndex >= 0) {
           const color2 = this.getColorForCategoryIndex(embedCategoryIndex);
           if (embedProfileLink.length) {
-            embedProfileLink[0].style.setProperty("background-color", `${color2}55`, "important");
+            embedProfileLink[0].style.setProperty("background-color", `${color2}80`, "important");
             embedProfileLink[0].style.setProperty("border", `1px solid ${color2}88`, "important");
             embedProfileLink[0].style.setProperty("border-radius", "3px", "important");
             embedProfileLink[0].style.setProperty("padding", "0 2px", "important");
@@ -72171,16 +72290,6 @@ ${rule}`;
             embedProfileLink.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
           }
           if (embedAvatar.length) embedAvatar.css("box-shadow", "");
-        }
-        $embedText.find(".rule-content-highlight").each(function() {
-          $(this).replaceWith($(this).text());
-        });
-        const embedTextContent = $embedText.text();
-        const embedMatchResult = this.getMatchingContentRuleForText(embedTextContent);
-        if (embedMatchResult) {
-          const { pattern, categoryIndex } = embedMatchResult;
-          const color2 = this.getColorForCategoryIndex(categoryIndex);
-          this.highlightMatchingText($embedText, pattern, color2);
         }
       });
     }
@@ -72220,7 +72329,7 @@ ${rule}`;
      */
     highlightMatchingText($container, pattern, color2) {
       if (!$container.length) return;
-      const highlightStyle = `background-color: ${color2}55; border: 1px solid ${color2}88; border-radius: 3px; padding: 0 2px;`;
+      const highlightStyle = `background-color: ${color2}33; border: 1px solid ${color2}88; border-radius: 3px; padding: 0 2px;`;
       const processNode = (node) => {
         if (node.nodeType === Node.TEXT_NODE) {
           const text = node.textContent;

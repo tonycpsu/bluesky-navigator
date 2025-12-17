@@ -4311,19 +4311,27 @@ export class ItemHandler extends Handler {
   applyEmbeddedPostHighlighting($el) {
     const colorCodingEnabled = this.config.get('ruleColorCoding');
 
-    // Find all embedded posts (quote posts) - they have aria-label starting with "Post by"
-    $el.find("div[aria-label^='Post by']").each((i, embedEl) => {
-      const $embed = $(embedEl);
+    // Embedded/quoted posts use data-word-wrap="1" for their text content
+    // (main posts use data-testid="postText")
+    // Find all such elements - if there are any, this post has embedded content
+    const embeddedTexts = $el.find('div[data-word-wrap="1"]');
+    if (embeddedTexts.length === 0) return;
 
-      // Extract handle from aria-label (format: "Post by handle" - no @ prefix)
-      const ariaLabel = $embed.attr('aria-label') || '';
+    // Process each embedded text element
+    embeddedTexts.each((i, embedTextEl) => {
+      const $embedText = $(embedTextEl);
+
+      // Find the containing "Post by" div to get the handle
+      const $embedContainer = $embedText.closest("div[aria-label^='Post by']");
+      if (!$embedContainer.length) return;
+
+      const ariaLabel = $embedContainer.attr('aria-label') || '';
       const handleMatch = ariaLabel.match(/Post by (.+)/);
       const embedHandle = handleMatch ? handleMatch[1] : null;
 
-      // Find profile link and avatar within the embedded post
-      const embedProfileLink = $embed.find(constants.PROFILE_SELECTOR).first();
-      const embedAvatar = $embed.find('div[data-testid="userAvatarImage"]').first();
-      const embedPostText = $embed.find('div[data-testid="postText"]').first();
+      // Find avatar within the embedded post container
+      const embedAvatar = $embedContainer.find('div[data-testid="userAvatarImage"]').first();
+      const embedProfileLink = $embedContainer.find(constants.PROFILE_SELECTOR).first();
 
       const embedCategoryIndex = embedHandle ? this.getFilterCategoryIndexForHandle(embedHandle) : -1;
 
@@ -4333,11 +4341,9 @@ export class ItemHandler extends Handler {
           embedProfileLink.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
         }
         if (embedAvatar.length) embedAvatar.css('box-shadow', '');
-        if (embedPostText.length) {
-          embedPostText.find('.rule-content-highlight').each(function() {
-            $(this).replaceWith($(this).text());
-          });
-        }
+        $embedText.find('.rule-content-highlight').each(function() {
+          $(this).replaceWith($(this).text());
+        });
         return;
       }
 
@@ -4367,19 +4373,18 @@ export class ItemHandler extends Handler {
       }
 
       // Apply content highlighting to embedded post text
-      if (embedPostText.length) {
-        // Clear previous highlights
-        embedPostText.find('.rule-content-highlight').each(function() {
-          $(this).replaceWith($(this).text());
-        });
+      // Clear previous highlights first
+      $embedText.find('.rule-content-highlight').each(function() {
+        $(this).replaceWith($(this).text());
+      });
 
-        // Check for content matches in embedded post
-        const embedMatchResult = this.getMatchingContentRuleForText(embedPostText.text());
-        if (embedMatchResult) {
-          const { pattern, categoryIndex } = embedMatchResult;
-          const color = this.getColorForCategoryIndex(categoryIndex);
-          this.highlightMatchingText(embedPostText, pattern, color);
-        }
+      // Check for content matches in embedded post
+      const embedTextContent = $embedText.text();
+      const embedMatchResult = this.getMatchingContentRuleForText(embedTextContent);
+      if (embedMatchResult) {
+        const { pattern, categoryIndex } = embedMatchResult;
+        const color = this.getColorForCategoryIndex(categoryIndex);
+        this.highlightMatchingText($embedText, pattern, color);
       }
     });
   }

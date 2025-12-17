@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+500.726ee15b
+// @version     1.0.31+501.f780579e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -72118,25 +72118,26 @@ ${rule}`;
      */
     applyEmbeddedPostHighlighting($el) {
       const colorCodingEnabled = this.config.get("ruleColorCoding");
-      $el.find("div[aria-label^='Post by']").each((i2, embedEl) => {
-        const $embed = $(embedEl);
-        const ariaLabel = $embed.attr("aria-label") || "";
+      const embeddedTexts = $el.find('div[data-word-wrap="1"]');
+      if (embeddedTexts.length === 0) return;
+      embeddedTexts.each((i2, embedTextEl) => {
+        const $embedText = $(embedTextEl);
+        const $embedContainer = $embedText.closest("div[aria-label^='Post by']");
+        if (!$embedContainer.length) return;
+        const ariaLabel = $embedContainer.attr("aria-label") || "";
         const handleMatch = ariaLabel.match(/Post by (.+)/);
         const embedHandle = handleMatch ? handleMatch[1] : null;
-        const embedProfileLink = $embed.find(constants.PROFILE_SELECTOR).first();
-        const embedAvatar = $embed.find('div[data-testid="userAvatarImage"]').first();
-        const embedPostText = $embed.find('div[data-testid="postText"]').first();
+        const embedAvatar = $embedContainer.find('div[data-testid="userAvatarImage"]').first();
+        const embedProfileLink = $embedContainer.find(constants.PROFILE_SELECTOR).first();
         const embedCategoryIndex = embedHandle ? this.getFilterCategoryIndexForHandle(embedHandle) : -1;
         if (!colorCodingEnabled) {
           if (embedProfileLink.length) {
             embedProfileLink.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
           }
           if (embedAvatar.length) embedAvatar.css("box-shadow", "");
-          if (embedPostText.length) {
-            embedPostText.find(".rule-content-highlight").each(function() {
-              $(this).replaceWith($(this).text());
-            });
-          }
+          $embedText.find(".rule-content-highlight").each(function() {
+            $(this).replaceWith($(this).text());
+          });
           return;
         }
         if (embedCategoryIndex >= 0) {
@@ -72159,16 +72160,15 @@ ${rule}`;
           }
           if (embedAvatar.length) embedAvatar.css("box-shadow", "");
         }
-        if (embedPostText.length) {
-          embedPostText.find(".rule-content-highlight").each(function() {
-            $(this).replaceWith($(this).text());
-          });
-          const embedMatchResult = this.getMatchingContentRuleForText(embedPostText.text());
-          if (embedMatchResult) {
-            const { pattern, categoryIndex } = embedMatchResult;
-            const color2 = this.getColorForCategoryIndex(categoryIndex);
-            this.highlightMatchingText(embedPostText, pattern, color2);
-          }
+        $embedText.find(".rule-content-highlight").each(function() {
+          $(this).replaceWith($(this).text());
+        });
+        const embedTextContent = $embedText.text();
+        const embedMatchResult = this.getMatchingContentRuleForText(embedTextContent);
+        if (embedMatchResult) {
+          const { pattern, categoryIndex } = embedMatchResult;
+          const color2 = this.getColorForCategoryIndex(categoryIndex);
+          this.highlightMatchingText($embedText, pattern, color2);
         }
       });
     }

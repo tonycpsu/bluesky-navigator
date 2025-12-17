@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+497.09025da1
+// @version     1.0.31+498.674b38ed
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -402,6 +402,11 @@
             this.dirtySeenEntries.set(postId, timestamp);
           }
         }
+        for (const postId of Object.keys(oldSeen)) {
+          if (!(postId in newSeen)) {
+            this.dirtySeenEntries.set(postId, null);
+          }
+        }
         this.lastSeenSnapshot = { ...newSeen };
       }
       this.state = { ...this.state, ...newState };
@@ -482,6 +487,7 @@
     /**
      * Syncs dirty seen entries to remote as individual records.
      * Each entry is stored as seen:<postId> with timestamp value.
+     * Entries with null timestamp are deleted from remote.
      */
     async syncSeenToRemote() {
       if (this.dirtySeenEntries.size === 0) {
@@ -489,14 +495,25 @@
       }
       const entries = Array.from(this.dirtySeenEntries.entries());
       this.dirtySeenEntries.clear();
-      const upsertStatements = entries.map(([postId, timestamp]) => {
+      const upserts = entries.filter(([, timestamp]) => timestamp != null);
+      const deletes = entries.filter(([, timestamp]) => timestamp == null);
+      const statements = [];
+      for (const [postId, timestamp] of upserts) {
         const safeId = postId.replace(/[^a-zA-Z0-9_-]/g, "_");
-        return `UPSERT seen:${safeId} SET postId = "${postId}", timestamp = "${timestamp}", updated_at = time::now();`;
-      }).join(" ");
-      const querySize = (upsertStatements.length / 1024).toFixed(2);
+        statements.push(`UPSERT seen:${safeId} SET postId = "${postId}", timestamp = "${timestamp}", updated_at = time::now();`);
+      }
+      for (const [postId] of deletes) {
+        const safeId = postId.replace(/[^a-zA-Z0-9_-]/g, "_");
+        statements.push(`DELETE seen:${safeId};`);
+      }
+      if (statements.length === 0) {
+        return;
+      }
+      const query = statements.join(" ");
+      const querySize = (query.length / 1024).toFixed(2);
       try {
-        await this.executeRemoteQuery(upsertStatements, "success");
-        console.log(`[StateManager] Synced ${entries.length} seen entries to remote (${querySize} KB)`);
+        await this.executeRemoteQuery(query, "success");
+        console.log(`[StateManager] Synced ${upserts.length} seen, deleted ${deletes.length} unseen entries (${querySize} KB)`);
         this.seenSyncCount++;
         if (this.seenSyncCount >= 10) {
           this.seenSyncCount = 0;
@@ -582,20 +599,29 @@
         if (this.dirtySeenEntries.size > 0) {
           const entries = Array.from(this.dirtySeenEntries.entries());
           this.dirtySeenEntries.clear();
-          const upsertStatements = entries.map(([postId, timestamp]) => {
+          const upserts = entries.filter(([, timestamp]) => timestamp != null);
+          const deletes = entries.filter(([, timestamp]) => timestamp == null);
+          const statements = [];
+          for (const [postId, timestamp] of upserts) {
             const safeId = postId.replace(/[^a-zA-Z0-9_-]/g, "_");
-            return `UPSERT seen:${safeId} SET postId = "${postId}", timestamp = "${timestamp}", updated_at = time::now();`;
-          }).join(" ");
-          const seenQuery = `USE NS ${namespace} DB ${database}; ${upsertStatements}`;
-          const seenSize = (upsertStatements.length / 1024).toFixed(2);
-          console.log(`[StateManager] Syncing ${entries.length} seen entries on unload (${seenSize} KB)`);
-          fetch(sqlUrl, {
-            method: "POST",
-            headers,
-            body: seenQuery,
-            keepalive: true
-          }).catch(() => {
-          });
+            statements.push(`UPSERT seen:${safeId} SET postId = "${postId}", timestamp = "${timestamp}", updated_at = time::now();`);
+          }
+          for (const [postId] of deletes) {
+            const safeId = postId.replace(/[^a-zA-Z0-9_-]/g, "_");
+            statements.push(`DELETE seen:${safeId};`);
+          }
+          if (statements.length > 0) {
+            const seenQuery = `USE NS ${namespace} DB ${database}; ${statements.join(" ")}`;
+            const seenSize = (statements.join(" ").length / 1024).toFixed(2);
+            console.log(`[StateManager] Syncing ${upserts.length} seen, ${deletes.length} unseen on unload (${seenSize} KB)`);
+            fetch(sqlUrl, {
+              method: "POST",
+              headers,
+              body: seenQuery,
+              keepalive: true
+            }).catch(() => {
+            });
+          }
         }
       } catch (error) {
         console.error("Error preparing remote state save:", error);
@@ -70452,6 +70478,10 @@ div#statusBar.has-feed-map {
         this.markPostRead(this.postIdForItem(mainItem), isRead);
         this.applyItemStyle(this.items[index], index == this.index);
       }
+      if (!markedRead) {
+        $(mainItem).removeClass("filtered");
+        $(mainItem).closest(".thread").removeClass("filtered");
+      }
       this.updateInfoIndicator();
     }
     markPostRead(postId, isRead) {
@@ -70460,7 +70490,7 @@ div#statusBar.has-feed-map {
       if (isRead || isRead == null && !seen[postId]) {
         seen[postId] = currentTime;
       } else {
-        seen[postId] = null;
+        delete seen[postId];
       }
       this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
       return !!seen[postId];

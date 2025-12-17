@@ -2296,6 +2296,11 @@ export class ItemHandler extends Handler {
       this.markPostRead(this.postIdForItem(mainItem), isRead);
       this.applyItemStyle(this.items[index], index == this.index);
     }
+    // When marking as unread, remove filtered class so item becomes visible again
+    if (!markedRead) {
+      $(mainItem).removeClass('filtered');
+      $(mainItem).closest('.thread').removeClass('filtered');
+    }
     this.updateInfoIndicator();
   }
 
@@ -2306,7 +2311,9 @@ export class ItemHandler extends Handler {
     if (isRead || (isRead == null && !seen[postId])) {
       seen[postId] = currentTime;
     } else {
-      seen[postId] = null;
+      // Delete the key entirely instead of setting to null
+      // This ensures proper persistence and remote sync
+      delete seen[postId];
     }
     this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
     return !!seen[postId];

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+505.6356d0a5
+// @version     1.0.31+506.271e14d7
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69098,35 +69098,40 @@ div#statusBar.has-feed-map {
       return [mainPost[0], ...this.unrolledReplies.toArray()];
     }
     /**
-     * Scroll a thread post into view within the unrolled thread container
+     * Scroll a thread post to align with the top of the visible area (below toolbar)
      */
     scrollThreadPostIntoView(post2) {
       if (!post2) return;
       const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
+      const toolbarHeight = this.getToolbarHeight();
       if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
         const containerRect = scrollContainer.getBoundingClientRect();
         const postRect = post2.getBoundingClientRect();
         const postTopInContainer = postRect.top - containerRect.top + scrollContainer.scrollTop;
-        const targetScrollTop = postTopInContainer - 10;
         scrollContainer.scrollTo({
-          top: targetScrollTop,
-          behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
+          top: Math.max(0, postTopInContainer - 10),
+          behavior: "instant"
+          // Instant for container, smooth for window
         });
-      } else {
-        const rect = post2.getBoundingClientRect();
-        const toolbarHeight = this.getToolbarHeight();
-        const scrollNeeded = rect.top - toolbarHeight - 10;
-        if (Math.abs(scrollNeeded) > 50) {
-          this.ignoreMouseMovement = true;
-          window.scrollBy({
-            top: scrollNeeded,
-            behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
-          });
-          setTimeout(() => {
-            this.ignoreMouseMovement = false;
-          }, 500);
-        }
       }
+      const postRectAfter = post2.getBoundingClientRect();
+      const scrollNeeded = postRectAfter.top - toolbarHeight - 10;
+      console.log(
+        "[scrollThreadPostIntoView] postRect.top:",
+        postRectAfter.top,
+        "toolbarHeight:",
+        toolbarHeight,
+        "scrollNeeded:",
+        scrollNeeded
+      );
+      this.ignoreMouseMovement = true;
+      window.scrollBy({
+        top: scrollNeeded,
+        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
+      });
+      setTimeout(() => {
+        this.ignoreMouseMovement = false;
+      }, 500);
     }
     set index(value) {
       this._index = value;
@@ -69643,7 +69648,7 @@ div#statusBar.has-feed-map {
         }
         const unrolledPosts = await this.api.unrollThread(thread);
         const parent = $(item).find('div[data-testid="contentHider-post"]').first().parent();
-        parent.css({ "overflow-y": "scroll", "max-height": "80vH", "padding-top": "1em" });
+        parent.css({ "overflow-y": "scroll", "max-height": "80vH", "padding-top": "1em", "overscroll-behavior": "contain" });
         let div = $(parent).find("div.unrolled-replies");
         if ($(div).length) {
           $(div).empty();

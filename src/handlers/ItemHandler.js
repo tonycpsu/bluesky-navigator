@@ -388,44 +388,46 @@ export class ItemHandler extends Handler {
   }
 
   /**
-   * Scroll a thread post into view within the unrolled thread container
+   * Scroll a thread post to align with the top of the visible area (below toolbar)
    */
   scrollThreadPostIntoView(post) {
     if (!post) return;
 
     // Find the scroll container (parent of contentHider-post with overflow-y: scroll)
     const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
+    const toolbarHeight = this.getToolbarHeight();
 
+    // Step 1: Scroll within the container to reveal the post
     if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
-      // Container is scrollable - scroll within it
       const containerRect = scrollContainer.getBoundingClientRect();
       const postRect = post.getBoundingClientRect();
 
-      // Calculate position relative to container
+      // Calculate where post is relative to container's scroll position
       const postTopInContainer = postRect.top - containerRect.top + scrollContainer.scrollTop;
-      const targetScrollTop = postTopInContainer - 10; // 10px padding from top
 
+      // Scroll container to put post near the top of the container
       scrollContainer.scrollTo({
-        top: targetScrollTop,
-        behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+        top: Math.max(0, postTopInContainer - 10),
+        behavior: 'instant', // Instant for container, smooth for window
       });
-    } else {
-      // Fallback to window scroll if no scroll container
-      const rect = post.getBoundingClientRect();
-      const toolbarHeight = this.getToolbarHeight();
-      const scrollNeeded = rect.top - toolbarHeight - 10;
-
-      if (Math.abs(scrollNeeded) > 50) {
-        this.ignoreMouseMovement = true;
-        window.scrollBy({
-          top: scrollNeeded,
-          behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
-        });
-        setTimeout(() => {
-          this.ignoreMouseMovement = false;
-        }, 500);
-      }
     }
+
+    // Step 2: Scroll the window to position the post at the top of viewport (below toolbar)
+    // Get fresh rect after container scroll
+    const postRectAfter = post.getBoundingClientRect();
+    const scrollNeeded = postRectAfter.top - toolbarHeight - 10;
+
+    console.log('[scrollThreadPostIntoView] postRect.top:', postRectAfter.top,
+      'toolbarHeight:', toolbarHeight, 'scrollNeeded:', scrollNeeded);
+
+    this.ignoreMouseMovement = true;
+    window.scrollBy({
+      top: scrollNeeded,
+      behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+    });
+    setTimeout(() => {
+      this.ignoreMouseMovement = false;
+    }, 500);
   }
 
   set index(value) {
@@ -1097,7 +1099,7 @@ export class ItemHandler extends Handler {
       }
       const unrolledPosts = await this.api.unrollThread(thread);
       const parent = $(item).find('div[data-testid="contentHider-post"]').first().parent();
-      parent.css({ 'overflow-y': 'scroll', 'max-height': '80vH', 'padding-top': '1em' });
+      parent.css({ 'overflow-y': 'scroll', 'max-height': '80vH', 'padding-top': '1em', 'overscroll-behavior': 'contain' });
       let div = $(parent).find('div.unrolled-replies');
       if ($(div).length) {
         $(div).empty();

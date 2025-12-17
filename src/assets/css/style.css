@@ -5308,6 +5308,90 @@ div#statusBar.has-feed-map {
 }
 
 /* ==========================================================================
+   Action Feedback Indicator
+   Brief visual feedback when post actions are triggered off-screen
+   ========================================================================== */
+
+.bsky-nav-action-feedback {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%) scale(0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  z-index: 10000;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+.bsky-nav-action-feedback.visible {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+.bsky-nav-action-feedback svg {
+  display: block;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .bsky-nav-action-feedback {
+    background: rgba(30, 30, 30, 0.95);
+  }
+}
+
+/* Menu feedback - shows menu options at bottom of screen */
+.bsky-nav-menu-feedback {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  z-index: 10000;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: auto;
+}
+
+.bsky-nav-menu-feedback.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.bsky-nav-menu-feedback-menu {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  min-width: 200px;
+}
+
+.bsky-nav-menu-feedback-menu [role="menuitem"] {
+  cursor: pointer;
+  padding: 12px 16px;
+}
+
+.bsky-nav-menu-feedback-menu [role="menuitem"]:hover,
+.bsky-nav-menu-feedback-menu .bsky-nav-menu-item-selected {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  .bsky-nav-menu-feedback-menu {
+    background: #1a1a1a;
+  }
+  .bsky-nav-menu-feedback-menu [role="menuitem"]:hover,
+  .bsky-nav-menu-feedback-menu .bsky-nav-menu-item-selected {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* ==========================================================================
    Global UIManager Toolbar and Status Bar
    These styles apply to the persistent toolbar/status bar shown on all pages
    ========================================================================== */

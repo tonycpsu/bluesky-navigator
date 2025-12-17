@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+498.674b38ed
+// @version     1.0.31+499.3b5f94f7
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -52334,6 +52334,90 @@ div#statusBar.has-feed-map {
 }
 
 /* ==========================================================================
+   Action Feedback Indicator
+   Brief visual feedback when post actions are triggered off-screen
+   ========================================================================== */
+
+.bsky-nav-action-feedback {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%) scale(0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  z-index: 10000;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+.bsky-nav-action-feedback.visible {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+.bsky-nav-action-feedback svg {
+  display: block;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .bsky-nav-action-feedback {
+    background: rgba(30, 30, 30, 0.95);
+  }
+}
+
+/* Menu feedback - shows menu options at bottom of screen */
+.bsky-nav-menu-feedback {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  z-index: 10000;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: auto;
+}
+
+.bsky-nav-menu-feedback.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.bsky-nav-menu-feedback-menu {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  min-width: 200px;
+}
+
+.bsky-nav-menu-feedback-menu [role="menuitem"] {
+  cursor: pointer;
+  padding: 12px 16px;
+}
+
+.bsky-nav-menu-feedback-menu [role="menuitem"]:hover,
+.bsky-nav-menu-feedback-menu .bsky-nav-menu-item-selected {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  .bsky-nav-menu-feedback-menu {
+    background: #1a1a1a;
+  }
+  .bsky-nav-menu-feedback-menu [role="menuitem"]:hover,
+  .bsky-nav-menu-feedback-menu .bsky-nav-menu-item-selected {
+    background: rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* ==========================================================================
    Global UIManager Toolbar and Status Bar
    These styles apply to the persistent toolbar/status bar shown on all pages
    ========================================================================== */
@@ -70055,8 +70139,14 @@ div#statusBar.has-feed-map {
     }
     openReplyDialog(item) {
       const button = $(item).find("button[aria-label^='Reply']");
-      button.focus();
-      button.click();
+      if (button.length) {
+        const wasVisible = this.isElementInViewport(button[0]);
+        button.focus();
+        button.click();
+        if (!wasVisible) {
+          this.showActionFeedback(button[0]);
+        }
+      }
     }
     handleLikeAction(item) {
       if (this.config.get("showReplySidecar") && this.replyIndex != null) {
@@ -70064,23 +70154,198 @@ div#statusBar.has-feed-map {
       } else if (this.threadIndex) {
         this.likePost(this.selectedPost);
       } else {
-        $(item).find("button[data-testid='likeBtn']").click();
+        const button = $(item).find("button[data-testid='likeBtn']");
+        if (button.length) {
+          const wasVisible = this.isElementInViewport(button[0]);
+          button.click();
+          if (!wasVisible) {
+            setTimeout(() => this.showActionFeedback(button[0]), 50);
+          }
+        }
       }
     }
     openRepostMenu(item) {
-      $(item).find("button[aria-label^='Repost']").click();
+      const button = $(item).find("button[aria-label^='Repost']");
+      if (button.length) {
+        const wasVisible = this.isElementInViewport(button[0]);
+        button.click();
+        if (!wasVisible) {
+          this.waitForRepostMenu();
+        }
+      }
+    }
+    /**
+     * Wait for repost menu to appear and show feedback
+     */
+    waitForRepostMenu() {
+      let attempts = 0;
+      const maxAttempts = 20;
+      const checkInterval = setInterval(() => {
+        attempts++;
+        const repostItem = $("div[aria-label^='Repost'][role='menuitem']");
+        const quoteItem = $("div[aria-label^='Quote'][role='menuitem']");
+        if (repostItem.length || quoteItem.length) {
+          clearInterval(checkInterval);
+          this.showRepostMenuFeedback(repostItem, quoteItem);
+        } else if (attempts >= maxAttempts) {
+          clearInterval(checkInterval);
+        }
+      }, 50);
+    }
+    /**
+     * Show repost menu options at the bottom of the screen
+     */
+    showRepostMenuFeedback(repostItem, quoteItem) {
+      $(".bsky-nav-menu-feedback").remove();
+      const $feedback = $('<div class="bsky-nav-menu-feedback"></div>');
+      const $menu = $('<div class="bsky-nav-menu-feedback-menu"></div>');
+      const items = [];
+      let selectedIndex = 0;
+      let cleanedUp = false;
+      const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        $(document).off("click.repostMenuFeedback");
+        $(document).off("keydown.repostMenuFeedback");
+        $feedback.removeClass("visible");
+        setTimeout(() => $feedback.remove(), 200);
+      };
+      const closeHandler = (e2) => {
+        if (!$(e2.target).closest(".bsky-nav-menu-feedback-menu").length) {
+          cleanup();
+        }
+      };
+      const keyHandler = (e2) => {
+        switch (e2.key) {
+          case "ArrowDown":
+          case "j":
+            e2.preventDefault();
+            e2.stopPropagation();
+            selectedIndex = (selectedIndex + 1) % items.length;
+            updateSelection();
+            break;
+          case "ArrowUp":
+          case "k":
+            e2.preventDefault();
+            e2.stopPropagation();
+            selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+            updateSelection();
+            break;
+          case "Enter":
+            e2.preventDefault();
+            e2.stopPropagation();
+            items[selectedIndex].original.click();
+            cleanup();
+            break;
+          case "Escape":
+            e2.preventDefault();
+            e2.stopPropagation();
+            cleanup();
+            break;
+        }
+      };
+      const updateSelection = () => {
+        items.forEach((item, i2) => {
+          item.$el.toggleClass("bsky-nav-menu-item-selected", i2 === selectedIndex);
+        });
+      };
+      if (repostItem.length) {
+        const $repost = repostItem.clone();
+        $repost.attr("data-index", items.length);
+        $repost.on("click", () => {
+          repostItem.click();
+          cleanup();
+        });
+        $menu.append($repost);
+        items.push({ $el: $repost, original: repostItem });
+      }
+      if (quoteItem.length) {
+        const $quote = quoteItem.clone();
+        $quote.attr("data-index", items.length);
+        $quote.on("click", () => {
+          quoteItem.click();
+          cleanup();
+        });
+        $menu.append($quote);
+        items.push({ $el: $quote, original: quoteItem });
+      }
+      $feedback.append($menu);
+      $("body").append($feedback);
+      updateSelection();
+      setTimeout(() => {
+        $(document).on("click.repostMenuFeedback", closeHandler);
+        $(document).on("keydown.repostMenuFeedback", keyHandler);
+      }, 10);
+      requestAnimationFrame(() => {
+        $feedback.addClass("visible");
+      });
     }
     repostImmediately(item) {
-      $(item).find("button[aria-label^='Repost']").click();
-      setTimeout(() => {
-        $("div[aria-label^='Repost'][role='menuitem']").click();
-      }, constants.REPOST_MENU_DELAY);
+      const button = $(item).find("button[aria-label^='Repost']");
+      if (button.length) {
+        const wasVisible = this.isElementInViewport(button[0]);
+        button.click();
+        setTimeout(() => {
+          $("div[aria-label^='Repost'][role='menuitem']").click();
+          if (!wasVisible) {
+            setTimeout(() => this.showActionFeedback(button[0]), 50);
+          }
+        }, constants.REPOST_MENU_DELAY);
+      }
     }
     savePost(item) {
-      $(item).find("button[data-testid='postBookmarkBtn']").click();
+      const button = $(item).find("button[data-testid='postBookmarkBtn']");
+      if (button.length) {
+        const wasVisible = this.isElementInViewport(button[0]);
+        button.click();
+        if (!wasVisible) {
+          setTimeout(() => this.showActionFeedback(button[0]), 50);
+        }
+      }
     }
     openShareMenu(item) {
-      $(item).find("button[data-testid='postShareBtn']").click();
+      const button = $(item).find("button[data-testid='postShareBtn']");
+      if (button.length) {
+        const wasVisible = this.isElementInViewport(button[0]);
+        button.click();
+        if (!wasVisible) {
+          this.showActionFeedback(button[0]);
+        }
+      }
+    }
+    /**
+     * Check if an element is visible in the viewport
+     * @param {HTMLElement} element - The element to check
+     * @returns {boolean} True if element is at least partially visible
+     */
+    isElementInViewport(element) {
+      if (!element) return false;
+      const rect = element.getBoundingClientRect();
+      const statusBar = document.getElementById("statusBar");
+      const statusBarHeight = statusBar ? statusBar.getBoundingClientRect().height : 0;
+      const effectiveViewportHeight = window.innerHeight - statusBarHeight;
+      return rect.top < effectiveViewportHeight && rect.bottom > 0 && rect.left < window.innerWidth && rect.right > 0;
+    }
+    /**
+     * Show a brief visual feedback indicator using the actual button icon
+     * @param {HTMLElement} button - The button element containing the icon
+     */
+    showActionFeedback(button) {
+      $(".bsky-nav-action-feedback").remove();
+      const svg = $(button).find("svg").first();
+      if (!svg.length) return;
+      const svgClone = svg.clone();
+      svgClone.attr("width", "32").attr("height", "32");
+      const $feedback = $('<div class="bsky-nav-action-feedback"></div>');
+      $feedback.append(svgClone);
+      $("body").append($feedback);
+      requestAnimationFrame(() => {
+        $feedback.addClass("visible");
+      });
+      setTimeout(() => {
+        $feedback.removeClass("visible");
+        setTimeout(() => $feedback.remove(), 300);
+      }, 800);
     }
     switchToTab(tabIndex) {
       const tabs = $("div[role='tablist'] > div > div > div").filter(":visible");

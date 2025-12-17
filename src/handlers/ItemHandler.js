@@ -1763,8 +1763,14 @@ export class ItemHandler extends Handler {
 
   openReplyDialog(item) {
     const button = $(item).find("button[aria-label^='Reply']");
-    button.focus();
-    button.click();
+    if (button.length) {
+      const wasVisible = this.isElementInViewport(button[0]);
+      button.focus();
+      button.click();
+      if (!wasVisible) {
+        this.showActionFeedback(button[0]);
+      }
+    }
   }
 
   handleLikeAction(item) {
@@ -1773,27 +1779,247 @@ export class ItemHandler extends Handler {
     } else if (this.threadIndex) {
       this.likePost(this.selectedPost);
     } else {
-      $(item).find("button[data-testid='likeBtn']").click();
+      const button = $(item).find("button[data-testid='likeBtn']");
+      if (button.length) {
+        const wasVisible = this.isElementInViewport(button[0]);
+        button.click();
+        if (!wasVisible) {
+          // Show feedback after click so the icon reflects the new state
+          setTimeout(() => this.showActionFeedback(button[0]), 50);
+        }
+      }
     }
   }
 
   openRepostMenu(item) {
-    $(item).find("button[aria-label^='Repost']").click();
+    const button = $(item).find("button[aria-label^='Repost']");
+    if (button.length) {
+      const wasVisible = this.isElementInViewport(button[0]);
+      button.click();
+      if (!wasVisible) {
+        // Wait for menu to appear and show it at bottom of screen
+        this.waitForRepostMenu();
+      }
+    }
+  }
+
+  /**
+   * Wait for repost menu to appear and show feedback
+   */
+  waitForRepostMenu() {
+    let attempts = 0;
+    const maxAttempts = 20;
+    const checkInterval = setInterval(() => {
+      attempts++;
+      // Try to find the menu by looking for menu items with Repost/Quote text
+      // Use same selector pattern as repostImmediately
+      const repostItem = $("div[aria-label^='Repost'][role='menuitem']");
+      const quoteItem = $("div[aria-label^='Quote'][role='menuitem']");
+      if (repostItem.length || quoteItem.length) {
+        clearInterval(checkInterval);
+        // Create a simple menu with the found items
+        this.showRepostMenuFeedback(repostItem, quoteItem);
+      } else if (attempts >= maxAttempts) {
+        clearInterval(checkInterval);
+      }
+    }, 50);
+  }
+
+  /**
+   * Show repost menu options at the bottom of the screen
+   */
+  showRepostMenuFeedback(repostItem, quoteItem) {
+    // Remove any existing feedback
+    $('.bsky-nav-menu-feedback').remove();
+
+    const $feedback = $('<div class="bsky-nav-menu-feedback"></div>');
+    const $menu = $('<div class="bsky-nav-menu-feedback-menu"></div>');
+    const items = [];
+    let selectedIndex = 0;
+    let cleanedUp = false;
+
+    // Define handlers first so they can reference each other
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      $(document).off('click.repostMenuFeedback');
+      $(document).off('keydown.repostMenuFeedback');
+      $feedback.removeClass('visible');
+      setTimeout(() => $feedback.remove(), 200);
+    };
+
+    const closeHandler = (e) => {
+      if (!$(e.target).closest('.bsky-nav-menu-feedback-menu').length) {
+        cleanup();
+      }
+    };
+
+    const keyHandler = (e) => {
+      switch (e.key) {
+        case 'ArrowDown':
+        case 'j':
+          e.preventDefault();
+          e.stopPropagation();
+          selectedIndex = (selectedIndex + 1) % items.length;
+          updateSelection();
+          break;
+        case 'ArrowUp':
+        case 'k':
+          e.preventDefault();
+          e.stopPropagation();
+          selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+          updateSelection();
+          break;
+        case 'Enter':
+          e.preventDefault();
+          e.stopPropagation();
+          items[selectedIndex].original.click();
+          cleanup();
+          break;
+        case 'Escape':
+          e.preventDefault();
+          e.stopPropagation();
+          cleanup();
+          break;
+      }
+    };
+
+    const updateSelection = () => {
+      items.forEach((item, i) => {
+        item.$el.toggleClass('bsky-nav-menu-item-selected', i === selectedIndex);
+      });
+    };
+
+    // Build menu items
+    if (repostItem.length) {
+      const $repost = repostItem.clone();
+      $repost.attr('data-index', items.length);
+      $repost.on('click', () => {
+        repostItem.click();
+        cleanup();
+      });
+      $menu.append($repost);
+      items.push({ $el: $repost, original: repostItem });
+    }
+
+    if (quoteItem.length) {
+      const $quote = quoteItem.clone();
+      $quote.attr('data-index', items.length);
+      $quote.on('click', () => {
+        quoteItem.click();
+        cleanup();
+      });
+      $menu.append($quote);
+      items.push({ $el: $quote, original: quoteItem });
+    }
+
+    $feedback.append($menu);
+    $('body').append($feedback);
+
+    updateSelection();
+
+    // Use namespaced events for cleaner removal
+    setTimeout(() => {
+      $(document).on('click.repostMenuFeedback', closeHandler);
+      $(document).on('keydown.repostMenuFeedback', keyHandler);
+    }, 10);
+
+    // Trigger animation
+    requestAnimationFrame(() => {
+      $feedback.addClass('visible');
+    });
   }
 
   repostImmediately(item) {
-    $(item).find("button[aria-label^='Repost']").click();
-    setTimeout(() => {
-      $("div[aria-label^='Repost'][role='menuitem']").click();
-    }, constants.REPOST_MENU_DELAY);
+    const button = $(item).find("button[aria-label^='Repost']");
+    if (button.length) {
+      const wasVisible = this.isElementInViewport(button[0]);
+      button.click();
+      setTimeout(() => {
+        $("div[aria-label^='Repost'][role='menuitem']").click();
+        if (!wasVisible) {
+          // Show feedback after repost completes so icon reflects new state
+          setTimeout(() => this.showActionFeedback(button[0]), 50);
+        }
+      }, constants.REPOST_MENU_DELAY);
+    }
   }
 
   savePost(item) {
-    $(item).find("button[data-testid='postBookmarkBtn']").click();
+    const button = $(item).find("button[data-testid='postBookmarkBtn']");
+    if (button.length) {
+      const wasVisible = this.isElementInViewport(button[0]);
+      button.click();
+      if (!wasVisible) {
+        setTimeout(() => this.showActionFeedback(button[0]), 50);
+      }
+    }
   }
 
   openShareMenu(item) {
-    $(item).find("button[data-testid='postShareBtn']").click();
+    const button = $(item).find("button[data-testid='postShareBtn']");
+    if (button.length) {
+      const wasVisible = this.isElementInViewport(button[0]);
+      button.click();
+      if (!wasVisible) {
+        this.showActionFeedback(button[0]);
+      }
+    }
+  }
+
+  /**
+   * Check if an element is visible in the viewport
+   * @param {HTMLElement} element - The element to check
+   * @returns {boolean} True if element is at least partially visible
+   */
+  isElementInViewport(element) {
+    if (!element) return false;
+    const rect = element.getBoundingClientRect();
+
+    // Account for status bar at the bottom
+    const statusBar = document.getElementById('statusBar');
+    const statusBarHeight = statusBar ? statusBar.getBoundingClientRect().height : 0;
+    const effectiveViewportHeight = window.innerHeight - statusBarHeight;
+
+    return (
+      rect.top < effectiveViewportHeight &&
+      rect.bottom > 0 &&
+      rect.left < window.innerWidth &&
+      rect.right > 0
+    );
+  }
+
+  /**
+   * Show a brief visual feedback indicator using the actual button icon
+   * @param {HTMLElement} button - The button element containing the icon
+   */
+  showActionFeedback(button) {
+    // Remove any existing feedback
+    $('.bsky-nav-action-feedback').remove();
+
+    // Clone the SVG icon from the button
+    const svg = $(button).find('svg').first();
+    if (!svg.length) return;
+
+    const svgClone = svg.clone();
+    // Make the icon larger for visibility
+    svgClone.attr('width', '32').attr('height', '32');
+
+    const $feedback = $('<div class="bsky-nav-action-feedback"></div>');
+    $feedback.append(svgClone);
+
+    $('body').append($feedback);
+
+    // Trigger animation
+    requestAnimationFrame(() => {
+      $feedback.addClass('visible');
+    });
+
+    // Remove after animation
+    setTimeout(() => {
+      $feedback.removeClass('visible');
+      setTimeout(() => $feedback.remove(), 300);
+    }, 800);
   }
 
   switchToTab(tabIndex) {

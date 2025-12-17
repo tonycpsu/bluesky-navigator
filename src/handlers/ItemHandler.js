@@ -3814,7 +3814,16 @@ export class ItemHandler extends Handler {
     if (!url) return;
     const uri = await this.api.getAtprotoUri(url);
     if (!uri) return;
-    return await this.api.getThread(uri);
+    try {
+      return await this.api.getThread(uri);
+    } catch (error) {
+      // Handle deleted/unavailable posts gracefully
+      if (error.message?.includes('not found') || error.name === 'NotFoundError') {
+        console.warn(`[ItemHandler] Post not found: ${uri}`);
+        return null;
+      }
+      throw error;
+    }
   }
 
   getHandles() {

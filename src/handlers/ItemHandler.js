@@ -4585,7 +4585,7 @@ export class ItemHandler extends Handler {
   highlightMatchingText($container, pattern, color) {
     if (!$container.length) return;
 
-    const highlightStyle = `background-color: ${color}33; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;`;
+    const highlightStyle = `background-color: ${color}33;`;
 
     // Process text nodes recursively
     const processNode = (node) => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+503.83ff1f96
+// @version     1.0.31+504.bba7bc6e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -72329,7 +72329,7 @@ ${rule}`;
      */
     highlightMatchingText($container, pattern, color2) {
       if (!$container.length) return;
-      const highlightStyle = `background-color: ${color2}33; border: 1px solid ${color2}88; border-radius: 3px; padding: 0 2px;`;
+      const highlightStyle = `background-color: ${color2}33;`;
       const processNode = (node) => {
         if (node.nodeType === Node.TEXT_NODE) {
           const text = node.textContent;

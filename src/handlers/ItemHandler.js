@@ -322,6 +322,15 @@ export class ItemHandler extends Handler {
     this.postId = this.postIdForItem($(item));
     this.updateInfoIndicator();
 
+    // Save focus position to persistent state for restore on page reload
+    // StateManager debounces these updates automatically
+    if (this.state?.stateManager && this.postId) {
+      this.state.stateManager.updateState({
+        focusedPostId: this.postId,
+        focusedIndex: newIndex,
+      });
+    }
+
     // Apply visual styling
     if (item && document.contains(item)) {
       this.applyItemStyle(item, true);
@@ -428,6 +437,15 @@ export class ItemHandler extends Handler {
     this.threadNavList = null;
     this.postId = this.postIdForItem(this.selectedItem);
     this.updateInfoIndicator();
+
+    // Save focus position to persistent state for restore on page reload
+    // StateManager debounces these updates automatically
+    if (this.state?.stateManager && this.postId) {
+      this.state.stateManager.updateState({
+        focusedPostId: this.postId,
+        focusedIndex: value,
+      });
+    }
   }
 
   get index() {
@@ -602,8 +620,10 @@ export class ItemHandler extends Handler {
     this._skipSidecar = skipSidecar;
 
     // Use NavigableList for navigation (handles deselect + select callbacks)
+    // Force selection on first call (when _index is undefined) to ensure initial styling is applied
     const navList = this.getMainNavList();
-    const moved = navList.jumpTo(index);
+    const isFirstSelection = this._index == null;
+    const moved = navList.jumpTo(index, isFirstSelection);
 
     // Clear flags
     this._markOnDeselect = false;
@@ -1866,15 +1886,22 @@ export class ItemHandler extends Handler {
     this.updateItems();
   }
 
-  jumpToPost(postId) {
+  jumpToPost(postId, skipScroll = false) {
+    console.log('[jumpToPost] looking for:', postId, 'in', this.items?.length, 'items');
+    const itemPostIds = [];
     for (const [i, item] of $(this.items).get().entries()) {
       const other = this.postIdForItem(item);
+      itemPostIds.push(other);
       if (postId == other) {
+        console.log('[jumpToPost] FOUND at index:', i);
         this.setIndex(i);
-        this.updateItems();
+        if (!skipScroll) {
+          this.updateItems();
+        }
         return true;
       }
     }
+    console.log('[jumpToPost] NOT FOUND. First 10 post IDs:', itemPostIds.slice(0, 10));
     return false;
   }
 
@@ -2444,7 +2471,9 @@ export class ItemHandler extends Handler {
     this.perfLog('onItemAdded');
     this.applyItemStyle(element);
     clearTimeout(this.loadItemsDebounceTimeout);
-    this.loadItemsDebounceTimeout = setTimeout(() => this.loadItems(), 500);
+    // Don't pass restore target here - let the existing selection persist
+    // The initial restore happens in activate() -> loadItems({ postId, index })
+    this.loadItemsDebounceTimeout = setTimeout(() => this.loadItems({ preserveSelection: true }), 500);
 
     // Initialize swipe gestures and long press on mobile
     if (this.gestureHandler) {
@@ -3720,6 +3749,7 @@ export class ItemHandler extends Handler {
   updateItems() {
     // Temporarily suppress focus changes during programmatic scroll
     this.ignoreMouseMovement = true;
+    console.log('[updateItems] scrolling to index:', this.index, new Error().stack);
     if (this.index == 0) {
       window.scrollTo(0, 0);
     } else if ($(this.selectedItem).length) {
@@ -4326,7 +4356,12 @@ export class ItemHandler extends Handler {
     setTimeout(tryLoad, initialDelay);
   }
 
-  loadItems(focusedPostId) {
+  /**
+   * Load and process items in the feed
+   * @param {string|object} restoreTarget - Either a post ID string, or an object with { postId, index }
+   *   Post ID is tried first; index is used as fallback if post is not found
+   */
+  loadItems(restoreTarget) {
     this.perfLog('loadItems called');
 
     // Show loading indicator while items are being processed
@@ -4334,20 +4369,20 @@ export class ItemHandler extends Handler {
 
     // Minimal delay to allow browser to paint the loading indicator
     setTimeout(() => {
-      this._doLoadItems(focusedPostId);
+      this._doLoadItems(restoreTarget);
     }, 0);
   }
 
-  _doLoadItems(focusedPostId) {
+  _doLoadItems(restoreTarget) {
     const perfEnd = this.perfStart('_doLoadItems');
     try {
-      this._doLoadItemsInner(focusedPostId);
+      this._doLoadItemsInner(restoreTarget);
     } finally {
       perfEnd();
     }
   }
 
-  _doLoadItemsInner(focusedPostId) {
+  _doLoadItemsInner(restoreTarget) {
     const classes = ['thread-first', 'thread-middle', 'thread-last'];
     const set = [];
 
@@ -4508,13 +4543,65 @@ export class ItemHandler extends Handler {
     $('img#loadOlderIndicatorImage').addClass('image-highlight');
     $('img#loadOlderIndicatorImage').removeClass('toolbar-icon-pending');
 
-    if (focusedPostId) {
-      this.jumpToPost(focusedPostId);
-    } else if (!this.jumpToPost(this.postId)) {
-      this.setIndex(0);
-      // Ensure sidecar opens on initial load
-      this.expandItem(this.selectedItem);
+    // Parse restore target - can be a string (post ID) or object { postId, index, preserveSelection }
+    let targetPostId, targetIndex, preserveSelection;
+    if (typeof restoreTarget === 'string') {
+      targetPostId = restoreTarget;
+    } else if (restoreTarget && typeof restoreTarget === 'object') {
+      targetPostId = restoreTarget.postId;
+      targetIndex = restoreTarget.index;
+      preserveSelection = restoreTarget.preserveSelection;
     }
+
+    // Try to restore focus position:
+    // - If preserveSelection is true, keep current selection without any changes (for onItemAdded reloads)
+    // - Otherwise try to find the target post by ID, or start fresh at top
+    let restoreMethod = 'none';
+
+    if (preserveSelection) {
+      // Within-session preserve: don't change selection, just ensure styling is correct
+      if (this._index != null && this._index >= 0 && this.items?.length > 0) {
+        // Clamp index if items were removed
+        const safeIndex = Math.min(this._index, this.items.length - 1);
+        if (safeIndex !== this._index) {
+          this._index = safeIndex;
+          this.postId = this.postIdForItem(this.selectedItem);
+        }
+        // Just apply styling, no scroll, no state updates
+        this.applyItemStyle(this.selectedItem, true);
+        restoreMethod = 'preserveSelection-keep';
+      } else if (this.items?.length > 0) {
+        // No current selection but we have items - this is first load after items became available
+        // Try to restore from StateManager (cross-session restore)
+        const statePostId = this.state?.focusedPostId;
+        if (statePostId && this.jumpToPost(statePostId)) {
+          restoreMethod = 'preserveSelection-state-postId';
+        } else {
+          // Post not found - start fresh at top
+          this.setIndex(0);
+          this.updateItems();
+          this.expandItem(this.selectedItem);
+          restoreMethod = 'preserveSelection-fallback-0';
+        }
+      } else {
+        // No items yet - will retry when items are added
+        restoreMethod = 'preserveSelection-no-items';
+      }
+    } else if (targetPostId && this.jumpToPost(targetPostId)) {
+      // Cross-session restore: found the target post
+      restoreMethod = 'targetPostId';
+    } else if (this.items?.length > 0) {
+      // Target post not found or no target - start fresh at top
+      // (Don't use index fallback - the feed content has changed, so index is meaningless)
+      this.setIndex(0);
+      this.updateItems();
+      this.expandItem(this.selectedItem);
+      restoreMethod = 'fallback-0';
+    } else {
+      // No items yet - skip restore, will be handled by subsequent onItemAdded
+      restoreMethod = 'skipped-no-items';
+    }
+    console.log('[loadItems] restore:', { restoreMethod, targetPostId, targetIndex, preserveSelection, currentPostId: this.postId, currentIndex: this._index, statePostId: this.state?.focusedPostId, stateIndex: this.state?.focusedIndex, itemCount: this.items?.length });
 
     this.updateInfoIndicator();
     this.enableFooterObserver();
@@ -4543,12 +4630,8 @@ export class ItemHandler extends Handler {
     // Hide loading indicator now that items are fully processed and sorted
     this.hideFeedLoading();
 
-    // Scroll to restored post after DOM is ready (deferred to allow layout to settle)
-    if (focusedPostId && this.selectedItem && this.selectedItem.length) {
-      requestAnimationFrame(() => {
-        this.scrollToElement(this.selectedItem[0]);
-      });
-    }
+    // Note: scrolling is handled by jumpToPost/setIndex -> updateItems()
+    // No additional scroll needed here
   }
 
   applyThreadIndicatorStyles() {
@@ -4637,8 +4720,10 @@ ${
     // Show loading indicator (CSS class hides items)
     this.showFeedLoading();
 
-    // Save post ID before any DOM changes - be defensive about missing elements
+    // Save post ID and index before any DOM changes - be defensive about missing elements
+    // Post ID is preferred for restoration; index is fallback if post is no longer in feed
     const oldPostId = this.selectedItem ? this.postIdForItem(this.selectedItem) : null;
+    const oldIndex = this.index;
 
     // Clear selection styling before clicking (be defensive)
     // Check that element is still in the DOM before trying to style it
@@ -4655,7 +4740,7 @@ ${
 
     setTimeout(() => {
       try {
-        this.loadItems(oldPostId);
+        this.loadItems({ postId: oldPostId, index: oldIndex });
       } catch (e) {
         console.warn('[bsky-navigator] Error in loadItems after loadNewer:', e);
       }

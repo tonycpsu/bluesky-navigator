@@ -956,15 +956,20 @@ export class FeedItemHandler extends ItemHandler {
 
     // Re-scan DOM for items when reactivating (e.g., after navigating back from post detail)
     // This ensures this.items array is fresh and not holding stale DOM references
-    // Pass the saved post ID to restore selection to the same post
-    this.loadItems(this._savedPostId);
+    // Priority: in-memory saved values (from deactivate) > persisted state (from page reload)
+    const postId = this._savedPostId ?? this.state.focusedPostId;
+    const index = this._savedIndex ?? this.state.focusedIndex;
+    console.log('[activate] calling loadItems with:', { postId, index, _savedPostId: this._savedPostId, stateFocusedPostId: this.state.focusedPostId });
+    this.loadItems({ postId, index });
   }
 
   deactivate() {
     super.deactivate();
 
-    // Save current post ID so we can restore selection when reactivating
+    // Save current post ID and index so we can restore selection when reactivating
+    // Post ID is preferred; index is fallback if post is no longer in feed
     this._savedPostId = this.postId;
+    this._savedIndex = this.index;
 
     // Remove scroll listener
     if (this._scrollHandler) {

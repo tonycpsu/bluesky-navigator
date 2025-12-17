@@ -23,7 +23,8 @@
       "Bash(grep:*)",
       "WebFetch(domain:github.com)",
       "SlashCommand(/commit-commands:commit)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

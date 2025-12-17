@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+494.170355b1
+// @version     1.0.31+495.7448e81a
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -290,6 +290,10 @@
     async loadState(defaultState) {
       try {
         const savedState = JSON.parse(GM_getValue(this.key, "{}"));
+        console.log("[StateManager] Loaded state:", {
+          focusedPostId: savedState.focusedPostId,
+          focusedIndex: savedState.focusedIndex
+        });
         const localLastUpdated = savedState.lastUpdated;
         if (this.config.stateSyncEnabled) {
           const remoteState = await this.loadRemoteState();
@@ -357,6 +361,10 @@
      */
     async saveLocalState() {
       this.cleanupState();
+      console.log("[StateManager] Saving state:", {
+        focusedPostId: this.state.focusedPostId,
+        focusedIndex: this.state.focusedIndex
+      });
       GM_setValue(this.key, JSON.stringify(this.state));
       this.isLocalStateDirty = false;
       this.notifyListeners();
@@ -68062,14 +68070,15 @@ div#statusBar.has-feed-map {
     /**
      * Jump to specific index
      * @param {number} index - Target index
-     * @returns {boolean} - True if selection changed
+     * @param {boolean} [force=false] - Force selection even if already at this index
+     * @returns {boolean} - True if selection changed (or forced)
      */
-    jumpTo(index) {
+    jumpTo(index, force = false) {
       const items = this.getItems();
       if (!items.length) return false;
       const oldIndex = this.selectedIndex;
       const newIndex = Math.max(0, Math.min(index, items.length - 1));
-      if (newIndex === oldIndex) {
+      if (newIndex === oldIndex && !force) {
         return false;
       }
       items.forEach((item) => item.classList.remove(this.selectedClass));
@@ -68764,6 +68773,12 @@ div#statusBar.has-feed-map {
       this.threadNavList = null;
       this.postId = this.postIdForItem($(item));
       this.updateInfoIndicator();
+      if (this.state?.stateManager && this.postId) {
+        this.state.stateManager.updateState({
+          focusedPostId: this.postId,
+          focusedIndex: newIndex
+        });
+      }
       if (item && document.contains(item)) {
         this.applyItemStyle(item, true);
       }
@@ -68844,6 +68859,12 @@ div#statusBar.has-feed-map {
       this.threadNavList = null;
       this.postId = this.postIdForItem(this.selectedItem);
       this.updateInfoIndicator();
+      if (this.state?.stateManager && this.postId) {
+        this.state.stateManager.updateState({
+          focusedPostId: this.postId,
+          focusedIndex: value
+        });
+      }
     }
     get index() {
       return this._index;
@@ -68974,7 +68995,8 @@ div#statusBar.has-feed-map {
       this._markOnDeselect = mark;
       this._skipSidecar = skipSidecar;
       const navList = this.getMainNavList();
-      const moved = navList.jumpTo(index);
+      const isFirstSelection = this._index == null;
+      const moved = navList.jumpTo(index, isFirstSelection);
       this._markOnDeselect = false;
       this._skipSidecar = false;
       if (update) {
@@ -69950,15 +69972,22 @@ div#statusBar.has-feed-map {
       this.setIndex(i2, mark);
       this.updateItems();
     }
-    jumpToPost(postId) {
+    jumpToPost(postId, skipScroll = false) {
+      console.log("[jumpToPost] looking for:", postId, "in", this.items?.length, "items");
+      const itemPostIds = [];
       for (const [i2, item] of $(this.items).get().entries()) {
         const other = this.postIdForItem(item);
+        itemPostIds.push(other);
         if (postId == other) {
+          console.log("[jumpToPost] FOUND at index:", i2);
           this.setIndex(i2);
-          this.updateItems();
+          if (!skipScroll) {
+            this.updateItems();
+          }
           return true;
         }
       }
+      console.log("[jumpToPost] NOT FOUND. First 10 post IDs:", itemPostIds.slice(0, 10));
       return false;
     }
     // ===========================================================================
@@ -70411,7 +70440,7 @@ div#statusBar.has-feed-map {
       this.perfLog("onItemAdded");
       this.applyItemStyle(element);
       clearTimeout(this.loadItemsDebounceTimeout);
-      this.loadItemsDebounceTimeout = setTimeout(() => this.loadItems(), 500);
+      this.loadItemsDebounceTimeout = setTimeout(() => this.loadItems({ preserveSelection: true }), 500);
       if (this.gestureHandler) {
         this.gestureHandler.init(element);
       }
@@ -71381,6 +71410,7 @@ ${rule}`;
     }
     updateItems() {
       this.ignoreMouseMovement = true;
+      console.log("[updateItems] scrolling to index:", this.index, new Error().stack);
       if (this.index == 0) {
         window.scrollTo(0, 0);
       } else if ($(this.selectedItem).length) {
@@ -71844,22 +71874,27 @@ ${rule}`;
       };
       setTimeout(tryLoad, initialDelay);
     }
-    loadItems(focusedPostId) {
+    /**
+     * Load and process items in the feed
+     * @param {string|object} restoreTarget - Either a post ID string, or an object with { postId, index }
+     *   Post ID is tried first; index is used as fallback if post is not found
+     */
+    loadItems(restoreTarget) {
       this.perfLog("loadItems called");
       this.showFeedLoading();
       setTimeout(() => {
-        this._doLoadItems(focusedPostId);
+        this._doLoadItems(restoreTarget);
       }, 0);
     }
-    _doLoadItems(focusedPostId) {
+    _doLoadItems(restoreTarget) {
       const perfEnd = this.perfStart("_doLoadItems");
       try {
-        this._doLoadItemsInner(focusedPostId);
+        this._doLoadItemsInner(restoreTarget);
       } finally {
         perfEnd();
       }
     }
-    _doLoadItemsInner(focusedPostId) {
+    _doLoadItemsInner(restoreTarget) {
       const classes = ["thread-first", "thread-middle", "thread-last"];
       const set = [];
       const unrolledRepliesCount = $(".unrolled-replies").not(".post-view-modal *").length;
@@ -71953,12 +71988,48 @@ ${rule}`;
       this.loading = false;
       $("img#loadOlderIndicatorImage").addClass("image-highlight");
       $("img#loadOlderIndicatorImage").removeClass("toolbar-icon-pending");
-      if (focusedPostId) {
-        this.jumpToPost(focusedPostId);
-      } else if (!this.jumpToPost(this.postId)) {
-        this.setIndex(0);
-        this.expandItem(this.selectedItem);
+      let targetPostId, targetIndex, preserveSelection;
+      if (typeof restoreTarget === "string") {
+        targetPostId = restoreTarget;
+      } else if (restoreTarget && typeof restoreTarget === "object") {
+        targetPostId = restoreTarget.postId;
+        targetIndex = restoreTarget.index;
+        preserveSelection = restoreTarget.preserveSelection;
       }
+      let restoreMethod = "none";
+      if (preserveSelection) {
+        if (this._index != null && this._index >= 0 && this.items?.length > 0) {
+          const safeIndex = Math.min(this._index, this.items.length - 1);
+          if (safeIndex !== this._index) {
+            this._index = safeIndex;
+            this.postId = this.postIdForItem(this.selectedItem);
+          }
+          this.applyItemStyle(this.selectedItem, true);
+          restoreMethod = "preserveSelection-keep";
+        } else if (this.items?.length > 0) {
+          const statePostId = this.state?.focusedPostId;
+          if (statePostId && this.jumpToPost(statePostId)) {
+            restoreMethod = "preserveSelection-state-postId";
+          } else {
+            this.setIndex(0);
+            this.updateItems();
+            this.expandItem(this.selectedItem);
+            restoreMethod = "preserveSelection-fallback-0";
+          }
+        } else {
+          restoreMethod = "preserveSelection-no-items";
+        }
+      } else if (targetPostId && this.jumpToPost(targetPostId)) {
+        restoreMethod = "targetPostId";
+      } else if (this.items?.length > 0) {
+        this.setIndex(0);
+        this.updateItems();
+        this.expandItem(this.selectedItem);
+        restoreMethod = "fallback-0";
+      } else {
+        restoreMethod = "skipped-no-items";
+      }
+      console.log("[loadItems] restore:", { restoreMethod, targetPostId, targetIndex, preserveSelection, currentPostId: this.postId, currentIndex: this._index, statePostId: this.state?.focusedPostId, stateIndex: this.state?.focusedIndex, itemCount: this.items?.length });
       this.updateInfoIndicator();
       this.enableFooterObserver();
       if ($(this.items).filter(":visible").length == 0) {
@@ -71979,11 +72050,6 @@ ${rule}`;
       }
       this.ignoreMouseMovement = false;
       this.hideFeedLoading();
-      if (focusedPostId && this.selectedItem && this.selectedItem.length) {
-        requestAnimationFrame(() => {
-          this.scrollToElement(this.selectedItem[0]);
-        });
-      }
     }
     applyThreadIndicatorStyles() {
       $("div.r-1mhb1uw").each((i2, el) => {
@@ -72044,6 +72110,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.hideNewPostsPill();
       this.showFeedLoading();
       const oldPostId = this.selectedItem ? this.postIdForItem(this.selectedItem) : null;
+      const oldIndex = this.index;
       try {
         if (this.selectedItem && $(this.selectedItem).length && document.contains($(this.selectedItem)[0])) {
           this.applyItemStyle(this.selectedItem, false);
@@ -72054,7 +72121,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       $(this.loadNewerButton).click();
       setTimeout(() => {
         try {
-          this.loadItems(oldPostId);
+          this.loadItems({ postId: oldPostId, index: oldIndex });
         } catch (e2) {
           console.warn("[bsky-navigator] Error in loadItems after loadNewer:", e2);
         }
@@ -72810,11 +72877,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this._scrollHandler = this._throttledScrollUpdate.bind(this);
       window.addEventListener("scroll", this._scrollHandler, { passive: true });
       this.updateFilterEnforcement();
-      this.loadItems(this._savedPostId);
+      const postId = this._savedPostId ?? this.state.focusedPostId;
+      const index = this._savedIndex ?? this.state.focusedIndex;
+      console.log("[activate] calling loadItems with:", { postId, index, _savedPostId: this._savedPostId, stateFocusedPostId: this.state.focusedPostId });
+      this.loadItems({ postId, index });
     }
     deactivate() {
       super.deactivate();
       this._savedPostId = this.postId;
+      this._savedIndex = this.index;
       if (this._scrollHandler) {
         window.removeEventListener("scroll", this._scrollHandler);
         this._scrollHandler = null;

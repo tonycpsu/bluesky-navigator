@@ -155,16 +155,17 @@ export class NavigableList {
   /**
    * Jump to specific index
    * @param {number} index - Target index
-   * @returns {boolean} - True if selection changed
+   * @param {boolean} [force=false] - Force selection even if already at this index
+   * @returns {boolean} - True if selection changed (or forced)
    */
-  jumpTo(index) {
+  jumpTo(index, force = false) {
     const items = this.getItems();
     if (!items.length) return false;
 
     const oldIndex = this.selectedIndex;
     const newIndex = Math.max(0, Math.min(index, items.length - 1));
 
-    if (newIndex === oldIndex) {
+    if (newIndex === oldIndex && !force) {
       return false;
     }
 

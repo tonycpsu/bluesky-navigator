@@ -142,6 +142,10 @@ export class StateManager {
   async loadState(defaultState) {
     try {
       const savedState = JSON.parse(GM_getValue(this.key, '{}'));
+      console.log('[StateManager] Loaded state:', {
+        focusedPostId: savedState.focusedPostId,
+        focusedIndex: savedState.focusedIndex,
+      });
       const localLastUpdated = savedState.lastUpdated;
 
       if (this.config.stateSyncEnabled) {
@@ -219,6 +223,10 @@ export class StateManager {
    */
   async saveLocalState() {
     this.cleanupState(); // Ensure state is pruned before saving
+    console.log('[StateManager] Saving state:', {
+      focusedPostId: this.state.focusedPostId,
+      focusedIndex: this.state.focusedIndex,
+    });
     GM_setValue(this.key, JSON.stringify(this.state));
     this.isLocalStateDirty = false; // Reset dirty flag
     this.notifyListeners();

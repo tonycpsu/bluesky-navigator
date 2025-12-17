@@ -212,7 +212,24 @@ export class StateManager {
           } else {
             // Preserve filter from local state - it's session-only and shouldn't be synced
             const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
-            return { ...defaultState, ...remoteWithoutFilter, filter: savedState.filter || defaultState.filter || '' };
+
+            // Merge seen entries from both local and remote to prevent data loss
+            // Local may have entries not yet synced to remote, remote may have entries from other sessions
+            const mergedSeen = { ...(savedState.seen || {}) };
+            const remoteSeen = remoteWithoutFilter.seen || {};
+            for (const [postId, timestamp] of Object.entries(remoteSeen)) {
+              // Take remote entry if local doesn't have it, or if remote is newer
+              if (!mergedSeen[postId] || new Date(timestamp) > new Date(mergedSeen[postId])) {
+                mergedSeen[postId] = timestamp;
+              }
+            }
+
+            return {
+              ...defaultState,
+              ...remoteWithoutFilter,
+              filter: savedState.filter || defaultState.filter || '',
+              seen: mergedSeen
+            };
           }
         } else {
           return { ...defaultState, ...savedState };

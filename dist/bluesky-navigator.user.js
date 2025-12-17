@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+495.7448e81a
+// @version     1.0.31+496.1e73bd0f
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -182,6 +182,9 @@
       this.isRemoteSyncPending = false;
       this.localSaveTimeout = null;
       this.remoteSyncTimeout = null;
+      this.dirtySeenEntries = /* @__PURE__ */ new Map();
+      this.lastSeenSnapshot = null;
+      this.seenSyncCount = 0;
       this.handleBlockListResponse = this.handleBlockListResponse.bind(this);
       this.saveStateImmediately = this.saveStateImmediately.bind(this);
       this.saveRemoteStateSync = this.saveRemoteStateSync.bind(this);
@@ -279,6 +282,51 @@
         });
       });
     }
+    /**
+     * Executes a query and returns ALL results (not just the first one).
+     * @param {string} query - The query string to execute.
+     * @param {string} successStatus - The status to set on successful execution.
+     * @returns {Promise<Array>} - Resolves with all results from the query.
+     */
+    async executeRemoteQueryAll(query, successStatus = "success") {
+      const {
+        url,
+        namespace = "bluesky_navigator",
+        database = "state",
+        username,
+        password
+      } = JSON.parse(this.config.stateSyncConfig);
+      return new Promise((resolve, reject) => {
+        GM_xmlhttpRequest({
+          method: "POST",
+          url: `${url.replace(/\/$/, "")}/sql`,
+          headers: {
+            Accept: "application/json",
+            Authorization: "Basic " + btoa(`${username}:${password}`)
+          },
+          data: `USE NS ${namespace} DB ${database}; ${query}`,
+          onload: (response) => {
+            try {
+              if (response.status !== 200) {
+                throw new Error(response.statusText);
+              }
+              const result = JSON.parse(response.responseText)[1]?.result || [];
+              this.setSyncStatus(successStatus);
+              resolve(result);
+            } catch (error) {
+              console.error("Error executing query:", error.message);
+              this.setSyncStatus("failure", error.message);
+              reject(error);
+            }
+          },
+          onerror: (error) => {
+            console.error("Network error executing query:", error.message);
+            this.setSyncStatus("failure", error.message);
+            reject(error);
+          }
+        });
+      });
+    }
     async getRemoteStateUpdated() {
       const sinceResult = await this.executeRemoteQuery(`SELECT lastUpdated FROM state:current;`);
       return sinceResult["lastUpdated"];
@@ -324,6 +372,18 @@
         const result = await this.executeRemoteQuery("SELECT * FROM state:current;");
         const stateObj = result || {};
         delete stateObj.id;
+        const seenRecords = await this.executeRemoteQueryAll("SELECT postId, timestamp FROM seen;");
+        if (seenRecords && seenRecords.length > 0) {
+          stateObj.seen = {};
+          for (const record2 of seenRecords) {
+            if (record2.postId && record2.timestamp) {
+              stateObj.seen[record2.postId] = record2.timestamp;
+            }
+          }
+        }
+        const stateSize = (JSON.stringify(stateObj).length / 1024).toFixed(2);
+        const seenSize = stateObj.seen ? (JSON.stringify(stateObj.seen).length / 1024).toFixed(2) : "0";
+        console.log(`[StateManager] Loaded remote state: ${stateSize} KB total, ${seenSize} KB seen (${seenRecords?.length || 0} entries)`);
         return stateObj;
       } catch (error) {
         console.error("Failed to load remote state:", error);
@@ -334,6 +394,16 @@
      * Updates the state and schedules a chained local and remote save.
      */
     updateState(newState) {
+      if (newState.seen && this.config.stateSyncEnabled) {
+        const oldSeen = this.lastSeenSnapshot || {};
+        const newSeen = newState.seen;
+        for (const [postId, timestamp] of Object.entries(newSeen)) {
+          if (oldSeen[postId] !== timestamp) {
+            this.dirtySeenEntries.set(postId, timestamp);
+          }
+        }
+        this.lastSeenSnapshot = { ...newSeen };
+      }
       this.state = { ...this.state, ...newState };
       this.state.lastUpdated = (/* @__PURE__ */ new Date()).toISOString();
       this.isLocalStateDirty = true;
@@ -361,11 +431,15 @@
      */
     async saveLocalState() {
       this.cleanupState();
+      const stateJson = JSON.stringify(this.state);
+      const sizeKB = (stateJson.length / 1024).toFixed(2);
       console.log("[StateManager] Saving state:", {
         focusedPostId: this.state.focusedPostId,
-        focusedIndex: this.state.focusedIndex
+        focusedIndex: this.state.focusedIndex,
+        sizeKB: `${sizeKB} KB`,
+        seenCount: Object.keys(this.state.seen || {}).length
       });
-      GM_setValue(this.key, JSON.stringify(this.state));
+      GM_setValue(this.key, stateJson);
       this.isLocalStateDirty = false;
       this.notifyListeners();
     }
@@ -391,14 +465,72 @@
           return;
         }
         this.setSyncStatus("pending");
-        const { filter, ...stateToSync } = this.state;
+        const { filter, seen, ...stateToSync } = this.state;
+        const stateJson = JSON.stringify(stateToSync);
+        const stateSize = (stateJson.length / 1024).toFixed(2);
+        console.log(`[StateManager] Saving remote state: ${stateSize} KB (excluding seen)`);
         await this.executeRemoteQuery(
-          `UPSERT state:current MERGE {${JSON.stringify(stateToSync).slice(1, -1)}, created_at: time::now()}`,
+          `UPSERT state:current MERGE {${stateJson.slice(1, -1)}, created_at: time::now()}`,
           "success"
         );
         this.isRemoteSyncPending = false;
+        await this.syncSeenToRemote();
       } catch (error) {
         console.error("Failed to save remote state:", error);
+      }
+    }
+    /**
+     * Syncs dirty seen entries to remote as individual records.
+     * Each entry is stored as seen:<postId> with timestamp value.
+     */
+    async syncSeenToRemote() {
+      if (this.dirtySeenEntries.size === 0) {
+        return;
+      }
+      const entries = Array.from(this.dirtySeenEntries.entries());
+      this.dirtySeenEntries.clear();
+      const upsertStatements = entries.map(([postId, timestamp]) => {
+        const safeId = postId.replace(/[^a-zA-Z0-9_-]/g, "_");
+        return `UPSERT seen:${safeId} SET postId = "${postId}", timestamp = "${timestamp}", updated_at = time::now();`;
+      }).join(" ");
+      const querySize = (upsertStatements.length / 1024).toFixed(2);
+      try {
+        await this.executeRemoteQuery(upsertStatements, "success");
+        console.log(`[StateManager] Synced ${entries.length} seen entries to remote (${querySize} KB)`);
+        this.seenSyncCount++;
+        if (this.seenSyncCount >= 10) {
+          this.seenSyncCount = 0;
+          this.cleanupRemoteSeenEntries();
+        }
+      } catch (error) {
+        entries.forEach(([postId, timestamp]) => {
+          this.dirtySeenEntries.set(postId, timestamp);
+        });
+        console.error("Failed to sync seen entries:", error);
+      }
+    }
+    /**
+     * Cleans up old seen entries from remote storage.
+     * Deletes entries older than maxEntries based on timestamp.
+     */
+    async cleanupRemoteSeenEntries() {
+      if (!this.config.stateSyncEnabled) {
+        return;
+      }
+      try {
+        const countResult = await this.executeRemoteQuery("SELECT count() FROM seen GROUP ALL;");
+        const count = countResult?.count || 0;
+        if (count <= this.maxEntries) {
+          console.log(`[StateManager] Remote seen entries: ${count}/${this.maxEntries} (no cleanup needed)`);
+          return;
+        }
+        const toDelete = count - this.maxEntries;
+        await this.executeRemoteQuery(
+          `DELETE FROM seen ORDER BY timestamp ASC LIMIT ${toDelete};`
+        );
+        console.log(`[StateManager] Remote cleanup: deleted ${toDelete} old entries (${count} \u2192 ${this.maxEntries})`);
+      } catch (error) {
+        console.error("Failed to cleanup remote seen entries:", error);
       }
     }
     /**
@@ -430,18 +562,41 @@
           username,
           password
         } = JSON.parse(this.config.stateSyncConfig);
-        const { filter, ...stateToSync } = this.state;
-        const query = `USE NS ${namespace} DB ${database}; UPSERT state:current MERGE {${JSON.stringify(stateToSync).slice(1, -1)}, created_at: time::now()}`;
-        fetch(`${url.replace(/\/$/, "")}/sql`, {
+        const sqlUrl = `${url.replace(/\/$/, "")}/sql`;
+        const headers = {
+          "Accept": "application/json",
+          "Authorization": "Basic " + btoa(`${username}:${password}`)
+        };
+        const { filter, seen, ...stateToSync } = this.state;
+        const stateJson = JSON.stringify(stateToSync);
+        const stateQuery = `USE NS ${namespace} DB ${database}; UPSERT state:current MERGE {${stateJson.slice(1, -1)}, created_at: time::now()}`;
+        const stateSize = (stateJson.length / 1024).toFixed(2);
+        console.log(`[StateManager] Saving remote state on unload: ${stateSize} KB (excluding seen)`);
+        fetch(sqlUrl, {
           method: "POST",
-          headers: {
-            "Accept": "application/json",
-            "Authorization": "Basic " + btoa(`${username}:${password}`)
-          },
-          body: query,
+          headers,
+          body: stateQuery,
           keepalive: true
         }).catch(() => {
         });
+        if (this.dirtySeenEntries.size > 0) {
+          const entries = Array.from(this.dirtySeenEntries.entries());
+          this.dirtySeenEntries.clear();
+          const upsertStatements = entries.map(([postId, timestamp]) => {
+            const safeId = postId.replace(/[^a-zA-Z0-9_-]/g, "_");
+            return `UPSERT seen:${safeId} SET postId = "${postId}", timestamp = "${timestamp}", updated_at = time::now();`;
+          }).join(" ");
+          const seenQuery = `USE NS ${namespace} DB ${database}; ${upsertStatements}`;
+          const seenSize = (upsertStatements.length / 1024).toFixed(2);
+          console.log(`[StateManager] Syncing ${entries.length} seen entries on unload (${seenSize} KB)`);
+          fetch(sqlUrl, {
+            method: "POST",
+            headers,
+            body: seenQuery,
+            keepalive: true
+          }).catch(() => {
+          });
+        }
       } catch (error) {
         console.error("Error preparing remote state save:", error);
       }

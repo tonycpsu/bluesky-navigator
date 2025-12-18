@@ -388,7 +388,8 @@ export class ItemHandler extends Handler {
   }
 
   /**
-   * Scroll a thread post to align with the top of the visible area (below toolbar)
+   * Scroll a thread post into view within its container.
+   * Prefers scrolling within the container, falls back to page scroll if needed.
    */
   scrollThreadPostIntoView(post) {
     if (!post) return;
@@ -397,37 +398,28 @@ export class ItemHandler extends Handler {
     const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
     const toolbarHeight = this.getToolbarHeight();
 
-    // Step 1: Scroll within the container to reveal the post
+    // If container is scrollable, scroll within it
     if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
       const containerRect = scrollContainer.getBoundingClientRect();
       const postRect = post.getBoundingClientRect();
 
-      // Calculate where post is relative to container's scroll position
-      const postTopInContainer = postRect.top - containerRect.top + scrollContainer.scrollTop;
+      // Calculate how far the post is from the top of the container's visible area
+      const postTopRelativeToContainer = postRect.top - containerRect.top;
 
-      // Scroll container to put post near the top of the container
-      scrollContainer.scrollTo({
-        top: Math.max(0, postTopInContainer - 10),
-        behavior: 'instant', // Instant for container, smooth for window
-      });
+      // Adjust scrollTop to bring the post to the top of the container
+      scrollContainer.scrollTop += postTopRelativeToContainer - 10;
+    } else {
+      // Container not scrollable - scroll the page to align post with top of viewport
+      const postRect = post.getBoundingClientRect();
+      const scrollNeeded = postRect.top - toolbarHeight - 10;
+
+      if (Math.abs(scrollNeeded) > 5) {
+        window.scrollBy({
+          top: scrollNeeded,
+          behavior: 'instant',
+        });
+      }
     }
-
-    // Step 2: Scroll the window to position the post at the top of viewport (below toolbar)
-    // Get fresh rect after container scroll
-    const postRectAfter = post.getBoundingClientRect();
-    const scrollNeeded = postRectAfter.top - toolbarHeight - 10;
-
-    console.log('[scrollThreadPostIntoView] postRect.top:', postRectAfter.top,
-      'toolbarHeight:', toolbarHeight, 'scrollNeeded:', scrollNeeded);
-
-    this.ignoreMouseMovement = true;
-    window.scrollBy({
-      top: scrollNeeded,
-      behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
-    });
-    setTimeout(() => {
-      this.ignoreMouseMovement = false;
-    }, 500);
   }
 
   set index(value) {
@@ -2130,13 +2122,9 @@ export class ItemHandler extends Handler {
   }
 
   jumpToPost(postId, skipScroll = false) {
-    console.log('[jumpToPost] looking for:', postId, 'in', this.items?.length, 'items');
-    const itemPostIds = [];
     for (const [i, item] of $(this.items).get().entries()) {
       const other = this.postIdForItem(item);
-      itemPostIds.push(other);
       if (postId == other) {
-        console.log('[jumpToPost] FOUND at index:', i);
         this.setIndex(i);
         if (!skipScroll) {
           this.updateItems();
@@ -2144,7 +2132,6 @@ export class ItemHandler extends Handler {
         return true;
       }
     }
-    console.log('[jumpToPost] NOT FOUND. First 10 post IDs:', itemPostIds.slice(0, 10));
     return false;
   }
 
@@ -4155,7 +4142,6 @@ export class ItemHandler extends Handler {
   updateItems() {
     // Temporarily suppress focus changes during programmatic scroll
     this.ignoreMouseMovement = true;
-    console.log('[updateItems] scrolling to index:', this.index, new Error().stack);
     if (this.index == 0) {
       window.scrollTo(0, 0);
     } else if ($(this.selectedItem).length) {
@@ -5017,7 +5003,6 @@ export class ItemHandler extends Handler {
       // No items yet - skip restore, will be handled by subsequent onItemAdded
       restoreMethod = 'skipped-no-items';
     }
-    console.log('[loadItems] restore:', { restoreMethod, targetPostId, targetIndex, preserveSelection, currentPostId: this.postId, currentIndex: this._index, statePostId: this.state?.focusedPostId, stateIndex: this.state?.focusedIndex, itemCount: this.items?.length });
 
     this.updateInfoIndicator();
     this.enableFooterObserver();

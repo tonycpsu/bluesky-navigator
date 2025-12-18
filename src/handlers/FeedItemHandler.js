@@ -959,7 +959,6 @@ export class FeedItemHandler extends ItemHandler {
     // Priority: in-memory saved values (from deactivate) > persisted state (from page reload)
     const postId = this._savedPostId ?? this.state.focusedPostId;
     const index = this._savedIndex ?? this.state.focusedIndex;
-    console.log('[activate] calling loadItems with:', { postId, index, _savedPostId: this._savedPostId, stateFocusedPostId: this.state.focusedPostId });
     this.loadItems({ postId, index });
   }
 

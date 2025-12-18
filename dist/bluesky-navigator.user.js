@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+506.271e14d7
+// @version     1.0.31+507.7447dc66
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69098,7 +69098,8 @@ div#statusBar.has-feed-map {
       return [mainPost[0], ...this.unrolledReplies.toArray()];
     }
     /**
-     * Scroll a thread post to align with the top of the visible area (below toolbar)
+     * Scroll a thread post into view within its container.
+     * Prefers scrolling within the container, falls back to page scroll if needed.
      */
     scrollThreadPostIntoView(post2) {
       if (!post2) return;
@@ -69107,31 +69108,18 @@ div#statusBar.has-feed-map {
       if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
         const containerRect = scrollContainer.getBoundingClientRect();
         const postRect = post2.getBoundingClientRect();
-        const postTopInContainer = postRect.top - containerRect.top + scrollContainer.scrollTop;
-        scrollContainer.scrollTo({
-          top: Math.max(0, postTopInContainer - 10),
-          behavior: "instant"
-          // Instant for container, smooth for window
-        });
+        const postTopRelativeToContainer = postRect.top - containerRect.top;
+        scrollContainer.scrollTop += postTopRelativeToContainer - 10;
+      } else {
+        const postRect = post2.getBoundingClientRect();
+        const scrollNeeded = postRect.top - toolbarHeight - 10;
+        if (Math.abs(scrollNeeded) > 5) {
+          window.scrollBy({
+            top: scrollNeeded,
+            behavior: "instant"
+          });
+        }
       }
-      const postRectAfter = post2.getBoundingClientRect();
-      const scrollNeeded = postRectAfter.top - toolbarHeight - 10;
-      console.log(
-        "[scrollThreadPostIntoView] postRect.top:",
-        postRectAfter.top,
-        "toolbarHeight:",
-        toolbarHeight,
-        "scrollNeeded:",
-        scrollNeeded
-      );
-      this.ignoreMouseMovement = true;
-      window.scrollBy({
-        top: scrollNeeded,
-        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
-      });
-      setTimeout(() => {
-        this.ignoreMouseMovement = false;
-      }, 500);
     }
     set index(value) {
       this._index = value;
@@ -70445,13 +70433,9 @@ div#statusBar.has-feed-map {
       this.updateItems();
     }
     jumpToPost(postId, skipScroll = false) {
-      console.log("[jumpToPost] looking for:", postId, "in", this.items?.length, "items");
-      const itemPostIds = [];
       for (const [i2, item] of $(this.items).get().entries()) {
         const other = this.postIdForItem(item);
-        itemPostIds.push(other);
         if (postId == other) {
-          console.log("[jumpToPost] FOUND at index:", i2);
           this.setIndex(i2);
           if (!skipScroll) {
             this.updateItems();
@@ -70459,7 +70443,6 @@ div#statusBar.has-feed-map {
           return true;
         }
       }
-      console.log("[jumpToPost] NOT FOUND. First 10 post IDs:", itemPostIds.slice(0, 10));
       return false;
     }
     // ===========================================================================
@@ -71996,7 +71979,6 @@ ${rule}`;
     }
     updateItems() {
       this.ignoreMouseMovement = true;
-      console.log("[updateItems] scrolling to index:", this.index, new Error().stack);
       if (this.index == 0) {
         window.scrollTo(0, 0);
       } else if ($(this.selectedItem).length) {
@@ -72581,15 +72563,14 @@ ${rule}`;
       this.loading = false;
       $("img#loadOlderIndicatorImage").addClass("image-highlight");
       $("img#loadOlderIndicatorImage").removeClass("toolbar-icon-pending");
-      let targetPostId, targetIndex, preserveSelection;
+      let targetPostId, preserveSelection;
       if (typeof restoreTarget === "string") {
         targetPostId = restoreTarget;
       } else if (restoreTarget && typeof restoreTarget === "object") {
         targetPostId = restoreTarget.postId;
-        targetIndex = restoreTarget.index;
+        restoreTarget.index;
         preserveSelection = restoreTarget.preserveSelection;
       }
-      let restoreMethod = "none";
       if (preserveSelection) {
         if (this._index != null && this._index >= 0 && this.items?.length > 0) {
           const safeIndex = Math.min(this._index, this.items.length - 1);
@@ -72598,31 +72579,21 @@ ${rule}`;
             this.postId = this.postIdForItem(this.selectedItem);
           }
           this.applyItemStyle(this.selectedItem, true);
-          restoreMethod = "preserveSelection-keep";
         } else if (this.items?.length > 0) {
           const statePostId = this.state?.focusedPostId;
-          if (statePostId && this.jumpToPost(statePostId)) {
-            restoreMethod = "preserveSelection-state-postId";
-          } else {
+          if (statePostId && this.jumpToPost(statePostId)) ;
+          else {
             this.setIndex(0);
             this.updateItems();
             this.expandItem(this.selectedItem);
-            restoreMethod = "preserveSelection-fallback-0";
           }
-        } else {
-          restoreMethod = "preserveSelection-no-items";
-        }
-      } else if (targetPostId && this.jumpToPost(targetPostId)) {
-        restoreMethod = "targetPostId";
-      } else if (this.items?.length > 0) {
+        } else ;
+      } else if (targetPostId && this.jumpToPost(targetPostId)) ;
+      else if (this.items?.length > 0) {
         this.setIndex(0);
         this.updateItems();
         this.expandItem(this.selectedItem);
-        restoreMethod = "fallback-0";
-      } else {
-        restoreMethod = "skipped-no-items";
-      }
-      console.log("[loadItems] restore:", { restoreMethod, targetPostId, targetIndex, preserveSelection, currentPostId: this.postId, currentIndex: this._index, statePostId: this.state?.focusedPostId, stateIndex: this.state?.focusedIndex, itemCount: this.items?.length });
+      } else ;
       this.updateInfoIndicator();
       this.enableFooterObserver();
       if ($(this.items).filter(":visible").length == 0) {
@@ -73472,7 +73443,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.updateFilterEnforcement();
       const postId = this._savedPostId ?? this.state.focusedPostId;
       const index = this._savedIndex ?? this.state.focusedIndex;
-      console.log("[activate] calling loadItems with:", { postId, index, _savedPostId: this._savedPostId, stateFocusedPostId: this.state.focusedPostId });
       this.loadItems({ postId, index });
     }
     deactivate() {

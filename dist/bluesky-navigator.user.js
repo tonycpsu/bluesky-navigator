@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+507.7447dc66
+// @version     1.0.31+508.a21f7f2c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69098,28 +69098,15 @@ div#statusBar.has-feed-map {
       return [mainPost[0], ...this.unrolledReplies.toArray()];
     }
     /**
-     * Scroll a thread post into view within its container.
-     * Prefers scrolling within the container, falls back to page scroll if needed.
+     * Scroll a thread post into view, same as top-level posts.
      */
     scrollThreadPostIntoView(post2) {
       if (!post2) return;
-      const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
-      const toolbarHeight = this.getToolbarHeight();
-      if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
-        const containerRect = scrollContainer.getBoundingClientRect();
-        const postRect = post2.getBoundingClientRect();
-        const postTopRelativeToContainer = postRect.top - containerRect.top;
-        scrollContainer.scrollTop += postTopRelativeToContainer - 10;
-      } else {
-        const postRect = post2.getBoundingClientRect();
-        const scrollNeeded = postRect.top - toolbarHeight - 10;
-        if (Math.abs(scrollNeeded) > 5) {
-          window.scrollBy({
-            top: scrollNeeded,
-            behavior: "instant"
-          });
-        }
-      }
+      post2.style.scrollMarginTop = `${this.getToolbarHeight()}px`;
+      post2.scrollIntoView({
+        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
+        block: "start"
+      });
     }
     set index(value) {
       this._index = value;
@@ -69973,23 +69960,13 @@ div#statusBar.has-feed-map {
               this.replyIndex += 1;
             } else if (this.config.get("unrolledPostSelection") && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
               const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
-              const isVisible = this.isElementFullyVisible(currentThreadPost);
-              if (!isVisible) {
-                if (!this.scrollElementIntoView(currentThreadPost[0], 1)) {
-                  if (this.threadIndex < this.unrolledReplies.length) {
-                    if (event.key == "j") this.markItemRead(this.index, true);
-                    this.threadIndex += 1;
-                  } else {
-                    this.jumpToNext(event.key == "j");
-                  }
+              if (!this.scrollElementIntoView(currentThreadPost[0], 1)) {
+                if (this.threadIndex < this.unrolledReplies.length) {
+                  if (event.key == "j") this.markItemRead(this.index, true);
+                  this.threadIndex += 1;
+                } else {
+                  this.jumpToNext(event.key == "j");
                 }
-              } else if (this.threadIndex < this.unrolledReplies.length) {
-                if (event.key == "j") {
-                  this.markItemRead(this.index, true);
-                }
-                this.threadIndex += 1;
-              } else {
-                this.jumpToNext(event.key == "j");
               }
             } else {
               const isVisible = this.isElementFullyVisible(this.selectedItem);
@@ -70007,22 +69984,13 @@ div#statusBar.has-feed-map {
               this.replyIndex -= 1;
             } else if (this.config.get("unrolledPostSelection") && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
               const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
-              if (!this.isElementFullyVisible(currentThreadPost)) {
-                if (!this.scrollElementIntoView(currentThreadPost[0], -1)) {
-                  if (this.threadIndex > 0) {
-                    if (event.key == "k") this.markItemRead(this.index, true);
-                    this.threadIndex -= 1;
-                  } else {
-                    this.jumpToPrev(event.key == "k");
-                  }
+              if (!this.scrollElementIntoView(currentThreadPost[0], -1)) {
+                if (this.threadIndex > 0) {
+                  if (event.key == "k") this.markItemRead(this.index, true);
+                  this.threadIndex -= 1;
+                } else {
+                  this.jumpToPrev(event.key == "k");
                 }
-              } else if (this.threadIndex > 0) {
-                if (event.key == "k") {
-                  this.markItemRead(this.index, true);
-                }
-                this.threadIndex -= 1;
-              } else {
-                this.jumpToPrev(event.key == "k");
               }
             } else {
               if (!this.isElementFullyVisible(this.selectedItem)) {
@@ -71106,7 +71074,7 @@ div#statusBar.has-feed-map {
           scrollAmount = rect.top - toolbarHeight - 10;
         }
       } else {
-        return true;
+        return false;
       }
       this.ignoreMouseMovement = true;
       window.scrollBy({

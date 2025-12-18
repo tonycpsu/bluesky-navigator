@@ -388,38 +388,17 @@ export class ItemHandler extends Handler {
   }
 
   /**
-   * Scroll a thread post into view within its container.
-   * Prefers scrolling within the container, falls back to page scroll if needed.
+   * Scroll a thread post into view, same as top-level posts.
    */
   scrollThreadPostIntoView(post) {
     if (!post) return;
 
-    // Find the scroll container (parent of contentHider-post with overflow-y: scroll)
-    const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
-    const toolbarHeight = this.getToolbarHeight();
-
-    // If container is scrollable, scroll within it
-    if (scrollContainer && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
-      const containerRect = scrollContainer.getBoundingClientRect();
-      const postRect = post.getBoundingClientRect();
-
-      // Calculate how far the post is from the top of the container's visible area
-      const postTopRelativeToContainer = postRect.top - containerRect.top;
-
-      // Adjust scrollTop to bring the post to the top of the container
-      scrollContainer.scrollTop += postTopRelativeToContainer - 10;
-    } else {
-      // Container not scrollable - scroll the page to align post with top of viewport
-      const postRect = post.getBoundingClientRect();
-      const scrollNeeded = postRect.top - toolbarHeight - 10;
-
-      if (Math.abs(scrollNeeded) > 5) {
-        window.scrollBy({
-          top: scrollNeeded,
-          behavior: 'instant',
-        });
-      }
-    }
+    // Use same approach as top-level posts: set scroll-margin-top and use scrollIntoView
+    post.style.scrollMarginTop = `${this.getToolbarHeight()}px`;
+    post.scrollIntoView({
+      behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+      block: 'start',
+    });
   }
 
   set index(value) {
@@ -1563,28 +1542,17 @@ export class ItemHandler extends Handler {
           } else if (this.config.get('unrolledPostSelection') && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
             // In unrolled thread (threadIndex is set)
             const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
-            const isVisible = this.isElementFullyVisible(currentThreadPost);
-            if (!isVisible) {
-              // Scroll current thread post into view (direction: down)
-              // If scrollElementIntoView returns false, post scrolled past - continue to next
-              if (!this.scrollElementIntoView(currentThreadPost[0], 1)) {
-                // Post scrolled past - go to next
-                if (this.threadIndex < this.unrolledReplies.length) {
-                  if (event.key == 'j') this.markItemRead(this.index, true);
-                  this.threadIndex += 1;
-                } else {
-                  this.jumpToNext(event.key == 'j');
-                }
+            // Use scrollElementIntoView which handles tall posts by scrolling incrementally
+            // It returns false when post is fully visible (no more scrolling needed)
+            if (!this.scrollElementIntoView(currentThreadPost[0], 1)) {
+              // Post is fully visible - advance to next
+              if (this.threadIndex < this.unrolledReplies.length) {
+                if (event.key == 'j') this.markItemRead(this.index, true);
+                this.threadIndex += 1;
+              } else {
+                // End of thread - go to next main post
+                this.jumpToNext(event.key == 'j');
               }
-            } else if (this.threadIndex < this.unrolledReplies.length) {
-              // More posts in thread - go to next (setter handles scrolling)
-              if (event.key == 'j') {
-                this.markItemRead(this.index, true);
-              }
-              this.threadIndex += 1;
-            } else {
-              // End of thread - go to next main post
-              this.jumpToNext(event.key == 'j');
             }
           } else {
             // Normal post - check visibility first
@@ -1606,27 +1574,17 @@ export class ItemHandler extends Handler {
           } else if (this.config.get('unrolledPostSelection') && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
             // In unrolled thread (threadIndex is set)
             const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
-            if (!this.isElementFullyVisible(currentThreadPost)) {
-              // Scroll current thread post into view (direction: up)
-              // If scrollElementIntoView returns false, post scrolled past - continue to prev
-              if (!this.scrollElementIntoView(currentThreadPost[0], -1)) {
-                // Post scrolled past - go to prev
-                if (this.threadIndex > 0) {
-                  if (event.key == 'k') this.markItemRead(this.index, true);
-                  this.threadIndex -= 1;
-                } else {
-                  this.jumpToPrev(event.key == 'k');
-                }
+            // Use scrollElementIntoView which handles tall posts by scrolling incrementally
+            // It returns false when post is fully visible (no more scrolling needed)
+            if (!this.scrollElementIntoView(currentThreadPost[0], -1)) {
+              // Post is fully visible - go to previous
+              if (this.threadIndex > 0) {
+                if (event.key == 'k') this.markItemRead(this.index, true);
+                this.threadIndex -= 1;
+              } else {
+                // Start of thread - go to previous main post
+                this.jumpToPrev(event.key == 'k');
               }
-            } else if (this.threadIndex > 0) {
-              // More posts in thread - go to previous (setter handles scrolling)
-              if (event.key == 'k') {
-                this.markItemRead(this.index, true);
-              }
-              this.threadIndex -= 1;
-            } else {
-              // Start of thread - go to previous main post
-              this.jumpToPrev(event.key == 'k');
             }
           } else {
             // Normal post - check visibility first
@@ -2982,8 +2940,8 @@ export class ItemHandler extends Handler {
         scrollAmount = rect.top - toolbarHeight - 10;
       }
     } else {
-      // Already visible, shouldn't happen but handle gracefully
-      return true;
+      // Already fully visible - no scrolling needed, can advance
+      return false;
     }
 
     this.ignoreMouseMovement = true;

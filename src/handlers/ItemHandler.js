@@ -393,12 +393,96 @@ export class ItemHandler extends Handler {
   scrollThreadPostIntoView(post) {
     if (!post) return;
 
+    const toolbarHeight = this.getToolbarHeight();
+
     // Use same approach as top-level posts: set scroll-margin-top and use scrollIntoView
-    post.style.scrollMarginTop = `${this.getToolbarHeight()}px`;
+    post.style.scrollMarginTop = `${toolbarHeight}px`;
     post.scrollIntoView({
       behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
       block: 'start',
     });
+  }
+
+  /**
+   * Scroll a thread element into view within its container.
+   * Handles tall posts by scrolling incrementally (half container height at a time).
+   * Returns true if scrolled, false if fully visible (can advance to next/prev).
+   * @param {Element} element - The element to scroll into view
+   * @param {number} direction - 1 for down, -1 for up
+   */
+  scrollThreadElementIntoView(element, direction = 1) {
+    if (!element) return false;
+
+    const el = element[0] || element;
+    const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
+
+    if (!scrollContainer) {
+      // No container - fall back to page scrolling
+      return this.scrollElementIntoView(el, direction);
+    }
+
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const toolbarHeight = this.getToolbarHeight();
+
+    // Calculate the visible area of the container (accounting for toolbar if container extends behind it)
+    const visibleTop = Math.max(containerRect.top, toolbarHeight);
+    const visibleBottom = containerRect.bottom;
+    const visibleHeight = visibleBottom - visibleTop;
+
+    // Check if element needs scrolling within container
+    const elHeight = elRect.bottom - elRect.top;
+
+    if (elHeight > visibleHeight) {
+      // Tall element - scroll incrementally
+      if (direction > 0) {
+        // Going down: check if bottom is visible
+        if (elRect.bottom <= visibleBottom) {
+          return false; // Bottom visible, can advance
+        }
+        // Scroll down by half visible height or remaining distance
+        const remaining = elRect.bottom - visibleBottom;
+        const scrollAmount = Math.min(visibleHeight * 0.5, remaining + 10);
+        scrollContainer.scrollTop += scrollAmount;
+        return true;
+      } else {
+        // Going up: check if top is visible
+        if (elRect.top >= visibleTop) {
+          return false; // Top visible, can advance
+        }
+        // Scroll up by half visible height or remaining distance
+        const remaining = visibleTop - elRect.top;
+        const scrollAmount = Math.min(visibleHeight * 0.5, remaining + 10);
+        scrollContainer.scrollTop -= scrollAmount;
+        return true;
+      }
+    } else {
+      // Normal element - check visibility based on direction
+      const topOverlap = visibleTop - elRect.top;
+      const bottomOverlap = elRect.bottom - visibleBottom;
+
+      // When going DOWN, only care if bottom is visible (top can be above)
+      // When going UP, only care if top is visible (bottom can be below)
+      if (direction > 0) {
+        // Going down - bottom must be visible
+        if (elRect.bottom <= visibleBottom || bottomOverlap < 20) {
+          return false;
+        }
+        // Bottom below visible area - scroll down
+        const scrollAmount = bottomOverlap + 10;
+        scrollContainer.scrollTop += scrollAmount;
+        return true;
+      } else {
+        // Going up - top must be visible
+        if (elRect.top >= visibleTop || topOverlap < 20) {
+          return false;
+        }
+        // Top above visible area - scroll up
+        const scrollAmount = topOverlap + 10;
+        scrollContainer.scrollTop -= scrollAmount;
+        return true;
+      }
+    }
   }
 
   set index(value) {
@@ -1542,9 +1626,9 @@ export class ItemHandler extends Handler {
           } else if (this.config.get('unrolledPostSelection') && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
             // In unrolled thread (threadIndex is set)
             const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
-            // Use scrollElementIntoView which handles tall posts by scrolling incrementally
+            // Use scrollThreadElementIntoView which handles container scrolling
             // It returns false when post is fully visible (no more scrolling needed)
-            if (!this.scrollElementIntoView(currentThreadPost[0], 1)) {
+            if (!this.scrollThreadElementIntoView(currentThreadPost[0], 1)) {
               // Post is fully visible - advance to next
               if (this.threadIndex < this.unrolledReplies.length) {
                 if (event.key == 'j') this.markItemRead(this.index, true);
@@ -1574,9 +1658,9 @@ export class ItemHandler extends Handler {
           } else if (this.config.get('unrolledPostSelection') && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
             // In unrolled thread (threadIndex is set)
             const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
-            // Use scrollElementIntoView which handles tall posts by scrolling incrementally
+            // Use scrollThreadElementIntoView which handles container scrolling
             // It returns false when post is fully visible (no more scrolling needed)
-            if (!this.scrollElementIntoView(currentThreadPost[0], -1)) {
+            if (!this.scrollThreadElementIntoView(currentThreadPost[0], -1)) {
               // Post is fully visible - go to previous
               if (this.threadIndex > 0) {
                 if (event.key == 'k') this.markItemRead(this.index, true);

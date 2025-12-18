@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+508.a21f7f2c
+// @version     1.0.31+509.11ced748
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69102,11 +69102,71 @@ div#statusBar.has-feed-map {
      */
     scrollThreadPostIntoView(post2) {
       if (!post2) return;
-      post2.style.scrollMarginTop = `${this.getToolbarHeight()}px`;
+      const toolbarHeight = this.getToolbarHeight();
+      post2.style.scrollMarginTop = `${toolbarHeight}px`;
       post2.scrollIntoView({
         behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
         block: "start"
       });
+    }
+    /**
+     * Scroll a thread element into view within its container.
+     * Handles tall posts by scrolling incrementally (half container height at a time).
+     * Returns true if scrolled, false if fully visible (can advance to next/prev).
+     * @param {Element} element - The element to scroll into view
+     * @param {number} direction - 1 for down, -1 for up
+     */
+    scrollThreadElementIntoView(element, direction2 = 1) {
+      if (!element) return false;
+      const el = element[0] || element;
+      const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
+      if (!scrollContainer) {
+        return this.scrollElementIntoView(el, direction2);
+      }
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      const toolbarHeight = this.getToolbarHeight();
+      const visibleTop = Math.max(containerRect.top, toolbarHeight);
+      const visibleBottom = containerRect.bottom;
+      const visibleHeight = visibleBottom - visibleTop;
+      const elHeight = elRect.bottom - elRect.top;
+      if (elHeight > visibleHeight) {
+        if (direction2 > 0) {
+          if (elRect.bottom <= visibleBottom) {
+            return false;
+          }
+          const remaining = elRect.bottom - visibleBottom;
+          const scrollAmount = Math.min(visibleHeight * 0.5, remaining + 10);
+          scrollContainer.scrollTop += scrollAmount;
+          return true;
+        } else {
+          if (elRect.top >= visibleTop) {
+            return false;
+          }
+          const remaining = visibleTop - elRect.top;
+          const scrollAmount = Math.min(visibleHeight * 0.5, remaining + 10);
+          scrollContainer.scrollTop -= scrollAmount;
+          return true;
+        }
+      } else {
+        const topOverlap = visibleTop - elRect.top;
+        const bottomOverlap = elRect.bottom - visibleBottom;
+        if (direction2 > 0) {
+          if (elRect.bottom <= visibleBottom || bottomOverlap < 20) {
+            return false;
+          }
+          const scrollAmount = bottomOverlap + 10;
+          scrollContainer.scrollTop += scrollAmount;
+          return true;
+        } else {
+          if (elRect.top >= visibleTop || topOverlap < 20) {
+            return false;
+          }
+          const scrollAmount = topOverlap + 10;
+          scrollContainer.scrollTop -= scrollAmount;
+          return true;
+        }
+      }
     }
     set index(value) {
       this._index = value;
@@ -69960,7 +70020,7 @@ div#statusBar.has-feed-map {
               this.replyIndex += 1;
             } else if (this.config.get("unrolledPostSelection") && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
               const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
-              if (!this.scrollElementIntoView(currentThreadPost[0], 1)) {
+              if (!this.scrollThreadElementIntoView(currentThreadPost[0], 1)) {
                 if (this.threadIndex < this.unrolledReplies.length) {
                   if (event.key == "j") this.markItemRead(this.index, true);
                   this.threadIndex += 1;
@@ -69984,7 +70044,7 @@ div#statusBar.has-feed-map {
               this.replyIndex -= 1;
             } else if (this.config.get("unrolledPostSelection") && this.unrolledReplies.length > 0 && this.threadIndex !== null) {
               const currentThreadPost = this.getPostForThreadIndex(this.threadIndex);
-              if (!this.scrollElementIntoView(currentThreadPost[0], -1)) {
+              if (!this.scrollThreadElementIntoView(currentThreadPost[0], -1)) {
                 if (this.threadIndex > 0) {
                   if (event.key == "k") this.markItemRead(this.index, true);
                   this.threadIndex -= 1;

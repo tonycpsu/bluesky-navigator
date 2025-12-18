@@ -3543,6 +3543,11 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   handleInput(event) {
+    // Skip processing when user is typing in an input field
+    if (utils.isUserTyping()) {
+      return true; // Return true to signal callers to also skip
+    }
+
     const item = this.selectedItem;
     if (event.key == 'a') {
       $(item).find(constants.PROFILE_SELECTOR)[0].click();

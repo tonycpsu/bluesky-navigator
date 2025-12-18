@@ -163,6 +163,9 @@ export class ItemHandler extends Handler {
     // Watch for hover card portals (added as direct children of body)
     // Using custom observer instead of waitForElement to avoid interfering with Bluesky's render
     this.hoverCardObserver = new MutationObserver(() => {
+      // Skip processing when user is typing to prevent freezing during compose
+      if (utils.isUserTyping()) return;
+
       this.perfLog('hoverCardObserver mutation');
       // Debounce and defer processing to avoid interfering with Bluesky's render cycle
       if (this.hoverCardDebounce) return;
@@ -1535,6 +1538,11 @@ export class ItemHandler extends Handler {
   // ===========================================================================
 
   handleInput(event) {
+    // Skip processing when user is typing in an input field
+    if (utils.isUserTyping()) {
+      return true; // Return true to signal callers to also skip
+    }
+
     if (this.handleMovementKey(event)) {
       return event.key;
     } else if (this.handleItemKey(event)) {
@@ -2180,7 +2188,14 @@ export class ItemHandler extends Handler {
 
   jumpToNext(mark) {
     if (this.index < this.items.length) {
-      this.setIndex(this.index + 1, mark, true);
+      if (this.index === this.items.length - 1) {
+        // At the last item - just mark as read if requested (can't advance)
+        if (mark) {
+          this.markItemRead(this.index, true);
+        }
+      } else {
+        this.setIndex(this.index + 1, mark, true);
+      }
     } else {
       const next = $(this.selectedItem).parent().parent().parent().next();
       if (next && $.trim(next.text()) == 'Continue thread...') {

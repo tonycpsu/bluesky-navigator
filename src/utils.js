@@ -9,8 +9,31 @@ export function debounce(func, delay) {
   };
 }
 
+/**
+ * Check if user is currently in a text input context (compose modal, search, etc.)
+ * Used to skip expensive observer processing during typing
+ */
+export function isUserTyping() {
+  const activeElement = document.activeElement;
+  if (!activeElement) return false;
+
+  const tagName = activeElement.tagName.toLowerCase();
+  if (tagName === 'input' || tagName === 'textarea') return true;
+
+  // Check for tiptap rich text editor (compose modal)
+  if (activeElement.closest('.tiptap')) return true;
+
+  // Check for contenteditable
+  if (activeElement.isContentEditable) return true;
+
+  return false;
+}
+
 export function waitForElement(selector, onAdd, onRemove, onChange, ignoreExisting) {
   const observer = new MutationObserver((mutations) => {
+    // Skip processing when user is typing to prevent freezing during compose
+    if (isUserTyping()) return;
+
     mutations.forEach((mutation) => {
       if (onAdd) {
         mutation.addedNodes.forEach((node) => {

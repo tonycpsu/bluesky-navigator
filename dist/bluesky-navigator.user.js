@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+511.1b83e41e
+// @version     1.0.31+512.05481f35
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45036,8 +45036,18 @@ if (cid) {
       debounceTimeout = setTimeout(() => func.apply(this, args), delay);
     };
   }
+  function isUserTyping() {
+    const activeElement = document.activeElement;
+    if (!activeElement) return false;
+    const tagName = activeElement.tagName.toLowerCase();
+    if (tagName === "input" || tagName === "textarea") return true;
+    if (activeElement.closest(".tiptap")) return true;
+    if (activeElement.isContentEditable) return true;
+    return false;
+  }
   function waitForElement$3(selector, onAdd, onRemove, onChange, ignoreExisting) {
     const observer = new MutationObserver((mutations) => {
+      if (isUserTyping()) return;
       mutations.forEach((mutation) => {
         if (onAdd) {
           mutation.addedNodes.forEach((node) => {
@@ -45144,6 +45154,7 @@ if (cid) {
     debounce,
     extractLastTerm,
     getAnimationDuration: getAnimationDuration$1,
+    isUserTyping,
     observeChanges,
     observeVisibilityChange: observeVisibilityChange$1,
     prefersHighContrast,
@@ -52752,6 +52763,9 @@ div#statusBar.has-feed-map {
       document.removeEventListener("keydown", this.handleInput, true);
     }
     handleInput(event) {
+      if (isUserTyping()) {
+        return;
+      }
       if (event.altKey && !event.metaKey) {
         if (event.code === "KeyH") {
           event.preventDefault();
@@ -68915,6 +68929,7 @@ div#statusBar.has-feed-map {
         this.onPopupRemove
       );
       this.hoverCardObserver = new MutationObserver(() => {
+        if (isUserTyping()) return;
         this.perfLog("hoverCardObserver mutation");
         if (this.hoverCardDebounce) return;
         this.hoverCardDebounce = requestAnimationFrame(() => {
@@ -69947,6 +69962,9 @@ div#statusBar.has-feed-map {
     // Keyboard Handling
     // ===========================================================================
     handleInput(event) {
+      if (isUserTyping()) {
+        return true;
+      }
       if (this.handleMovementKey(event)) {
         return event.key;
       } else if (this.handleItemKey(event)) {
@@ -70472,7 +70490,13 @@ div#statusBar.has-feed-map {
     }
     jumpToNext(mark) {
       if (this.index < this.items.length) {
-        this.setIndex(this.index + 1, mark, true);
+        if (this.index === this.items.length - 1) {
+          if (mark) {
+            this.markItemRead(this.index, true);
+          }
+        } else {
+          this.setIndex(this.index + 1, mark, true);
+        }
       } else {
         const next = $(this.selectedItem).parent().parent().parent().next();
         if (next && $.trim(next.text()) == "Continue thread...") {
@@ -75437,6 +75461,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
     }
     handleInput(event) {
+      if (isUserTyping()) {
+        return true;
+      }
       const item = this.selectedItem;
       if (event.key == "a") {
         $(item).find(constants.PROFILE_SELECTOR)[0].click();
@@ -75482,6 +75509,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return $('div[data-testid="postThreadScreen"] > div:visible').eq(0).outerHeight();
     }
     handleInput(event) {
+      if (isUserTyping()) {
+        return true;
+      }
       const item = this.selectedItem;
       if (["o", "Enter"].includes(event.key) && !(event.altKey || event.metaKey)) {
         const inner = $(item).find("div[aria-label^='Post by']");

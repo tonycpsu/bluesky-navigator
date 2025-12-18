@@ -1,6 +1,7 @@
 // PostItemHandler.js - Handler for individual post/thread pages
 
 import { ItemHandler } from './ItemHandler.js';
+import { isUserTyping } from '../utils.js';
 
 /**
  * Handler for viewing individual posts and their thread replies.
@@ -38,6 +39,11 @@ export class PostItemHandler extends ItemHandler {
   }
 
   handleInput(event) {
+    // Skip processing when user is typing in an input field
+    if (isUserTyping()) {
+      return true; // Return true to signal callers to also skip
+    }
+
     const item = this.selectedItem;
 
     if (['o', 'Enter'].includes(event.key) && !(event.altKey || event.metaKey)) {

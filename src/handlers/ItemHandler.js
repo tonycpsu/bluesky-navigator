@@ -259,6 +259,14 @@ export class ItemHandler extends Handler {
           // Update parent item styling to show child is focused
           $(this.selectedItem).addClass('item-selection-child-focused');
           $(this.selectedItem).removeClass('item-selection-active');
+          // If we're on a thread post, also update its styling to show sidecar has focus
+          if (this._threadIndex != null) {
+            const threadPost = this.getThreadNavList().getSelectedItem();
+            if (threadPost) {
+              $(threadPost).addClass('reply-selection-child-focused');
+              $(threadPost).removeClass('reply-selection-active');
+            }
+          }
           // Custom scroll handling
           this.scrollSidecarToReply(item);
         },
@@ -535,6 +543,14 @@ export class ItemHandler extends Handler {
         this.getSidecarNavList().clearSelection();
         $(this.selectedItem).addClass('item-selection-active');
         $(this.selectedItem).removeClass('item-selection-child-focused');
+        // Restore thread post styling if we're on a thread post
+        if (this._threadIndex != null) {
+          const threadPost = this.getThreadNavList().getSelectedItem();
+          if (threadPost) {
+            $(threadPost).addClass('reply-selection-active');
+            $(threadPost).removeClass('reply-selection-child-focused');
+          }
+        }
       }
       this._replyIndex = null;
       return;
@@ -552,6 +568,17 @@ export class ItemHandler extends Handler {
     if (wasNull) {
       // First activation - reset and jump to requested index
       navList.reset();
+      // Apply parent styling immediately (onSelect may not fire for index 0)
+      $(this.selectedItem).addClass('item-selection-child-focused');
+      $(this.selectedItem).removeClass('item-selection-active');
+      // If we're on a thread post, also update its styling to show sidecar has focus
+      if (this._threadIndex != null) {
+        const threadPost = this.getThreadNavList().getSelectedItem();
+        if (threadPost) {
+          $(threadPost).addClass('reply-selection-child-focused');
+          $(threadPost).removeClass('reply-selection-active');
+        }
+      }
       if (value > 0) {
         navList.jumpTo(value);
       } else {
@@ -623,6 +650,9 @@ export class ItemHandler extends Handler {
     if (wasNull) {
       // First activation - reset and jump to requested index
       navList.reset();
+      // Apply parent styling immediately (onSelect may not fire for index 0)
+      $(this.selectedItem).addClass('item-selection-child-focused');
+      $(this.selectedItem).removeClass('item-selection-active');
       if (value > 0) {
         navList.jumpTo(value);
       } else {
@@ -808,6 +838,11 @@ export class ItemHandler extends Handler {
     // Initialize fixed sidecar panel if enabled
     if (this.isFixedSidecar() && this.config.get('showReplySidecar')) {
       this.initFixedSidecarPanel();
+    }
+
+    // Initialize inline sidecar hidden state from saved config
+    if (!this.isFixedSidecar() && this.config.get('fixedSidecarVisible') === false) {
+      $('body').addClass('inline-sidecar-hidden');
     }
   }
 
@@ -1017,6 +1052,27 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Toggle the inline sidecar visibility globally for all posts
+   */
+  toggleInlineSidecar(item) {
+    const isCurrentlyVisible = this.config.get('fixedSidecarVisible') !== false;
+
+    if (isCurrentlyVisible) {
+      // Hide all sidecars
+      this.config.set('fixedSidecarVisible', false);
+      $('body').addClass('inline-sidecar-hidden');
+      $('.sidecar-replies').not('.post-view-modal *').hide();
+      $(item).addClass('sidecar-collapsed');
+    } else {
+      // Show all sidecars
+      this.config.set('fixedSidecarVisible', true);
+      $('body').removeClass('inline-sidecar-hidden');
+      $('.sidecar-replies').not('.post-view-modal *').show();
+      $(item).removeClass('sidecar-collapsed');
+    }
+  }
+
+  /**
    * Update the fixed sidecar panel with content for the given item
    */
   async updateFixedSidecarPanel(item, thread) {
@@ -1211,13 +1267,17 @@ export class ItemHandler extends Handler {
         if ($(item).hasClass('unrolled-duplicate')) return false;
         return true;
       });
-      // Show focus on first post without scrolling (set directly to skip setter's scroll)
-      this._threadIndex = 0;
-      $(this.selectedItem).addClass('item-selection-child-focused');
-      $(this.selectedItem).removeClass('item-selection-active');
-      if (this.selectedPost) {
-        this.selectedPost.addClass('reply-selection-active');
-      }
+      // Show focus on first post without scrolling
+      // Use requestAnimationFrame to ensure DOM is fully rendered before applying styles
+      // Also verify item is still selected (could have changed during async operations)
+      const currentItem = item;
+      requestAnimationFrame(() => {
+        if (this.selectedItem?.[0] !== currentItem[0]) return; // Selection changed during async
+        this._threadIndex = 0;
+        $(this.selectedItem).addClass('item-selection-child-focused');
+        $(this.selectedItem).removeClass('item-selection-active');
+        this.getThreadNavList().updateSelection();
+      });
 
       // Hide "View full thread" element that follows unrolled threads (it's redundant)
       // Get the root post ID from the unrolled thread
@@ -1410,6 +1470,19 @@ export class ItemHandler extends Handler {
       }
     });
     container.append($(sidecarContent));
+
+    // Check if sidecar has actual content (replies or parent context)
+    const hasSidecarContent = container.find('.sidecar-post').length > 0;
+    if (hasSidecarContent) {
+      $(item).addClass('has-sidecar');
+    } else {
+      $(item).removeClass('has-sidecar');
+      // Remove empty sidecar container
+      container.find('.sidecar-replies').remove();
+      container.removeData('sidecar-loading');
+      return;
+    }
+
     container.find('.sidecar-post').each((i, post) => {
       $(post).on('mouseover', this.onSidecarItemMouseOver);
     });
@@ -1435,8 +1508,11 @@ export class ItemHandler extends Handler {
     });
 
     const sidecar = container.find('.sidecar-replies')[0];
-    const display =
-      action == null
+    // Respect global sidecar visibility setting
+    const globallyHidden = this.config.get('fixedSidecarVisible') === false;
+    const display = globallyHidden
+      ? 'none'
+      : action == null
         ? sidecar && $(sidecar).is(':visible')
           ? 'none'
           : 'flex'
@@ -1444,6 +1520,11 @@ export class ItemHandler extends Handler {
           ? 'flex'
           : 'none';
     container.find('.sidecar-replies').css('display', display);
+
+    // Apply collapsed indicator if globally hidden
+    if (globallyHidden) {
+      $(item).addClass('sidecar-collapsed');
+    }
 
     // Clear the loading lock
     container.removeData('sidecar-loading');
@@ -1570,7 +1651,11 @@ export class ItemHandler extends Handler {
         break;
 
       case 't':
-        this.toggleFixedSidecarPanel(item);
+        if (this.isFixedSidecar()) {
+          this.toggleFixedSidecarPanel(item);
+        } else {
+          this.toggleInlineSidecar(item);
+        }
         break;
 
       case '+':
@@ -4370,8 +4455,15 @@ export class ItemHandler extends Handler {
 
   applySelectionStyling(element, selected) {
     if (selected) {
-      $(element).addClass('item-selection-active');
-      $(element).removeClass('item-selection-child-focused');
+      // Check if we're in thread/sidecar navigation mode
+      const childFocused = this._threadIndex != null || this._replyIndex != null;
+      if (childFocused) {
+        $(element).addClass('item-selection-child-focused');
+        $(element).removeClass('item-selection-active');
+      } else {
+        $(element).addClass('item-selection-active');
+        $(element).removeClass('item-selection-child-focused');
+      }
       $(element).removeClass('item-selection-inactive');
     } else {
       $(element).removeClass('item-selection-active');
@@ -4837,19 +4929,23 @@ export class ItemHandler extends Handler {
     // Only clean up unrolled content if the user has navigated away (no unrolled content visible)
     // If there's still unrolled content, preserve it and its hidden "View full thread" elements
     if (!hasUnrolledContent) {
-      // Clean up unrolled replies and sidecar containers from previous load
+      // Clean up unrolled replies from previous load
       // These are elements WE created and appended to React containers
       // Use individual try-catch per element since React may have removed parents
-      // Exclude elements inside post-view-modal to avoid affecting the modal's sidecar
-      $('.sidecar-replies').not('.post-view-modal *').each((i, el) => {
-        try {
-          if (el.parentNode) {
-            el.parentNode.removeChild(el);
+
+      // Only remove sidecar-replies when in fixed sidecar mode (inline sidecar should persist)
+      if (this.isFixedSidecar()) {
+        // Exclude elements inside post-view-modal to avoid affecting the modal's sidecar
+        $('.sidecar-replies').not('.post-view-modal *').each((i, el) => {
+          try {
+            if (el.parentNode) {
+              el.parentNode.removeChild(el);
+            }
+          } catch (e) {
+            // Element already removed or parent changed - ignore
           }
-        } catch (e) {
-          // Element already removed or parent changed - ignore
-        }
-      });
+        });
+      }
 
       // Clear tracked unrolled post IDs when unrolled content is removed
       this.unrolledPostIds.clear();
@@ -4951,20 +5047,6 @@ export class ItemHandler extends Handler {
           this.itemStats.newest = timestamp;
         }
 
-        // Add empty sidecar container placeholder (actual content loads on selection)
-        // Skip on mobile view and when using fixed sidecar
-        if (
-          !this.state.mobileView &&
-          this.config.get('showReplySidecar') &&
-          !this.isFixedSidecar() &&
-          $(this.selectedItem).closest('.thread').outerWidth() >=
-            this.config.get('showReplySidecarMinimumWidth')
-        ) {
-          if (!$(item).parent().find('.sidecar-replies').length) {
-            // Add empty placeholder - content loads lazily on selection
-            $(item).parent().append('<div class="sidecar-replies sidecar-replies-empty"></div>');
-          }
-        }
       });
 
     this.enableFooterObserver();

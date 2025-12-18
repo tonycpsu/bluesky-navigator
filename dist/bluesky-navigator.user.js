@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+511.e58da2f8
+// @version     1.0.31+511.1b83e41e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -68993,6 +68993,13 @@ div#statusBar.has-feed-map {
           onSelect: (item, index) => {
             $(this.selectedItem).addClass("item-selection-child-focused");
             $(this.selectedItem).removeClass("item-selection-active");
+            if (this._threadIndex != null) {
+              const threadPost = this.getThreadNavList().getSelectedItem();
+              if (threadPost) {
+                $(threadPost).addClass("reply-selection-child-focused");
+                $(threadPost).removeClass("reply-selection-active");
+              }
+            }
             this.scrollSidecarToReply(item);
           }
         });
@@ -69206,6 +69213,13 @@ div#statusBar.has-feed-map {
           this.getSidecarNavList().clearSelection();
           $(this.selectedItem).addClass("item-selection-active");
           $(this.selectedItem).removeClass("item-selection-child-focused");
+          if (this._threadIndex != null) {
+            const threadPost = this.getThreadNavList().getSelectedItem();
+            if (threadPost) {
+              $(threadPost).addClass("reply-selection-active");
+              $(threadPost).removeClass("reply-selection-child-focused");
+            }
+          }
         }
         this._replyIndex = null;
         return;
@@ -69217,6 +69231,15 @@ div#statusBar.has-feed-map {
       const wasNull = this._replyIndex == null;
       if (wasNull) {
         navList.reset();
+        $(this.selectedItem).addClass("item-selection-child-focused");
+        $(this.selectedItem).removeClass("item-selection-active");
+        if (this._threadIndex != null) {
+          const threadPost = this.getThreadNavList().getSelectedItem();
+          if (threadPost) {
+            $(threadPost).addClass("reply-selection-child-focused");
+            $(threadPost).removeClass("reply-selection-active");
+          }
+        }
         if (value > 0) {
           navList.jumpTo(value);
         } else {
@@ -69272,6 +69295,8 @@ div#statusBar.has-feed-map {
       const wasNull = this._threadIndex == null;
       if (wasNull) {
         navList.reset();
+        $(this.selectedItem).addClass("item-selection-child-focused");
+        $(this.selectedItem).removeClass("item-selection-active");
         if (value > 0) {
           navList.jumpTo(value);
         } else {
@@ -69418,6 +69443,9 @@ div#statusBar.has-feed-map {
       });
       if (this.isFixedSidecar() && this.config.get("showReplySidecar")) {
         this.initFixedSidecarPanel();
+      }
+      if (!this.isFixedSidecar() && this.config.get("fixedSidecarVisible") === false) {
+        $("body").addClass("inline-sidecar-hidden");
       }
     }
     /**
@@ -69579,6 +69607,23 @@ div#statusBar.has-feed-map {
       }
     }
     /**
+     * Toggle the inline sidecar visibility globally for all posts
+     */
+    toggleInlineSidecar(item) {
+      const isCurrentlyVisible = this.config.get("fixedSidecarVisible") !== false;
+      if (isCurrentlyVisible) {
+        this.config.set("fixedSidecarVisible", false);
+        $("body").addClass("inline-sidecar-hidden");
+        $(".sidecar-replies").not(".post-view-modal *").hide();
+        $(item).addClass("sidecar-collapsed");
+      } else {
+        this.config.set("fixedSidecarVisible", true);
+        $("body").removeClass("inline-sidecar-hidden");
+        $(".sidecar-replies").not(".post-view-modal *").show();
+        $(item).removeClass("sidecar-collapsed");
+      }
+    }
+    /**
      * Update the fixed sidecar panel with content for the given item
      */
     async updateFixedSidecarPanel(item, thread) {
@@ -69728,12 +69773,14 @@ div#statusBar.has-feed-map {
           if ($(item2).hasClass("unrolled-duplicate")) return false;
           return true;
         });
-        this._threadIndex = 0;
-        $(this.selectedItem).addClass("item-selection-child-focused");
-        $(this.selectedItem).removeClass("item-selection-active");
-        if (this.selectedPost) {
-          this.selectedPost.addClass("reply-selection-active");
-        }
+        const currentItem = item;
+        requestAnimationFrame(() => {
+          if (this.selectedItem?.[0] !== currentItem[0]) return;
+          this._threadIndex = 0;
+          $(this.selectedItem).addClass("item-selection-child-focused");
+          $(this.selectedItem).removeClass("item-selection-active");
+          this.getThreadNavList().updateSelection();
+        });
         const rootPostId = thread.post.uri?.split("/").slice(-1)[0];
         if (rootPostId) {
           const threadPostIds = /* @__PURE__ */ new Set([rootPostId, ...unrolledIds]);
@@ -69859,6 +69906,15 @@ div#statusBar.has-feed-map {
         }
       });
       container.append($(sidecarContent));
+      const hasSidecarContent = container.find(".sidecar-post").length > 0;
+      if (hasSidecarContent) {
+        $(item).addClass("has-sidecar");
+      } else {
+        $(item).removeClass("has-sidecar");
+        container.find(".sidecar-replies").remove();
+        container.removeData("sidecar-loading");
+        return;
+      }
       container.find(".sidecar-post").each((i2, post2) => {
         $(post2).on("mouseover", this.onSidecarItemMouseOver);
       });
@@ -69879,8 +69935,12 @@ div#statusBar.has-feed-map {
         });
       });
       const sidecar = container.find(".sidecar-replies")[0];
-      const display2 = action == null ? sidecar && $(sidecar).is(":visible") ? "none" : "flex" : action ? "flex" : "none";
+      const globallyHidden = this.config.get("fixedSidecarVisible") === false;
+      const display2 = globallyHidden ? "none" : action == null ? sidecar && $(sidecar).is(":visible") ? "none" : "flex" : action ? "flex" : "none";
       container.find(".sidecar-replies").css("display", display2);
+      if (globallyHidden) {
+        $(item).addClass("sidecar-collapsed");
+      }
       container.removeData("sidecar-loading");
     }
     // ===========================================================================
@@ -69977,7 +70037,11 @@ div#statusBar.has-feed-map {
           this.showReaderModeModal(item);
           break;
         case "t":
-          this.toggleFixedSidecarPanel(item);
+          if (this.isFixedSidecar()) {
+            this.toggleFixedSidecarPanel(item);
+          } else {
+            this.toggleInlineSidecar(item);
+          }
           break;
         case "+":
           this.openAddToRulesForItem(item);
@@ -72152,8 +72216,14 @@ ${rule}`;
     }
     applySelectionStyling(element, selected) {
       if (selected) {
-        $(element).addClass("item-selection-active");
-        $(element).removeClass("item-selection-child-focused");
+        const childFocused = this._threadIndex != null || this._replyIndex != null;
+        if (childFocused) {
+          $(element).addClass("item-selection-child-focused");
+          $(element).removeClass("item-selection-active");
+        } else {
+          $(element).addClass("item-selection-active");
+          $(element).removeClass("item-selection-child-focused");
+        }
         $(element).removeClass("item-selection-inactive");
       } else {
         $(element).removeClass("item-selection-active");
@@ -72503,14 +72573,16 @@ ${rule}`;
       const unrolledRepliesCount = $(".unrolled-replies").not(".post-view-modal *").length;
       const hasUnrolledContent = unrolledRepliesCount > 0;
       if (!hasUnrolledContent) {
-        $(".sidecar-replies").not(".post-view-modal *").each((i2, el) => {
-          try {
-            if (el.parentNode) {
-              el.parentNode.removeChild(el);
+        if (this.isFixedSidecar()) {
+          $(".sidecar-replies").not(".post-view-modal *").each((i2, el) => {
+            try {
+              if (el.parentNode) {
+                el.parentNode.removeChild(el);
+              }
+            } catch (e2) {
             }
-          } catch (e2) {
-          }
-        });
+          });
+        }
         this.unrolledPostIds.clear();
         try {
           $(".unrolled-duplicate").removeClass("unrolled-duplicate filtered");
@@ -72572,11 +72644,6 @@ ${rule}`;
         }
         if (!this.itemStats.newest || timestamp > this.itemStats.newest) {
           this.itemStats.newest = timestamp;
-        }
-        if (!this.state.mobileView && this.config.get("showReplySidecar") && !this.isFixedSidecar() && $(this.selectedItem).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth")) {
-          if (!$(item).parent().find(".sidecar-replies").length) {
-            $(item).parent().append('<div class="sidecar-replies sidecar-replies-empty"></div>');
-          }
         }
       });
       this.enableFooterObserver();
@@ -77103,6 +77170,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             ${config.get("replySelectionActive")};
         }
 
+        .reply-selection-child-focused {
+            outline: 1px color-mix(in srgb, var(--focus-ring-color, #0066cc) 35%, transparent) solid !important;
+        }
+
+        .sidecar-collapsed {
+            border-right: 3px dashed var(--focus-ring-color, #0066cc) !important;
+        }
+
         .sidecar-post {
             margin: 1px;
             ${config.get("replySelectionInactive")}
@@ -77111,11 +77186,19 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         /* Sidecar width configuration - only apply when using inline sidecar */
         ${config.get("fixedSidecar") !== true && config.get("fixedSidecar") !== "Fixed" ? `
         @media only screen and (min-width: 801px) {
-            .item {
+            /* Only narrow items that have sidecar content */
+            .item.has-sidecar {
                 flex: ${100 - (config.get("sidecarWidthPercent") || 30)} !important;
             }
             .sidecar-replies {
                 flex: ${config.get("sidecarWidthPercent") || 30} !important;
+            }
+            /* Reset item width when inline sidecar is hidden */
+            body.inline-sidecar-hidden .item.has-sidecar {
+                flex: 1 !important;
+            }
+            body.inline-sidecar-hidden .sidecar-replies {
+                display: none !important;
             }
         }
         ` : ""}

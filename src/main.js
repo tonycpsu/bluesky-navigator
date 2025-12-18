@@ -1006,6 +1006,14 @@ function getScreenFromElement(element) {
             ${config.get('replySelectionActive')};
         }
 
+        .reply-selection-child-focused {
+            outline: 1px color-mix(in srgb, var(--focus-ring-color, #0066cc) 35%, transparent) solid !important;
+        }
+
+        .sidecar-collapsed {
+            border-right: 3px dashed var(--focus-ring-color, #0066cc) !important;
+        }
+
         .sidecar-post {
             margin: 1px;
             ${config.get('replySelectionInactive')}
@@ -1016,11 +1024,19 @@ function getScreenFromElement(element) {
           config.get('fixedSidecar') !== true && config.get('fixedSidecar') !== 'Fixed'
             ? `
         @media only screen and (min-width: 801px) {
-            .item {
+            /* Only narrow items that have sidecar content */
+            .item.has-sidecar {
                 flex: ${100 - (config.get('sidecarWidthPercent') || 30)} !important;
             }
             .sidecar-replies {
                 flex: ${config.get('sidecarWidthPercent') || 30} !important;
+            }
+            /* Reset item width when inline sidecar is hidden */
+            body.inline-sidecar-hidden .item.has-sidecar {
+                flex: 1 !important;
+            }
+            body.inline-sidecar-hidden .sidecar-replies {
+                display: none !important;
             }
         }
         `

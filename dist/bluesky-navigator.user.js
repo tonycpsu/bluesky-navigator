@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+509.11ced748
+// @version     1.0.31+511.e58da2f8
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45587,13 +45587,13 @@ if (cid) {
         selectionActive: {
           label: "Selected post",
           type: "css",
-          default: "outline: var(--focus-ring-width, 2px) var(--focus-ring-color, #0066cc) solid !important;",
+          default: "outline: var(--focus-ring-width, 2px) var(--focus-ring-color, #0066cc) solid !important; box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus-ring-color, #0066cc) 15%, transparent);",
           help: "CSS for the currently selected post"
         },
         selectionChildFocused: {
           label: "Child focused",
           type: "css",
-          default: "outline: var(--focus-ring-width, 2px) color-mix(in srgb, var(--focus-ring-color, #0066cc) 40%, transparent) solid !important;",
+          default: "outline: var(--focus-ring-width, 2px) color-mix(in srgb, var(--focus-ring-color, #0066cc) 35%, transparent) solid !important;",
           help: "Post style when reply is focused"
         },
         selectionInactive: {
@@ -45605,7 +45605,7 @@ if (cid) {
         replySelectionActive: {
           label: "Selected reply",
           type: "css",
-          default: "outline: 1px var(--focus-ring-color, #0066cc) solid !important;",
+          default: "outline: 3px var(--focus-ring-color, #0066cc) solid !important; outline-offset: -1px;",
           help: "CSS for selected reply in sidecar"
         },
         replySelectionInactive: {

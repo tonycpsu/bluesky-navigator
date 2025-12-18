@@ -442,13 +442,13 @@ const CONFIG_SCHEMA = {
       selectionActive: {
         label: 'Selected post',
         type: 'css',
-        default: 'outline: var(--focus-ring-width, 2px) var(--focus-ring-color, #0066cc) solid !important;',
+        default: 'outline: var(--focus-ring-width, 2px) var(--focus-ring-color, #0066cc) solid !important; box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus-ring-color, #0066cc) 15%, transparent);',
         help: 'CSS for the currently selected post',
       },
       selectionChildFocused: {
         label: 'Child focused',
         type: 'css',
-        default: 'outline: var(--focus-ring-width, 2px) color-mix(in srgb, var(--focus-ring-color, #0066cc) 40%, transparent) solid !important;',
+        default: 'outline: var(--focus-ring-width, 2px) color-mix(in srgb, var(--focus-ring-color, #0066cc) 35%, transparent) solid !important;',
         help: 'Post style when reply is focused',
       },
       selectionInactive: {
@@ -460,7 +460,7 @@ const CONFIG_SCHEMA = {
       replySelectionActive: {
         label: 'Selected reply',
         type: 'css',
-        default: 'outline: 1px var(--focus-ring-color, #0066cc) solid !important;',
+        default: 'outline: 3px var(--focus-ring-color, #0066cc) solid !important; outline-offset: -1px;',
         help: 'CSS for selected reply in sidecar',
       },
       replySelectionInactive: {

@@ -1124,8 +1124,8 @@ export class ConfigModal {
 
       if (!currentCategory) continue;
 
-      // Match explicit allow/deny rules (including include type)
-      const ruleMatch = line.match(/^(allow|deny)\s+(all|from|content|include)\s*"?([^"]*)"?$/i);
+      // Match explicit allow/deny rules (including include and list types)
+      const ruleMatch = line.match(/^(allow|deny)\s+(all|from|content|include|list)\s*"?([^"]*)"?$/i);
       if (ruleMatch) {
         const [, action, type, value] = ruleMatch;
         currentCategory.rules.push({
@@ -1139,6 +1139,15 @@ export class ConfigModal {
       // Shortcut: $category = allow include category
       if (line.startsWith('$')) {
         currentCategory.rules.push({ action: 'allow', type: 'include', value: line.substring(1) });
+        continue;
+      }
+
+      // Shortcut: &listname or &"list name" = allow list listname
+      if (line.startsWith('&')) {
+        const listMatch = line.match(/^&"?([^"]+)"?$/);
+        if (listMatch) {
+          currentCategory.rules.push({ action: 'allow', type: 'list', value: listMatch[1] });
+        }
         continue;
       }
 
@@ -1174,6 +1183,13 @@ export class ConfigModal {
         } else if (rule.type === 'include' && rule.action === 'allow') {
           // Shortcut for allow include category
           lines.push(`$${rule.value}`);
+        } else if (rule.type === 'list' && rule.action === 'allow') {
+          // Shortcut for allow list - use quotes if name contains spaces
+          if (rule.value.includes(' ')) {
+            lines.push(`&"${rule.value}"`);
+          } else {
+            lines.push(`&${rule.value}`);
+          }
         } else if (rule.type === 'from' && rule.value.startsWith('@')) {
           // Shortcut for allow from @handle
           lines.push(rule.value);
@@ -1336,6 +1352,7 @@ export class ConfigModal {
             <option value="from" ${rule.type === 'from' ? 'selected' : ''}>From (author)</option>
             <option value="content" ${rule.type === 'content' ? 'selected' : ''}>Content (text)</option>
             <option value="include" ${rule.type === 'include' ? 'selected' : ''}>Include (category)</option>
+            <option value="list" ${rule.type === 'list' ? 'selected' : ''}>List (&name)</option>
             <option value="all" ${rule.type === 'all' ? 'selected' : ''}>All</option>
           </select>
           ${valueHtml}
@@ -1419,7 +1436,7 @@ export class ConfigModal {
 
   /**
    * Organize rules in a category by type and value.
-   * Type order: all, include, from, content
+   * Type order: all, include, list, from, content
    * Within same type, sort by value alphabetically.
    * This sorting is safe because rules of different types don't overlap.
    * @param {number} catIndex - The category index
@@ -1428,7 +1445,7 @@ export class ConfigModal {
     const category = this.parsedRules[catIndex];
     if (!category || !category.rules) return;
 
-    const typeOrder = { all: 0, include: 1, from: 2, content: 3 };
+    const typeOrder = { all: 0, include: 1, list: 2, from: 3, content: 4 };
 
     category.rules.sort((a, b) => {
       // First sort by type

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+530.8a71befc
+// @version     1.0.31+530.f18297dd
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46277,7 +46277,7 @@ if (cid) {
           continue;
         }
         if (!currentCategory) continue;
-        const ruleMatch = line.match(/^(allow|deny)\s+(all|from|content|include)\s*"?([^"]*)"?$/i);
+        const ruleMatch = line.match(/^(allow|deny)\s+(all|from|content|include|list)\s*"?([^"]*)"?$/i);
         if (ruleMatch) {
           const [, action, type, value] = ruleMatch;
           currentCategory.rules.push({
@@ -46289,6 +46289,13 @@ if (cid) {
         }
         if (line.startsWith("$")) {
           currentCategory.rules.push({ action: "allow", type: "include", value: line.substring(1) });
+          continue;
+        }
+        if (line.startsWith("&")) {
+          const listMatch = line.match(/^&"?([^"]+)"?$/);
+          if (listMatch) {
+            currentCategory.rules.push({ action: "allow", type: "list", value: listMatch[1] });
+          }
           continue;
         }
         if (line.startsWith("@")) {
@@ -46314,6 +46321,12 @@ if (cid) {
             lines.push(`${rule.action} ${rule.type} ${rule.value}`);
           } else if (rule.type === "include" && rule.action === "allow") {
             lines.push(`$${rule.value}`);
+          } else if (rule.type === "list" && rule.action === "allow") {
+            if (rule.value.includes(" ")) {
+              lines.push(`&"${rule.value}"`);
+            } else {
+              lines.push(`&${rule.value}`);
+            }
           } else if (rule.type === "from" && rule.value.startsWith("@")) {
             lines.push(rule.value);
           } else if (rule.type === "content") {
@@ -46458,6 +46471,7 @@ if (cid) {
             <option value="from" ${rule.type === "from" ? "selected" : ""}>From (author)</option>
             <option value="content" ${rule.type === "content" ? "selected" : ""}>Content (text)</option>
             <option value="include" ${rule.type === "include" ? "selected" : ""}>Include (category)</option>
+            <option value="list" ${rule.type === "list" ? "selected" : ""}>List (&name)</option>
             <option value="all" ${rule.type === "all" ? "selected" : ""}>All</option>
           </select>
           ${valueHtml}
@@ -46531,7 +46545,7 @@ if (cid) {
     }
     /**
      * Organize rules in a category by type and value.
-     * Type order: all, include, from, content
+     * Type order: all, include, list, from, content
      * Within same type, sort by value alphabetically.
      * This sorting is safe because rules of different types don't overlap.
      * @param {number} catIndex - The category index
@@ -46539,7 +46553,7 @@ if (cid) {
     organizeRulesInCategory(catIndex) {
       const category = this.parsedRules[catIndex];
       if (!category || !category.rules) return;
-      const typeOrder = { all: 0, include: 1, from: 2, content: 3 };
+      const typeOrder = { all: 0, include: 1, list: 2, from: 3, content: 4 };
       category.rules.sort((a2, b) => {
         const typeA = typeOrder[a2.type] ?? 99;
         const typeB = typeOrder[b.type] ?? 99;

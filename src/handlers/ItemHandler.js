@@ -4138,7 +4138,8 @@ export class ItemHandler extends Handler {
 
       if (!rulesName) continue;
 
-      const ruleMatch = line.match(/(allow|deny) (all|from|content|include) "?([^"]+)"?/);
+      // Match explicit allow/deny rules (including include and list types)
+      const ruleMatch = line.match(/(allow|deny) (all|from|content|include|list) "?([^"]+)"?/);
       if (ruleMatch) {
         const [_, action, type, value] = ruleMatch;
         rules[rulesName].push({ action, type, value });
@@ -4147,6 +4148,12 @@ export class ItemHandler extends Handler {
 
       if (line.startsWith('$')) {
         rules[rulesName].push({ action: 'allow', type: 'include', value: line.substring(1) });
+      } else if (line.startsWith('&')) {
+        // Interpret "&listname" or '&"list name"' as "allow list listname"
+        const listMatch = line.match(/^&"?([^"]+)"?$/);
+        if (listMatch) {
+          rules[rulesName].push({ action: 'allow', type: 'list', value: listMatch[1] });
+        }
       } else if (line.startsWith('@')) {
         rules[rulesName].push({ action: 'allow', type: 'from', value: line });
       } else {

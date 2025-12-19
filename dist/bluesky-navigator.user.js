@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+526.64950821
+// @version     1.0.31+527.f465f358
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -72256,7 +72256,7 @@ ${rule}`;
           continue;
         }
         if (!rulesName) continue;
-        const ruleMatch = line.match(/(allow|deny) (all|from|content|include) "?([^"]+)"?/);
+        const ruleMatch = line.match(/(allow|deny) (all|from|content|include|list) "?([^"]+)"?/);
         if (ruleMatch) {
           const [_, action, type, value] = ruleMatch;
           rules[rulesName].push({ action, type, value });
@@ -72264,6 +72264,11 @@ ${rule}`;
         }
         if (line.startsWith("$")) {
           rules[rulesName].push({ action: "allow", type: "include", value: line.substring(1) });
+        } else if (line.startsWith("&")) {
+          const listMatch = line.match(/^&"?([^"]+)"?$/);
+          if (listMatch) {
+            rules[rulesName].push({ action: "allow", type: "list", value: listMatch[1] });
+          }
         } else if (line.startsWith("@")) {
           rules[rulesName].push({ action: "allow", type: "from", value: line });
         } else {
@@ -77174,7 +77179,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           continue;
         }
         if (!rulesName) continue;
-        const ruleMatch = line.match(/(allow|deny) (all|from|content|include) "?([^"]+)"?/);
+        const ruleMatch = line.match(/(allow|deny) (all|from|content|include|list) "?([^"]+)"?/);
         if (ruleMatch) {
           const [_, action, type, value] = ruleMatch;
           rules[rulesName].push({ action, type, value });
@@ -77182,6 +77187,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         if (line.startsWith("$")) {
           rules[rulesName].push({ action: "allow", type: "include", value: line.substring(1) });
+        } else if (line.startsWith("&")) {
+          const listMatch = line.match(/^&"?([^"]+)"?$/);
+          if (listMatch) {
+            rules[rulesName].push({ action: "allow", type: "list", value: listMatch[1] });
+          }
         } else if (line.startsWith("@")) {
           rules[rulesName].push({ action: "allow", type: "from", value: line });
         } else {

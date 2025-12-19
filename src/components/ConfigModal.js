@@ -2408,8 +2408,9 @@ export class ConfigModal {
       }
     }
 
-    // Update UI and save
+    // Update UI and save immediately
     this.syncVisualToRaw();
+    this.config.set('rulesConfig', this.pendingChanges['rulesConfig']);
     this.refreshVisualEditor();
 
     console.log(`Pull sync: added ${added} handles to ${category}`);
@@ -2590,8 +2591,9 @@ export class ConfigModal {
       this.parsedRules[categoryIndex].rules.splice(dup.ruleIndex, 1);
     }
 
-    // Update UI
+    // Update UI and save immediately
     this.syncVisualToRaw();
+    this.config.set('rulesConfig', this.pendingChanges['rulesConfig']);
     this.refreshVisualEditor();
 
     console.log(`Deduplication: removed ${duplicates.length} duplicate rules from ${category}`);

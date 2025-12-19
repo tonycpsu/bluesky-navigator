@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+564.d6f20dd3
+// @version     1.0.31+565.770bb202
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -73882,45 +73882,14 @@ ${rule}`;
       this.onRulesChanged();
     }
     /**
-     * Parse rules config into state format (simplified version of main.js parseRulesConfig)
+     * Parse rules config using the shared function from state
      */
     parseRulesForState(configText) {
-      const lines = configText.split("\n");
-      const rules = {};
-      let rulesName = null;
-      for (let line of lines) {
-        line = line.trim();
-        if (!line || line.startsWith(";") || line.startsWith("#")) continue;
-        const sectionMatch = line.match(/^\[([^\]]+?)(?:\s*(?:->|→)\s*(.*?))?\]$/);
-        if (sectionMatch) {
-          rulesName = sectionMatch[1].trim();
-          const backingList = sectionMatch[2]?.trim() || null;
-          rules[rulesName] = [];
-          if (!rules._backingLists) rules._backingLists = {};
-          if (backingList) rules._backingLists[rulesName] = backingList;
-          continue;
-        }
-        if (!rulesName) continue;
-        const ruleMatch = line.match(/(allow|deny) (all|from|content|include|list) "?([^"]+)"?/);
-        if (ruleMatch) {
-          const [_, action, type, value] = ruleMatch;
-          rules[rulesName].push({ action, type, value });
-          continue;
-        }
-        if (line.startsWith("$")) {
-          rules[rulesName].push({ action: "allow", type: "include", value: line.substring(1) });
-        } else if (line.startsWith("&")) {
-          const listMatch = line.match(/^&"?([^"]+)"?$/);
-          if (listMatch) {
-            rules[rulesName].push({ action: "allow", type: "list", value: listMatch[1] });
-          }
-        } else if (line.startsWith("@")) {
-          rules[rulesName].push({ action: "allow", type: "from", value: line });
-        } else {
-          rules[rulesName].push({ action: "allow", type: "content", value: line });
-        }
+      if (this.state.parseRulesConfig) {
+        return this.state.parseRulesConfig(configText);
       }
-      return rules;
+      console.warn("[bsky-nav] parseRulesConfig not found on state, rules may not parse correctly");
+      return {};
     }
     /**
      * Check if a handle matches any rule in a category (including via includes).
@@ -73930,7 +73899,7 @@ ${rule}`;
      * @returns {boolean} True if handle matches any rule in the category
      * @private
      */
-    handleMatchesCategory(normalizedHandle, categoryName, visited = /* @__PURE__ */ new Set()) {
+    handleMatchesCategory(normalizedHandle, categoryName, visited = /* @__PURE__ */ new Set(), debug = false) {
       if (visited.has(categoryName)) {
         return false;
       }
@@ -73943,7 +73912,9 @@ ${rule}`;
       const backingList = this.state.rules._backingLists?.[categoryName];
       if (backingList && this.state.listCache) {
         const result = this.state.listCache.isInListSync(normalizedHandle, backingList);
+        if (debug) console.log(`[debug] ${normalizedHandle} in backing list "${backingList}": ${result}`);
         if (result === true) {
+          if (debug) console.log(`[debug] MATCH: ${normalizedHandle} found in backing list "${backingList}" for category "${categoryName}"`);
           return true;
         }
         if (result === void 0) {
@@ -73954,16 +73925,20 @@ ${rule}`;
       }
       for (const rule of rules) {
         if (rule.type === "from" && rule.value.toLowerCase() === normalizedHandle.toLowerCase()) {
+          if (debug) console.log(`[debug] MATCH: ${normalizedHandle} matches from rule "${rule.value}" in category "${categoryName}"`);
           return true;
         }
         if (rule.type === "include") {
-          if (this.handleMatchesCategory(normalizedHandle, rule.value, visited)) {
+          if (this.handleMatchesCategory(normalizedHandle, rule.value, visited, debug)) {
+            if (debug) console.log(`[debug] MATCH: ${normalizedHandle} matches via include of "${rule.value}" in category "${categoryName}"`);
             return true;
           }
         }
         if (rule.type === "list") {
           const result = this.state.listCache?.isInListSync(normalizedHandle, rule.value);
+          if (debug) console.log(`[debug] ${normalizedHandle} in list rule "${rule.value}": ${result}`);
           if (result === true) {
+            if (debug) console.log(`[debug] MATCH: ${normalizedHandle} found in list rule "${rule.value}" in category "${categoryName}"`);
             return true;
           }
           if (result === void 0 && this.state.listCache) {
@@ -73973,7 +73948,46 @@ ${rule}`;
           }
         }
       }
+      if (debug) console.log(`[debug] NO MATCH: ${normalizedHandle} not found in category "${categoryName}"`);
       return false;
+    }
+    /**
+     * Debug helper - check why a handle matches a category
+     * Call from console: unsafeWindow.blueskyNavigatorState.handlers.feed.debugHandleMatch('@handle', 'category')
+     */
+    debugHandleMatch(handle2, categoryName) {
+      const normalizedHandle = handle2.startsWith("@") ? handle2 : `@${handle2}`;
+      console.log(`[debug] Checking ${normalizedHandle} against category "${categoryName}"`);
+      console.log(`[debug] Rules for "${categoryName}":`, this.state.rules?.[categoryName]);
+      console.log(`[debug] Backing list for "${categoryName}":`, this.state.rules?._backingLists?.[categoryName]);
+      return this.handleMatchesCategory(normalizedHandle, categoryName, /* @__PURE__ */ new Set(), true);
+    }
+    /**
+     * Debug helper - compare state.rules with what would be parsed from config
+     * Call from console: unsafeWindow.blueskyNavigatorState.handlers.feed.debugRulesSync()
+     */
+    debugRulesSync() {
+      const configText = this.config.get("rulesConfig") || "";
+      const parsedFromConfig = this.parseRulesForState(configText);
+      console.log("[debug] === Rules Sync Check ===");
+      console.log("[debug] Config text:", configText);
+      console.log("[debug] Parsed from config:", parsedFromConfig);
+      console.log("[debug] Current state.rules:", this.state.rules);
+      const stateCategories = Object.keys(this.state.rules || {}).filter((k) => !k.startsWith("_"));
+      const configCategories = Object.keys(parsedFromConfig || {}).filter((k) => !k.startsWith("_"));
+      console.log("[debug] State categories:", stateCategories);
+      console.log("[debug] Config categories:", configCategories);
+      for (const cat of stateCategories) {
+        const stateRules = this.state.rules[cat];
+        const configRules = parsedFromConfig[cat];
+        if (JSON.stringify(stateRules) !== JSON.stringify(configRules)) {
+          console.log(`[debug] MISMATCH in category "${cat}":`);
+          console.log(`[debug]   State:`, stateRules);
+          console.log(`[debug]   Config:`, configRules);
+        }
+      }
+      console.log("[debug] State _backingLists:", this.state.rules?._backingLists);
+      console.log("[debug] Config _backingLists:", parsedFromConfig?._backingLists);
     }
     /**
      * Get the index of the first filter category that contains a handle.
@@ -79411,6 +79425,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         config.set("rulesConfig", state.rulesConfig);
       }
       state.rules = parseRulesConfig(config.get("rulesConfig"));
+      state.parseRulesConfig = parseRulesConfig;
       initToastNotifications(api);
       const uiManager = new UIManager(config, state);
       const defaultAdapter = new DefaultUIAdapter();

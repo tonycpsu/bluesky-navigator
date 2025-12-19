@@ -854,6 +854,8 @@ function getScreenFromElement(element) {
       config.set('rulesConfig', state.rulesConfig);
     }
     state.rules = parseRulesConfig(config.get('rulesConfig'));
+    // Store the parse function so handlers can use it
+    state.parseRulesConfig = parseRulesConfig;
 
     // Initialize toast notification system (pass API if available)
     initToastNotifications(api);

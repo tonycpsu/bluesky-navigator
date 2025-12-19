@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+543.ac472ccc
+// @version     1.0.31+544.6f77cb44
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45148,6 +45148,12 @@ if (cid) {
     if (activeElement.isContentEditable) return true;
     return false;
   }
+  function isModalOpen() {
+    if (document.querySelector(".config-modal")) return true;
+    if (document.querySelector(".shortcuts-overlay")) return true;
+    if (document.querySelector(".sync-dialog-overlay")) return true;
+    return false;
+  }
   function waitForElement$3(selector, onAdd, onRemove, onChange, ignoreExisting) {
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
@@ -45256,6 +45262,7 @@ if (cid) {
     debounce,
     extractLastTerm,
     getAnimationDuration: getAnimationDuration$1,
+    isModalOpen,
     isUserTyping,
     observeChanges,
     observeVisibilityChange: observeVisibilityChange$1,
@@ -54050,6 +54057,9 @@ div#statusBar.has-feed-map {
     }
     handleInput(event) {
       if (isUserTyping()) {
+        return;
+      }
+      if (isModalOpen()) {
         return;
       }
       if (event.altKey && !event.metaKey) {
@@ -71267,6 +71277,9 @@ div#statusBar.has-feed-map {
       if (isUserTyping()) {
         return true;
       }
+      if (isModalOpen()) {
+        return true;
+      }
       if (this.handleMovementKey(event)) {
         return event.key;
       } else if (this.handleItemKey(event)) {
@@ -77054,6 +77067,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (isUserTyping()) {
         return true;
       }
+      if (isModalOpen()) {
+        return true;
+      }
       const item = this.selectedItem;
       if (event.key == "A") {
         $(item).find(constants.PROFILE_SELECTOR)[0].click();
@@ -77102,6 +77118,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     handleInput(event) {
       if (isUserTyping()) {
+        return true;
+      }
+      if (isModalOpen()) {
         return true;
       }
       const item = this.selectedItem;

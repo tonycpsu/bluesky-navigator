@@ -1,7 +1,7 @@
 // PostItemHandler.js - Handler for individual post/thread pages
 
 import { ItemHandler } from './ItemHandler.js';
-import { isUserTyping } from '../utils.js';
+import { isUserTyping, isModalOpen } from '../utils.js';
 
 /**
  * Handler for viewing individual posts and their thread replies.
@@ -42,6 +42,11 @@ export class PostItemHandler extends ItemHandler {
     // Skip processing when user is typing in an input field
     if (isUserTyping()) {
       return true; // Return true to signal callers to also skip
+    }
+
+    // Skip processing when a modal dialog is open
+    if (isModalOpen()) {
+      return true;
     }
 
     const item = this.selectedItem;

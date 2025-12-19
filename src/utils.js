@@ -29,6 +29,23 @@ export function isUserTyping() {
   return false;
 }
 
+/**
+ * Check if any modal dialog is currently open
+ * Used to disable keyboard shortcuts when modals are active
+ */
+export function isModalOpen() {
+  // Check for config modal
+  if (document.querySelector('.config-modal')) return true;
+
+  // Check for shortcut overlay
+  if (document.querySelector('.shortcuts-overlay')) return true;
+
+  // Check for sync dialog
+  if (document.querySelector('.sync-dialog-overlay')) return true;
+
+  return false;
+}
+
 export function waitForElement(selector, onAdd, onRemove, onChange, ignoreExisting) {
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {

@@ -3612,6 +3612,11 @@ export class FeedItemHandler extends ItemHandler {
       return true; // Return true to signal callers to also skip
     }
 
+    // Skip processing when a modal dialog is open
+    if (utils.isModalOpen()) {
+      return true;
+    }
+
     const item = this.selectedItem;
     if (event.key == 'A') {
       // Go to author's profile

@@ -1,7 +1,7 @@
 // Handler.js - Base handler class for keyboard input handling
 
 import { ShortcutOverlay } from '../components/ShortcutOverlay.js';
-import { isUserTyping } from '../utils.js';
+import { isUserTyping, isModalOpen } from '../utils.js';
 
 /**
  * Base handler class that provides keyboard binding and global navigation shortcuts.
@@ -42,6 +42,11 @@ export class Handler {
     // Skip processing when user is typing in an input field
     // This prevents freezing during compose and allows normal text entry
     if (isUserTyping()) {
+      return;
+    }
+
+    // Skip processing when a modal dialog is open
+    if (isModalOpen()) {
       return;
     }
 

@@ -1566,6 +1566,11 @@ export class ItemHandler extends Handler {
       return true; // Return true to signal callers to also skip
     }
 
+    // Skip processing when a modal dialog is open
+    if (utils.isModalOpen()) {
+      return true;
+    }
+
     if (this.handleMovementKey(event)) {
       return event.key;
     } else if (this.handleItemKey(event)) {

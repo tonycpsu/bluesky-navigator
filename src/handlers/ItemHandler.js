@@ -3703,6 +3703,12 @@ export class ItemHandler extends Handler {
               : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings → Rules.</div>'
             }
           </div>
+          <div class="bsky-nav-rules-list-option" style="display: none;">
+            <label>
+              <input type="checkbox" class="bsky-nav-rules-add-to-list-checkbox" checked>
+              <span class="bsky-nav-rules-list-option-text">Add to list "<span class="bsky-nav-rules-list-name"></span>"</span>
+            </label>
+          </div>
           <div class="bsky-nav-rules-dropdown-footer">
             <input type="text" class="bsky-nav-rules-quick-filter" placeholder="${categories.length > 0 ? 'Type # or name...' : 'Create first category...'}" autocomplete="off" spellcheck="false">
             <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
@@ -3837,23 +3843,26 @@ export class ItemHandler extends Handler {
       });
     }
 
+    // Helper to add author based on checkbox state
+    const addToListCheckbox = dropdown.find('.bsky-nav-rules-add-to-list-checkbox');
+    const addAuthorToCategory = async (category) => {
+      const backingList = !isContentRule && this.state.rules?._backingLists?.[category];
+      const shouldAddToList = backingList && this.api && this.state.listCache && addToListCheckbox.is(':checked');
+
+      if (shouldAddToList) {
+        // Add to list via API
+        await this.addAuthorToList(handle, backingList);
+      } else {
+        // Add to local rules
+        addRule(category, selectedAction);
+      }
+      closeDropdown();
+    };
+
     // Category button handlers
     dropdown.find('.bsky-nav-rules-category-btn').on('click', async (e) => {
       const category = $(e.target).data('category');
-
-      // Check if category has a backing list (only for author rules)
-      const backingList = !isContentRule && this.state.rules?._backingLists?.[category];
-
-      console.log('[bsky-nav] Add rule click:', { category, backingList, hasApi: !!this.api, hasListCache: !!this.state.listCache, isContentRule });
-
-      if (backingList && this.api && this.state.listCache) {
-        // Show choice popup for list-backed categories
-        this.showListBackedAddChoice(e.target, handle, category, backingList, selectedAction, closeDropdown, addRule);
-      } else {
-        // No backing list - add directly to rules
-        addRule(category, selectedAction);
-        closeDropdown();
-      }
+      await addAuthorToCategory(category);
     });
 
     // Quick filter input reference
@@ -3889,6 +3898,23 @@ export class ItemHandler extends Handler {
     const categoryButtons = dropdown.find('.bsky-nav-rules-category-btn');
     let numTimeout = null;
 
+    // Helper to update the "add to list" checkbox visibility
+    const listOptionEl = dropdown.find('.bsky-nav-rules-list-option');
+    const listNameEl = dropdown.find('.bsky-nav-rules-list-name');
+    const updateListOption = (category) => {
+      if (isContentRule || !category) {
+        listOptionEl.hide();
+        return;
+      }
+      const backingList = this.state.rules?._backingLists?.[category];
+      if (backingList && this.api && this.state.listCache) {
+        listNameEl.text(backingList);
+        listOptionEl.show();
+      } else {
+        listOptionEl.hide();
+      }
+    };
+
     const selectCategory = (index) => {
       if (index >= 0 && index < categoryButtons.filter(':visible').length) {
         categoryButtons.removeClass('selected');
@@ -3896,6 +3922,7 @@ export class ItemHandler extends Handler {
         const selected = visibleButtons.eq(index);
         selected.addClass('selected');
         selected[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        updateListOption(selected.data('category'));
       }
     };
 
@@ -3919,6 +3946,9 @@ export class ItemHandler extends Handler {
       if (firstVisible) {
         categoryButtons.removeClass('selected');
         firstVisible.addClass('selected');
+        updateListOption(firstVisible.data('category'));
+      } else {
+        updateListOption(null);
       }
 
       // Update create button visibility - show if filter could be a new category
@@ -3963,6 +3993,11 @@ export class ItemHandler extends Handler {
     // Focus the input when dropdown opens
     setTimeout(() => quickFilterInput.focus(), 50);
 
+    // Show list option for initially selected category (if any)
+    if (activeCategory) {
+      updateListOption(activeCategory);
+    }
+
     const keyHandler = (e) => {
       // Handle Enter key
       if (e.key === 'Enter') {
@@ -3973,12 +4008,11 @@ export class ItemHandler extends Handler {
         const selected = dropdown.find('.bsky-nav-rules-category-btn.selected:visible');
 
         if (selected.length) {
-          // Select the highlighted category
+          // Select the highlighted category - use helper for list support
           const category = selected.data('category');
-          addRule(category, selectedAction);
-          closeDropdown();
+          addAuthorToCategory(category);
         } else if (val && !/^\d+$/.test(val)) {
-          // Create new category if text entered and no match
+          // Create new category if text entered and no match (no backing list)
           addRule(val, selectedAction);
           closeDropdown();
         }

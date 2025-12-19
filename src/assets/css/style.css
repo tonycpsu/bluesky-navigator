@@ -5301,6 +5301,30 @@ div#statusBar.has-feed-map {
   text-align: center;
 }
 
+.bsky-nav-rules-list-option {
+  padding: 8px 14px;
+  border-top: 1px solid #e5e7eb;
+  background: #f0fdf4;
+  font-size: 13px;
+}
+
+.bsky-nav-rules-list-option label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.bsky-nav-rules-list-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.bsky-nav-rules-list-name {
+  font-weight: 500;
+}
+
 .bsky-nav-rules-dropdown-footer {
   display: flex;
   gap: 8px;
@@ -5776,6 +5800,12 @@ div#statusBar.has-feed-map {
 
   .bsky-nav-rules-list-btn:hover {
     background: #374151;
+  }
+
+  .bsky-nav-rules-list-option {
+    background: #064e3b;
+    border-top-color: #374151;
+    color: #d1fae5;
   }
 
   .bsky-nav-rules-dropdown-footer {

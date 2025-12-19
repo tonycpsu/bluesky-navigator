@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+563.34e1bf3d
+// @version     1.0.31+564.d6f20dd3
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -53339,6 +53339,30 @@ div#statusBar.has-feed-map {
   text-align: center;
 }
 
+.bsky-nav-rules-list-option {
+  padding: 8px 14px;
+  border-top: 1px solid #e5e7eb;
+  background: #f0fdf4;
+  font-size: 13px;
+}
+
+.bsky-nav-rules-list-option label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.bsky-nav-rules-list-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.bsky-nav-rules-list-name {
+  font-weight: 500;
+}
+
 .bsky-nav-rules-dropdown-footer {
   display: flex;
   gap: 8px;
@@ -53814,6 +53838,12 @@ div#statusBar.has-feed-map {
 
   .bsky-nav-rules-list-btn:hover {
     background: #374151;
+  }
+
+  .bsky-nav-rules-list-option {
+    background: #064e3b;
+    border-top-color: #374151;
+    color: #d1fae5;
   }
 
   .bsky-nav-rules-dropdown-footer {
@@ -73348,6 +73378,12 @@ div#statusBar.has-feed-map {
                 `;
       }).join("") : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings \u2192 Rules.</div>'}
           </div>
+          <div class="bsky-nav-rules-list-option" style="display: none;">
+            <label>
+              <input type="checkbox" class="bsky-nav-rules-add-to-list-checkbox" checked>
+              <span class="bsky-nav-rules-list-option-text">Add to list "<span class="bsky-nav-rules-list-name"></span>"</span>
+            </label>
+          </div>
           <div class="bsky-nav-rules-dropdown-footer">
             <input type="text" class="bsky-nav-rules-quick-filter" placeholder="${categories.length > 0 ? "Type # or name..." : "Create first category..."}" autocomplete="off" spellcheck="false">
             <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
@@ -73446,16 +73482,20 @@ div#statusBar.has-feed-map {
           }
         });
       }
-      dropdown.find(".bsky-nav-rules-category-btn").on("click", async (e2) => {
-        const category = $(e2.target).data("category");
+      const addToListCheckbox = dropdown.find(".bsky-nav-rules-add-to-list-checkbox");
+      const addAuthorToCategory = async (category) => {
         const backingList = !isContentRule && this.state.rules?._backingLists?.[category];
-        console.log("[bsky-nav] Add rule click:", { category, backingList, hasApi: !!this.api, hasListCache: !!this.state.listCache, isContentRule });
-        if (backingList && this.api && this.state.listCache) {
-          this.showListBackedAddChoice(e2.target, handle2, category, backingList, selectedAction, closeDropdown, addRule);
+        const shouldAddToList = backingList && this.api && this.state.listCache && addToListCheckbox.is(":checked");
+        if (shouldAddToList) {
+          await this.addAuthorToList(handle2, backingList);
         } else {
           addRule(category, selectedAction);
-          closeDropdown();
         }
+        closeDropdown();
+      };
+      dropdown.find(".bsky-nav-rules-category-btn").on("click", async (e2) => {
+        const category = $(e2.target).data("category");
+        await addAuthorToCategory(category);
       });
       const quickFilterInput = dropdown.find(".bsky-nav-rules-quick-filter");
       dropdown.find(".bsky-nav-rules-create-btn").on("click", () => {
@@ -73477,6 +73517,21 @@ div#statusBar.has-feed-map {
         $(document).on("mousedown.rulesDropdown", closeHandler);
       }, 100);
       const categoryButtons = dropdown.find(".bsky-nav-rules-category-btn");
+      const listOptionEl = dropdown.find(".bsky-nav-rules-list-option");
+      const listNameEl = dropdown.find(".bsky-nav-rules-list-name");
+      const updateListOption = (category) => {
+        if (isContentRule || !category) {
+          listOptionEl.hide();
+          return;
+        }
+        const backingList = this.state.rules?._backingLists?.[category];
+        if (backingList && this.api && this.state.listCache) {
+          listNameEl.text(backingList);
+          listOptionEl.show();
+        } else {
+          listOptionEl.hide();
+        }
+      };
       const selectCategory = (index) => {
         if (index >= 0 && index < categoryButtons.filter(":visible").length) {
           categoryButtons.removeClass("selected");
@@ -73484,6 +73539,7 @@ div#statusBar.has-feed-map {
           const selected = visibleButtons.eq(index);
           selected.addClass("selected");
           selected[0].scrollIntoView({ block: "nearest", behavior: "smooth" });
+          updateListOption(selected.data("category"));
         }
       };
       const filterCategories = (filterText) => {
@@ -73503,6 +73559,9 @@ div#statusBar.has-feed-map {
         if (firstVisible) {
           categoryButtons.removeClass("selected");
           firstVisible.addClass("selected");
+          updateListOption(firstVisible.data("category"));
+        } else {
+          updateListOption(null);
         }
         const createBtn = dropdown.find(".bsky-nav-rules-create-btn");
         const isNewCategory = filterText && !/^\d+$/.test(filterText) && !categories.some((cat) => cat.toLowerCase() === lowerFilter);
@@ -73529,6 +73588,9 @@ div#statusBar.has-feed-map {
         processInput();
       });
       setTimeout(() => quickFilterInput.focus(), 50);
+      if (activeCategory) {
+        updateListOption(activeCategory);
+      }
       const keyHandler = (e2) => {
         if (e2.key === "Enter") {
           e2.preventDefault();
@@ -73537,8 +73599,7 @@ div#statusBar.has-feed-map {
           const selected = dropdown.find(".bsky-nav-rules-category-btn.selected:visible");
           if (selected.length) {
             const category = selected.data("category");
-            addRule(category, selectedAction);
-            closeDropdown();
+            addAuthorToCategory(category);
           } else if (val && !/^\d+$/.test(val)) {
             addRule(val, selectedAction);
             closeDropdown();

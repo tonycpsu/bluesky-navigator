@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+535.830b67af
+// @version     1.0.31+536.d73cf60e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47192,7 +47192,7 @@ if (cid) {
       if (!members || members.size === 0) {
         throw new Error("List is empty or could not be fetched");
       }
-      const categoryIndex = this.parsedRules.findIndex((c) => c.name === category);
+      let categoryIndex = this.parsedRules.findIndex((c) => c.name === category);
       const categoryRules = categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : [];
       const existingHandles = new Set(
         categoryRules.filter((r) => r.type === "from").map((r) => r.value.replace(/^@/, "").toLowerCase())
@@ -47202,19 +47202,13 @@ if (cid) {
         if (!existingHandles.has(handle2.toLowerCase())) {
           if (categoryIndex === -1) {
             this.parsedRules.push({ name: category, rules: [] });
-            const newIndex = this.parsedRules.length - 1;
-            this.parsedRules[newIndex].rules.push({
-              action: ruleAction,
-              type: "from",
-              value: `@${handle2}`
-            });
-          } else {
-            this.parsedRules[categoryIndex].rules.push({
-              action: ruleAction,
-              type: "from",
-              value: `@${handle2}`
-            });
+            categoryIndex = this.parsedRules.length - 1;
           }
+          this.parsedRules[categoryIndex].rules.push({
+            action: ruleAction,
+            type: "from",
+            value: `@${handle2}`
+          });
           added++;
         }
       }

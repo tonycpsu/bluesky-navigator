@@ -2257,7 +2257,7 @@ export class ConfigModal {
     }
 
     // Get existing handles in category using findIndex pattern
-    const categoryIndex = this.parsedRules.findIndex(c => c.name === category);
+    let categoryIndex = this.parsedRules.findIndex(c => c.name === category);
     const categoryRules = categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : [];
     const existingHandles = new Set(
       categoryRules
@@ -2272,19 +2272,15 @@ export class ConfigModal {
         // Create category if it doesn't exist
         if (categoryIndex === -1) {
           this.parsedRules.push({ name: category, rules: [] });
-          const newIndex = this.parsedRules.length - 1;
-          this.parsedRules[newIndex].rules.push({
-            action: ruleAction,
-            type: 'from',
-            value: `@${handle}`,
-          });
-        } else {
-          this.parsedRules[categoryIndex].rules.push({
-            action: ruleAction,
-            type: 'from',
-            value: `@${handle}`,
-          });
+          categoryIndex = this.parsedRules.length - 1;
         }
+
+        // Now always push to the correct category
+        this.parsedRules[categoryIndex].rules.push({
+          action: ruleAction,
+          type: 'from',
+          value: `@${handle}`,
+        });
         added++;
       }
     }

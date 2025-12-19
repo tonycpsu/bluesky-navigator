@@ -4377,6 +4377,32 @@ div#statusBar.has-feed-map {
   background: #ffffff;
 }
 
+.rules-backing-list {
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
+  color: #374151;
+  max-width: 140px;
+  cursor: pointer;
+}
+
+.rules-backing-list:hover {
+  border-color: #9ca3af;
+}
+
+.rules-backing-list:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.rules-backing-list:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .rules-category-delete {
   background: none;
   border: none;
@@ -4915,6 +4941,16 @@ div#statusBar.has-feed-map {
   .rules-category-name:focus {
     border-color: #3b82f6;
     background: #1f2937;
+  }
+
+  .rules-backing-list {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .rules-backing-list:hover {
+    border-color: #6b7280;
   }
 
   .rules-category-delete:hover {

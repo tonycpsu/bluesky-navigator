@@ -1303,6 +1303,22 @@ export class ConfigModal {
             </div>
             <input type="text" class="rules-category-name" value="${this.escapeHtml(category.name)}"
                    data-category="${catIndex}">
+            <select class="rules-backing-list" data-category="${catIndex}"
+                    title="Backing list (authors in list are automatically matched)"
+                    ${!this.hasApiAccess() ? 'disabled' : ''}>
+              <option value="">No backing list</option>
+              ${(this.cachedListNames || []).map(name => `
+                <option value="${this.escapeHtml(name)}"
+                        ${category.backingList === name ? 'selected' : ''}>
+                  ${this.escapeHtml(name)}
+                </option>
+              `).join('')}
+              ${category.backingList && !(this.cachedListNames || []).includes(category.backingList) ? `
+                <option value="${this.escapeHtml(category.backingList)}" selected>
+                  ${this.escapeHtml(category.backingList)}
+                </option>
+              ` : ''}
+            </select>
             <button type="button" class="rules-sync-btn" data-category="${this.escapeHtml(category.name)}"
                     title="Sync with Bluesky list" ${!this.hasApiAccess() ? 'disabled' : ''}>
               ⟳
@@ -1678,6 +1694,16 @@ export class ConfigModal {
       input.addEventListener('change', (e) => {
         const catIndex = parseInt(e.target.dataset.category);
         this.parsedRules[catIndex].name = e.target.value;
+        this.syncVisualToRaw();
+      });
+    });
+
+    // Backing list selection
+    panel.querySelectorAll('.rules-backing-list').forEach(select => {
+      select.addEventListener('change', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        const listName = e.target.value || null;
+        this.parsedRules[catIndex].backingList = listName;
         this.syncVisualToRaw();
       });
     });

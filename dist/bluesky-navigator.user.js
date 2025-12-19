@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+555.800241ba
+// @version     1.0.31+556.0af2575b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46438,6 +46438,22 @@ if (cid) {
             </div>
             <input type="text" class="rules-category-name" value="${this.escapeHtml(category.name)}"
                    data-category="${catIndex}">
+            <select class="rules-backing-list" data-category="${catIndex}"
+                    title="Backing list (authors in list are automatically matched)"
+                    ${!this.hasApiAccess() ? "disabled" : ""}>
+              <option value="">No backing list</option>
+              ${(this.cachedListNames || []).map((name) => `
+                <option value="${this.escapeHtml(name)}"
+                        ${category.backingList === name ? "selected" : ""}>
+                  ${this.escapeHtml(name)}
+                </option>
+              `).join("")}
+              ${category.backingList && !(this.cachedListNames || []).includes(category.backingList) ? `
+                <option value="${this.escapeHtml(category.backingList)}" selected>
+                  ${this.escapeHtml(category.backingList)}
+                </option>
+              ` : ""}
+            </select>
             <button type="button" class="rules-sync-btn" data-category="${this.escapeHtml(category.name)}"
                     title="Sync with Bluesky list" ${!this.hasApiAccess() ? "disabled" : ""}>
               \u27F3
@@ -46742,6 +46758,14 @@ if (cid) {
         input.addEventListener("change", (e2) => {
           const catIndex = parseInt(e2.target.dataset.category);
           this.parsedRules[catIndex].name = e2.target.value;
+          this.syncVisualToRaw();
+        });
+      });
+      panel.querySelectorAll(".rules-backing-list").forEach((select) => {
+        select.addEventListener("change", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          const listName = e2.target.value || null;
+          this.parsedRules[catIndex].backingList = listName;
           this.syncVisualToRaw();
         });
       });
@@ -52368,6 +52392,32 @@ div#statusBar.has-feed-map {
   background: #ffffff;
 }
 
+.rules-backing-list {
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
+  color: #374151;
+  max-width: 140px;
+  cursor: pointer;
+}
+
+.rules-backing-list:hover {
+  border-color: #9ca3af;
+}
+
+.rules-backing-list:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.rules-backing-list:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .rules-category-delete {
   background: none;
   border: none;
@@ -52906,6 +52956,16 @@ div#statusBar.has-feed-map {
   .rules-category-name:focus {
     border-color: #3b82f6;
     background: #1f2937;
+  }
+
+  .rules-backing-list {
+    background: #1f2937;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .rules-backing-list:hover {
+    border-color: #6b7280;
   }
 
   .rules-category-delete:hover {

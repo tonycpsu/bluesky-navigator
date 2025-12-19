@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+531.9ca427c8
+// @version     1.0.31+532.9277f364
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46941,10 +46941,237 @@ if (cid) {
       modalBody.appendChild(menu);
     }
     /**
-     * Shows the sync dialog for a category (placeholder for Task 8)
+     * Shows the sync dialog for a category
      */
-    showSyncDialog(category, action) {
-      alert(`Sync dialog not yet implemented. Category: ${category}, Action: ${action}`);
+    async showSyncDialog(category, action) {
+      const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+      if (!listCache) {
+        alert("AT Protocol agent not configured. Please set up your app password in settings.");
+        return;
+      }
+      const listNames = await listCache.getListNames();
+      const categoryIndex = this.parsedRules.findIndex((c) => c.name === category);
+      const categoryRules = categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : [];
+      const handles = categoryRules.filter((r) => r.type === "from" && r.value.startsWith("@")).map((r) => r.value.replace(/^@/, ""));
+      const dialog = document.createElement("div");
+      dialog.className = "sync-dialog-overlay";
+      if (action === "push") {
+        dialog.innerHTML = this.renderPushDialog(category, listNames, handles);
+      } else if (action === "pull") {
+        dialog.innerHTML = this.renderPullDialog(category, listNames);
+      } else {
+        dialog.innerHTML = this.renderBidirectionalDialog(category, listNames, handles);
+      }
+      this.setupSyncDialogEvents(dialog, category, action, listCache);
+      document.body.appendChild(dialog);
+    }
+    /**
+     * Render push dialog
+     */
+    renderPushDialog(category, listNames, handles) {
+      const listOptions2 = listNames.map(
+        (name) => `<option value="${this.escapeHtml(name)}">${this.escapeHtml(name)}</option>`
+      ).join("");
+      return `
+      <div class="sync-dialog">
+        <div class="sync-dialog-header">
+          <h3>Push "${this.escapeHtml(category)}" to Bluesky List</h3>
+          <button class="sync-dialog-close">&times;</button>
+        </div>
+        <div class="sync-dialog-body">
+          <div class="sync-option">
+            <label>
+              <input type="radio" name="listChoice" value="new" checked>
+              Create new list:
+            </label>
+            <input type="text" class="sync-new-list-name" placeholder="List name">
+          </div>
+          <div class="sync-option">
+            <label>
+              <input type="radio" name="listChoice" value="existing">
+              Existing list:
+            </label>
+            <select class="sync-existing-list">
+              <option value="">Select a list...</option>
+              ${listOptions2}
+            </select>
+          </div>
+          <div class="sync-preview">
+            <strong>${handles.length}</strong> handles will be synced
+          </div>
+        </div>
+        <div class="sync-dialog-footer">
+          <button class="sync-cancel">Cancel</button>
+          <button class="sync-confirm" data-action="push">Push to List</button>
+        </div>
+      </div>
+    `;
+    }
+    /**
+     * Render pull dialog
+     */
+    renderPullDialog(category, listNames) {
+      const listOptions2 = listNames.map(
+        (name) => `<option value="${this.escapeHtml(name)}">${this.escapeHtml(name)}</option>`
+      ).join("");
+      return `
+      <div class="sync-dialog">
+        <div class="sync-dialog-header">
+          <h3>Pull from Bluesky List to "${this.escapeHtml(category)}"</h3>
+          <button class="sync-dialog-close">&times;</button>
+        </div>
+        <div class="sync-dialog-body">
+          <div class="sync-option">
+            <label>Select source list:</label>
+            <select class="sync-existing-list">
+              <option value="">Select a list...</option>
+              ${listOptions2}
+            </select>
+          </div>
+          <div class="sync-option">
+            <label>
+              <input type="radio" name="ruleAction" value="allow" checked> Add as: allow from @handle
+            </label>
+            <label>
+              <input type="radio" name="ruleAction" value="deny"> Add as: deny from @handle
+            </label>
+          </div>
+          <div class="sync-preview"></div>
+        </div>
+        <div class="sync-dialog-footer">
+          <button class="sync-cancel">Cancel</button>
+          <button class="sync-confirm" data-action="pull">Import Handles</button>
+        </div>
+      </div>
+    `;
+    }
+    /**
+     * Render bidirectional dialog (combines push and pull)
+     */
+    renderBidirectionalDialog(category, listNames, handles) {
+      const listOptions2 = listNames.map(
+        (name) => `<option value="${this.escapeHtml(name)}">${this.escapeHtml(name)}</option>`
+      ).join("");
+      return `
+      <div class="sync-dialog">
+        <div class="sync-dialog-header">
+          <h3>Bidirectional Sync: "${this.escapeHtml(category)}"</h3>
+          <button class="sync-dialog-close">&times;</button>
+        </div>
+        <div class="sync-dialog-body">
+          <div class="sync-option">
+            <label>
+              <input type="radio" name="listChoice" value="new" checked>
+              Create new list:
+            </label>
+            <input type="text" class="sync-new-list-name" placeholder="List name">
+          </div>
+          <div class="sync-option">
+            <label>
+              <input type="radio" name="listChoice" value="existing">
+              Existing list:
+            </label>
+            <select class="sync-existing-list">
+              <option value="">Select a list...</option>
+              ${listOptions2}
+            </select>
+          </div>
+          <div class="sync-preview">
+            <strong>${handles.length}</strong> handles will be pushed to list
+          </div>
+          <div class="sync-option">
+            <label>Rule action for pulled handles:</label>
+            <label>
+              <input type="radio" name="ruleAction" value="allow" checked> Add as: allow from @handle
+            </label>
+            <label>
+              <input type="radio" name="ruleAction" value="deny"> Add as: deny from @handle
+            </label>
+          </div>
+        </div>
+        <div class="sync-dialog-footer">
+          <button class="sync-cancel">Cancel</button>
+          <button class="sync-confirm" data-action="bidirectional">Sync Both Ways</button>
+        </div>
+      </div>
+    `;
+    }
+    /**
+     * Setup event listeners for sync dialog
+     */
+    setupSyncDialogEvents(dialog, category, action, listCache) {
+      dialog.querySelector(".sync-dialog-close").addEventListener("click", () => dialog.remove());
+      dialog.querySelector(".sync-cancel").addEventListener("click", () => dialog.remove());
+      dialog.addEventListener("click", (e2) => {
+        if (e2.target === dialog) dialog.remove();
+      });
+      if (action === "pull" || action === "bidirectional") {
+        const select = dialog.querySelector(".sync-existing-list");
+        select.addEventListener("change", async () => {
+          const listName = select.value;
+          if (!listName) return;
+          const members = await listCache.getMembers(listName);
+          const categoryIndex = this.parsedRules.findIndex((c) => c.name === category);
+          const existingHandles = new Set(
+            (categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : []).filter((r) => r.type === "from").map((r) => r.value.replace(/^@/, "").toLowerCase())
+          );
+          const newHandles = members ? [...members].filter((h) => !existingHandles.has(h)) : [];
+          dialog.querySelector(".sync-preview").innerHTML = `<strong>${newHandles.length}</strong> new handles will be added`;
+        });
+      }
+      dialog.querySelector(".sync-confirm").addEventListener("click", async () => {
+        await this.executeSyncAction(dialog, category, action, listCache);
+      });
+    }
+    /**
+     * Execute sync action (placeholder - actual logic in Task 9/10)
+     */
+    async executeSyncAction(dialog, category, action, listCache) {
+      const confirmBtn = dialog.querySelector(".sync-confirm");
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Syncing...";
+      try {
+        if (action === "push") {
+          await this.executePushSync(dialog, category, listCache);
+        } else if (action === "pull") {
+          await this.executePullSync(dialog, category, listCache);
+        } else {
+          await this.executePushSync(dialog, category, listCache);
+          await this.executePullSync(dialog, category, listCache);
+        }
+        dialog.remove();
+        this.showSyncSuccess("Sync completed successfully");
+      } catch (error) {
+        console.error("Sync failed:", error);
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = action === "push" ? "Push to List" : action === "pull" ? "Import Handles" : "Sync Both Ways";
+        alert(`Sync failed: ${error.message}`);
+      }
+    }
+    /**
+     * Execute push sync (placeholder for Task 9)
+     */
+    async executePushSync(dialog, category, listCache) {
+      console.log("Push sync not yet implemented");
+    }
+    /**
+     * Execute pull sync (placeholder for Task 10)
+     */
+    async executePullSync(dialog, category, listCache) {
+      console.log("Pull sync not yet implemented");
+    }
+    /**
+     * Show sync success toast
+     */
+    showSyncSuccess(message2) {
+      const toast = document.createElement("div");
+      toast.className = "sync-toast";
+      toast.textContent = message2;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.add("sync-toast-hiding");
+        setTimeout(() => toast.remove(), 300);
+      }, 3e3);
     }
     /**
      * Update feed map preview dynamically when settings change
@@ -51804,6 +52031,139 @@ div#statusBar.has-feed-map {
 
 .sync-menu-item:last-child {
   border-radius: 0 0 8px 8px;
+}
+
+/* Sync dialog overlay */
+.sync-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10002;
+}
+
+.sync-dialog {
+  background: var(--background-color, white);
+  border-radius: 12px;
+  width: 400px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.sync-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #eee);
+}
+
+.sync-dialog-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.sync-dialog-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.sync-dialog-body {
+  padding: 20px;
+}
+
+.sync-option {
+  margin-bottom: 16px;
+}
+
+.sync-option label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.sync-option input[type="text"],
+.sync-option select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.sync-preview {
+  padding: 12px;
+  background: var(--hover-bg, #f5f5f5);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.sync-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color, #eee);
+}
+
+.sync-cancel,
+.sync-confirm {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sync-cancel {
+  background: none;
+  border: 1px solid var(--border-color, #ccc);
+}
+
+.sync-confirm {
+  background: var(--accent-color, #0085ff);
+  color: white;
+  border: none;
+}
+
+.sync-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Sync toast notification */
+.sync-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  z-index: 10003;
+  animation: syncToastIn 0.3s ease;
+}
+
+.sync-toast-hiding {
+  animation: syncToastOut 0.3s ease forwards;
+}
+
+@keyframes syncToastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes syncToastOut {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(20px); }
 }
 
 .rules-category-drag-handle {

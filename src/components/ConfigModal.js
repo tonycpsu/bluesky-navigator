@@ -1955,10 +1955,275 @@ export class ConfigModal {
   }
 
   /**
-   * Shows the sync dialog for a category (placeholder for Task 8)
+   * Shows the sync dialog for a category
    */
-  showSyncDialog(category, action) {
-    alert(`Sync dialog not yet implemented. Category: ${category}, Action: ${action}`);
+  async showSyncDialog(category, action) {
+    const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+    if (!listCache) {
+      alert('AT Protocol agent not configured. Please set up your app password in settings.');
+      return;
+    }
+
+    // Get available lists
+    const listNames = await listCache.getListNames();
+
+    // Get handles from this category's rules
+    const categoryIndex = this.parsedRules.findIndex(c => c.name === category);
+    const categoryRules = categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : [];
+    const handles = categoryRules
+      .filter(r => r.type === 'from' && r.value.startsWith('@'))
+      .map(r => r.value.replace(/^@/, ''));
+
+    const dialog = document.createElement('div');
+    dialog.className = 'sync-dialog-overlay';
+
+    if (action === 'push') {
+      dialog.innerHTML = this.renderPushDialog(category, listNames, handles);
+    } else if (action === 'pull') {
+      dialog.innerHTML = this.renderPullDialog(category, listNames);
+    } else {
+      dialog.innerHTML = this.renderBidirectionalDialog(category, listNames, handles);
+    }
+
+    this.setupSyncDialogEvents(dialog, category, action, listCache);
+    document.body.appendChild(dialog);
+  }
+
+  /**
+   * Render push dialog
+   */
+  renderPushDialog(category, listNames, handles) {
+    const listOptions = listNames.map(name =>
+      `<option value="${this.escapeHtml(name)}">${this.escapeHtml(name)}</option>`
+    ).join('');
+
+    return `
+      <div class="sync-dialog">
+        <div class="sync-dialog-header">
+          <h3>Push "${this.escapeHtml(category)}" to Bluesky List</h3>
+          <button class="sync-dialog-close">&times;</button>
+        </div>
+        <div class="sync-dialog-body">
+          <div class="sync-option">
+            <label>
+              <input type="radio" name="listChoice" value="new" checked>
+              Create new list:
+            </label>
+            <input type="text" class="sync-new-list-name" placeholder="List name">
+          </div>
+          <div class="sync-option">
+            <label>
+              <input type="radio" name="listChoice" value="existing">
+              Existing list:
+            </label>
+            <select class="sync-existing-list">
+              <option value="">Select a list...</option>
+              ${listOptions}
+            </select>
+          </div>
+          <div class="sync-preview">
+            <strong>${handles.length}</strong> handles will be synced
+          </div>
+        </div>
+        <div class="sync-dialog-footer">
+          <button class="sync-cancel">Cancel</button>
+          <button class="sync-confirm" data-action="push">Push to List</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render pull dialog
+   */
+  renderPullDialog(category, listNames) {
+    const listOptions = listNames.map(name =>
+      `<option value="${this.escapeHtml(name)}">${this.escapeHtml(name)}</option>`
+    ).join('');
+
+    return `
+      <div class="sync-dialog">
+        <div class="sync-dialog-header">
+          <h3>Pull from Bluesky List to "${this.escapeHtml(category)}"</h3>
+          <button class="sync-dialog-close">&times;</button>
+        </div>
+        <div class="sync-dialog-body">
+          <div class="sync-option">
+            <label>Select source list:</label>
+            <select class="sync-existing-list">
+              <option value="">Select a list...</option>
+              ${listOptions}
+            </select>
+          </div>
+          <div class="sync-option">
+            <label>
+              <input type="radio" name="ruleAction" value="allow" checked> Add as: allow from @handle
+            </label>
+            <label>
+              <input type="radio" name="ruleAction" value="deny"> Add as: deny from @handle
+            </label>
+          </div>
+          <div class="sync-preview"></div>
+        </div>
+        <div class="sync-dialog-footer">
+          <button class="sync-cancel">Cancel</button>
+          <button class="sync-confirm" data-action="pull">Import Handles</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render bidirectional dialog (combines push and pull)
+   */
+  renderBidirectionalDialog(category, listNames, handles) {
+    const listOptions = listNames.map(name =>
+      `<option value="${this.escapeHtml(name)}">${this.escapeHtml(name)}</option>`
+    ).join('');
+
+    return `
+      <div class="sync-dialog">
+        <div class="sync-dialog-header">
+          <h3>Bidirectional Sync: "${this.escapeHtml(category)}"</h3>
+          <button class="sync-dialog-close">&times;</button>
+        </div>
+        <div class="sync-dialog-body">
+          <div class="sync-option">
+            <label>
+              <input type="radio" name="listChoice" value="new" checked>
+              Create new list:
+            </label>
+            <input type="text" class="sync-new-list-name" placeholder="List name">
+          </div>
+          <div class="sync-option">
+            <label>
+              <input type="radio" name="listChoice" value="existing">
+              Existing list:
+            </label>
+            <select class="sync-existing-list">
+              <option value="">Select a list...</option>
+              ${listOptions}
+            </select>
+          </div>
+          <div class="sync-preview">
+            <strong>${handles.length}</strong> handles will be pushed to list
+          </div>
+          <div class="sync-option">
+            <label>Rule action for pulled handles:</label>
+            <label>
+              <input type="radio" name="ruleAction" value="allow" checked> Add as: allow from @handle
+            </label>
+            <label>
+              <input type="radio" name="ruleAction" value="deny"> Add as: deny from @handle
+            </label>
+          </div>
+        </div>
+        <div class="sync-dialog-footer">
+          <button class="sync-cancel">Cancel</button>
+          <button class="sync-confirm" data-action="bidirectional">Sync Both Ways</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Setup event listeners for sync dialog
+   */
+  setupSyncDialogEvents(dialog, category, action, listCache) {
+    // Close button
+    dialog.querySelector('.sync-dialog-close').addEventListener('click', () => dialog.remove());
+    dialog.querySelector('.sync-cancel').addEventListener('click', () => dialog.remove());
+
+    // Click outside to close
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) dialog.remove();
+    });
+
+    // Preview updates for pull
+    if (action === 'pull' || action === 'bidirectional') {
+      const select = dialog.querySelector('.sync-existing-list');
+      select.addEventListener('change', async () => {
+        const listName = select.value;
+        if (!listName) return;
+
+        const members = await listCache.getMembers(listName);
+        const categoryIndex = this.parsedRules.findIndex(c => c.name === category);
+        const existingHandles = new Set(
+          (categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : [])
+            .filter(r => r.type === 'from')
+            .map(r => r.value.replace(/^@/, '').toLowerCase())
+        );
+
+        const newHandles = members ? [...members].filter(h => !existingHandles.has(h)) : [];
+        dialog.querySelector('.sync-preview').innerHTML =
+          `<strong>${newHandles.length}</strong> new handles will be added`;
+      });
+    }
+
+    // Confirm button
+    dialog.querySelector('.sync-confirm').addEventListener('click', async () => {
+      await this.executeSyncAction(dialog, category, action, listCache);
+    });
+  }
+
+  /**
+   * Execute sync action (placeholder - actual logic in Task 9/10)
+   */
+  async executeSyncAction(dialog, category, action, listCache) {
+    const confirmBtn = dialog.querySelector('.sync-confirm');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Syncing...';
+
+    try {
+      if (action === 'push') {
+        await this.executePushSync(dialog, category, listCache);
+      } else if (action === 'pull') {
+        await this.executePullSync(dialog, category, listCache);
+      } else {
+        await this.executePushSync(dialog, category, listCache);
+        await this.executePullSync(dialog, category, listCache);
+      }
+
+      dialog.remove();
+      this.showSyncSuccess('Sync completed successfully');
+    } catch (error) {
+      console.error('Sync failed:', error);
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = action === 'push' ? 'Push to List' : action === 'pull' ? 'Import Handles' : 'Sync Both Ways';
+      alert(`Sync failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Execute push sync (placeholder for Task 9)
+   */
+  async executePushSync(dialog, category, listCache) {
+    // Placeholder - will be implemented in Task 9
+    console.log('Push sync not yet implemented');
+  }
+
+  /**
+   * Execute pull sync (placeholder for Task 10)
+   */
+  async executePullSync(dialog, category, listCache) {
+    // Placeholder - will be implemented in Task 10
+    console.log('Pull sync not yet implemented');
+  }
+
+  /**
+   * Show sync success toast
+   */
+  showSyncSuccess(message) {
+    // Create toast notification
+    const toast = document.createElement('div');
+    toast.className = 'sync-toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+      toast.classList.add('sync-toast-hiding');
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
   }
 
   /**

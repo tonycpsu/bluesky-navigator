@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+559.48de0e9a
+// @version     1.0.31+560.ad45672a
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -76248,11 +76248,24 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return null;
       }
       const rules = this.state.rules?.[ruleName];
-      if (!rules) {
+      if (!rules || !Array.isArray(rules)) {
         return null;
       }
       visited.add(ruleName);
       let allowed = null;
+      const backingList = this.state.rules._backingLists?.[ruleName];
+      if (backingList && this.state.listCache) {
+        const authorHandle = this.getAuthorHandle(item);
+        if (authorHandle) {
+          const isInList = this.state.listCache.isInListSync?.(authorHandle, backingList);
+          if (isInList === true) {
+            return true;
+          }
+          if (isInList === void 0) {
+            this.state.listCache.getMembers(backingList);
+          }
+        }
+      }
       for (const rule of rules) {
         if (rule.type === "all") {
           allowed = rule.action === "allow";

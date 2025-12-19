@@ -1595,7 +1595,7 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     const rules = this.state.rules?.[ruleName];
-    if (!rules) {
+    if (!rules || !Array.isArray(rules)) {
       return null;
     }
 
@@ -1603,6 +1603,23 @@ export class FeedItemHandler extends ItemHandler {
     visited.add(ruleName);
 
     let allowed = null;
+
+    // Check backing list membership first (if category has a backing list)
+    const backingList = this.state.rules._backingLists?.[ruleName];
+    if (backingList && this.state.listCache) {
+      const authorHandle = this.getAuthorHandle(item);
+      if (authorHandle) {
+        const isInList = this.state.listCache.isInListSync?.(authorHandle, backingList);
+        if (isInList === true) {
+          return true; // Author is in backing list - matches category
+        }
+        // If not cached, trigger async fetch for next time
+        if (isInList === undefined) {
+          this.state.listCache.getMembers(backingList);
+        }
+      }
+    }
+
     for (const rule of rules) {
       if (rule.type === 'all') {
         allowed = rule.action === 'allow';

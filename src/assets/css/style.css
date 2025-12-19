@@ -3048,13 +3048,13 @@ div#statusBar.has-feed-map {
   margin-left: auto;
 }
 
-/* Read post styling */
-.feed-map-tooltip.feed-map-tooltip-read {
+/* Read post styling - only when visible */
+.feed-map-tooltip.visible.feed-map-tooltip-read {
   opacity: 0.85;
 }
 
-.feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-author,
-.feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-content {
+.feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-author,
+.feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-content {
   color: #6b7280;
 }
 

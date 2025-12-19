@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+520.7f992fcf
+// @version     1.0.31+521.5b0f8ff8
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -50105,13 +50105,13 @@ div#statusBar.has-feed-map {
   margin-left: auto;
 }
 
-/* Read post styling */
-.feed-map-tooltip.feed-map-tooltip-read {
+/* Read post styling - only when visible */
+.feed-map-tooltip.visible.feed-map-tooltip-read {
   opacity: 0.85;
 }
 
-.feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-author,
-.feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-content {
+.feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-author,
+.feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-content {
   color: #6b7280;
 }
 

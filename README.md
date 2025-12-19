@@ -204,6 +204,30 @@ by their order, `Alt+Shift+1-9` to negate them, or `Alt+0` to clear the filter.
 These searches can be combined, and any search can be negated by prefixing it
 with `!`.
 
+### List-Based Filtering
+
+Filter posts based on Bluesky list membership:
+
+```ini
+[favorites]
+allow from list "My Favorites"      # show posts from list members
+deny from list "Muted"              # hide posts from list members
+&"Close Friends"                    # shorthand for: allow from list
+
+[combined]
+$favorites                          # include the favorites category
+allow from @special.bsky.social    # plus individual authors
+```
+
+**Syncing with Lists:**
+
+The Rules tab includes sync buttons next to each category. Use these to:
+- **Push to List**: Export all `@handle` rules to a Bluesky list
+- **Pull from List**: Import list members as rules
+- **Bidirectional**: Sync both directions (additive only)
+
+Note: List-based filtering requires the AT Protocol agent to be configured.
+
 
 Feed Map
 --------

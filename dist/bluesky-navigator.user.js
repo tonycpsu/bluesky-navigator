@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+528.83664921
+// @version     1.0.31+530.8a71befc
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47221,6 +47221,21 @@ if (cid) {
       return members.has(normalizedHandle);
     }
     /**
+     * Synchronously checks if a handle is in a list (from cache only)
+     * @param {string} handle - Handle to check
+     * @param {string} listName - List name
+     * @returns {boolean|undefined} True/false if cached, undefined if not cached
+     */
+    isInListSync(handle2, listName) {
+      const normalizedName = listName.toLowerCase();
+      const cached = this.cache.get(normalizedName);
+      if (!cached || Date.now() - cached.fetchedAt >= this.cacheDurationMs) {
+        return void 0;
+      }
+      const normalizedHandle = handle2.replace(/^@/, "").toLowerCase();
+      return cached.members.has(normalizedHandle);
+    }
+    /**
      * Invalidates cache for a specific list or all lists
      * @param {string} [listName] - List name to invalidate, or all if omitted
      */
@@ -74676,7 +74691,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      */
     parseFilterRules(filterText) {
       return filterText.split(/[ ]+/).map((ruleStatement) => {
-        const match2 = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
+        const match2 = ruleStatement.match(/(!)?([$@%&])?"?([^"]+)"?/);
         return {
           invert: match2[1] === "!",
           matchType: match2[2] || null,
@@ -74699,6 +74714,29 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           break;
         case "%":
           allowed = this.filterContent(item, rule.query);
+          break;
+        case "&":
+          {
+            const listName = rule.query;
+            const listCache = this.state.listCache;
+            if (!listCache) {
+              console.warn("List rules require AT Protocol agent to be configured");
+              allowed = false;
+              break;
+            }
+            const authorHandle = this.getAuthorHandle(item);
+            if (!authorHandle) {
+              allowed = false;
+              break;
+            }
+            const isInList = listCache.isInListSync?.(authorHandle, listName);
+            if (isInList === void 0) {
+              listCache.getMembers(listName);
+              allowed = false;
+            } else {
+              allowed = isInList;
+            }
+          }
           break;
         default:
           allowed = this.filterAuthor(item, rule.query) || this.filterContent(item, rule.query);
@@ -74735,6 +74773,19 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (includedResult !== null) {
             allowed = rule.action === "allow" ? includedResult : !includedResult;
           }
+        } else if (rule.type === "list") {
+          const listCache = this.state.listCache;
+          if (listCache) {
+            const authorHandle = this.getAuthorHandle(item);
+            if (authorHandle) {
+              const isInList = listCache.isInListSync?.(authorHandle, rule.value);
+              if (isInList !== void 0) {
+                allowed = rule.action === "allow" ? isInList : !isInList;
+              } else {
+                listCache.getMembers(rule.value);
+              }
+            }
+          }
         }
       }
       return allowed;
@@ -74754,6 +74805,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return handle2;
     }
     /**
+     * Extracts the author handle from a feed item
+     * @param {Element} item - The feed item element
+     * @returns {string|null} Author handle or null
+     */
+    getAuthorHandle(item) {
+      return this.getHandleForFilter(item);
+    }
+    /**
      * Checks if an item's author matches a pattern.
      */
     filterAuthor(item, author) {
@@ -74771,7 +74830,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       $(item).find(".filter-highlight").contents().unwrap();
       if (!this.state.filter) return;
       const terms = this.state.filter.split(/\s+/).filter((term) => {
-        return term && !term.startsWith("@") && !term.startsWith("$") && !term.startsWith("!");
+        return term && !term.startsWith("@") && !term.startsWith("$") && !term.startsWith("&") && !term.startsWith("!");
       }).map((term) => {
         return term.startsWith("%") ? term.substring(1) : term;
       });

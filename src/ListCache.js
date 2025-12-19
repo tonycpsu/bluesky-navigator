@@ -98,6 +98,24 @@ export class ListCache {
   }
 
   /**
+   * Synchronously checks if a handle is in a list (from cache only)
+   * @param {string} handle - Handle to check
+   * @param {string} listName - List name
+   * @returns {boolean|undefined} True/false if cached, undefined if not cached
+   */
+  isInListSync(handle, listName) {
+    const normalizedName = listName.toLowerCase();
+    const cached = this.cache.get(normalizedName);
+
+    if (!cached || (Date.now() - cached.fetchedAt) >= this.cacheDurationMs) {
+      return undefined; // Not cached or expired
+    }
+
+    const normalizedHandle = handle.replace(/^@/, '').toLowerCase();
+    return cached.members.has(normalizedHandle);
+  }
+
+  /**
    * Invalidates cache for a specific list or all lists
    * @param {string} [listName] - List name to invalidate, or all if omitted
    */

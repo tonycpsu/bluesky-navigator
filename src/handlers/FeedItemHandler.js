@@ -1517,7 +1517,7 @@ export class FeedItemHandler extends ItemHandler {
    */
   parseFilterRules(filterText) {
     return filterText.split(/[ ]+/).map((ruleStatement) => {
-      const match = ruleStatement.match(/(!)?([$@%])?"?([^"]+)"?/);
+      const match = ruleStatement.match(/(!)?([$@%&])?"?([^"]+)"?/);
       return {
         invert: match[1] === '!',
         matchType: match[2] || null,
@@ -1542,6 +1542,36 @@ export class FeedItemHandler extends ItemHandler {
         break;
       case '%':
         allowed = this.filterContent(item, rule.query);
+        break;
+      case '&':
+        // Handle list rules - check if author is in the specified list
+        {
+          const listName = rule.query;
+          const listCache = this.state.listCache;
+
+          if (!listCache) {
+            console.warn('List rules require AT Protocol agent to be configured');
+            allowed = false;
+            break;
+          }
+
+          // Get author handle from item
+          const authorHandle = this.getAuthorHandle(item);
+          if (!authorHandle) {
+            allowed = false;
+            break;
+          }
+
+          // Check list membership (sync check - use cached result if available)
+          const isInList = listCache.isInListSync?.(authorHandle, listName);
+          if (isInList === undefined) {
+            // Not cached yet - trigger async fetch for next time
+            listCache.getMembers(listName);
+            allowed = false; // Default to not matching until cached
+          } else {
+            allowed = isInList;
+          }
+        }
         break;
       default:
         allowed = this.filterAuthor(item, rule.query) || this.filterContent(item, rule.query);
@@ -1587,6 +1617,21 @@ export class FeedItemHandler extends ItemHandler {
           // Apply the action (allow/deny) to the included result
           allowed = rule.action === 'allow' ? includedResult : !includedResult;
         }
+      } else if (rule.type === 'list') {
+        // Handle list type rules
+        const listCache = this.state.listCache;
+        if (listCache) {
+          const authorHandle = this.getAuthorHandle(item);
+          if (authorHandle) {
+            const isInList = listCache.isInListSync?.(authorHandle, rule.value);
+            if (isInList !== undefined) {
+              allowed = rule.action === 'allow' ? isInList : !isInList;
+            } else {
+              // Not cached - trigger async fetch
+              listCache.getMembers(rule.value);
+            }
+          }
+        }
       }
     }
     return allowed;
@@ -1609,6 +1654,15 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     return handle;
+  }
+
+  /**
+   * Extracts the author handle from a feed item
+   * @param {Element} item - The feed item element
+   * @returns {string|null} Author handle or null
+   */
+  getAuthorHandle(item) {
+    return this.getHandleForFilter(item);
   }
 
   /**
@@ -1636,7 +1690,7 @@ export class FeedItemHandler extends ItemHandler {
     // Parse filter for content terms to highlight
     const terms = this.state.filter.split(/\s+/).filter((term) => {
       // Only highlight content-based searches, not @ or $ prefixed
-      return term && !term.startsWith('@') && !term.startsWith('$') && !term.startsWith('!');
+      return term && !term.startsWith('@') && !term.startsWith('$') && !term.startsWith('&') && !term.startsWith('!');
     }).map((term) => {
       // Remove % prefix if present
       return term.startsWith('%') ? term.substring(1) : term;

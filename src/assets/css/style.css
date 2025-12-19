@@ -5381,6 +5381,102 @@ div#statusBar.has-feed-map {
 }
 
 /* =============================================================================
+   List-Backed Category Choice Popup
+   ============================================================================= */
+
+.bsky-nav-list-choice-popup {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 12px;
+  min-width: 220px;
+  font-family: InterVariable, system-ui, -apple-system, sans-serif;
+}
+
+.bsky-nav-list-choice-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.bsky-nav-list-choice-info {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+
+.bsky-nav-list-choice-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bsky-nav-list-choice-btn {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.bsky-nav-list-choice-btn:active {
+  transform: scale(0.98);
+}
+
+.bsky-nav-list-choice-btn.primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.bsky-nav-list-choice-btn.primary:hover {
+  background: #2563eb;
+}
+
+.bsky-nav-list-choice-btn.secondary {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.bsky-nav-list-choice-btn.secondary:hover {
+  background: #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bsky-nav-list-choice-popup {
+    background: #1f2937;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+
+  .bsky-nav-list-choice-header {
+    color: #f9fafb;
+  }
+
+  .bsky-nav-list-choice-info {
+    color: #9ca3af;
+  }
+
+  .bsky-nav-list-choice-btn.primary {
+    background: #3b82f6;
+  }
+
+  .bsky-nav-list-choice-btn.primary:hover {
+    background: #2563eb;
+  }
+
+  .bsky-nav-list-choice-btn.secondary {
+    background: #374151;
+    color: #f9fafb;
+  }
+
+  .bsky-nav-list-choice-btn.secondary:hover {
+    background: #4b5563;
+  }
+}
+
+/* =============================================================================
    Custom Profile Hover Card (for sidecar replies)
    ============================================================================= */
 

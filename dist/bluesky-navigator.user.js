@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+556.0af2575b
+// @version     1.0.31+557.369fd574
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -53396,6 +53396,102 @@ div#statusBar.has-feed-map {
 }
 
 /* =============================================================================
+   List-Backed Category Choice Popup
+   ============================================================================= */
+
+.bsky-nav-list-choice-popup {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 12px;
+  min-width: 220px;
+  font-family: InterVariable, system-ui, -apple-system, sans-serif;
+}
+
+.bsky-nav-list-choice-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.bsky-nav-list-choice-info {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+
+.bsky-nav-list-choice-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bsky-nav-list-choice-btn {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.bsky-nav-list-choice-btn:active {
+  transform: scale(0.98);
+}
+
+.bsky-nav-list-choice-btn.primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.bsky-nav-list-choice-btn.primary:hover {
+  background: #2563eb;
+}
+
+.bsky-nav-list-choice-btn.secondary {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.bsky-nav-list-choice-btn.secondary:hover {
+  background: #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bsky-nav-list-choice-popup {
+    background: #1f2937;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+
+  .bsky-nav-list-choice-header {
+    color: #f9fafb;
+  }
+
+  .bsky-nav-list-choice-info {
+    color: #9ca3af;
+  }
+
+  .bsky-nav-list-choice-btn.primary {
+    background: #3b82f6;
+  }
+
+  .bsky-nav-list-choice-btn.primary:hover {
+    background: #2563eb;
+  }
+
+  .bsky-nav-list-choice-btn.secondary {
+    background: #374151;
+    color: #f9fafb;
+  }
+
+  .bsky-nav-list-choice-btn.secondary:hover {
+    background: #4b5563;
+  }
+}
+
+/* =============================================================================
    Custom Profile Hover Card (for sidecar replies)
    ============================================================================= */
 
@@ -73326,10 +73422,15 @@ div#statusBar.has-feed-map {
           }
         });
       }
-      dropdown.find(".bsky-nav-rules-category-btn").on("click", (e2) => {
+      dropdown.find(".bsky-nav-rules-category-btn").on("click", async (e2) => {
         const category = $(e2.target).data("category");
-        addRule(category, selectedAction);
-        closeDropdown();
+        const backingList = !isContentRule && this.state.rules?._backingLists?.[category];
+        if (backingList && this.api && this.state.listCache) {
+          this.showListBackedAddChoice(e2.target, handle2, category, backingList, selectedAction, closeDropdown, addRule);
+        } else {
+          addRule(category, selectedAction);
+          closeDropdown();
+        }
       });
       const quickFilterInput = dropdown.find(".bsky-nav-rules-quick-filter");
       dropdown.find(".bsky-nav-rules-create-btn").on("click", () => {
@@ -73474,6 +73575,96 @@ div#statusBar.has-feed-map {
         }
       }
       return categories;
+    }
+    /**
+     * Show choice popup for adding to a list-backed category
+     * @param {Element} targetEl - Element to position popup near
+     * @param {string} handle - Handle to add
+     * @param {string} category - Category name
+     * @param {string} backingList - Name of the backing list
+     * @param {string} action - 'allow' or 'deny'
+     * @param {Function} closeParentDropdown - Function to close the parent dropdown
+     * @param {Function} addRuleCallback - Function to add rule to local config
+     */
+    showListBackedAddChoice(targetEl, handle2, category, backingList, action, closeParentDropdown, addRuleCallback) {
+      $(".bsky-nav-list-choice-popup").remove();
+      const rect = targetEl.getBoundingClientRect();
+      const popup = $(`
+      <div class="bsky-nav-list-choice-popup">
+        <div class="bsky-nav-list-choice-header">
+          Add @${handle2} to "${category}"
+        </div>
+        <div class="bsky-nav-list-choice-info">
+          This category is backed by list "${backingList}"
+        </div>
+        <div class="bsky-nav-list-choice-buttons">
+          <button class="bsky-nav-list-choice-btn primary" data-choice="list">
+            Add to List
+          </button>
+          <button class="bsky-nav-list-choice-btn secondary" data-choice="rules">
+            Add to Rules Only
+          </button>
+        </div>
+      </div>
+    `);
+      popup.css({
+        position: "fixed",
+        top: rect.bottom + 5 + "px",
+        left: rect.left + "px",
+        zIndex: 10002
+      });
+      $("body").append(popup);
+      popup.find(".bsky-nav-list-choice-btn").on("click", async (e2) => {
+        const choice = $(e2.target).data("choice");
+        popup.remove();
+        if (choice === "list") {
+          await this.addAuthorToList(handle2, backingList);
+          closeParentDropdown();
+        } else {
+          addRuleCallback(category, action);
+          closeParentDropdown();
+        }
+      });
+      setTimeout(() => {
+        $(document).one("mousedown.listChoice", (e2) => {
+          if (!$(e2.target).closest(".bsky-nav-list-choice-popup").length) {
+            popup.remove();
+          }
+        });
+      }, 100);
+      $(document).one("keydown.listChoice", (e2) => {
+        if (e2.key === "Escape") {
+          popup.remove();
+        }
+      });
+    }
+    /**
+     * Add an author to a Bluesky list
+     * @param {string} handle - Handle to add (without @)
+     * @param {string} listName - Name of the list
+     */
+    async addAuthorToList(handle2, listName) {
+      try {
+        const listUri = await this.state.listCache.getListUri(listName);
+        if (!listUri) {
+          this.showRuleAddedNotification(`List "${listName}" not found`, "error");
+          return false;
+        }
+        const cleanHandle = handle2.replace(/^@/, "");
+        const did2 = await this.api.resolveHandleToDid(cleanHandle);
+        if (!did2) {
+          this.showRuleAddedNotification(`Could not resolve @${cleanHandle}`, "error");
+          return false;
+        }
+        await this.api.addToList(listUri, did2);
+        this.state.listCache.invalidate(listName);
+        this.showRuleAddedNotification(`Added @${cleanHandle} to list "${listName}"`);
+        return true;
+      } catch (error) {
+        console.warn("Failed to add to list:", error);
+        this.showRuleAddedNotification(`Failed to add to list: ${error.message}`, "error");
+        return false;
+      }
     }
     /**
      * Add an author to the rules config

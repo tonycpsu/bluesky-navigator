@@ -3837,10 +3837,20 @@ export class ItemHandler extends Handler {
     }
 
     // Category button handlers
-    dropdown.find('.bsky-nav-rules-category-btn').on('click', (e) => {
+    dropdown.find('.bsky-nav-rules-category-btn').on('click', async (e) => {
       const category = $(e.target).data('category');
-      addRule(category, selectedAction);
-      closeDropdown();
+
+      // Check if category has a backing list (only for author rules)
+      const backingList = !isContentRule && this.state.rules?._backingLists?.[category];
+
+      if (backingList && this.api && this.state.listCache) {
+        // Show choice popup for list-backed categories
+        this.showListBackedAddChoice(e.target, handle, category, backingList, selectedAction, closeDropdown, addRule);
+      } else {
+        // No backing list - add directly to rules
+        addRule(category, selectedAction);
+        closeDropdown();
+      }
     });
 
     // Quick filter input reference
@@ -4037,6 +4047,120 @@ export class ItemHandler extends Handler {
       }
     }
     return categories;
+  }
+
+  /**
+   * Show choice popup for adding to a list-backed category
+   * @param {Element} targetEl - Element to position popup near
+   * @param {string} handle - Handle to add
+   * @param {string} category - Category name
+   * @param {string} backingList - Name of the backing list
+   * @param {string} action - 'allow' or 'deny'
+   * @param {Function} closeParentDropdown - Function to close the parent dropdown
+   * @param {Function} addRuleCallback - Function to add rule to local config
+   */
+  showListBackedAddChoice(targetEl, handle, category, backingList, action, closeParentDropdown, addRuleCallback) {
+    // Remove any existing choice popup
+    $('.bsky-nav-list-choice-popup').remove();
+
+    const rect = targetEl.getBoundingClientRect();
+
+    const popup = $(`
+      <div class="bsky-nav-list-choice-popup">
+        <div class="bsky-nav-list-choice-header">
+          Add @${handle} to "${category}"
+        </div>
+        <div class="bsky-nav-list-choice-info">
+          This category is backed by list "${backingList}"
+        </div>
+        <div class="bsky-nav-list-choice-buttons">
+          <button class="bsky-nav-list-choice-btn primary" data-choice="list">
+            Add to List
+          </button>
+          <button class="bsky-nav-list-choice-btn secondary" data-choice="rules">
+            Add to Rules Only
+          </button>
+        </div>
+      </div>
+    `);
+
+    popup.css({
+      position: 'fixed',
+      top: (rect.bottom + 5) + 'px',
+      left: rect.left + 'px',
+      zIndex: 10002
+    });
+
+    $('body').append(popup);
+
+    // Handle button clicks
+    popup.find('.bsky-nav-list-choice-btn').on('click', async (e) => {
+      const choice = $(e.target).data('choice');
+      popup.remove();
+
+      if (choice === 'list') {
+        // Add to list via API
+        await this.addAuthorToList(handle, backingList);
+        closeParentDropdown();
+      } else {
+        // Add to local rules only
+        addRuleCallback(category, action);
+        closeParentDropdown();
+      }
+    });
+
+    // Close on click outside
+    setTimeout(() => {
+      $(document).one('mousedown.listChoice', (e) => {
+        if (!$(e.target).closest('.bsky-nav-list-choice-popup').length) {
+          popup.remove();
+        }
+      });
+    }, 100);
+
+    // Close on Escape
+    $(document).one('keydown.listChoice', (e) => {
+      if (e.key === 'Escape') {
+        popup.remove();
+      }
+    });
+  }
+
+  /**
+   * Add an author to a Bluesky list
+   * @param {string} handle - Handle to add (without @)
+   * @param {string} listName - Name of the list
+   */
+  async addAuthorToList(handle, listName) {
+    try {
+      // Get list URI
+      const listUri = await this.state.listCache.getListUri(listName);
+      if (!listUri) {
+        this.showRuleAddedNotification(`List "${listName}" not found`, 'error');
+        return false;
+      }
+
+      // Resolve handle to DID
+      const cleanHandle = handle.replace(/^@/, '');
+      const did = await this.api.resolveHandleToDid(cleanHandle);
+      if (!did) {
+        this.showRuleAddedNotification(`Could not resolve @${cleanHandle}`, 'error');
+        return false;
+      }
+
+      // Add to list
+      await this.api.addToList(listUri, did);
+
+      // Invalidate cache to pick up the new member
+      this.state.listCache.invalidate(listName);
+
+      this.showRuleAddedNotification(`Added @${cleanHandle} to list "${listName}"`);
+      return true;
+    } catch (error) {
+      console.warn('Failed to add to list:', error);
+      this.showRuleAddedNotification(`Failed to add to list: ${error.message}`, 'error');
+      return false;
+    }
   }
 
   /**

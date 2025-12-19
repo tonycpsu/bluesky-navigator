@@ -1924,6 +1924,8 @@ export class ConfigModal {
       <button class="sync-menu-item" data-action="push">Push to List...</button>
       <button class="sync-menu-item" data-action="pull">Pull from List...</button>
       <button class="sync-menu-item" data-action="bidirectional">Bidirectional Sync...</button>
+      <hr class="sync-menu-divider">
+      <button class="sync-menu-item" data-action="dedupe">Remove Duplicates...</button>
     `;
 
     // Position near button
@@ -1938,7 +1940,11 @@ export class ConfigModal {
     menu.querySelectorAll('.sync-menu-item').forEach(item => {
       item.addEventListener('click', () => {
         menu.remove();
-        this.showSyncDialog(category, item.dataset.action);
+        if (item.dataset.action === 'dedupe') {
+          this.showDedupeDialog(category);
+        } else {
+          this.showSyncDialog(category, item.dataset.action);
+        }
       });
     });
 
@@ -2313,6 +2319,172 @@ export class ConfigModal {
       toast.classList.add('sync-toast-hiding');
       setTimeout(() => toast.remove(), 300);
     }, 3000);
+  }
+
+  /**
+   * Show deduplication dialog for a category
+   */
+  async showDedupeDialog(category) {
+    const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+    if (!listCache) {
+      alert('AT Protocol agent not configured. Please set up your app password in settings.');
+      return;
+    }
+
+    // Find duplicate handles
+    const duplicates = await this.findDuplicateHandles(category, listCache);
+
+    const dialog = document.createElement('div');
+    dialog.className = 'sync-dialog-overlay';
+    dialog.innerHTML = this.renderDedupeDialog(category, duplicates);
+
+    // Setup events
+    dialog.querySelector('.sync-dialog-close').addEventListener('click', () => dialog.remove());
+    dialog.querySelector('.sync-cancel').addEventListener('click', () => dialog.remove());
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) dialog.remove();
+    });
+
+    const confirmBtn = dialog.querySelector('.sync-confirm');
+    if (duplicates.length === 0) {
+      confirmBtn.disabled = true;
+    } else {
+      confirmBtn.addEventListener('click', async () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Removing...';
+        try {
+          await this.executeDeduplication(category, duplicates);
+          dialog.remove();
+          this.showSyncSuccess(`Removed ${duplicates.length} duplicate rule(s)`);
+        } catch (error) {
+          console.error('Deduplication failed:', error);
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'Remove Duplicates';
+          alert(`Deduplication failed: ${error.message}`);
+        }
+      });
+    }
+
+    document.body.appendChild(dialog);
+  }
+
+  /**
+   * Find handles in a category that are duplicated in list rules
+   * @param {string} category - Category name
+   * @param {object} listCache - ListCache instance
+   * @returns {Promise<Array>} Array of {handle, listName, action, ruleIndex}
+   */
+  async findDuplicateHandles(category, listCache) {
+    const categoryIndex = this.parsedRules.findIndex(c => c.name === category);
+    if (categoryIndex < 0) return [];
+
+    const categoryRules = this.parsedRules[categoryIndex].rules;
+    const duplicates = [];
+
+    // Find all list rules in this category and collect their members
+    const listMembers = new Map(); // Map<listName, {members: Set<handle>, action: string}>
+
+    for (const rule of categoryRules) {
+      if (rule.type === 'list') {
+        const listName = rule.value;
+        const members = await listCache.getMembers(listName);
+        if (members && members.size > 0) {
+          listMembers.set(listName, {
+            members: new Set([...members].map(h => h.toLowerCase())),
+            action: rule.action
+          });
+        }
+      }
+    }
+
+    // If no list rules, no duplicates possible
+    if (listMembers.size === 0) return [];
+
+    // Check each @handle rule against list members
+    categoryRules.forEach((rule, ruleIndex) => {
+      if (rule.type === 'from' && rule.value.startsWith('@')) {
+        const handle = rule.value.replace(/^@/, '').toLowerCase();
+
+        // Check if this handle is in any list with matching action
+        for (const [listName, listInfo] of listMembers) {
+          if (listInfo.members.has(handle) && listInfo.action === rule.action) {
+            duplicates.push({
+              handle: rule.value,
+              listName,
+              action: rule.action,
+              ruleIndex
+            });
+            break; // Only report first matching list
+          }
+        }
+      }
+    });
+
+    return duplicates;
+  }
+
+  /**
+   * Render deduplication dialog
+   */
+  renderDedupeDialog(category, duplicates) {
+    let content;
+    if (duplicates.length === 0) {
+      content = `
+        <p>No duplicate handles found in "${this.escapeHtml(category)}".</p>
+        <p class="sync-dialog-hint">Duplicates are @handle rules where the handle is already included in a list rule with the same action (allow/deny).</p>
+      `;
+    } else {
+      const duplicatesList = duplicates.map(d => `
+        <div class="dedupe-item">
+          <span class="dedupe-handle">${this.escapeHtml(d.handle)}</span>
+          <span class="dedupe-info">→ in list "${this.escapeHtml(d.listName)}" (${d.action})</span>
+        </div>
+      `).join('');
+
+      content = `
+        <p>Found <strong>${duplicates.length}</strong> handle rule(s) that are already covered by list rules:</p>
+        <div class="dedupe-list">${duplicatesList}</div>
+        <p class="sync-dialog-hint">These individual @handle rules can be removed since they're already included in the referenced lists.</p>
+      `;
+    }
+
+    return `
+      <div class="sync-dialog">
+        <div class="sync-dialog-header">
+          <h3>Remove Duplicates: "${this.escapeHtml(category)}"</h3>
+          <button class="sync-dialog-close">&times;</button>
+        </div>
+        <div class="sync-dialog-body">
+          ${content}
+        </div>
+        <div class="sync-dialog-footer">
+          <button class="sync-cancel">Cancel</button>
+          <button class="sync-confirm" data-action="dedupe">${duplicates.length > 0 ? 'Remove Duplicates' : 'OK'}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Execute deduplication - remove duplicate handle rules
+   */
+  async executeDeduplication(category, duplicates) {
+    const categoryIndex = this.parsedRules.findIndex(c => c.name === category);
+    if (categoryIndex < 0) return;
+
+    // Sort by ruleIndex descending so we can remove from end first
+    const sortedDuplicates = [...duplicates].sort((a, b) => b.ruleIndex - a.ruleIndex);
+
+    // Remove each duplicate rule
+    for (const dup of sortedDuplicates) {
+      this.parsedRules[categoryIndex].rules.splice(dup.ruleIndex, 1);
+    }
+
+    // Update UI
+    this.syncVisualToRaw();
+    this.refreshVisualEditor();
+
+    console.log(`Deduplication: removed ${duplicates.length} duplicate rules from ${category}`);
   }
 
   /**

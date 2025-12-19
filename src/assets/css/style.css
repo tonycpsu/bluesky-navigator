@@ -4592,6 +4592,51 @@ div#statusBar.has-feed-map {
   to { opacity: 0; transform: translateX(-50%) translateY(20px); }
 }
 
+/* Sync menu divider */
+.sync-menu-divider {
+  margin: 4px 0;
+  border: none;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+
+/* Deduplication dialog styles */
+.dedupe-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 12px 0;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 6px;
+}
+
+.dedupe-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.dedupe-item:last-child {
+  border-bottom: none;
+}
+
+.dedupe-handle {
+  font-family: monospace;
+  font-weight: 500;
+  color: var(--link-color, #1d4ed8);
+}
+
+.dedupe-info {
+  font-size: 12px;
+  color: var(--secondary-text, #6b7280);
+}
+
+.sync-dialog-hint {
+  font-size: 12px;
+  color: var(--secondary-text, #6b7280);
+  margin-top: 12px;
+}
+
 .rules-category-drag-handle {
   cursor: grab;
   color: #9ca3af;

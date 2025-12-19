@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+538.bc998568
+// @version     1.0.31+539.ca6416d9
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46918,6 +46918,8 @@ if (cid) {
       <button class="sync-menu-item" data-action="push">Push to List...</button>
       <button class="sync-menu-item" data-action="pull">Pull from List...</button>
       <button class="sync-menu-item" data-action="bidirectional">Bidirectional Sync...</button>
+      <hr class="sync-menu-divider">
+      <button class="sync-menu-item" data-action="dedupe">Remove Duplicates...</button>
     `;
       const rect = anchorEl.getBoundingClientRect();
       const modalBody = this.modalEl.querySelector(".config-modal-body");
@@ -46928,7 +46930,11 @@ if (cid) {
       menu.querySelectorAll(".sync-menu-item").forEach((item) => {
         item.addEventListener("click", () => {
           menu.remove();
-          this.showSyncDialog(category, item.dataset.action);
+          if (item.dataset.action === "dedupe") {
+            this.showDedupeDialog(category);
+          } else {
+            this.showSyncDialog(category, item.dataset.action);
+          }
         });
       });
       const closeHandler = (e2) => {
@@ -47232,6 +47238,141 @@ if (cid) {
         toast.classList.add("sync-toast-hiding");
         setTimeout(() => toast.remove(), 300);
       }, 3e3);
+    }
+    /**
+     * Show deduplication dialog for a category
+     */
+    async showDedupeDialog(category) {
+      const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+      if (!listCache) {
+        alert("AT Protocol agent not configured. Please set up your app password in settings.");
+        return;
+      }
+      const duplicates = await this.findDuplicateHandles(category, listCache);
+      const dialog = document.createElement("div");
+      dialog.className = "sync-dialog-overlay";
+      dialog.innerHTML = this.renderDedupeDialog(category, duplicates);
+      dialog.querySelector(".sync-dialog-close").addEventListener("click", () => dialog.remove());
+      dialog.querySelector(".sync-cancel").addEventListener("click", () => dialog.remove());
+      dialog.addEventListener("click", (e2) => {
+        if (e2.target === dialog) dialog.remove();
+      });
+      const confirmBtn = dialog.querySelector(".sync-confirm");
+      if (duplicates.length === 0) {
+        confirmBtn.disabled = true;
+      } else {
+        confirmBtn.addEventListener("click", async () => {
+          confirmBtn.disabled = true;
+          confirmBtn.textContent = "Removing...";
+          try {
+            await this.executeDeduplication(category, duplicates);
+            dialog.remove();
+            this.showSyncSuccess(`Removed ${duplicates.length} duplicate rule(s)`);
+          } catch (error) {
+            console.error("Deduplication failed:", error);
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = "Remove Duplicates";
+            alert(`Deduplication failed: ${error.message}`);
+          }
+        });
+      }
+      document.body.appendChild(dialog);
+    }
+    /**
+     * Find handles in a category that are duplicated in list rules
+     * @param {string} category - Category name
+     * @param {object} listCache - ListCache instance
+     * @returns {Promise<Array>} Array of {handle, listName, action, ruleIndex}
+     */
+    async findDuplicateHandles(category, listCache) {
+      const categoryIndex = this.parsedRules.findIndex((c) => c.name === category);
+      if (categoryIndex < 0) return [];
+      const categoryRules = this.parsedRules[categoryIndex].rules;
+      const duplicates = [];
+      const listMembers2 = /* @__PURE__ */ new Map();
+      for (const rule of categoryRules) {
+        if (rule.type === "list") {
+          const listName = rule.value;
+          const members = await listCache.getMembers(listName);
+          if (members && members.size > 0) {
+            listMembers2.set(listName, {
+              members: new Set([...members].map((h) => h.toLowerCase())),
+              action: rule.action
+            });
+          }
+        }
+      }
+      if (listMembers2.size === 0) return [];
+      categoryRules.forEach((rule, ruleIndex) => {
+        if (rule.type === "from" && rule.value.startsWith("@")) {
+          const handle2 = rule.value.replace(/^@/, "").toLowerCase();
+          for (const [listName, listInfo] of listMembers2) {
+            if (listInfo.members.has(handle2) && listInfo.action === rule.action) {
+              duplicates.push({
+                handle: rule.value,
+                listName,
+                action: rule.action,
+                ruleIndex
+              });
+              break;
+            }
+          }
+        }
+      });
+      return duplicates;
+    }
+    /**
+     * Render deduplication dialog
+     */
+    renderDedupeDialog(category, duplicates) {
+      let content2;
+      if (duplicates.length === 0) {
+        content2 = `
+        <p>No duplicate handles found in "${this.escapeHtml(category)}".</p>
+        <p class="sync-dialog-hint">Duplicates are @handle rules where the handle is already included in a list rule with the same action (allow/deny).</p>
+      `;
+      } else {
+        const duplicatesList = duplicates.map((d) => `
+        <div class="dedupe-item">
+          <span class="dedupe-handle">${this.escapeHtml(d.handle)}</span>
+          <span class="dedupe-info">\u2192 in list "${this.escapeHtml(d.listName)}" (${d.action})</span>
+        </div>
+      `).join("");
+        content2 = `
+        <p>Found <strong>${duplicates.length}</strong> handle rule(s) that are already covered by list rules:</p>
+        <div class="dedupe-list">${duplicatesList}</div>
+        <p class="sync-dialog-hint">These individual @handle rules can be removed since they're already included in the referenced lists.</p>
+      `;
+      }
+      return `
+      <div class="sync-dialog">
+        <div class="sync-dialog-header">
+          <h3>Remove Duplicates: "${this.escapeHtml(category)}"</h3>
+          <button class="sync-dialog-close">&times;</button>
+        </div>
+        <div class="sync-dialog-body">
+          ${content2}
+        </div>
+        <div class="sync-dialog-footer">
+          <button class="sync-cancel">Cancel</button>
+          <button class="sync-confirm" data-action="dedupe">${duplicates.length > 0 ? "Remove Duplicates" : "OK"}</button>
+        </div>
+      </div>
+    `;
+    }
+    /**
+     * Execute deduplication - remove duplicate handle rules
+     */
+    async executeDeduplication(category, duplicates) {
+      const categoryIndex = this.parsedRules.findIndex((c) => c.name === category);
+      if (categoryIndex < 0) return;
+      const sortedDuplicates = [...duplicates].sort((a2, b) => b.ruleIndex - a2.ruleIndex);
+      for (const dup of sortedDuplicates) {
+        this.parsedRules[categoryIndex].rules.splice(dup.ruleIndex, 1);
+      }
+      this.syncVisualToRaw();
+      this.refreshVisualEditor();
+      console.log(`Deduplication: removed ${duplicates.length} duplicate rules from ${category}`);
     }
     /**
      * Update feed map preview dynamically when settings change
@@ -52224,6 +52365,51 @@ div#statusBar.has-feed-map {
 @keyframes syncToastOut {
   from { opacity: 1; transform: translateX(-50%) translateY(0); }
   to { opacity: 0; transform: translateX(-50%) translateY(20px); }
+}
+
+/* Sync menu divider */
+.sync-menu-divider {
+  margin: 4px 0;
+  border: none;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+
+/* Deduplication dialog styles */
+.dedupe-list {
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 12px 0;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 6px;
+}
+
+.dedupe-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.dedupe-item:last-child {
+  border-bottom: none;
+}
+
+.dedupe-handle {
+  font-family: monospace;
+  font-weight: 500;
+  color: var(--link-color, #1d4ed8);
+}
+
+.dedupe-info {
+  font-size: 12px;
+  color: var(--secondary-text, #6b7280);
+}
+
+.sync-dialog-hint {
+  font-size: 12px;
+  color: var(--secondary-text, #6b7280);
+  margin-top: 12px;
 }
 
 .rules-category-drag-handle {

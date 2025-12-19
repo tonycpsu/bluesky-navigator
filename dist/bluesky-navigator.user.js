@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+561.6f95b034
+// @version     1.0.31+562.34ae82b2
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47845,6 +47845,8 @@ if (cid) {
       this.listsMetadataFetchedAt = null;
       this.pendingMetadataFetch = null;
       this.pendingMemberFetches = /* @__PURE__ */ new Map();
+      this.authFailedAt = null;
+      this.authFailureCooldownMs = 60 * 1e3;
     }
     /**
      * Ensures list metadata (name -> URI mapping) is loaded
@@ -47853,6 +47855,9 @@ if (cid) {
      */
     async ensureListsMetadata(forceRefresh = false) {
       if (!this.api) return;
+      if (this.authFailedAt && Date.now() - this.authFailedAt < this.authFailureCooldownMs) {
+        return;
+      }
       if (forceRefresh && this.pendingMetadataFetch) {
         await this.pendingMetadataFetch;
       }
@@ -47878,8 +47883,15 @@ if (cid) {
           this.listDisplayNames = newDisplayNames;
           this.listsMetadataFetched = true;
           this.listsMetadataFetchedAt = Date.now();
+          this.authFailedAt = null;
         } catch (error) {
-          console.warn("Failed to fetch lists metadata:", error);
+          const isAuthError = error.message?.includes("Authentication") || error.status === 401;
+          if (isAuthError) {
+            this.authFailedAt = Date.now();
+            console.warn("List cache: Authentication failed, will retry in 1 minute");
+          } else {
+            console.warn("Failed to fetch lists metadata:", error);
+          }
         } finally {
           this.pendingMetadataFetch = null;
         }
@@ -47905,7 +47917,9 @@ if (cid) {
           await this.ensureListsMetadata();
           const listUri = this.listNameToUri.get(normalizedName);
           if (!listUri) {
-            console.warn(`List not found: ${listName}`);
+            if (!this.authFailedAt) {
+              console.warn(`List not found: ${listName}`);
+            }
             return null;
           }
           const members = await this.api.getListMembers(listUri);

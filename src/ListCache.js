@@ -29,6 +29,10 @@ export class ListCache {
     // Track in-flight requests to avoid duplicate fetches
     this.pendingMetadataFetch = null;
     this.pendingMemberFetches = new Map(); // list name -> Promise
+
+    // Track auth failures to avoid repeated retries
+    this.authFailedAt = null;
+    this.authFailureCooldownMs = 60 * 1000; // Wait 1 minute before retrying after auth failure
   }
 
   /**
@@ -38,6 +42,11 @@ export class ListCache {
    */
   async ensureListsMetadata(forceRefresh = false) {
     if (!this.api) return;
+
+    // Check if we're in auth failure cooldown
+    if (this.authFailedAt && (Date.now() - this.authFailedAt) < this.authFailureCooldownMs) {
+      return; // Don't retry during cooldown
+    }
 
     // If force refresh and there's a pending fetch, wait for it first
     if (forceRefresh && this.pendingMetadataFetch) {
@@ -74,8 +83,17 @@ export class ListCache {
         this.listDisplayNames = newDisplayNames;
         this.listsMetadataFetched = true;
         this.listsMetadataFetchedAt = Date.now();
+        this.authFailedAt = null; // Clear auth failure on success
       } catch (error) {
-        console.warn('Failed to fetch lists metadata:', error);
+        // Check if this is an auth error
+        const isAuthError = error.message?.includes('Authentication') ||
+          error.status === 401;
+        if (isAuthError) {
+          this.authFailedAt = Date.now();
+          console.warn('List cache: Authentication failed, will retry in 1 minute');
+        } else {
+          console.warn('Failed to fetch lists metadata:', error);
+        }
         // Keep existing data on error rather than clearing
       } finally {
         this.pendingMetadataFetch = null;
@@ -113,7 +131,10 @@ export class ListCache {
         // Get URI for list name
         const listUri = this.listNameToUri.get(normalizedName);
         if (!listUri) {
-          console.warn(`List not found: ${listName}`);
+          // Only warn if we're not in auth failure cooldown (in which case we just don't have the data)
+          if (!this.authFailedAt) {
+            console.warn(`List not found: ${listName}`);
+          }
           return null;
         }
 

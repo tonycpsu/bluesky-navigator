@@ -667,6 +667,7 @@ export class ConfigModal {
     this.isVisible = true;
     this.pendingChanges = {};
     this.prefillRule = null; // Clear any pre-fill data
+    this._listNamesFetched = false; // Reset so we fetch fresh list names
 
     // Initialize collapsed state from schema
     Object.entries(CONFIG_SCHEMA).forEach(([tab, schema]) => {
@@ -691,6 +692,9 @@ export class ConfigModal {
       }
     };
     document.addEventListener('keydown', this.escapeHandler, true);
+
+    // Fetch list names and refresh visual editor (async)
+    this.refreshVisualEditor();
   }
 
   /**
@@ -774,6 +778,7 @@ export class ConfigModal {
       }
       this.modalEl = null;
       this.isVisible = false;
+      this._listNamesFetched = false; // Reset so next open fetches fresh list names
 
       if (this.previousActiveElement) {
         this.previousActiveElement.focus();
@@ -1117,10 +1122,14 @@ export class ConfigModal {
       line = line.trim();
       if (!line || line.startsWith(';') || line.startsWith('#')) continue;
 
-      // Match category header [name]
-      const sectionMatch = line.match(/^\[(.+)\]$/);
+      // Match category header [name] or [name -> List Name] or [name → List Name]
+      const sectionMatch = line.match(/^\[([^\]→-]+?)(?:\s*(?:->|→)\s*(.+?))?\]$/);
       if (sectionMatch) {
-        currentCategory = { name: sectionMatch[1], rules: [] };
+        currentCategory = {
+          name: sectionMatch[1].trim(),
+          backingList: sectionMatch[2]?.trim() || null,
+          rules: []
+        };
         categories.push(currentCategory);
         continue;
       }
@@ -1340,12 +1349,19 @@ export class ConfigModal {
         `;
       } else if (rule.type === 'list') {
         // Dropdown for list selection
-        const listOptions = this.cachedListNames.map(name => `
+        // Include current value even if not in cached list (in case fetch failed)
+        const listNames = this.cachedListNames || [];
+        const hasCurrentValue = rule.value && !listNames.includes(rule.value);
+        const currentValueOption = hasCurrentValue
+          ? `<option value="${this.escapeHtml(rule.value)}" selected>${this.escapeHtml(rule.value)}</option>`
+          : '';
+        const listOptions = listNames.map(name => `
           <option value="${this.escapeHtml(name)}" ${rule.value === name ? 'selected' : ''}>${this.escapeHtml(name)}</option>
         `).join('');
         valueHtml = `
           <select class="rules-value rules-list-select" data-category="${catIndex}" data-rule="${ruleIndex}">
             <option value="">Select list...</option>
+            ${currentValueOption}
             ${listOptions}
           </select>
         `;
@@ -1418,9 +1434,10 @@ export class ConfigModal {
     this._refreshPending = true;
 
     try {
-      // Only fetch list names if not already cached
-      if (!this.cachedListNames || this.cachedListNames.length === 0) {
-        await this.updateCachedListNames();
+      // Fetch list names on first refresh of this modal session
+      if (!this._listNamesFetched) {
+        this._listNamesFetched = true;
+        await this.updateCachedListNames(true); // Force refresh to get latest
       }
 
       const visualContainer = this.modalEl.querySelector('.rules-visual');
@@ -1442,11 +1459,11 @@ export class ConfigModal {
   /**
    * Update cached list names from API
    */
-  async updateCachedListNames() {
+  async updateCachedListNames(forceRefresh = false) {
     const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
     if (listCache) {
       try {
-        this.cachedListNames = await listCache.getListNames();
+        this.cachedListNames = await listCache.getListNames(forceRefresh);
       } catch (e) {
         console.warn('Failed to fetch list names:', e);
       }
@@ -2393,9 +2410,9 @@ export class ConfigModal {
       processed++;
       updateProgress(processed, total, `Resolving ${handle}...`);
 
-      // Yield to event loop every 5 handles to prevent UI freeze
+      // Rate limit: delay every 5 handles to prevent API throttling
       if (processed % 5 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 0));
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       const did = await api.resolveHandleToDid(handle);
@@ -2408,8 +2425,6 @@ export class ConfigModal {
 
     // Invalidate cache
     listCache.invalidate(listName);
-
-    console.log(`Push sync: added ${added} members to ${listName}`);
   }
 
   /**
@@ -2473,8 +2488,6 @@ export class ConfigModal {
       unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
     }
     this.refreshVisualEditor();
-
-    console.log(`Pull sync: added ${added} handles to ${category}`);
   }
 
   /**
@@ -2665,8 +2678,6 @@ export class ConfigModal {
       unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
     }
     this.refreshVisualEditor();
-
-    console.log(`Deduplication: removed ${duplicates.length} duplicate rules from ${category}`);
   }
 
   /**

@@ -212,10 +212,13 @@ function getScreenFromElement(element) {
       line = line.trim();
       if (!line || line.startsWith(';') || line.startsWith('#')) continue;
 
-      const sectionMatch = line.match(/^\[(.+)\]$/);
+      const sectionMatch = line.match(/^\[([^\]→-]+?)(?:\s*(?:->|→)\s*(.+?))?\]$/);
       if (sectionMatch) {
-        rulesName = sectionMatch[1];
+        rulesName = sectionMatch[1].trim();
+        const backingList = sectionMatch[2]?.trim() || null;
         rules[rulesName] = [];
+        if (!rules._backingLists) rules._backingLists = {};
+        if (backingList) rules._backingLists[rulesName] = backingList;
         continue;
       }
 

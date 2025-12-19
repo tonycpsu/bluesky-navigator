@@ -3640,7 +3640,11 @@ export class ItemHandler extends Handler {
     this.rulesDropdownActive = true;
 
     // Get rule categories from config
-    const rulesConfig = this.config.get('rulesConfig') || '';
+    // Check if config modal is open and has pending changes
+    let rulesConfig = this.config.get('rulesConfig') || '';
+    if (this.config.modal?.isVisible && this.config.modal?.pendingChanges?.rulesConfig) {
+      rulesConfig = this.config.modal.pendingChanges.rulesConfig;
+    }
     const categories = this.parseRuleCategories(rulesConfig);
 
     // Check if a rule filter is currently active (e.g., "$politics")
@@ -3762,21 +3766,25 @@ export class ItemHandler extends Handler {
         dropdown.find('.bsky-nav-rules-tab-content').removeClass('active');
         dropdown.find(`.bsky-nav-rules-tab-${tab}`).addClass('active');
 
-        // Load lists on first switch to lists tab
+        // Load lists on first switch to lists tab (force refresh to get latest)
         if (tab === 'lists' && !listsLoaded) {
           listsLoaded = true;
+          const listsContainer = dropdown.find('.bsky-nav-rules-dropdown-lists');
+          listsContainer.html('<div class="bsky-nav-rules-loading">Loading lists...</div>');
+
           try {
-            const listNames = await listCache.getListNames();
-            const listsContainer = dropdown.find('.bsky-nav-rules-dropdown-lists');
+            const listNames = await listCache.getListNames(true); // Force refresh
 
             if (listNames.length === 0) {
               listsContainer.html('<div class="bsky-nav-rules-no-lists">No lists found.<br>Create one in Bluesky settings.</div>');
             } else {
-              listsContainer.html(listNames.map(name => `
-                <button class="bsky-nav-rules-list-btn" data-list="${name}">
-                  ${name}
-                </button>
-              `).join(''));
+              listsContainer.empty();
+              for (const name of listNames) {
+                const btn = $('<button class="bsky-nav-rules-list-btn"></button>')
+                  .attr('data-list', name)
+                  .text(name);
+                listsContainer.append(btn);
+              }
 
               // List button click handler
               listsContainer.find('.bsky-nav-rules-list-btn').on('click', async (e) => {
@@ -4230,10 +4238,13 @@ export class ItemHandler extends Handler {
       line = line.trim();
       if (!line || line.startsWith(';') || line.startsWith('#')) continue;
 
-      const sectionMatch = line.match(/^\[(.+)\]$/);
+      const sectionMatch = line.match(/^\[([^\]→-]+?)(?:\s*(?:->|→)\s*(.+?))?\]$/);
       if (sectionMatch) {
-        rulesName = sectionMatch[1];
+        rulesName = sectionMatch[1].trim();
+        const backingList = sectionMatch[2]?.trim() || null;
         rules[rulesName] = [];
+        if (!rules._backingLists) rules._backingLists = {};
+        if (backingList) rules._backingLists[rulesName] = backingList;
         continue;
       }
 
@@ -4289,6 +4300,19 @@ export class ItemHandler extends Handler {
       if (rule.type === 'include') {
         if (this.handleMatchesCategory(normalizedHandle, rule.value, visited)) {
           return true;
+        }
+      }
+      if (rule.type === 'list') {
+        // Check if handle is in the referenced list (synchronous cache check)
+        const result = this.state.listCache?.isInListSync(normalizedHandle, rule.value);
+        if (result === true) {
+          return true;
+        }
+        // If result is undefined (not cached), trigger a fetch and refresh when done
+        if (result === undefined && this.state.listCache) {
+          this.state.listCache.getMembers(rule.value).then(() => {
+            this.scheduleHighlightRefresh();
+          });
         }
       }
     }
@@ -5169,6 +5193,35 @@ export class ItemHandler extends Handler {
    */
   applyRuleStylingToAllItems() {
     this.onRulesChanged();
+  }
+
+  /**
+   * Schedule a debounced refresh of rule color styling for all items.
+   * Called when list cache is populated asynchronously.
+   */
+  scheduleHighlightRefresh() {
+    if (this._highlightRefreshTimeout) {
+      clearTimeout(this._highlightRefreshTimeout);
+    }
+    this._highlightRefreshTimeout = setTimeout(() => {
+      this._highlightRefreshTimeout = null;
+      this.refreshAllRuleColorStyling();
+    }, 100);
+  }
+
+  /**
+   * Re-applies rule color styling to all visible items.
+   * Called after list cache is populated to update highlighting.
+   */
+  refreshAllRuleColorStyling() {
+    if (!this.items || !this.items.length) return;
+
+    for (let i = 0; i < this.items.length; i++) {
+      const item = this.items[i];
+      if (item) {
+        this.applyRuleColorStyling(item);
+      }
+    }
   }
 
   /**

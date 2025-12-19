@@ -102,6 +102,109 @@ export class BlueskyAPI {
     return data;
   }
 
+  /**
+   * Fetches all lists owned by an actor
+   * @param {string} actor - Handle or DID (defaults to logged-in user)
+   * @returns {Promise<Array>} Array of list objects with uri, name, purpose
+   */
+  async getLists(actor = null) {
+    const params = { actor: actor || this.agent.session?.did, limit: 100 };
+    const lists = [];
+    let cursor = null;
+
+    do {
+      if (cursor) params.cursor = cursor;
+      const { data } = await this.agent.app.bsky.graph.getLists(params);
+      lists.push(...data.lists);
+      cursor = data.cursor;
+    } while (cursor);
+
+    return lists;
+  }
+
+  /**
+   * Fetches all members of a list
+   * @param {string} listUri - AT URI of the list
+   * @returns {Promise<Array>} Array of member objects with did, handle
+   */
+  async getListMembers(listUri) {
+    const params = { list: listUri, limit: 100 };
+    const members = [];
+    let cursor = null;
+
+    do {
+      if (cursor) params.cursor = cursor;
+      const { data } = await this.agent.app.bsky.graph.getList(params);
+      members.push(...data.items.map(item => ({
+        did: item.subject.did,
+        handle: item.subject.handle,
+      })));
+      cursor = data.cursor;
+    } while (cursor);
+
+    return members;
+  }
+
+  /**
+   * Creates a new list
+   * @param {string} name - Display name for the list
+   * @param {string} purpose - 'curatelist' or 'modlist'
+   * @param {string} description - Optional description
+   * @returns {Promise<string>} URI of the created list
+   */
+  async createList(name, purpose = 'app.bsky.graph.defs#curatelist', description = '') {
+    const record = {
+      $type: 'app.bsky.graph.list',
+      name,
+      purpose,
+      description,
+      createdAt: new Date().toISOString(),
+    };
+    const { data } = await this.agent.com.atproto.repo.createRecord({
+      repo: this.agent.session.did,
+      collection: 'app.bsky.graph.list',
+      record,
+    });
+    return data.uri;
+  }
+
+  /**
+   * Adds a user to a list
+   * @param {string} listUri - AT URI of the list
+   * @param {string} subjectDid - DID of the user to add
+   * @returns {Promise<string>} URI of the list item record
+   */
+  async addToList(listUri, subjectDid) {
+    const record = {
+      $type: 'app.bsky.graph.listitem',
+      list: listUri,
+      subject: subjectDid,
+      createdAt: new Date().toISOString(),
+    };
+    const { data } = await this.agent.com.atproto.repo.createRecord({
+      repo: this.agent.session.did,
+      collection: 'app.bsky.graph.listitem',
+      record,
+    });
+    return data.uri;
+  }
+
+  /**
+   * Resolves a handle to a DID
+   * @param {string} handle - User handle (with or without @)
+   * @returns {Promise<string|null>} DID or null if not found
+   */
+  async resolveHandleToDid(handle) {
+    const cleanHandle = handle.replace(/^@/, '');
+    try {
+      const { data } = await this.agent.resolveHandle({ handle: cleanHandle });
+      return data.did;
+    } catch (error) {
+      console.warn(`Failed to resolve handle ${cleanHandle}:`, error);
+      return null;
+    }
+  }
+
   async getReplies(uri) {
     const thread = this.getThread(uri);
     return thread.replies.map((i, reply) => {

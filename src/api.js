@@ -92,6 +92,16 @@ export class BlueskyAPI {
     return thread;
   }
 
+  /**
+   * Fetches a user's profile by handle or DID
+   * @param {string} actor - Handle (e.g., "alice.bsky.social") or DID
+   * @returns {Promise<Object>} Profile data including displayName, description, avatar, followersCount, etc.
+   */
+  async getProfile(actor) {
+    const { data } = await this.agent.getProfile({ actor });
+    return data;
+  }
+
   async getReplies(uri) {
     const thread = this.getThread(uri);
     return thread.replies.map((i, reply) => {

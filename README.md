@@ -89,7 +89,8 @@ Press `?` to show the keyboard shortcuts overlay at any time.
  | O            | open embedded post (feed view)                     |
  | i            | open link in post                                  |
  | m            | view/play/pause media in post                      |
- | a            | open post author's profile                         |
+ | a            | show author hover card (press again to dismiss)    |
+ | A            | open post author's profile                         |
  | r            | reply to post                                      |
  | +            | add post author to filter rules                    |
  | l            | like/unlike post                                   |
@@ -113,7 +114,6 @@ Press `?` to show the keyboard shortcuts overlay at any time.
  | :            | toggle between forward/reverse order               |
  | "            | toggle show all or only unread posts               |
  | .            | mark post read/unread                              |
- | A            | mark all visible posts as read                     |
  | ;            | expand/collapse replies sidecar                    |
 
 ### Quick Filter Rules

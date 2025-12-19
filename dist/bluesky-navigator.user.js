@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+516.47176176
+// @version     1.0.31+517.9230d82c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44976,6 +44976,15 @@ if (cid) {
       const { thread } = res.data;
       return thread;
     }
+    /**
+     * Fetches a user's profile by handle or DID
+     * @param {string} actor - Handle (e.g., "alice.bsky.social") or DID
+     * @returns {Promise<Object>} Profile data including displayName, description, avatar, followersCount, etc.
+     */
+    async getProfile(actor) {
+      const { data } = await this.agent.getProfile({ actor });
+      return data;
+    }
     async getReplies(uri) {
       const thread = this.getThread(uri);
       return thread.replies.map((i2, reply) => {
@@ -52038,6 +52047,207 @@ div#statusBar.has-feed-map {
   font-size: 18px;
 }
 
+/* =============================================================================
+   Custom Profile Hover Card (for sidecar replies)
+   ============================================================================= */
+
+.bsky-nav-profile-card {
+  position: fixed;
+  z-index: 10000;
+  width: 300px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  animation: bsky-nav-profile-card-fade-in 150ms ease;
+}
+
+@keyframes bsky-nav-profile-card-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bsky-nav-profile-card-banner {
+  height: 80px;
+  background: linear-gradient(135deg, #0085ff 0%, #00c2ff 100%);
+  background-size: cover;
+  background-position: center;
+}
+
+.bsky-nav-profile-card-content {
+  padding: 0 16px 16px;
+  margin-top: -32px;
+}
+
+.bsky-nav-profile-card-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 3px solid white;
+  background: #e4e9ef;
+  object-fit: cover;
+}
+
+.bsky-nav-profile-card-names {
+  margin-top: 8px;
+}
+
+.bsky-nav-profile-card-displayname {
+  font-size: 17px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.bsky-nav-profile-card-handle {
+  font-size: 14px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.bsky-nav-profile-card-handle a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.bsky-nav-profile-card-handle a:hover {
+  text-decoration: underline;
+}
+
+.bsky-nav-profile-card-bio {
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.4;
+  margin-top: 10px;
+  max-height: 60px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.bsky-nav-profile-card-stats {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.bsky-nav-profile-card-stat {
+  display: flex;
+  gap: 4px;
+}
+
+.bsky-nav-profile-card-stat-value {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.bsky-nav-profile-card-stat-label {
+  color: #6b7280;
+}
+
+.bsky-nav-profile-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.bsky-nav-profile-card-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.bsky-nav-profile-card-btn-primary {
+  background: #0085ff;
+  color: white;
+}
+
+.bsky-nav-profile-card-btn-primary:hover {
+  background: #0070db;
+}
+
+.bsky-nav-profile-card-btn-secondary {
+  background: #eff2f6;
+  color: #374151;
+}
+
+.bsky-nav-profile-card-btn-secondary:hover {
+  background: #dce2eb;
+}
+
+.bsky-nav-profile-card-loading {
+  padding: 40px 16px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.bsky-nav-profile-card-error {
+  padding: 20px 16px;
+  text-align: center;
+  color: #ef4444;
+}
+
+/* Dark mode for profile card */
+@media (prefers-color-scheme: dark) {
+  .bsky-nav-profile-card {
+    background: #1f2937;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+
+  .bsky-nav-profile-card-avatar {
+    border-color: #1f2937;
+    background: #374151;
+  }
+
+  .bsky-nav-profile-card-displayname {
+    color: #f3f4f6;
+  }
+
+  .bsky-nav-profile-card-handle {
+    color: #9ca3af;
+  }
+
+  .bsky-nav-profile-card-bio {
+    color: #d1d5db;
+  }
+
+  .bsky-nav-profile-card-stat-value {
+    color: #f3f4f6;
+  }
+
+  .bsky-nav-profile-card-stat-label {
+    color: #9ca3af;
+  }
+
+  .bsky-nav-profile-card-btn-secondary {
+    background: #374151;
+    color: #d1d5db;
+  }
+
+  .bsky-nav-profile-card-btn-secondary:hover {
+    background: #4b5563;
+  }
+
+  .bsky-nav-profile-card-loading {
+    color: #9ca3af;
+  }
+}
+
 /* Dark mode for rules dropdown */
 @media (prefers-color-scheme: dark) {
   .bsky-nav-add-to-rules-btn {
@@ -52577,7 +52787,9 @@ div#statusBar.has-feed-map {
       { keys: ["c"], description: "Screenshot to clipboard" },
       { keys: ["v"], description: "Full-screen post view" },
       { keys: ["V"], description: "Reader mode (thread)" },
-      { keys: ["t"], description: "Toggle thread context" }
+      { keys: ["t"], description: "Toggle thread context" },
+      { keys: ["a"], description: "Show author hover card" },
+      { keys: ["A"], description: "Open author profile" }
     ],
     "Feed Controls": [
       { keys: ["/"], description: "Focus search" },
@@ -52586,8 +52798,7 @@ div#statusBar.has-feed-map {
       { keys: [":"], description: "Toggle sort order" },
       { keys: ['"'], description: "Toggle hide read" },
       { keys: [","], description: "Refresh items" },
-      { keys: ["."], description: "Toggle read status" },
-      { keys: ["A"], description: "Mark all visible as read" }
+      { keys: ["."], description: "Toggle read status" }
     ],
     "Quick Filters": [
       { keys: ["Alt+1-9"], description: "Apply filter rule" },
@@ -52596,7 +52807,6 @@ div#statusBar.has-feed-map {
     ],
     Other: [
       { keys: [";"], description: "Expand sidecar" },
-      { keys: ["a"], description: "Open author profile" },
       { keys: ["1-9"], description: "Switch to tab" },
       { keys: ["?"], description: "Show/hide this help" },
       { keys: ["Esc"], description: "Close overlay" }
@@ -71315,49 +71525,107 @@ div#statusBar.has-feed-map {
      * @param {HTMLElement} item - The selected item
      */
     toggleAuthorHoverCard(item) {
+      const existingCard = document.querySelector(".bsky-nav-profile-card");
+      if (existingCard) {
+        existingCard.remove();
+        return;
+      }
       let $searchContext;
+      let isSidecarContext = false;
       if (this._replyIndex != null && this.selectedReply.length) {
         $searchContext = this.selectedReply;
+        isSidecarContext = true;
       } else if (this._threadIndex != null) {
-        if (this._threadIndex === 0) {
-          $searchContext = $(item);
-        } else {
-          const posts = this.getUnrolledThreadPosts();
-          const post2 = posts[this._threadIndex];
-          $searchContext = $(post2).closest(".unrolled-reply");
-          if (!$searchContext.length) {
-            $searchContext = $(post2);
-          }
-        }
+        $searchContext = $(item);
       } else {
         $searchContext = $(item);
       }
       if (!$searchContext || !$searchContext.length) return;
       let allProfileLinks = $searchContext.find('a[href*="/profile/"]');
-      console.log("[bsky-nav] toggleAuthorHoverCard search:", {
-        replyIndex: this._replyIndex,
-        threadIndex: this._threadIndex,
-        searchContext: $searchContext[0],
-        searchContextClass: $searchContext.attr("class"),
-        profileLinksInContext: allProfileLinks.length,
-        itemElement: item,
-        itemClass: $(item).attr("class"),
-        profileLinksInItem: $(item).find('a[href*="/profile/"]').length
-      });
       if (allProfileLinks.length === 0) {
         $searchContext = $(item);
         allProfileLinks = $searchContext.find('a[href*="/profile/"]');
-        console.log("[bsky-nav] Fallback to item, found:", allProfileLinks.length);
       }
       let profileLink;
-      if (this._replyIndex != null || this._threadIndex != null || allProfileLinks.length <= 1) {
+      if (this._replyIndex != null || allProfileLinks.length <= 1) {
         profileLink = allProfileLinks.first()[0];
       } else {
-        profileLink = allProfileLinks.filter((i2, el) => {
-          return $(el).find("img").length > 0 || $(el).siblings().find("img").length > 0;
-        }).first()[0] || allProfileLinks.eq(1)[0];
+        const avatarLink = allProfileLinks.filter((i2, el) => $(el).find("img").length > 0).first()[0];
+        if (avatarLink) {
+          const authorHref = $(avatarLink).attr("href");
+          const authorLinks = allProfileLinks.filter((i2, el) => $(el).attr("href") === authorHref);
+          const authorNonAvatarLinks = authorLinks.filter((i2, el) => $(el).find("img").length === 0);
+          if (authorNonAvatarLinks.length > 0) {
+            profileLink = authorNonAvatarLinks.first()[0];
+          } else {
+            profileLink = avatarLink;
+          }
+        } else {
+          profileLink = allProfileLinks.eq(1)[0] || allProfileLinks.first()[0];
+        }
       }
       if (!profileLink) return;
+      if (isSidecarContext) {
+        this.showCustomProfileCard(profileLink);
+        return;
+      }
+      if (this.currentHoverCard) {
+        const rect = profileLink.getBoundingClientRect();
+        const pageWindow = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+        const pointerOptions = {
+          bubbles: true,
+          cancelable: true,
+          view: pageWindow,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+          pointerType: "mouse"
+        };
+        const mouseOptions = {
+          bubbles: true,
+          cancelable: true,
+          view: pageWindow,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2
+        };
+        profileLink.dispatchEvent(new PointerEvent("pointerout", pointerOptions));
+        profileLink.dispatchEvent(new PointerEvent("pointerleave", { ...pointerOptions, bubbles: false }));
+        profileLink.dispatchEvent(new MouseEvent("mouseout", mouseOptions));
+        profileLink.dispatchEvent(new MouseEvent("mouseleave", { ...mouseOptions, bubbles: false }));
+        this.currentHoverCard = null;
+        return;
+      }
+      this.triggerNativeHoverCard(profileLink);
+    }
+    /**
+     * Dismiss any visible hover card (native or custom)
+     */
+    dismissHoverCard() {
+      const customCard = document.querySelector(".bsky-nav-profile-card");
+      if (customCard) {
+        customCard.remove();
+      }
+      if (this.currentHoverCard) {
+        const escapeEvent = new KeyboardEvent("keydown", {
+          key: "Escape",
+          code: "Escape",
+          keyCode: 27,
+          which: 27,
+          bubbles: true,
+          cancelable: true
+        });
+        this.currentHoverCard.dispatchEvent(escapeEvent);
+        document.dispatchEvent(escapeEvent);
+        if (this.selectedItem && this.selectedItem.length) {
+          this.selectedItem[0].focus({ preventScroll: true });
+        }
+        this.currentHoverCard = null;
+      }
+    }
+    /**
+     * Trigger native Bluesky hover card by dispatching mouse events
+     * @param {HTMLElement} profileLink - The profile link element
+     */
+    triggerNativeHoverCard(profileLink) {
       const rect = profileLink.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
@@ -71381,13 +71649,6 @@ div#statusBar.has-feed-map {
         screenX: centerX,
         screenY: centerY
       };
-      if (this.currentHoverCard) {
-        profileLink.dispatchEvent(new PointerEvent("pointerout", pointerOptions));
-        profileLink.dispatchEvent(new PointerEvent("pointerleave", { ...pointerOptions, bubbles: false }));
-        profileLink.dispatchEvent(new MouseEvent("mouseout", mouseOptions));
-        profileLink.dispatchEvent(new MouseEvent("mouseleave", { ...mouseOptions, bubbles: false }));
-        return;
-      }
       profileLink.dispatchEvent(new PointerEvent("pointerout", pointerOptions));
       profileLink.dispatchEvent(new PointerEvent("pointerleave", { ...pointerOptions, bubbles: false }));
       profileLink.dispatchEvent(new MouseEvent("mouseout", mouseOptions));
@@ -71400,6 +71661,96 @@ div#statusBar.has-feed-map {
         profileLink.dispatchEvent(new PointerEvent("pointermove", pointerOptions));
         profileLink.dispatchEvent(new MouseEvent("mousemove", mouseOptions));
       }, 10);
+    }
+    /**
+     * Show custom profile card for sidecar replies (where native hover card doesn't work)
+     * @param {HTMLElement} profileLink - The profile link element
+     */
+    async showCustomProfileCard(profileLink) {
+      const href = profileLink.getAttribute("href") || "";
+      const handleMatch = href.match(/\/profile\/([^/?]+)/);
+      if (!handleMatch) return;
+      const handle2 = handleMatch[1];
+      const rect = profileLink.getBoundingClientRect();
+      const card = document.createElement("div");
+      card.className = "bsky-nav-profile-card";
+      const cardWidth = 300;
+      let left = rect.left;
+      let top = rect.bottom + 8;
+      if (left + cardWidth > window.innerWidth) {
+        left = window.innerWidth - cardWidth - 16;
+      }
+      if (top + 250 > window.innerHeight) {
+        top = rect.top - 258;
+      }
+      card.style.left = `${left}px`;
+      card.style.top = `${top}px`;
+      card.innerHTML = `<div class="bsky-nav-profile-card-loading">Loading...</div>`;
+      document.body.appendChild(card);
+      const dismissOnClickOutside = (e2) => {
+        if (!card.contains(e2.target)) {
+          card.remove();
+          document.removeEventListener("click", dismissOnClickOutside);
+          document.removeEventListener("keydown", dismissOnEscape);
+        }
+      };
+      const dismissOnEscape = (e2) => {
+        if (e2.key === "Escape") {
+          card.remove();
+          document.removeEventListener("click", dismissOnClickOutside);
+          document.removeEventListener("keydown", dismissOnEscape);
+        }
+      };
+      setTimeout(() => {
+        document.addEventListener("click", dismissOnClickOutside);
+        document.addEventListener("keydown", dismissOnEscape);
+      }, 100);
+      try {
+        if (!this.api) {
+          throw new Error("API not available");
+        }
+        const profile2 = await this.api.getProfile(handle2);
+        const formatCount = (n) => {
+          if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+          if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+          return n.toString();
+        };
+        card.innerHTML = `
+        <div class="bsky-nav-profile-card-banner" style="${profile2.banner ? `background-image: url(${profile2.banner})` : ""}"></div>
+        <div class="bsky-nav-profile-card-content">
+          <img class="bsky-nav-profile-card-avatar" src="${profile2.avatar || ""}" alt="${profile2.displayName || handle2}'s avatar">
+          <div class="bsky-nav-profile-card-names">
+            <div class="bsky-nav-profile-card-displayname">${this.escapeHtml(profile2.displayName || handle2)}</div>
+            <div class="bsky-nav-profile-card-handle"><a href="https://bsky.app/profile/${handle2}" target="_blank">@${handle2}</a></div>
+          </div>
+          ${profile2.description ? `<div class="bsky-nav-profile-card-bio">${this.escapeHtml(profile2.description)}</div>` : ""}
+          <div class="bsky-nav-profile-card-stats">
+            <div class="bsky-nav-profile-card-stat">
+              <span class="bsky-nav-profile-card-stat-value">${formatCount(profile2.followersCount || 0)}</span>
+              <span class="bsky-nav-profile-card-stat-label">followers</span>
+            </div>
+            <div class="bsky-nav-profile-card-stat">
+              <span class="bsky-nav-profile-card-stat-value">${formatCount(profile2.followsCount || 0)}</span>
+              <span class="bsky-nav-profile-card-stat-label">following</span>
+            </div>
+            <div class="bsky-nav-profile-card-stat">
+              <span class="bsky-nav-profile-card-stat-value">${formatCount(profile2.postsCount || 0)}</span>
+              <span class="bsky-nav-profile-card-stat-label">posts</span>
+            </div>
+          </div>
+          <div class="bsky-nav-profile-card-actions">
+            <button class="bsky-nav-profile-card-btn bsky-nav-profile-card-btn-primary" data-action="view-profile">View Profile</button>
+          </div>
+        </div>
+      `;
+        card.querySelector('[data-action="view-profile"]').addEventListener("click", () => {
+          window.location.href = `/profile/${handle2}`;
+          card.remove();
+        });
+      } catch (error) {
+        console.error("[bsky-nav] Failed to fetch profile:", error);
+        card.innerHTML = `<div class="bsky-nav-profile-card-error">Failed to load profile</div>`;
+      }
     }
     /**
      * Open Add to Rules dropdown for the author of the selected item,

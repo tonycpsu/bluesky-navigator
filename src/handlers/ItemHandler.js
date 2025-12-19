@@ -3259,29 +3259,26 @@ export class ItemHandler extends Handler {
    * @param {HTMLElement} item - The selected item
    */
   toggleAuthorHoverCard(item) {
+    // Check if our custom profile card is visible - if so, dismiss it
+    const existingCard = document.querySelector('.bsky-nav-profile-card');
+    if (existingCard) {
+      existingCard.remove();
+      return;
+    }
+
     // Determine which element to search for the profile link
     let $searchContext;
+    let isSidecarContext = false;
 
     if (this._replyIndex != null && this.selectedReply.length) {
       // Sidecar navigation mode - use the selected reply
       $searchContext = this.selectedReply;
+      isSidecarContext = true;
     } else if (this._threadIndex != null) {
-      // Thread navigation mode - unrolled posts are just content divs,
-      // so we need to search in the parent container (selectedItem) for author info
-      // For threadIndex 0 (main post), use the full selectedItem
-      // For other indices (replies), the unrolled reply divs contain the author info
-      if (this._threadIndex === 0) {
-        $searchContext = $(item);
-      } else {
-        // Unrolled replies - look in the unrolled-reply container
-        const posts = this.getUnrolledThreadPosts();
-        const post = posts[this._threadIndex];
-        // The unrolled reply might be wrapped - look for parent with profile links
-        $searchContext = $(post).closest('.unrolled-reply');
-        if (!$searchContext.length) {
-          $searchContext = $(post);
-        }
-      }
+      // Thread navigation mode - unrolled posts are just content divs without author info.
+      // All posts in an unrolled thread are by the same author (the thread author),
+      // so always use the full selectedItem which contains the author's profile link in the header.
+      $searchContext = $(item);
     } else {
       $searchContext = $(item);
     }
@@ -3292,40 +3289,124 @@ export class ItemHandler extends Handler {
     // Use href*="/profile/" to match both relative (/profile/...) and absolute (https://bsky.app/profile/...) URLs
     let allProfileLinks = $searchContext.find('a[href*="/profile/"]');
 
-    console.log('[bsky-nav] toggleAuthorHoverCard search:', {
-      replyIndex: this._replyIndex,
-      threadIndex: this._threadIndex,
-      searchContext: $searchContext[0],
-      searchContextClass: $searchContext.attr('class'),
-      profileLinksInContext: allProfileLinks.length,
-      itemElement: item,
-      itemClass: $(item).attr('class'),
-      profileLinksInItem: $(item).find('a[href*="/profile/"]').length
-    });
-
     // If no profile links found in search context, try the full selected item
     if (allProfileLinks.length === 0) {
       $searchContext = $(item);
       allProfileLinks = $searchContext.find('a[href*="/profile/"]');
-      console.log('[bsky-nav] Fallback to item, found:', allProfileLinks.length);
     }
 
     let profileLink;
 
-    // For sidecar/thread context or when there's only one link, just use the first one
-    // For feed items with multiple links (reposts), find the one associated with the post author
-    if (this._replyIndex != null || this._threadIndex != null || allProfileLinks.length <= 1) {
+    // For sidecar context or single link, just use the first profile link
+    if (this._replyIndex != null || allProfileLinks.length <= 1) {
       profileLink = allProfileLinks.first()[0];
     } else {
-      // Multiple profile links in main feed item - likely a repost
-      // Find the one with an avatar (the actual post author, not "Reposted by")
-      profileLink = allProfileLinks.filter((i, el) => {
-        return $(el).find('img').length > 0 || $(el).siblings().find('img').length > 0;
-      }).first()[0] || allProfileLinks.eq(1)[0];
+      // Multiple profile links - could be repost indicator, multiple author links, etc.
+      // Strategy: Find the avatar link (contains img) to identify the post author,
+      // then prefer non-avatar links to that same author for better popup positioning
+
+      const avatarLink = allProfileLinks.filter((i, el) => $(el).find('img').length > 0).first()[0];
+
+      if (avatarLink) {
+        // Get the author's profile URL from the avatar link
+        const authorHref = $(avatarLink).attr('href');
+
+        // Find all links to the same author profile, preferring non-avatar ones
+        const authorLinks = allProfileLinks.filter((i, el) => $(el).attr('href') === authorHref);
+        const authorNonAvatarLinks = authorLinks.filter((i, el) => $(el).find('img').length === 0);
+
+        if (authorNonAvatarLinks.length > 0) {
+          profileLink = authorNonAvatarLinks.first()[0];
+        } else {
+          profileLink = avatarLink;
+        }
+      } else {
+        // Fallback: no avatar found, use second link if available (skip potential "Reposted by")
+        profileLink = allProfileLinks.eq(1)[0] || allProfileLinks.first()[0];
+      }
     }
 
     if (!profileLink) return;
 
+    // For sidecar replies, show our custom profile card (Bluesky's hover card won't work)
+    if (isSidecarContext) {
+      this.showCustomProfileCard(profileLink);
+      return;
+    }
+
+    // If native hover card is visible, dismiss it by dispatching leave events on the profile link
+    if (this.currentHoverCard) {
+      const rect = profileLink.getBoundingClientRect();
+      const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+
+      const pointerOptions = {
+        bubbles: true,
+        cancelable: true,
+        view: pageWindow,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        pointerType: 'mouse',
+      };
+
+      const mouseOptions = {
+        bubbles: true,
+        cancelable: true,
+        view: pageWindow,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+      };
+
+      profileLink.dispatchEvent(new PointerEvent('pointerout', pointerOptions));
+      profileLink.dispatchEvent(new PointerEvent('pointerleave', { ...pointerOptions, bubbles: false }));
+      profileLink.dispatchEvent(new MouseEvent('mouseout', mouseOptions));
+      profileLink.dispatchEvent(new MouseEvent('mouseleave', { ...mouseOptions, bubbles: false }));
+      this.currentHoverCard = null;
+      return;
+    }
+
+    // For native Bluesky elements, trigger the native hover card
+    this.triggerNativeHoverCard(profileLink);
+  }
+
+  /**
+   * Dismiss any visible hover card (native or custom)
+   */
+  dismissHoverCard() {
+    // Remove custom card if present
+    const customCard = document.querySelector('.bsky-nav-profile-card');
+    if (customCard) {
+      customCard.remove();
+    }
+
+    // Try to dismiss native hover card
+    if (this.currentHoverCard) {
+      // First try: dispatch Escape key to dismiss (works with Radix components)
+      const escapeEvent = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        code: 'Escape',
+        keyCode: 27,
+        which: 27,
+        bubbles: true,
+        cancelable: true,
+      });
+      this.currentHoverCard.dispatchEvent(escapeEvent);
+      document.dispatchEvent(escapeEvent);
+
+      // Second try: focus elsewhere to trigger blur-based dismissal
+      if (this.selectedItem && this.selectedItem.length) {
+        // Focus a non-interactive element to move focus away
+        this.selectedItem[0].focus({ preventScroll: true });
+      }
+
+      this.currentHoverCard = null;
+    }
+  }
+
+  /**
+   * Trigger native Bluesky hover card by dispatching mouse events
+   * @param {HTMLElement} profileLink - The profile link element
+   */
+  triggerNativeHoverCard(profileLink) {
     const rect = profileLink.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
@@ -3353,15 +3434,6 @@ export class ItemHandler extends Handler {
       screenY: centerY,
     };
 
-    // If hover card is currently visible, dismiss it
-    if (this.currentHoverCard) {
-      profileLink.dispatchEvent(new PointerEvent('pointerout', pointerOptions));
-      profileLink.dispatchEvent(new PointerEvent('pointerleave', { ...pointerOptions, bubbles: false }));
-      profileLink.dispatchEvent(new MouseEvent('mouseout', mouseOptions));
-      profileLink.dispatchEvent(new MouseEvent('mouseleave', { ...mouseOptions, bubbles: false }));
-      return;
-    }
-
     // First dispatch leave events to reset any existing hover state
     profileLink.dispatchEvent(new PointerEvent('pointerout', pointerOptions));
     profileLink.dispatchEvent(new PointerEvent('pointerleave', { ...pointerOptions, bubbles: false }));
@@ -3377,6 +3449,120 @@ export class ItemHandler extends Handler {
       profileLink.dispatchEvent(new PointerEvent('pointermove', pointerOptions));
       profileLink.dispatchEvent(new MouseEvent('mousemove', mouseOptions));
     }, 10);
+  }
+
+  /**
+   * Show custom profile card for sidecar replies (where native hover card doesn't work)
+   * @param {HTMLElement} profileLink - The profile link element
+   */
+  async showCustomProfileCard(profileLink) {
+    // Extract handle from the profile link
+    const href = profileLink.getAttribute('href') || '';
+    const handleMatch = href.match(/\/profile\/([^/?]+)/);
+    if (!handleMatch) return;
+
+    const handle = handleMatch[1];
+    const rect = profileLink.getBoundingClientRect();
+
+    // Create the card container
+    const card = document.createElement('div');
+    card.className = 'bsky-nav-profile-card';
+
+    // Position the card near the profile link
+    const cardWidth = 300;
+    let left = rect.left;
+    let top = rect.bottom + 8;
+
+    // Adjust if would go off screen
+    if (left + cardWidth > window.innerWidth) {
+      left = window.innerWidth - cardWidth - 16;
+    }
+    if (top + 250 > window.innerHeight) {
+      top = rect.top - 258;
+    }
+
+    card.style.left = `${left}px`;
+    card.style.top = `${top}px`;
+
+    // Show loading state
+    card.innerHTML = `<div class="bsky-nav-profile-card-loading">Loading...</div>`;
+    document.body.appendChild(card);
+
+    // Setup click-outside to dismiss
+    const dismissOnClickOutside = (e) => {
+      if (!card.contains(e.target)) {
+        card.remove();
+        document.removeEventListener('click', dismissOnClickOutside);
+        document.removeEventListener('keydown', dismissOnEscape);
+      }
+    };
+    const dismissOnEscape = (e) => {
+      if (e.key === 'Escape') {
+        card.remove();
+        document.removeEventListener('click', dismissOnClickOutside);
+        document.removeEventListener('keydown', dismissOnEscape);
+      }
+    };
+    setTimeout(() => {
+      document.addEventListener('click', dismissOnClickOutside);
+      document.addEventListener('keydown', dismissOnEscape);
+    }, 100);
+
+    // Fetch profile data
+    try {
+      if (!this.api) {
+        throw new Error('API not available');
+      }
+
+      const profile = await this.api.getProfile(handle);
+
+      // Format follower/following counts
+      const formatCount = (n) => {
+        if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+        if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+        return n.toString();
+      };
+
+      // Build the card HTML
+      card.innerHTML = `
+        <div class="bsky-nav-profile-card-banner" style="${profile.banner ? `background-image: url(${profile.banner})` : ''}"></div>
+        <div class="bsky-nav-profile-card-content">
+          <img class="bsky-nav-profile-card-avatar" src="${profile.avatar || ''}" alt="${profile.displayName || handle}'s avatar">
+          <div class="bsky-nav-profile-card-names">
+            <div class="bsky-nav-profile-card-displayname">${this.escapeHtml(profile.displayName || handle)}</div>
+            <div class="bsky-nav-profile-card-handle"><a href="https://bsky.app/profile/${handle}" target="_blank">@${handle}</a></div>
+          </div>
+          ${profile.description ? `<div class="bsky-nav-profile-card-bio">${this.escapeHtml(profile.description)}</div>` : ''}
+          <div class="bsky-nav-profile-card-stats">
+            <div class="bsky-nav-profile-card-stat">
+              <span class="bsky-nav-profile-card-stat-value">${formatCount(profile.followersCount || 0)}</span>
+              <span class="bsky-nav-profile-card-stat-label">followers</span>
+            </div>
+            <div class="bsky-nav-profile-card-stat">
+              <span class="bsky-nav-profile-card-stat-value">${formatCount(profile.followsCount || 0)}</span>
+              <span class="bsky-nav-profile-card-stat-label">following</span>
+            </div>
+            <div class="bsky-nav-profile-card-stat">
+              <span class="bsky-nav-profile-card-stat-value">${formatCount(profile.postsCount || 0)}</span>
+              <span class="bsky-nav-profile-card-stat-label">posts</span>
+            </div>
+          </div>
+          <div class="bsky-nav-profile-card-actions">
+            <button class="bsky-nav-profile-card-btn bsky-nav-profile-card-btn-primary" data-action="view-profile">View Profile</button>
+          </div>
+        </div>
+      `;
+
+      // Add click handler for View Profile button
+      card.querySelector('[data-action="view-profile"]').addEventListener('click', () => {
+        window.location.href = `/profile/${handle}`;
+        card.remove();
+      });
+
+    } catch (error) {
+      console.error('[bsky-nav] Failed to fetch profile:', error);
+      card.innerHTML = `<div class="bsky-nav-profile-card-error">Failed to load profile</div>`;
+    }
   }
 
   /**

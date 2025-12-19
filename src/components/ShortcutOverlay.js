@@ -47,6 +47,8 @@ const SHORTCUTS = {
     { keys: ['v'], description: 'Full-screen post view' },
     { keys: ['V'], description: 'Reader mode (thread)' },
     { keys: ['t'], description: 'Toggle thread context' },
+    { keys: ['a'], description: 'Show author hover card' },
+    { keys: ['A'], description: 'Open author profile' },
   ],
   'Feed Controls': [
     { keys: ['/'], description: 'Focus search' },
@@ -56,7 +58,6 @@ const SHORTCUTS = {
     { keys: ['"'], description: 'Toggle hide read' },
     { keys: [','], description: 'Refresh items' },
     { keys: ['.'], description: 'Toggle read status' },
-    { keys: ['A'], description: 'Mark all visible as read' },
   ],
   'Quick Filters': [
     { keys: ['Alt+1-9'], description: 'Apply filter rule' },
@@ -65,7 +66,6 @@ const SHORTCUTS = {
   ],
   Other: [
     { keys: [';'], description: 'Expand sidecar' },
-    { keys: ['a'], description: 'Open author profile' },
     { keys: ['1-9'], description: 'Switch to tab' },
     { keys: ['?'], description: 'Show/hide this help' },
     { keys: ['Esc'], description: 'Close overlay' },

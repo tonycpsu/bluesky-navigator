@@ -5,6 +5,7 @@ import { state } from './state.js';
 import { BlueskyAPI } from './api.js';
 import * as utils from './utils.js';
 import { ConfigWrapper } from './ConfigWrapper.js';
+import { ListCache } from './ListCache.js';
 
 import style from './assets/css/style.css?raw';
 import sidecarTemplatesHtml from './sidecar.html?raw';
@@ -811,6 +812,15 @@ function getScreenFromElement(element) {
       }
       loadSidecarTemplate('body', sidecarTemplatesHtml);
     }
+
+    // Initialize list cache for rule filtering
+    let listCache = null;
+    if (api) {
+      listCache = new ListCache(api);
+    }
+
+    // Store in state for access by handlers
+    state.listCache = listCache;
 
     // Initialize mobileView early so handlers can use it in their constructors
     state.mobileView = window.innerWidth <= 800;

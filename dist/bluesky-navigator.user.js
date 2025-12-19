@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+527.f465f358
+// @version     1.0.31+528.83664921
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47149,6 +47149,117 @@ if (cid) {
       this.save();
     }
   }
+  class ListCache {
+    /**
+     * @param {BlueskyAPI} api - API instance for fetching lists
+     * @param {number} cacheDurationMs - Cache duration in milliseconds (default 5 min)
+     */
+    constructor(api, cacheDurationMs = 5 * 60 * 1e3) {
+      this.api = api;
+      this.cacheDurationMs = cacheDurationMs;
+      this.cache = /* @__PURE__ */ new Map();
+      this.listNameToUri = /* @__PURE__ */ new Map();
+      this.listsMetadataFetched = false;
+    }
+    /**
+     * Ensures list metadata (name -> URI mapping) is loaded
+     * @private
+     */
+    async ensureListsMetadata() {
+      if (this.listsMetadataFetched || !this.api) return;
+      try {
+        const lists = await this.api.getLists();
+        for (const list2 of lists) {
+          this.listNameToUri.set(list2.name.toLowerCase(), list2.uri);
+        }
+        this.listsMetadataFetched = true;
+      } catch (error) {
+        console.warn("Failed to fetch lists metadata:", error);
+      }
+    }
+    /**
+     * Gets the cached members for a list, fetching if needed
+     * @param {string} listName - Display name of the list
+     * @returns {Promise<Set<string>|null>} Set of handles (lowercase) or null if list not found
+     */
+    async getMembers(listName) {
+      const normalizedName = listName.toLowerCase();
+      const cached = this.cache.get(normalizedName);
+      if (cached && Date.now() - cached.fetchedAt < this.cacheDurationMs) {
+        return cached.members;
+      }
+      await this.ensureListsMetadata();
+      const listUri = this.listNameToUri.get(normalizedName);
+      if (!listUri) {
+        console.warn(`List not found: ${listName}`);
+        return null;
+      }
+      try {
+        const members = await this.api.getListMembers(listUri);
+        const handleSet = new Set(members.map((m) => m.handle.toLowerCase()));
+        this.cache.set(normalizedName, {
+          members: handleSet,
+          fetchedAt: Date.now(),
+          uri: listUri
+        });
+        return handleSet;
+      } catch (error) {
+        console.warn(`Failed to fetch list members for ${listName}:`, error);
+        return null;
+      }
+    }
+    /**
+     * Checks if a handle is in a list
+     * @param {string} handle - Handle to check (with or without @)
+     * @param {string} listName - Display name of the list
+     * @returns {Promise<boolean>} True if handle is in list
+     */
+    async isInList(handle2, listName) {
+      const members = await this.getMembers(listName);
+      if (!members) return false;
+      const normalizedHandle = handle2.replace(/^@/, "").toLowerCase();
+      return members.has(normalizedHandle);
+    }
+    /**
+     * Invalidates cache for a specific list or all lists
+     * @param {string} [listName] - List name to invalidate, or all if omitted
+     */
+    invalidate(listName = null) {
+      if (listName) {
+        this.cache.delete(listName.toLowerCase());
+      } else {
+        this.cache.clear();
+        this.listNameToUri.clear();
+        this.listsMetadataFetched = false;
+      }
+    }
+    /**
+     * Forces a refresh of a list's members
+     * @param {string} listName - List name to refresh
+     * @returns {Promise<Set<string>|null>} Refreshed member set
+     */
+    async refresh(listName) {
+      this.invalidate(listName);
+      return this.getMembers(listName);
+    }
+    /**
+     * Gets the URI for a list by name
+     * @param {string} listName - Display name of the list
+     * @returns {Promise<string|null>} List URI or null
+     */
+    async getListUri(listName) {
+      await this.ensureListsMetadata();
+      return this.listNameToUri.get(listName.toLowerCase()) || null;
+    }
+    /**
+     * Gets all known list names
+     * @returns {Promise<string[]>} Array of list names
+     */
+    async getListNames() {
+      await this.ensureListsMetadata();
+      return Array.from(this.listNameToUri.keys());
+    }
+  }
   const style = `/* style.css */
 
 /* ==========================================================================
@@ -77618,6 +77729,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         loadSidecarTemplate("body", sidecarTemplatesHtml);
       }
+      let listCache = null;
+      if (api) {
+        listCache = new ListCache(api);
+      }
+      state.listCache = listCache;
       state.mobileView = window.innerWidth <= 800;
       handlers = {
         feed: new FeedItemHandler("feed", config, state, api, constants.FEED_ITEM_SELECTOR),

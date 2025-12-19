@@ -2318,6 +2318,8 @@ export class ConfigModal {
     let listUri;
     let listName;
 
+    let existingDids = new Set();
+
     if (isNewList) {
       listName = dialog.querySelector('.sync-new-list-name').value.trim();
       if (!listName) throw new Error('Please enter a list name');
@@ -2327,16 +2329,16 @@ export class ConfigModal {
       dialog.dataset.createdListUri = listUri;
       // Invalidate cache so the new list appears
       listCache.invalidate();
+      // New list is empty, no need to fetch members
     } else {
       listName = dialog.querySelector('.sync-existing-list').value;
       if (!listName) throw new Error('Please select a list');
       listUri = await listCache.getListUri(listName);
       if (!listUri) throw new Error(`List "${listName}" not found. Try refreshing the page.`);
+      // Get existing list members for existing lists
+      const existingMembers = await api.getListMembers(listUri);
+      existingDids = new Set(existingMembers.map(m => m.did));
     }
-
-    // Get existing list members
-    const existingMembers = await api.getListMembers(listUri);
-    const existingDids = new Set(existingMembers.map(m => m.did));
 
     // Get handles from rules
     const categoryIndex = this.parsedRules.findIndex(c => c.name === category);

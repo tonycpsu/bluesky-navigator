@@ -1123,7 +1123,7 @@ export class ConfigModal {
       if (!line || line.startsWith(';') || line.startsWith('#')) continue;
 
       // Match category header [name] or [name -> List Name] or [name → List Name]
-      const sectionMatch = line.match(/^\[([^\]→-]+?)(?:\s*(?:->|→)\s*(.+?))?\]$/);
+      const sectionMatch = line.match(/^\[([^\]]+?)(?:\s*(?:->|→)\s*(.*?))?\]$/);
       if (sectionMatch) {
         currentCategory = {
           name: sectionMatch[1].trim(),

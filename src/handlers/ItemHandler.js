@@ -4238,7 +4238,7 @@ export class ItemHandler extends Handler {
       line = line.trim();
       if (!line || line.startsWith(';') || line.startsWith('#')) continue;
 
-      const sectionMatch = line.match(/^\[([^\]→-]+?)(?:\s*(?:->|→)\s*(.+?))?\]$/);
+      const sectionMatch = line.match(/^\[([^\]]+?)(?:\s*(?:->|→)\s*(.*?))?\]$/);
       if (sectionMatch) {
         rulesName = sectionMatch[1].trim();
         const backingList = sectionMatch[2]?.trim() || null;

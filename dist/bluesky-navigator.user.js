@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+552.8f6ba6fb
+// @version     1.0.31+553.8f06d177
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46286,7 +46286,7 @@ if (cid) {
       for (let line of lines) {
         line = line.trim();
         if (!line || line.startsWith(";") || line.startsWith("#")) continue;
-        const sectionMatch = line.match(/^\[([^\]→-]+?)(?:\s*(?:->|→)\s*(.+?))?\]$/);
+        const sectionMatch = line.match(/^\[([^\]]+?)(?:\s*(?:->|→)\s*(.*?))?\]$/);
         if (sectionMatch) {
           currentCategory = {
             name: sectionMatch[1].trim(),
@@ -73550,7 +73550,7 @@ ${rule}`;
       for (let line of lines) {
         line = line.trim();
         if (!line || line.startsWith(";") || line.startsWith("#")) continue;
-        const sectionMatch = line.match(/^\[([^\]→-]+?)(?:\s*(?:->|→)\s*(.+?))?\]$/);
+        const sectionMatch = line.match(/^\[([^\]]+?)(?:\s*(?:->|→)\s*(.*?))?\]$/);
         if (sectionMatch) {
           rulesName = sectionMatch[1].trim();
           const backingList = sectionMatch[2]?.trim() || null;
@@ -78563,7 +78563,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       for (let line of lines) {
         line = line.trim();
         if (!line || line.startsWith(";") || line.startsWith("#")) continue;
-        const sectionMatch = line.match(/^\[([^\]→-]+?)(?:\s*(?:->|→)\s*(.+?))?\]$/);
+        const sectionMatch = line.match(/^\[([^\]]+?)(?:\s*(?:->|→)\s*(.*?))?\]$/);
         if (sectionMatch) {
           rulesName = sectionMatch[1].trim();
           const backingList = sectionMatch[2]?.trim() || null;

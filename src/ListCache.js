@@ -16,29 +16,73 @@ export class ListCache {
     // Map of list name -> { members: Set<handle>, fetchedAt: Date, uri: string }
     this.cache = new Map();
 
-    // Map of list name -> URI (built from getLists call)
+    // Map of list name (lowercase) -> URI (built from getLists call)
     this.listNameToUri = new Map();
+
+    // Map of list name (lowercase) -> original display name
+    this.listDisplayNames = new Map();
 
     // Whether we've fetched the user's list metadata
     this.listsMetadataFetched = false;
+    this.listsMetadataFetchedAt = null;
+
+    // Track in-flight requests to avoid duplicate fetches
+    this.pendingMetadataFetch = null;
+    this.pendingMemberFetches = new Map(); // list name -> Promise
   }
 
   /**
    * Ensures list metadata (name -> URI mapping) is loaded
+   * @param {boolean} forceRefresh - Force refresh even if cached
    * @private
    */
-  async ensureListsMetadata() {
-    if (this.listsMetadataFetched || !this.api) return;
+  async ensureListsMetadata(forceRefresh = false) {
+    if (!this.api) return;
 
-    try {
-      const lists = await this.api.getLists();
-      for (const list of lists) {
-        this.listNameToUri.set(list.name.toLowerCase(), list.uri);
-      }
-      this.listsMetadataFetched = true;
-    } catch (error) {
-      console.warn('Failed to fetch lists metadata:', error);
+    // If force refresh and there's a pending fetch, wait for it first
+    if (forceRefresh && this.pendingMetadataFetch) {
+      await this.pendingMetadataFetch;
     }
+
+    // Check if cache is still valid (5 minute expiry for metadata)
+    const metadataCacheMs = 5 * 60 * 1000;
+    const cacheExpired = this.listsMetadataFetchedAt &&
+      (Date.now() - this.listsMetadataFetchedAt) >= metadataCacheMs;
+
+    if (this.listsMetadataFetched && !forceRefresh && !cacheExpired) {
+      return;
+    }
+
+    // Reuse pending fetch if one is in progress (non-force case)
+    if (this.pendingMetadataFetch) {
+      return this.pendingMetadataFetch;
+    }
+
+    this.pendingMetadataFetch = (async () => {
+      try {
+        const lists = await this.api.getLists();
+        // Only clear and repopulate after successful fetch
+        const newNameToUri = new Map();
+        const newDisplayNames = new Map();
+        for (const list of lists) {
+          const normalizedName = list.name.toLowerCase();
+          newNameToUri.set(normalizedName, list.uri);
+          newDisplayNames.set(normalizedName, list.name);
+        }
+        // Swap in the new data atomically
+        this.listNameToUri = newNameToUri;
+        this.listDisplayNames = newDisplayNames;
+        this.listsMetadataFetched = true;
+        this.listsMetadataFetchedAt = Date.now();
+      } catch (error) {
+        console.warn('Failed to fetch lists metadata:', error);
+        // Keep existing data on error rather than clearing
+      } finally {
+        this.pendingMetadataFetch = null;
+      }
+    })();
+
+    return this.pendingMetadataFetch;
   }
 
   /**
@@ -55,32 +99,45 @@ export class ListCache {
       return cached.members;
     }
 
-    // Ensure we have list metadata
-    await this.ensureListsMetadata();
-
-    // Get URI for list name
-    const listUri = this.listNameToUri.get(normalizedName);
-    if (!listUri) {
-      console.warn(`List not found: ${listName}`);
-      return null;
+    // Reuse pending fetch if one is in progress for this list
+    if (this.pendingMemberFetches.has(normalizedName)) {
+      return this.pendingMemberFetches.get(normalizedName);
     }
 
-    // Fetch members
-    try {
-      const members = await this.api.getListMembers(listUri);
-      const handleSet = new Set(members.map(m => m.handle.toLowerCase()));
+    // Create and track the fetch promise
+    const fetchPromise = (async () => {
+      try {
+        // Ensure we have list metadata
+        await this.ensureListsMetadata();
 
-      this.cache.set(normalizedName, {
-        members: handleSet,
-        fetchedAt: Date.now(),
-        uri: listUri,
-      });
+        // Get URI for list name
+        const listUri = this.listNameToUri.get(normalizedName);
+        if (!listUri) {
+          console.warn(`List not found: ${listName}`);
+          return null;
+        }
 
-      return handleSet;
-    } catch (error) {
-      console.warn(`Failed to fetch list members for ${listName}:`, error);
-      return null;
-    }
+        // Fetch members
+        const members = await this.api.getListMembers(listUri);
+        const handleSet = new Set(members.map(m => m.handle.toLowerCase()));
+
+        this.cache.set(normalizedName, {
+          members: handleSet,
+          fetchedAt: Date.now(),
+          uri: listUri,
+        });
+
+        return handleSet;
+      } catch (error) {
+        console.warn(`Failed to fetch list members for ${listName}:`, error);
+        return null;
+      } finally {
+        this.pendingMemberFetches.delete(normalizedName);
+      }
+    })();
+
+    this.pendingMemberFetches.set(normalizedName, fetchPromise);
+    return fetchPromise;
   }
 
   /**
@@ -136,11 +193,17 @@ export class ListCache {
    */
   invalidate(listName = null) {
     if (listName) {
-      this.cache.delete(listName.toLowerCase());
+      const normalizedName = listName.toLowerCase();
+      this.cache.delete(normalizedName);
+      this.pendingMemberFetches.delete(normalizedName);
     } else {
       this.cache.clear();
       this.listNameToUri.clear();
+      this.listDisplayNames.clear();
       this.listsMetadataFetched = false;
+      this.listsMetadataFetchedAt = null;
+      this.pendingMetadataFetch = null;
+      this.pendingMemberFetches.clear();
     }
   }
 
@@ -165,11 +228,12 @@ export class ListCache {
   }
 
   /**
-   * Gets all known list names
-   * @returns {Promise<string[]>} Array of list names
+   * Gets all known list names (with original case)
+   * @param {boolean} forceRefresh - Force refresh from API
+   * @returns {Promise<string[]>} Array of list names with original case
    */
-  async getListNames() {
-    await this.ensureListsMetadata();
-    return Array.from(this.listNameToUri.keys());
+  async getListNames(forceRefresh = false) {
+    await this.ensureListsMetadata(forceRefresh);
+    return Array.from(this.listDisplayNames.values());
   }
 }

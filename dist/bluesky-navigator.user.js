@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+540.1402aa85
+// @version     1.0.31+541.74f28a91
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45901,6 +45901,7 @@ if (cid) {
       this.rulesSubTab = "visual";
       this.parsedRules = [];
       this.collapsedCategories = {};
+      this.cachedListNames = [];
       instance$2 = this;
     }
     toggle() {
@@ -46456,6 +46457,16 @@ if (cid) {
             `).join("")}
           </select>
         `;
+        } else if (rule.type === "list") {
+          const listOptions2 = this.cachedListNames.map((name) => `
+          <option value="${this.escapeHtml(name)}" ${rule.value === name ? "selected" : ""}>${this.escapeHtml(name)}</option>
+        `).join("");
+          valueHtml = `
+          <select class="rules-value rules-list-select" data-category="${catIndex}" data-rule="${ruleIndex}">
+            <option value="">Select list...</option>
+            ${listOptions2}
+          </select>
+        `;
         } else if (rule.type === "all") {
           valueHtml = `<input type="text" class="rules-value" value="" disabled data-category="${catIndex}" data-rule="${ruleIndex}">`;
         } else {
@@ -46466,6 +46477,10 @@ if (cid) {
         `;
         }
         const unsavedClass = rule._unsaved ? " rules-row-unsaved" : "";
+        const saveButton = rule._unsaved ? `
+        <button type="button" class="rules-save-rule" data-category="${catIndex}" data-rule="${ruleIndex}"
+                title="Save this rule">\u{1F4BE}</button>
+      ` : "";
         return `
         <div class="rules-row${unsavedClass}" draggable="true" data-category="${catIndex}" data-rule="${ruleIndex}">
           <span class="rules-drag-handle" title="Drag to reorder">\u22EE\u22EE</span>
@@ -46481,6 +46496,7 @@ if (cid) {
             <option value="all" ${rule.type === "all" ? "selected" : ""}>All</option>
           </select>
           ${valueHtml}
+          ${saveButton}
           <button type="button" class="rules-delete-rule" data-category="${catIndex}" data-rule="${ruleIndex}"
                   title="Delete rule">\u{1F5D1}</button>
         </div>
@@ -46505,11 +46521,25 @@ if (cid) {
     /**
      * Re-render just the visual editor content
      */
-    refreshVisualEditor() {
+    async refreshVisualEditor() {
+      await this.updateCachedListNames();
       const visualContainer = this.modalEl.querySelector(".rules-visual");
       if (visualContainer) {
         visualContainer.innerHTML = this.renderVisualEditor();
         this.attachRulesEventListeners();
+      }
+    }
+    /**
+     * Update cached list names from API
+     */
+    async updateCachedListNames() {
+      const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+      if (listCache) {
+        try {
+          this.cachedListNames = await listCache.getListNames();
+        } catch (e2) {
+          console.warn("Failed to fetch list names:", e2);
+        }
       }
     }
     /**
@@ -46789,6 +46819,26 @@ if (cid) {
           this.parsedRules[catIndex].rules.splice(ruleIndex, 1);
           this.syncVisualToRaw();
           this.refreshVisualEditor();
+        });
+      });
+      panel.querySelectorAll(".rules-save-rule").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          const ruleIndex = parseInt(e2.target.dataset.rule);
+          delete this.parsedRules[catIndex].rules[ruleIndex]._unsaved;
+          if (this.config.get("autoOrganizeRules")) {
+            this.organizeRulesInCategory(catIndex);
+          }
+          this.syncVisualToRaw(true);
+          this.refreshVisualEditor();
+        });
+      });
+      panel.querySelectorAll(".rules-list-select").forEach((select) => {
+        select.addEventListener("change", (e2) => {
+          const catIndex = parseInt(e2.target.dataset.category);
+          const ruleIndex = parseInt(e2.target.dataset.rule);
+          this.parsedRules[catIndex].rules[ruleIndex].value = e2.target.value;
+          this.syncVisualToRaw();
         });
       });
       let draggedRow = null;
@@ -52587,6 +52637,22 @@ div#statusBar.has-feed-map {
   color: #dc2626;
 }
 
+.rules-save-rule {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #f59e0b;
+  font-size: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.rules-save-rule:hover {
+  background: #fef3c7;
+  color: #d97706;
+}
+
 /* Add buttons */
 .rules-add-rule,
 .rules-add-category {
@@ -52730,6 +52796,10 @@ div#statusBar.has-feed-map {
 
   .rules-delete-rule:hover {
     background: #450a0a;
+  }
+
+  .rules-save-rule:hover {
+    background: #451a03;
   }
 
   .rules-row.drag-over {

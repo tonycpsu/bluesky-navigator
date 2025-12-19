@@ -647,6 +647,7 @@ export class ConfigModal {
     this.rulesSubTab = 'visual'; // 'visual' or 'raw'
     this.parsedRules = []; // Parsed rule categories for visual editor
     this.collapsedCategories = {}; // Track collapsed state of rule categories
+    this.cachedListNames = []; // Cached Bluesky list names for dropdown
 
     instance = this;
   }
@@ -1337,6 +1338,17 @@ export class ConfigModal {
             `).join('')}
           </select>
         `;
+      } else if (rule.type === 'list') {
+        // Dropdown for list selection
+        const listOptions = this.cachedListNames.map(name => `
+          <option value="${this.escapeHtml(name)}" ${rule.value === name ? 'selected' : ''}>${this.escapeHtml(name)}</option>
+        `).join('');
+        valueHtml = `
+          <select class="rules-value rules-list-select" data-category="${catIndex}" data-rule="${ruleIndex}">
+            <option value="">Select list...</option>
+            ${listOptions}
+          </select>
+        `;
       } else if (rule.type === 'all') {
         valueHtml = `<input type="text" class="rules-value" value="" disabled data-category="${catIndex}" data-rule="${ruleIndex}">`;
       } else {
@@ -1348,6 +1360,11 @@ export class ConfigModal {
       }
 
       const unsavedClass = rule._unsaved ? ' rules-row-unsaved' : '';
+      const saveButton = rule._unsaved ? `
+        <button type="button" class="rules-save-rule" data-category="${catIndex}" data-rule="${ruleIndex}"
+                title="Save this rule">💾</button>
+      ` : '';
+
       return `
         <div class="rules-row${unsavedClass}" draggable="true" data-category="${catIndex}" data-rule="${ruleIndex}">
           <span class="rules-drag-handle" title="Drag to reorder">⋮⋮</span>
@@ -1363,6 +1380,7 @@ export class ConfigModal {
             <option value="all" ${rule.type === 'all' ? 'selected' : ''}>All</option>
           </select>
           ${valueHtml}
+          ${saveButton}
           <button type="button" class="rules-delete-rule" data-category="${catIndex}" data-rule="${ruleIndex}"
                   title="Delete rule">🗑</button>
         </div>
@@ -1391,11 +1409,28 @@ export class ConfigModal {
   /**
    * Re-render just the visual editor content
    */
-  refreshVisualEditor() {
+  async refreshVisualEditor() {
+    // Fetch list names for dropdown if API is available
+    await this.updateCachedListNames();
+
     const visualContainer = this.modalEl.querySelector('.rules-visual');
     if (visualContainer) {
       visualContainer.innerHTML = this.renderVisualEditor();
       this.attachRulesEventListeners();
+    }
+  }
+
+  /**
+   * Update cached list names from API
+   */
+  async updateCachedListNames() {
+    const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+    if (listCache) {
+      try {
+        this.cachedListNames = await listCache.getListNames();
+      } catch (e) {
+        console.warn('Failed to fetch list names:', e);
+      }
     }
   }
 
@@ -1756,6 +1791,32 @@ export class ConfigModal {
         this.parsedRules[catIndex].rules.splice(ruleIndex, 1);
         this.syncVisualToRaw();
         this.refreshVisualEditor();
+      });
+    });
+
+    // Save individual rule (marks as saved and re-organizes)
+    panel.querySelectorAll('.rules-save-rule').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        const ruleIndex = parseInt(e.target.dataset.rule);
+        // Remove unsaved flag from this rule
+        delete this.parsedRules[catIndex].rules[ruleIndex]._unsaved;
+        // Re-organize if enabled
+        if (this.config.get('autoOrganizeRules')) {
+          this.organizeRulesInCategory(catIndex);
+        }
+        this.syncVisualToRaw(true); // Skip auto-organize since we just did it
+        this.refreshVisualEditor();
+      });
+    });
+
+    // List dropdown change
+    panel.querySelectorAll('.rules-list-select').forEach(select => {
+      select.addEventListener('change', (e) => {
+        const catIndex = parseInt(e.target.dataset.category);
+        const ruleIndex = parseInt(e.target.dataset.rule);
+        this.parsedRules[catIndex].rules[ruleIndex].value = e.target.value;
+        this.syncVisualToRaw();
       });
     });
 

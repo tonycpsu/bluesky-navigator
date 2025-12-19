@@ -4780,6 +4780,22 @@ div#statusBar.has-feed-map {
   color: #dc2626;
 }
 
+.rules-save-rule {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #f59e0b;
+  font-size: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.rules-save-rule:hover {
+  background: #fef3c7;
+  color: #d97706;
+}
+
 /* Add buttons */
 .rules-add-rule,
 .rules-add-category {
@@ -4923,6 +4939,10 @@ div#statusBar.has-feed-map {
 
   .rules-delete-rule:hover {
     background: #450a0a;
+  }
+
+  .rules-save-rule:hover {
+    background: #451a03;
   }
 
   .rules-row.drag-over {

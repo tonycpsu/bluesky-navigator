@@ -4523,6 +4523,7 @@ div#statusBar.has-feed-map {
   border: 1px solid var(--border-color, #ccc);
   border-radius: 6px;
   font-size: 14px;
+  box-sizing: border-box;
 }
 
 .sync-preview {

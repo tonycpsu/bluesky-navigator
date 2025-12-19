@@ -4689,6 +4689,32 @@ div#statusBar.has-feed-map {
   border-radius: 4px;
 }
 
+.rules-row-unsaved {
+  background-color: #fef3c7;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin-left: -4px;
+  margin-right: -4px;
+  position: relative;
+}
+
+.rules-row-unsaved::before {
+  content: '●';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #f59e0b;
+  font-size: 8px;
+}
+
+/* Dark mode support for unsaved rules */
+@media (prefers-color-scheme: dark) {
+  .rules-row-unsaved {
+    background-color: rgba(245, 158, 11, 0.15);
+  }
+}
+
 .rules-drag-handle {
   cursor: grab;
   color: #9ca3af;

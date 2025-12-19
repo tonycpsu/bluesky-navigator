@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+539.ca6416d9
+// @version     1.0.31+540.1402aa85
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45969,7 +45969,8 @@ if (cid) {
         (r) => r.type === "from" && r.value.toLowerCase() === handle2.toLowerCase()
       );
       if (!ruleExists) {
-        category.rules.push({ action: "allow", type: "from", value: handle2 });
+        this.clearUnsavedFlags(categoryIndex);
+        category.rules.push({ action: "allow", type: "from", value: handle2, _unsaved: true });
         this.syncVisualToRaw();
         this.refreshVisualEditor();
       }
@@ -46464,8 +46465,9 @@ if (cid) {
                  data-category="${catIndex}" data-rule="${ruleIndex}">
         `;
         }
+        const unsavedClass = rule._unsaved ? " rules-row-unsaved" : "";
         return `
-        <div class="rules-row" draggable="true" data-category="${catIndex}" data-rule="${ruleIndex}">
+        <div class="rules-row${unsavedClass}" draggable="true" data-category="${catIndex}" data-rule="${ruleIndex}">
           <span class="rules-drag-handle" title="Drag to reorder">\u22EE\u22EE</span>
           <select class="rules-action" data-category="${catIndex}" data-rule="${ruleIndex}">
             <option value="allow" ${rule.action === "allow" ? "selected" : ""}>Allow</option>
@@ -46552,13 +46554,16 @@ if (cid) {
      * Type order: all, include, list, from, content
      * Within same type, sort by value alphabetically.
      * This sorting is safe because rules of different types don't overlap.
+     * Unsaved rules are kept at the bottom (not sorted) until saved.
      * @param {number} catIndex - The category index
      */
     organizeRulesInCategory(catIndex) {
       const category = this.parsedRules[catIndex];
       if (!category || !category.rules) return;
+      const savedRules = category.rules.filter((r) => !r._unsaved);
+      const unsavedRules = category.rules.filter((r) => r._unsaved);
       const typeOrder = { all: 0, include: 1, list: 2, from: 3, content: 4 };
-      category.rules.sort((a2, b) => {
+      savedRules.sort((a2, b) => {
         const typeA = typeOrder[a2.type] ?? 99;
         const typeB = typeOrder[b.type] ?? 99;
         if (typeA !== typeB) return typeA - typeB;
@@ -46567,6 +46572,7 @@ if (cid) {
         }
         return (a2.value || "").localeCompare(b.value || "", void 0, { sensitivity: "base" });
       });
+      category.rules = [...savedRules, ...unsavedRules];
     }
     /**
      * Organize all categories' rules
@@ -46575,6 +46581,26 @@ if (cid) {
       for (let i2 = 0; i2 < this.parsedRules.length; i2++) {
         this.organizeRulesInCategory(i2);
       }
+    }
+    /**
+     * Clear unsaved flags from rules in a category (or all categories if catIndex is null)
+     * @param {number|null} catIndex - Category index, or null for all categories
+     */
+    clearUnsavedFlags(catIndex = null) {
+      const categories = catIndex !== null ? [this.parsedRules[catIndex]] : this.parsedRules;
+      for (const category of categories) {
+        if (category && category.rules) {
+          for (const rule of category.rules) {
+            delete rule._unsaved;
+          }
+        }
+      }
+    }
+    /**
+     * Clear all unsaved flags (called on save)
+     */
+    clearAllUnsavedFlags() {
+      this.clearUnsavedFlags(null);
     }
     /**
      * Attach event listeners for the rules panel
@@ -46721,7 +46747,8 @@ if (cid) {
       panel.querySelectorAll(".rules-add-rule").forEach((btn) => {
         btn.addEventListener("click", (e2) => {
           const catIndex = parseInt(e2.target.dataset.category);
-          this.parsedRules[catIndex].rules.push({ action: "allow", type: "content", value: "" });
+          this.clearUnsavedFlags(catIndex);
+          this.parsedRules[catIndex].rules.push({ action: "allow", type: "content", value: "", _unsaved: true });
           this.syncVisualToRaw();
           this.refreshVisualEditor();
         });
@@ -46869,6 +46896,11 @@ if (cid) {
       });
     }
     save() {
+      this.clearAllUnsavedFlags();
+      if (this.config.get("autoOrganizeRules")) {
+        this.organizeAllRules();
+        this.syncVisualToRaw(true);
+      }
       Object.entries(this.pendingChanges).forEach(([key, value]) => {
         this.config.set(key, value);
       });
@@ -52462,6 +52494,32 @@ div#statusBar.has-feed-map {
 .rules-row.drag-over {
   background-color: #dbeafe;
   border-radius: 4px;
+}
+
+.rules-row-unsaved {
+  background-color: #fef3c7;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin-left: -4px;
+  margin-right: -4px;
+  position: relative;
+}
+
+.rules-row-unsaved::before {
+  content: '\u25CF';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #f59e0b;
+  font-size: 8px;
+}
+
+/* Dark mode support for unsaved rules */
+@media (prefers-color-scheme: dark) {
+  .rules-row-unsaved {
+    background-color: rgba(245, 158, 11, 0.15);
+  }
 }
 
 .rules-drag-handle {

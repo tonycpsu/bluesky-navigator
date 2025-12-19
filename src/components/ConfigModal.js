@@ -742,8 +742,10 @@ export class ConfigModal {
     );
 
     if (!ruleExists) {
-      // Add the new rule
-      category.rules.push({ action: 'allow', type: 'from', value: handle });
+      // Clear unsaved flag from existing rules in this category
+      this.clearUnsavedFlags(categoryIndex);
+      // Add the new rule marked as unsaved
+      category.rules.push({ action: 'allow', type: 'from', value: handle, _unsaved: true });
 
       // Sync to raw textarea
       this.syncVisualToRaw();
@@ -1345,8 +1347,9 @@ export class ConfigModal {
         `;
       }
 
+      const unsavedClass = rule._unsaved ? ' rules-row-unsaved' : '';
       return `
-        <div class="rules-row" draggable="true" data-category="${catIndex}" data-rule="${ruleIndex}">
+        <div class="rules-row${unsavedClass}" draggable="true" data-category="${catIndex}" data-rule="${ruleIndex}">
           <span class="rules-drag-handle" title="Drag to reorder">⋮⋮</span>
           <select class="rules-action" data-category="${catIndex}" data-rule="${ruleIndex}">
             <option value="allow" ${rule.action === 'allow' ? 'selected' : ''}>Allow</option>
@@ -1443,15 +1446,21 @@ export class ConfigModal {
    * Type order: all, include, list, from, content
    * Within same type, sort by value alphabetically.
    * This sorting is safe because rules of different types don't overlap.
+   * Unsaved rules are kept at the bottom (not sorted) until saved.
    * @param {number} catIndex - The category index
    */
   organizeRulesInCategory(catIndex) {
     const category = this.parsedRules[catIndex];
     if (!category || !category.rules) return;
 
+    // Separate saved and unsaved rules
+    const savedRules = category.rules.filter(r => !r._unsaved);
+    const unsavedRules = category.rules.filter(r => r._unsaved);
+
     const typeOrder = { all: 0, include: 1, list: 2, from: 3, content: 4 };
 
-    category.rules.sort((a, b) => {
+    // Only sort saved rules
+    savedRules.sort((a, b) => {
       // First sort by type
       const typeA = typeOrder[a.type] ?? 99;
       const typeB = typeOrder[b.type] ?? 99;
@@ -1465,6 +1474,9 @@ export class ConfigModal {
       // Then by value alphabetically
       return (a.value || '').localeCompare(b.value || '', undefined, { sensitivity: 'base' });
     });
+
+    // Combine: sorted saved rules first, then unsaved rules at the bottom
+    category.rules = [...savedRules, ...unsavedRules];
   }
 
   /**
@@ -1474,6 +1486,31 @@ export class ConfigModal {
     for (let i = 0; i < this.parsedRules.length; i++) {
       this.organizeRulesInCategory(i);
     }
+  }
+
+  /**
+   * Clear unsaved flags from rules in a category (or all categories if catIndex is null)
+   * @param {number|null} catIndex - Category index, or null for all categories
+   */
+  clearUnsavedFlags(catIndex = null) {
+    const categories = catIndex !== null
+      ? [this.parsedRules[catIndex]]
+      : this.parsedRules;
+
+    for (const category of categories) {
+      if (category && category.rules) {
+        for (const rule of category.rules) {
+          delete rule._unsaved;
+        }
+      }
+    }
+  }
+
+  /**
+   * Clear all unsaved flags (called on save)
+   */
+  clearAllUnsavedFlags() {
+    this.clearUnsavedFlags(null);
   }
 
   /**
@@ -1667,7 +1704,10 @@ export class ConfigModal {
     panel.querySelectorAll('.rules-add-rule').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const catIndex = parseInt(e.target.dataset.category);
-        this.parsedRules[catIndex].rules.push({ action: 'allow', type: 'content', value: '' });
+        // Clear unsaved flag from existing rules in this category
+        this.clearUnsavedFlags(catIndex);
+        // Add new rule marked as unsaved
+        this.parsedRules[catIndex].rules.push({ action: 'allow', type: 'content', value: '', _unsaved: true });
         this.syncVisualToRaw();
         this.refreshVisualEditor();
       });
@@ -1858,6 +1898,13 @@ export class ConfigModal {
   }
 
   save() {
+    // Clear unsaved flags from rules and re-organize if enabled
+    this.clearAllUnsavedFlags();
+    if (this.config.get('autoOrganizeRules')) {
+      this.organizeAllRules();
+      this.syncVisualToRaw(true); // Skip auto-organize since we just did it
+    }
+
     // Apply all pending changes
     Object.entries(this.pendingChanges).forEach(([key, value]) => {
       this.config.set(key, value);

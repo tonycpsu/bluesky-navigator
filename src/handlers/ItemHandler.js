@@ -405,8 +405,31 @@ export class ItemHandler extends Handler {
     if (!post) return;
 
     const toolbarHeight = this.getToolbarHeight();
+    const posts = this.getUnrolledThreadPosts();
 
-    // Use same approach as top-level posts: set scroll-margin-top and use scrollIntoView
+    // For the first post (index 0), scroll to show the thread header
+    // This requires scrolling both the internal container and the page
+    if (posts.length > 0 && post === posts[0]) {
+      // Get the internal scroll container (parent of contentHider-post)
+      const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
+      if (scrollContainer) {
+        // Scroll internal container to top to show first post
+        scrollContainer.scrollTop = 0;
+      }
+
+      // Scroll the page to show the thread header (selectedItem includes the header)
+      const container = this.selectedItem?.[0];
+      if (container) {
+        container.style.scrollMarginTop = `${toolbarHeight}px`;
+        container.scrollIntoView({
+          behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+          block: 'start',
+        });
+      }
+      return;
+    }
+
+    // For other posts, scroll the post itself into view
     post.style.scrollMarginTop = `${toolbarHeight}px`;
     post.scrollIntoView({
       behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',

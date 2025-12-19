@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+512.05481f35
+// @version     1.0.31+513.da6e384e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69125,6 +69125,22 @@ div#statusBar.has-feed-map {
     scrollThreadPostIntoView(post2) {
       if (!post2) return;
       const toolbarHeight = this.getToolbarHeight();
+      const posts = this.getUnrolledThreadPosts();
+      if (posts.length > 0 && post2 === posts[0]) {
+        const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
+        if (scrollContainer) {
+          scrollContainer.scrollTop = 0;
+        }
+        const container = this.selectedItem?.[0];
+        if (container) {
+          container.style.scrollMarginTop = `${toolbarHeight}px`;
+          container.scrollIntoView({
+            behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
+            block: "start"
+          });
+        }
+        return;
+      }
       post2.style.scrollMarginTop = `${toolbarHeight}px`;
       post2.scrollIntoView({
         behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",

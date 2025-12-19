@@ -220,6 +220,30 @@ export class ListCache {
   }
 
   /**
+   * Optimistically adds a handle to the cached members for a list.
+   * Use after successfully adding via API to avoid waiting for eventual consistency.
+   * @param {string} handle - Handle to add
+   * @param {string} listName - List name
+   */
+  addMemberToCache(handle, listName) {
+    const normalizedName = listName.toLowerCase();
+    const normalizedHandle = this.normalizeHandle(handle);
+
+    let cached = this.cache.get(normalizedName);
+    if (!cached) {
+      // Create a new cache entry if none exists
+      cached = {
+        members: new Set(),
+        fetchedAt: Date.now(),
+        uri: null,
+      };
+      this.cache.set(normalizedName, cached);
+    }
+
+    cached.members.add(normalizedHandle);
+  }
+
+  /**
    * Invalidates cache for a specific list or all lists
    * @param {string} [listName] - List name to invalidate, or all if omitted
    */

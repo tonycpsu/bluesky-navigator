@@ -4189,9 +4189,8 @@ export class ItemHandler extends Handler {
       // Add to list
       await this.api.addToList(listUri, did);
 
-      // Invalidate cache and re-fetch to pick up the new member
-      this.state.listCache.invalidate(listName);
-      await this.state.listCache.getMembers(listName);
+      // Optimistically add to local cache (don't wait for API eventual consistency)
+      this.state.listCache.addMemberToCache(cleanHandle, listName);
 
       // Refresh highlights to show the new member
       this.scheduleHighlightRefresh();

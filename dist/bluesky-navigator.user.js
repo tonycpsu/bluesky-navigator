@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+566.29f69d01
+// @version     1.0.31+567.31ae5b31
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47990,6 +47990,26 @@ if (cid) {
       return cached.members.has(normalizedHandle);
     }
     /**
+     * Optimistically adds a handle to the cached members for a list.
+     * Use after successfully adding via API to avoid waiting for eventual consistency.
+     * @param {string} handle - Handle to add
+     * @param {string} listName - List name
+     */
+    addMemberToCache(handle2, listName) {
+      const normalizedName = listName.toLowerCase();
+      const normalizedHandle = this.normalizeHandle(handle2);
+      let cached = this.cache.get(normalizedName);
+      if (!cached) {
+        cached = {
+          members: /* @__PURE__ */ new Set(),
+          fetchedAt: Date.now(),
+          uri: null
+        };
+        this.cache.set(normalizedName, cached);
+      }
+      cached.members.add(normalizedHandle);
+    }
+    /**
      * Invalidates cache for a specific list or all lists
      * @param {string} [listName] - List name to invalidate, or all if omitted
      */
@@ -73743,8 +73763,7 @@ div#statusBar.has-feed-map {
           return false;
         }
         await this.api.addToList(listUri, did2);
-        this.state.listCache.invalidate(listName);
-        await this.state.listCache.getMembers(listName);
+        this.state.listCache.addMemberToCache(cleanHandle, listName);
         this.scheduleHighlightRefresh();
         this.showRuleAddedNotification(`Added @${cleanHandle} to list "${listName}"`);
         return true;

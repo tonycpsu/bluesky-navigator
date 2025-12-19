@@ -5325,6 +5325,19 @@ div#statusBar.has-feed-map {
   font-weight: 500;
 }
 
+.bsky-nav-rules-location {
+  font-size: 11px;
+  opacity: 0.7;
+  font-weight: normal;
+  margin-left: 4px;
+}
+
+.bsky-nav-rules-remove-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .bsky-nav-rules-dropdown-footer {
   display: flex;
   gap: 8px;

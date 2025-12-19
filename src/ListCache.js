@@ -13,7 +13,7 @@ export class ListCache {
     this.api = api;
     this.cacheDurationMs = cacheDurationMs;
 
-    // Map of list name -> { members: Set<handle>, fetchedAt: Date, uri: string }
+    // Map of list name -> { members: Map<handle, { uri }>, fetchedAt: Date, uri: string }
     this.cache = new Map();
 
     // Map of list name (lowercase) -> URI (built from getLists call)
@@ -117,7 +117,7 @@ export class ListCache {
   /**
    * Gets the cached members for a list, fetching if needed
    * @param {string} listName - Display name of the list
-   * @returns {Promise<Set<string>|null>} Set of handles (lowercase) or null if list not found
+   * @returns {Promise<Map<string, { uri: string }>|null>} Map of handles (lowercase) to { uri } or null if list not found
    */
   async getMembers(listName) {
     const normalizedName = listName.toLowerCase();
@@ -149,17 +149,20 @@ export class ListCache {
           return null;
         }
 
-        // Fetch members
+        // Fetch members with their listitem URIs
         const members = await this.api.getListMembers(listUri);
-        const handleSet = new Set(members.map(m => m.handle.toLowerCase()));
+        const memberMap = new Map();
+        for (const m of members) {
+          memberMap.set(m.handle.toLowerCase(), { uri: m.uri });
+        }
 
         this.cache.set(normalizedName, {
-          members: handleSet,
+          members: memberMap,
           fetchedAt: Date.now(),
           uri: listUri,
         });
 
-        return handleSet;
+        return memberMap;
       } catch (error) {
         console.warn(`Failed to fetch list members for ${listName}:`, error);
         return null;
@@ -220,12 +223,28 @@ export class ListCache {
   }
 
   /**
+   * Gets the listitem URI for a handle in a list (for deletion)
+   * @param {string} handle - Handle to look up
+   * @param {string} listName - List name
+   * @returns {Promise<string|null>} Listitem URI or null if not found
+   */
+  async getMemberUri(handle, listName) {
+    const members = await this.getMembers(listName);
+    if (!members) return null;
+
+    const normalizedHandle = this.normalizeHandle(handle);
+    const member = members.get(normalizedHandle);
+    return member?.uri || null;
+  }
+
+  /**
    * Optimistically adds a handle to the cached members for a list.
    * Use after successfully adding via API to avoid waiting for eventual consistency.
    * @param {string} handle - Handle to add
    * @param {string} listName - List name
+   * @param {string} [listitemUri] - Optional listitem URI (for future deletion)
    */
-  addMemberToCache(handle, listName) {
+  addMemberToCache(handle, listName, listitemUri = null) {
     const normalizedName = listName.toLowerCase();
     const normalizedHandle = this.normalizeHandle(handle);
 
@@ -233,14 +252,30 @@ export class ListCache {
     if (!cached) {
       // Create a new cache entry if none exists
       cached = {
-        members: new Set(),
+        members: new Map(),
         fetchedAt: Date.now(),
         uri: null,
       };
       this.cache.set(normalizedName, cached);
     }
 
-    cached.members.add(normalizedHandle);
+    cached.members.set(normalizedHandle, { uri: listitemUri });
+  }
+
+  /**
+   * Optimistically removes a handle from the cached members for a list.
+   * Use after successfully removing via API to avoid waiting for eventual consistency.
+   * @param {string} handle - Handle to remove
+   * @param {string} listName - List name
+   */
+  removeMemberFromCache(handle, listName) {
+    const normalizedName = listName.toLowerCase();
+    const normalizedHandle = this.normalizeHandle(handle);
+
+    const cached = this.cache.get(normalizedName);
+    if (cached?.members) {
+      cached.members.delete(normalizedHandle);
+    }
   }
 
   /**

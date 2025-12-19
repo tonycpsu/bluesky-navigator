@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+567.31ae5b31
+// @version     1.0.31+568.dc890b93
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45006,7 +45006,7 @@ if (cid) {
     /**
      * Fetches all members of a list
      * @param {string} listUri - AT URI of the list
-     * @returns {Promise<Array>} Array of member objects with did, handle
+     * @returns {Promise<Array>} Array of member objects with did, handle, uri (listitem record URI)
      */
     async getListMembers(listUri) {
       const params = { list: listUri, limit: 100 };
@@ -45017,7 +45017,9 @@ if (cid) {
         const { data } = await this.agent.app.bsky.graph.getList(params);
         members.push(...data.items.map((item) => ({
           did: item.subject.did,
-          handle: item.subject.handle
+          handle: item.subject.handle,
+          uri: item.uri
+          // listitem record URI for deletion
         })));
         cursor = data.cursor;
       } while (cursor);
@@ -45064,6 +45066,23 @@ if (cid) {
         record: record2
       });
       return data.uri;
+    }
+    /**
+     * Removes a user from a list
+     * @param {string} listitemUri - AT URI of the listitem record to delete
+     * @returns {Promise<void>}
+     */
+    async removeFromList(listitemUri) {
+      const match2 = listitemUri.match(/at:\/\/([^/]+)\/([^/]+)\/([^/]+)/);
+      if (!match2) {
+        throw new Error(`Invalid listitem URI: ${listitemUri}`);
+      }
+      const [, repo, collection, rkey] = match2;
+      await this.agent.com.atproto.repo.deleteRecord({
+        repo,
+        collection,
+        rkey
+      });
     }
     /**
      * Resolves a handle to a DID
@@ -47910,7 +47929,7 @@ if (cid) {
     /**
      * Gets the cached members for a list, fetching if needed
      * @param {string} listName - Display name of the list
-     * @returns {Promise<Set<string>|null>} Set of handles (lowercase) or null if list not found
+     * @returns {Promise<Map<string, { uri: string }>|null>} Map of handles (lowercase) to { uri } or null if list not found
      */
     async getMembers(listName) {
       const normalizedName = listName.toLowerCase();
@@ -47932,13 +47951,16 @@ if (cid) {
             return null;
           }
           const members = await this.api.getListMembers(listUri);
-          const handleSet = new Set(members.map((m) => m.handle.toLowerCase()));
+          const memberMap = /* @__PURE__ */ new Map();
+          for (const m of members) {
+            memberMap.set(m.handle.toLowerCase(), { uri: m.uri });
+          }
           this.cache.set(normalizedName, {
-            members: handleSet,
+            members: memberMap,
             fetchedAt: Date.now(),
             uri: listUri
           });
-          return handleSet;
+          return memberMap;
         } catch (error) {
           console.warn(`Failed to fetch list members for ${listName}:`, error);
           return null;
@@ -47990,24 +48012,52 @@ if (cid) {
       return cached.members.has(normalizedHandle);
     }
     /**
+     * Gets the listitem URI for a handle in a list (for deletion)
+     * @param {string} handle - Handle to look up
+     * @param {string} listName - List name
+     * @returns {Promise<string|null>} Listitem URI or null if not found
+     */
+    async getMemberUri(handle2, listName) {
+      const members = await this.getMembers(listName);
+      if (!members) return null;
+      const normalizedHandle = this.normalizeHandle(handle2);
+      const member = members.get(normalizedHandle);
+      return member?.uri || null;
+    }
+    /**
      * Optimistically adds a handle to the cached members for a list.
      * Use after successfully adding via API to avoid waiting for eventual consistency.
      * @param {string} handle - Handle to add
      * @param {string} listName - List name
+     * @param {string} [listitemUri] - Optional listitem URI (for future deletion)
      */
-    addMemberToCache(handle2, listName) {
+    addMemberToCache(handle2, listName, listitemUri = null) {
       const normalizedName = listName.toLowerCase();
       const normalizedHandle = this.normalizeHandle(handle2);
       let cached = this.cache.get(normalizedName);
       if (!cached) {
         cached = {
-          members: /* @__PURE__ */ new Set(),
+          members: /* @__PURE__ */ new Map(),
           fetchedAt: Date.now(),
           uri: null
         };
         this.cache.set(normalizedName, cached);
       }
-      cached.members.add(normalizedHandle);
+      cached.members.set(normalizedHandle, { uri: listitemUri });
+    }
+    /**
+     * Optimistically removes a handle from the cached members for a list.
+     * Use after successfully removing via API to avoid waiting for eventual consistency.
+     * @param {string} handle - Handle to remove
+     * @param {string} listName - List name
+     */
+    removeMemberFromCache(handle2, listName) {
+      const normalizedName = listName.toLowerCase();
+      const normalizedHandle = this.normalizeHandle(handle2);
+      const cached = this.cache.get(normalizedName);
+      if (cached?.members) {
+        cached.members.delete(normalizedHandle);
+      }
     }
     /**
      * Invalidates cache for a specific list or all lists
@@ -53381,6 +53431,19 @@ div#statusBar.has-feed-map {
 
 .bsky-nav-rules-list-name {
   font-weight: 500;
+}
+
+.bsky-nav-rules-location {
+  font-size: 11px;
+  opacity: 0.7;
+  font-weight: normal;
+  margin-left: 4px;
+}
+
+.bsky-nav-rules-remove-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .bsky-nav-rules-dropdown-footer {
@@ -71840,6 +71903,9 @@ div#statusBar.has-feed-map {
         case "+":
           this.openAddToRulesForItem(item);
           break;
+        case "-":
+          this.openRemoveFromRulesForItem(item);
+          break;
         case "s":
           this.savePost(item);
           break;
@@ -73340,6 +73406,34 @@ div#statusBar.has-feed-map {
       this.showAddToRulesDropdown(rect, { handle: handle2 });
     }
     /**
+     * Open Remove from Rules dropdown for the author of the selected item.
+     * Shows only categories where the author exists.
+     * @param {jQuery} item - The selected item
+     */
+    openRemoveFromRulesForItem(item) {
+      if (!item || !item.length) return;
+      let handle2 = this.handleFromItem(item);
+      if (!handle2) {
+        const testId = $(item).attr("data-testid") || "";
+        const match2 = testId.match(/^feedItem-by-(.+)$/);
+        if (match2) {
+          handle2 = match2[1];
+        }
+      }
+      if (!handle2) return;
+      const authorElement = $(item).find(constants.PROFILE_SELECTOR).find("span").eq(0)[0];
+      let rect;
+      if (authorElement) {
+        rect = authorElement.getBoundingClientRect();
+        if (rect.top > 0 && rect.left > 0) {
+          this.showRemoveFromRulesDropdown(rect, handle2);
+          return;
+        }
+      }
+      rect = item[0].getBoundingClientRect();
+      this.showRemoveFromRulesDropdown(rect, handle2);
+    }
+    /**
      * Show dropdown to select which rule category or list to add to
      * @param {DOMRect} buttonRect - The bounding rect of the button (captured before hover card disappears)
      * @param {Object} options - Either { handle } for author rule or { selectedText } for content rule
@@ -73743,6 +73837,208 @@ div#statusBar.has-feed-map {
           popup.remove();
         }
       });
+    }
+    /**
+     * Show dropdown to select which rule category to remove the author from
+     * @param {DOMRect} buttonRect - Position rect
+     * @param {string} handle - Handle to remove
+     */
+    showRemoveFromRulesDropdown(buttonRect, handle2) {
+      $(".bsky-nav-rules-dropdown").remove();
+      this.rulesDropdownActive = true;
+      const categoriesWithAuthor = this.findCategoriesWithAuthor(handle2);
+      if (categoriesWithAuthor.length === 0) {
+        this.showRuleAddedNotification(`@${handle2} not found in any rule set`, "info");
+        this.rulesDropdownActive = false;
+        return;
+      }
+      const dropdown = $(`
+      <div class="bsky-nav-rules-dropdown">
+        <div class="bsky-nav-rules-dropdown-header">Remove @${handle2} from:</div>
+        <div class="bsky-nav-rules-dropdown-categories">
+          ${categoriesWithAuthor.map(({ category, inList, inRules, listName }) => {
+        const color2 = this.getColorForCategory(category);
+        const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const sc = isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.9)";
+        const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+        const location = inList && inRules ? `(list & rules)` : inList ? `(list: ${listName})` : `(rules)`;
+        return `
+            <button class="bsky-nav-rules-category-btn bsky-nav-rules-remove-btn"
+                    data-category="${category}"
+                    data-in-list="${inList}"
+                    data-in-rules="${inRules}"
+                    data-list-name="${listName || ""}"
+                    style="color: ${color2}; text-shadow: ${shadow}">
+              ${category} <span class="bsky-nav-rules-location">${location}</span>
+            </button>
+          `;
+      }).join("")}
+        </div>
+      </div>
+    `);
+      dropdown.css({
+        position: "fixed",
+        top: buttonRect.top + "px",
+        left: buttonRect.left + "px",
+        zIndex: 10001
+      });
+      $("body").append(dropdown);
+      const closeDropdown = () => {
+        dropdown.remove();
+        this.rulesDropdownActive = false;
+        $(document).off("mousedown.rulesDropdown");
+        $(document).off("keydown.rulesDropdown");
+      };
+      dropdown.find(".bsky-nav-rules-remove-btn").on("click", async (e2) => {
+        const btn = $(e2.currentTarget);
+        const category = btn.data("category");
+        const inList = btn.data("in-list");
+        const inRules = btn.data("in-rules");
+        const listName = btn.data("list-name");
+        btn.text("Removing...").prop("disabled", true);
+        await this.removeAuthorFromCategory(handle2, category, inList, inRules, listName);
+        closeDropdown();
+      });
+      dropdown.on("mousedown mouseup click", (e2) => {
+        e2.stopPropagation();
+      });
+      setTimeout(() => {
+        $(document).on("mousedown.rulesDropdown", (e2) => {
+          if (!$(e2.target).closest(".bsky-nav-rules-dropdown").length) {
+            closeDropdown();
+          }
+        });
+      }, 100);
+      $(document).on("keydown.rulesDropdown", (e2) => {
+        if (e2.key === "Escape") {
+          closeDropdown();
+          e2.preventDefault();
+        } else if (e2.key === "Enter") {
+          const firstBtn = dropdown.find(".bsky-nav-rules-remove-btn").first();
+          if (firstBtn.length) {
+            firstBtn.trigger("click");
+          }
+          e2.preventDefault();
+        }
+      });
+    }
+    /**
+     * Find all categories where the author exists (in list or rules)
+     * @param {string} handle - Handle to search for
+     * @returns {Array<{ category: string, inList: boolean, inRules: boolean, listName: string|null }>}
+     */
+    findCategoriesWithAuthor(handle2) {
+      const results = [];
+      const rules = this.state.rules;
+      if (!rules) return results;
+      const normalizedHandle = handle2.replace(/^@/, "").toLowerCase();
+      for (const category of Object.keys(rules).filter((k) => !k.startsWith("_"))) {
+        const categoryRules = rules[category];
+        if (!Array.isArray(categoryRules)) continue;
+        const backingList = rules._backingLists?.[category];
+        let inList = false;
+        let inRules = false;
+        if (backingList && this.state.listCache) {
+          const isInListSync = this.state.listCache.isInListSync(handle2, backingList);
+          if (isInListSync === true) {
+            inList = true;
+          }
+        }
+        for (const rule of categoryRules) {
+          if (rule.type === "from") {
+            const ruleHandle = rule.value.replace(/^@/, "").toLowerCase();
+            if (ruleHandle === normalizedHandle || ruleHandle === normalizedHandle.split(".")[0]) {
+              inRules = true;
+              break;
+            }
+          }
+        }
+        if (inList || inRules) {
+          results.push({ category, inList, inRules, listName: backingList || null });
+        }
+      }
+      return results;
+    }
+    /**
+     * Remove an author from a category (both list and rules if present)
+     * @param {string} handle - Handle to remove
+     * @param {string} category - Category name
+     * @param {boolean} inList - Whether author is in the backing list
+     * @param {boolean} inRules - Whether author is in local rules
+     * @param {string|null} listName - Name of the backing list
+     */
+    async removeAuthorFromCategory(handle2, category, inList, inRules, listName) {
+      let removedFromList = false;
+      let removedFromRules = false;
+      if (inList && listName && this.api && this.state.listCache) {
+        try {
+          await this.removeAuthorFromList(handle2, listName);
+          removedFromList = true;
+        } catch (error) {
+          console.warn("Failed to remove from list:", error);
+          this.showRuleAddedNotification(`Failed to remove from list: ${error.message}`, "error");
+        }
+      }
+      if (inRules) {
+        this.removeAuthorFromRules(handle2, category);
+        removedFromRules = true;
+      }
+      if (removedFromList && removedFromRules) {
+        this.showRuleAddedNotification(`Removed @${handle2} from "${category}" (list & rules)`);
+      } else if (removedFromList) {
+        this.showRuleAddedNotification(`Removed @${handle2} from list "${listName}"`);
+      } else if (removedFromRules) {
+        this.showRuleAddedNotification(`Removed @${handle2} from "${category}" rules`);
+      }
+      this.scheduleHighlightRefresh();
+    }
+    /**
+     * Remove an author from a Bluesky list
+     * @param {string} handle - Handle to remove (without @)
+     * @param {string} listName - Name of the list
+     */
+    async removeAuthorFromList(handle2, listName) {
+      const listitemUri = await this.state.listCache.getMemberUri(handle2, listName);
+      if (!listitemUri) {
+        throw new Error(`Member not found in list "${listName}"`);
+      }
+      await this.api.removeFromList(listitemUri);
+      this.state.listCache.removeMemberFromCache(handle2, listName);
+    }
+    /**
+     * Remove an author rule from the config
+     * @param {string} handle - Handle to remove
+     * @param {string} category - Category name
+     */
+    removeAuthorFromRules(handle2, category) {
+      let rulesConfig = this.config.get("rulesConfig") || "";
+      const normalizedHandle = handle2.replace(/^@/, "").toLowerCase();
+      const lines = rulesConfig.split("\n");
+      const newLines = [];
+      let inTargetCategory = false;
+      for (const line of lines) {
+        const sectionMatch = line.trim().match(/^\[([^\]]+?)(?:\s*(?:->|→)\s*.*)?\]$/);
+        if (sectionMatch) {
+          inTargetCategory = sectionMatch[1].trim().toLowerCase() === category.toLowerCase();
+          newLines.push(line);
+          continue;
+        }
+        if (inTargetCategory) {
+          const ruleMatch = line.trim().match(/^(allow|deny)\s+from\s+@?(.+)$/i);
+          if (ruleMatch) {
+            const ruleHandle = ruleMatch[2].toLowerCase();
+            if (ruleHandle === normalizedHandle || ruleHandle === normalizedHandle.split(".")[0] || ruleHandle + ".bsky.social" === normalizedHandle) {
+              continue;
+            }
+          }
+        }
+        newLines.push(line);
+      }
+      const newConfig = newLines.join("\n");
+      this.config.set("rulesConfig", newConfig);
+      if (this.state.parseRulesConfig) {
+        this.state.rules = this.state.parseRulesConfig(newConfig);
+      }
     }
     /**
      * Add an author to a Bluesky list

@@ -125,7 +125,7 @@ export class BlueskyAPI {
   /**
    * Fetches all members of a list
    * @param {string} listUri - AT URI of the list
-   * @returns {Promise<Array>} Array of member objects with did, handle
+   * @returns {Promise<Array>} Array of member objects with did, handle, uri (listitem record URI)
    */
   async getListMembers(listUri) {
     const params = { list: listUri, limit: 100 };
@@ -138,6 +138,7 @@ export class BlueskyAPI {
       members.push(...data.items.map(item => ({
         did: item.subject.did,
         handle: item.subject.handle,
+        uri: item.uri, // listitem record URI for deletion
       })));
       cursor = data.cursor;
     } while (cursor);
@@ -187,6 +188,27 @@ export class BlueskyAPI {
       record,
     });
     return data.uri;
+  }
+
+  /**
+   * Removes a user from a list
+   * @param {string} listitemUri - AT URI of the listitem record to delete
+   * @returns {Promise<void>}
+   */
+  async removeFromList(listitemUri) {
+    // Parse the URI to extract repo and rkey
+    // Format: at://did:plc:xxx/app.bsky.graph.listitem/rkey
+    const match = listitemUri.match(/at:\/\/([^/]+)\/([^/]+)\/([^/]+)/);
+    if (!match) {
+      throw new Error(`Invalid listitem URI: ${listitemUri}`);
+    }
+    const [, repo, collection, rkey] = match;
+
+    await this.agent.com.atproto.repo.deleteRecord({
+      repo,
+      collection,
+      rkey,
+    });
   }
 
   /**

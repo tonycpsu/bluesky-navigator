@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+558.635d48f2
+// @version     1.0.31+559.48de0e9a
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -71696,7 +71696,8 @@ div#statusBar.has-feed-map {
       const num = parseInt(event.code.substr(5)) - 1;
       $("#bsky-navigator-search").autocomplete("disable");
       if (num >= 0) {
-        const ruleName = Object.keys(this.state.rules)[num];
+        const ruleNames = Object.keys(this.state.rules).filter((k) => !k.startsWith("_"));
+        const ruleName = ruleNames[num];
         $("#bsky-navigator-search").val(`${event.shiftKey ? "!" : ""}$${ruleName}`);
       } else {
         $("#bsky-navigator-search").val(null);
@@ -73920,8 +73921,11 @@ ${rule}`;
       if (visited.has(categoryName)) {
         return false;
       }
+      if (categoryName.startsWith("_")) {
+        return false;
+      }
       const rules = this.state.rules?.[categoryName];
-      if (!rules) return false;
+      if (!rules || !Array.isArray(rules)) return false;
       visited.add(categoryName);
       for (const rule of rules) {
         if (rule.type === "content") {
@@ -73973,7 +73977,7 @@ ${rule}`;
         return [];
       }
       const results = [];
-      const categories = Object.keys(this.state.rules);
+      const categories = Object.keys(this.state.rules).filter((k) => !k.startsWith("_"));
       for (let i2 = 0; i2 < categories.length; i2++) {
         const patterns = this.findAllMatchingContentPatterns(text, categories[i2]);
         for (const pattern of patterns) {
@@ -74006,8 +74010,11 @@ ${rule}`;
       if (visited.has(categoryName)) {
         return [];
       }
+      if (categoryName.startsWith("_")) {
+        return [];
+      }
       const rules = this.state.rules?.[categoryName];
-      if (!rules) return [];
+      if (!rules || !Array.isArray(rules)) return [];
       visited.add(categoryName);
       const patterns = [];
       for (const rule of rules) {
@@ -74039,7 +74046,7 @@ ${rule}`;
       }
       const content2 = $(item).find('div[data-testid="postText"]').text();
       if (!content2) return -1;
-      const categories = Object.keys(this.state.rules);
+      const categories = Object.keys(this.state.rules).filter((k) => !k.startsWith("_"));
       for (let i2 = 0; i2 < categories.length; i2++) {
         if (this.contentMatchesCategory(content2, categories[i2])) {
           return i2;
@@ -74085,7 +74092,7 @@ ${rule}`;
       if (!this.state.rules || categoryIndex < 0) {
         return this.FILTER_LIST_COLORS[0];
       }
-      const categories = Object.keys(this.state.rules);
+      const categories = Object.keys(this.state.rules).filter((k) => !k.startsWith("_"));
       if (categoryIndex < categories.length) {
         const categoryName = categories[categoryIndex];
         return this.getColorForCategory(categoryName);

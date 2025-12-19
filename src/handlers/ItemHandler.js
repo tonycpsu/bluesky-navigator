@@ -1607,7 +1607,8 @@ export class ItemHandler extends Handler {
     $('#bsky-navigator-search').autocomplete('disable');
 
     if (num >= 0) {
-      const ruleName = Object.keys(this.state.rules)[num];
+      const ruleNames = Object.keys(this.state.rules).filter(k => !k.startsWith('_'));
+      const ruleName = ruleNames[num];
       $('#bsky-navigator-search').val(`${event.shiftKey ? '!' : ''}$${ruleName}`);
     } else {
       $('#bsky-navigator-search').val(null);
@@ -4500,8 +4501,13 @@ export class ItemHandler extends Handler {
       return false; // Circular dependency - stop recursion
     }
 
+    // Skip internal properties like _backingLists
+    if (categoryName.startsWith('_')) {
+      return false;
+    }
+
     const rules = this.state.rules?.[categoryName];
-    if (!rules) return false;
+    if (!rules || !Array.isArray(rules)) return false;
 
     visited.add(categoryName);
 
@@ -4562,7 +4568,7 @@ export class ItemHandler extends Handler {
     }
 
     const results = [];
-    const categories = Object.keys(this.state.rules);
+    const categories = Object.keys(this.state.rules).filter(k => !k.startsWith('_'));
     for (let i = 0; i < categories.length; i++) {
       const patterns = this.findAllMatchingContentPatterns(text, categories[i]);
       for (const pattern of patterns) {
@@ -4598,8 +4604,13 @@ export class ItemHandler extends Handler {
       return [];
     }
 
+    // Skip internal properties like _backingLists
+    if (categoryName.startsWith('_')) {
+      return [];
+    }
+
     const rules = this.state.rules?.[categoryName];
-    if (!rules) return [];
+    if (!rules || !Array.isArray(rules)) return [];
 
     visited.add(categoryName);
     const patterns = [];
@@ -4637,7 +4648,7 @@ export class ItemHandler extends Handler {
     const content = $(item).find('div[data-testid="postText"]').text();
     if (!content) return -1;
 
-    const categories = Object.keys(this.state.rules);
+    const categories = Object.keys(this.state.rules).filter(k => !k.startsWith('_'));
     for (let i = 0; i < categories.length; i++) {
       if (this.contentMatchesCategory(content, categories[i])) {
         return i;
@@ -4688,7 +4699,7 @@ export class ItemHandler extends Handler {
     if (!this.state.rules || categoryIndex < 0) {
       return this.FILTER_LIST_COLORS[0];
     }
-    const categories = Object.keys(this.state.rules);
+    const categories = Object.keys(this.state.rules).filter(k => !k.startsWith('_'));
     if (categoryIndex < categories.length) {
       const categoryName = categories[categoryIndex];
       return this.getColorForCategory(categoryName);

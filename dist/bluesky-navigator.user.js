@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+533.d4ac0524
+// @version     1.0.31+534.b9b6960e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47182,10 +47182,36 @@ if (cid) {
       console.log(`Push sync: added ${added} members to ${listName}`);
     }
     /**
-     * Execute pull sync (placeholder for Task 10)
+     * Execute pull sync - imports list members as rules
      */
     async executePullSync(dialog, category, listCache) {
-      console.log("Pull sync not yet implemented");
+      const listName = dialog.querySelector(".sync-existing-list").value;
+      if (!listName) throw new Error("Please select a list");
+      const ruleAction = dialog.querySelector('input[name="ruleAction"]:checked')?.value || "allow";
+      const members = await listCache.getMembers(listName);
+      if (!members || members.size === 0) {
+        throw new Error("List is empty or could not be fetched");
+      }
+      const existingHandles = new Set(
+        (this.parsedRules[category] || []).filter((r) => r.type === "from").map((r) => r.value.replace(/^@/, "").toLowerCase())
+      );
+      let added = 0;
+      for (const handle2 of members) {
+        if (!existingHandles.has(handle2.toLowerCase())) {
+          if (!this.parsedRules[category]) {
+            this.parsedRules[category] = [];
+          }
+          this.parsedRules[category].push({
+            action: ruleAction,
+            type: "from",
+            value: `@${handle2}`
+          });
+          added++;
+        }
+      }
+      this.syncVisualToRaw();
+      this.refreshVisualEditor();
+      console.log(`Pull sync: added ${added} handles to ${category}`);
     }
     /**
      * Show sync success toast

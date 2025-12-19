@@ -2242,11 +2242,48 @@ export class ConfigModal {
   }
 
   /**
-   * Execute pull sync (placeholder for Task 10)
+   * Execute pull sync - imports list members as rules
    */
   async executePullSync(dialog, category, listCache) {
-    // Placeholder - will be implemented in Task 10
-    console.log('Pull sync not yet implemented');
+    const listName = dialog.querySelector('.sync-existing-list').value;
+    if (!listName) throw new Error('Please select a list');
+
+    const ruleAction = dialog.querySelector('input[name="ruleAction"]:checked')?.value || 'allow';
+
+    // Get list members
+    const members = await listCache.getMembers(listName);
+    if (!members || members.size === 0) {
+      throw new Error('List is empty or could not be fetched');
+    }
+
+    // Get existing handles in category
+    const existingHandles = new Set(
+      (this.parsedRules[category] || [])
+        .filter(r => r.type === 'from')
+        .map(r => r.value.replace(/^@/, '').toLowerCase())
+    );
+
+    // Add new handles to rules
+    let added = 0;
+    for (const handle of members) {
+      if (!existingHandles.has(handle.toLowerCase())) {
+        if (!this.parsedRules[category]) {
+          this.parsedRules[category] = [];
+        }
+        this.parsedRules[category].push({
+          action: ruleAction,
+          type: 'from',
+          value: `@${handle}`,
+        });
+        added++;
+      }
+    }
+
+    // Update UI and save
+    this.syncVisualToRaw();
+    this.refreshVisualEditor();
+
+    console.log(`Pull sync: added ${added} handles to ${category}`);
   }
 
   /**

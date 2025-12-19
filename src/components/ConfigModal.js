@@ -1184,7 +1184,12 @@ export class ConfigModal {
 
     for (const category of categories) {
       if (lines.length > 0) lines.push(''); // Blank line between categories
-      lines.push(`[${category.name}]`);
+      // Include backing list in header if present
+      if (category.backingList) {
+        lines.push(`[${category.name} -> ${category.backingList}]`);
+      } else {
+        lines.push(`[${category.name}]`);
+      }
 
       for (const rule of category.rules) {
         if (rule.type === 'all') {

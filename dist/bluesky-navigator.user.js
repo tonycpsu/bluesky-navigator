@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+550.2312778d
+// @version     1.0.31+551.74609a82
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45928,6 +45928,7 @@ if (cid) {
       this.isVisible = true;
       this.pendingChanges = {};
       this.prefillRule = null;
+      this._listNamesFetched = false;
       Object.entries(CONFIG_SCHEMA).forEach(([tab, schema2]) => {
         if (schema2.collapsed) {
           this.collapsedSections[tab] = true;
@@ -45946,6 +45947,7 @@ if (cid) {
         }
       };
       document.addEventListener("keydown", this.escapeHandler, true);
+      this.refreshVisualEditor();
     }
     /**
      * Open the modal directly to Rules tab with a pre-filled rule for an author
@@ -45999,6 +46001,7 @@ if (cid) {
         }
         this.modalEl = null;
         this.isVisible = false;
+        this._listNamesFetched = false;
         if (this.previousActiveElement) {
           this.previousActiveElement.focus();
         }
@@ -46469,12 +46472,16 @@ if (cid) {
           </select>
         `;
         } else if (rule.type === "list") {
-          const listOptions2 = this.cachedListNames.map((name) => `
+          const listNames = this.cachedListNames || [];
+          const hasCurrentValue = rule.value && !listNames.includes(rule.value);
+          const currentValueOption = hasCurrentValue ? `<option value="${this.escapeHtml(rule.value)}" selected>${this.escapeHtml(rule.value)}</option>` : "";
+          const listOptions2 = listNames.map((name) => `
           <option value="${this.escapeHtml(name)}" ${rule.value === name ? "selected" : ""}>${this.escapeHtml(name)}</option>
         `).join("");
           valueHtml = `
           <select class="rules-value rules-list-select" data-category="${catIndex}" data-rule="${ruleIndex}">
             <option value="">Select list...</option>
+            ${currentValueOption}
             ${listOptions2}
           </select>
         `;
@@ -46539,8 +46546,9 @@ if (cid) {
       }
       this._refreshPending = true;
       try {
-        if (!this.cachedListNames || this.cachedListNames.length === 0) {
-          await this.updateCachedListNames();
+        if (!this._listNamesFetched) {
+          this._listNamesFetched = true;
+          await this.updateCachedListNames(true);
         }
         const visualContainer = this.modalEl.querySelector(".rules-visual");
         if (visualContainer) {
@@ -46558,11 +46566,11 @@ if (cid) {
     /**
      * Update cached list names from API
      */
-    async updateCachedListNames() {
+    async updateCachedListNames(forceRefresh = false) {
       const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
       if (listCache) {
         try {
-          this.cachedListNames = await listCache.getListNames();
+          this.cachedListNames = await listCache.getListNames(forceRefresh);
         } catch (e2) {
           console.warn("Failed to fetch list names:", e2);
         }
@@ -47303,24 +47311,21 @@ if (cid) {
           progressEl.textContent = `${status} (${current}/${total2})`;
         }
       };
-      let added = 0;
       let processed = 0;
       const total = handles.length;
       for (const handle2 of handles) {
         processed++;
         updateProgress(processed, total, `Resolving ${handle2}...`);
         if (processed % 5 === 0) {
-          await new Promise((resolve) => setTimeout(resolve, 0));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
         const did2 = await api.resolveHandleToDid(handle2);
         if (did2 && !existingDids.has(did2)) {
           updateProgress(processed, total, `Adding ${handle2}...`);
           await api.addToList(listUri, did2);
-          added++;
         }
       }
       listCache.invalidate(listName);
-      console.log(`Push sync: added ${added} members to ${listName}`);
     }
     /**
      * Execute pull sync - imports list members as rules
@@ -47344,7 +47349,6 @@ if (cid) {
           return handle2;
         })
       );
-      let added = 0;
       for (const handle2 of members) {
         if (!existingHandles.has(handle2.toLowerCase())) {
           if (categoryIndex === -1) {
@@ -47356,7 +47360,6 @@ if (cid) {
             type: "from",
             value: `@${handle2}`
           });
-          added++;
         }
       }
       this.syncVisualToRaw();
@@ -47366,7 +47369,6 @@ if (cid) {
         unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
       }
       this.refreshVisualEditor();
-      console.log(`Pull sync: added ${added} handles to ${category}`);
     }
     /**
      * Show sync success toast
@@ -47522,7 +47524,6 @@ if (cid) {
         unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
       }
       this.refreshVisualEditor();
-      console.log(`Deduplication: removed ${duplicates.length} duplicate rules from ${category}`);
     }
     /**
      * Update feed map preview dynamically when settings change
@@ -47807,23 +47808,51 @@ if (cid) {
       this.cacheDurationMs = cacheDurationMs;
       this.cache = /* @__PURE__ */ new Map();
       this.listNameToUri = /* @__PURE__ */ new Map();
+      this.listDisplayNames = /* @__PURE__ */ new Map();
       this.listsMetadataFetched = false;
+      this.listsMetadataFetchedAt = null;
+      this.pendingMetadataFetch = null;
+      this.pendingMemberFetches = /* @__PURE__ */ new Map();
     }
     /**
      * Ensures list metadata (name -> URI mapping) is loaded
+     * @param {boolean} forceRefresh - Force refresh even if cached
      * @private
      */
-    async ensureListsMetadata() {
-      if (this.listsMetadataFetched || !this.api) return;
-      try {
-        const lists = await this.api.getLists();
-        for (const list2 of lists) {
-          this.listNameToUri.set(list2.name.toLowerCase(), list2.uri);
-        }
-        this.listsMetadataFetched = true;
-      } catch (error) {
-        console.warn("Failed to fetch lists metadata:", error);
+    async ensureListsMetadata(forceRefresh = false) {
+      if (!this.api) return;
+      if (forceRefresh && this.pendingMetadataFetch) {
+        await this.pendingMetadataFetch;
       }
+      const metadataCacheMs = 5 * 60 * 1e3;
+      const cacheExpired = this.listsMetadataFetchedAt && Date.now() - this.listsMetadataFetchedAt >= metadataCacheMs;
+      if (this.listsMetadataFetched && !forceRefresh && !cacheExpired) {
+        return;
+      }
+      if (this.pendingMetadataFetch) {
+        return this.pendingMetadataFetch;
+      }
+      this.pendingMetadataFetch = (async () => {
+        try {
+          const lists = await this.api.getLists();
+          const newNameToUri = /* @__PURE__ */ new Map();
+          const newDisplayNames = /* @__PURE__ */ new Map();
+          for (const list2 of lists) {
+            const normalizedName = list2.name.toLowerCase();
+            newNameToUri.set(normalizedName, list2.uri);
+            newDisplayNames.set(normalizedName, list2.name);
+          }
+          this.listNameToUri = newNameToUri;
+          this.listDisplayNames = newDisplayNames;
+          this.listsMetadataFetched = true;
+          this.listsMetadataFetchedAt = Date.now();
+        } catch (error) {
+          console.warn("Failed to fetch lists metadata:", error);
+        } finally {
+          this.pendingMetadataFetch = null;
+        }
+      })();
+      return this.pendingMetadataFetch;
     }
     /**
      * Gets the cached members for a list, fetching if needed
@@ -47836,25 +47865,34 @@ if (cid) {
       if (cached && Date.now() - cached.fetchedAt < this.cacheDurationMs) {
         return cached.members;
       }
-      await this.ensureListsMetadata();
-      const listUri = this.listNameToUri.get(normalizedName);
-      if (!listUri) {
-        console.warn(`List not found: ${listName}`);
-        return null;
+      if (this.pendingMemberFetches.has(normalizedName)) {
+        return this.pendingMemberFetches.get(normalizedName);
       }
-      try {
-        const members = await this.api.getListMembers(listUri);
-        const handleSet = new Set(members.map((m) => m.handle.toLowerCase()));
-        this.cache.set(normalizedName, {
-          members: handleSet,
-          fetchedAt: Date.now(),
-          uri: listUri
-        });
-        return handleSet;
-      } catch (error) {
-        console.warn(`Failed to fetch list members for ${listName}:`, error);
-        return null;
-      }
+      const fetchPromise = (async () => {
+        try {
+          await this.ensureListsMetadata();
+          const listUri = this.listNameToUri.get(normalizedName);
+          if (!listUri) {
+            console.warn(`List not found: ${listName}`);
+            return null;
+          }
+          const members = await this.api.getListMembers(listUri);
+          const handleSet = new Set(members.map((m) => m.handle.toLowerCase()));
+          this.cache.set(normalizedName, {
+            members: handleSet,
+            fetchedAt: Date.now(),
+            uri: listUri
+          });
+          return handleSet;
+        } catch (error) {
+          console.warn(`Failed to fetch list members for ${listName}:`, error);
+          return null;
+        } finally {
+          this.pendingMemberFetches.delete(normalizedName);
+        }
+      })();
+      this.pendingMemberFetches.set(normalizedName, fetchPromise);
+      return fetchPromise;
     }
     /**
      * Normalizes a handle by adding .bsky.social suffix if missing
@@ -47902,11 +47940,17 @@ if (cid) {
      */
     invalidate(listName = null) {
       if (listName) {
-        this.cache.delete(listName.toLowerCase());
+        const normalizedName = listName.toLowerCase();
+        this.cache.delete(normalizedName);
+        this.pendingMemberFetches.delete(normalizedName);
       } else {
         this.cache.clear();
         this.listNameToUri.clear();
+        this.listDisplayNames.clear();
         this.listsMetadataFetched = false;
+        this.listsMetadataFetchedAt = null;
+        this.pendingMetadataFetch = null;
+        this.pendingMemberFetches.clear();
       }
     }
     /**
@@ -47928,12 +47972,13 @@ if (cid) {
       return this.listNameToUri.get(listName.toLowerCase()) || null;
     }
     /**
-     * Gets all known list names
-     * @returns {Promise<string[]>} Array of list names
+     * Gets all known list names (with original case)
+     * @param {boolean} forceRefresh - Force refresh from API
+     * @returns {Promise<string[]>} Array of list names with original case
      */
-    async getListNames() {
-      await this.ensureListsMetadata();
-      return Array.from(this.listNameToUri.keys());
+    async getListNames(forceRefresh = false) {
+      await this.ensureListsMetadata(forceRefresh);
+      return Array.from(this.listDisplayNames.values());
     }
   }
   const style = `/* style.css */
@@ -73067,7 +73112,10 @@ div#statusBar.has-feed-map {
       const selectedText = isContentRule ? options.selectedText : null;
       $(".bsky-nav-rules-dropdown").remove();
       this.rulesDropdownActive = true;
-      const rulesConfig = this.config.get("rulesConfig") || "";
+      let rulesConfig = this.config.get("rulesConfig") || "";
+      if (this.config.modal?.isVisible && this.config.modal?.pendingChanges?.rulesConfig) {
+        rulesConfig = this.config.modal.pendingChanges.rulesConfig;
+      }
       const categories = this.parseRuleCategories(rulesConfig);
       const activeFilter = this.state.filter || "";
       const activeRuleMatch = activeFilter.match(/\$(\S+)/);
@@ -73163,17 +73211,18 @@ div#statusBar.has-feed-map {
           dropdown.find(`.bsky-nav-rules-tab-${tab}`).addClass("active");
           if (tab === "lists" && !listsLoaded) {
             listsLoaded = true;
+            const listsContainer = dropdown.find(".bsky-nav-rules-dropdown-lists");
+            listsContainer.html('<div class="bsky-nav-rules-loading">Loading lists...</div>');
             try {
-              const listNames = await listCache.getListNames();
-              const listsContainer = dropdown.find(".bsky-nav-rules-dropdown-lists");
+              const listNames = await listCache.getListNames(true);
               if (listNames.length === 0) {
                 listsContainer.html('<div class="bsky-nav-rules-no-lists">No lists found.<br>Create one in Bluesky settings.</div>');
               } else {
-                listsContainer.html(listNames.map((name) => `
-                <button class="bsky-nav-rules-list-btn" data-list="${name}">
-                  ${name}
-                </button>
-              `).join(""));
+                listsContainer.empty();
+                for (const name of listNames) {
+                  const btn = $('<button class="bsky-nav-rules-list-btn"></button>').attr("data-list", name).text(name);
+                  listsContainer.append(btn);
+                }
                 listsContainer.find(".bsky-nav-rules-list-btn").on("click", async (e3) => {
                   const listName = $(e3.target).data("list");
                   const btn = $(e3.target);
@@ -73547,6 +73596,17 @@ ${rule}`;
         if (rule.type === "include") {
           if (this.handleMatchesCategory(normalizedHandle, rule.value, visited)) {
             return true;
+          }
+        }
+        if (rule.type === "list") {
+          const result = this.state.listCache?.isInListSync(normalizedHandle, rule.value);
+          if (result === true) {
+            return true;
+          }
+          if (result === void 0 && this.state.listCache) {
+            this.state.listCache.getMembers(rule.value).then(() => {
+              this.scheduleHighlightRefresh();
+            });
           }
         }
       }
@@ -74242,6 +74302,32 @@ ${rule}`;
      */
     applyRuleStylingToAllItems() {
       this.onRulesChanged();
+    }
+    /**
+     * Schedule a debounced refresh of rule color styling for all items.
+     * Called when list cache is populated asynchronously.
+     */
+    scheduleHighlightRefresh() {
+      if (this._highlightRefreshTimeout) {
+        clearTimeout(this._highlightRefreshTimeout);
+      }
+      this._highlightRefreshTimeout = setTimeout(() => {
+        this._highlightRefreshTimeout = null;
+        this.refreshAllRuleColorStyling();
+      }, 100);
+    }
+    /**
+     * Re-applies rule color styling to all visible items.
+     * Called after list cache is populated to update highlighting.
+     */
+    refreshAllRuleColorStyling() {
+      if (!this.items || !this.items.length) return;
+      for (let i2 = 0; i2 < this.items.length; i2++) {
+        const item = this.items[i2];
+        if (item) {
+          this.applyRuleColorStyling(item);
+        }
+      }
     }
     /**
      * Highlight matching text within an element by wrapping matches in styled spans.

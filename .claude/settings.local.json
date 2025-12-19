@@ -25,7 +25,8 @@
       "SlashCommand(/commit-commands:commit)",
       "Bash(npm run dev:*)",
       "Bash(python3:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "WebFetch(domain:gist.github.com)"
     ],
     "deny": [],
     "ask": []

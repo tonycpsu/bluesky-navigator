@@ -4293,6 +4293,21 @@ export class ItemHandler extends Handler {
 
     visited.add(categoryName);
 
+    // Check backing list membership first (if category has a backing list)
+    const backingList = this.state.rules._backingLists?.[categoryName];
+    if (backingList && this.state.listCache) {
+      const result = this.state.listCache.isInListSync(normalizedHandle, backingList);
+      if (result === true) {
+        return true;
+      }
+      // Trigger async fetch if not cached
+      if (result === undefined) {
+        this.state.listCache.getMembers(backingList).then(() => {
+          this.scheduleHighlightRefresh();
+        });
+      }
+    }
+
     for (const rule of rules) {
       if (rule.type === 'from' && rule.value.toLowerCase() === normalizedHandle.toLowerCase()) {
         return true;

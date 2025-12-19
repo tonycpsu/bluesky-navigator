@@ -327,7 +327,9 @@ export class StateManager {
    */
   async saveLocalState() {
     this.cleanupState(); // Ensure state is pruned before saving
-    const stateJson = JSON.stringify(this.state);
+    // Exclude non-serializable fields (objects with circular refs or complex instances)
+    const { listCache, rules, ...serializableState } = this.state;
+    const stateJson = JSON.stringify(serializableState);
     const sizeKB = (stateJson.length / 1024).toFixed(2);
     console.log('[StateManager] Saving state:', {
       focusedPostId: this.state.focusedPostId,
@@ -365,8 +367,8 @@ export class StateManager {
       }
 
       this.setSyncStatus('pending');
-      // Exclude session-only fields (filter) and seen (synced separately) from remote sync
-      const { filter, seen, ...stateToSync } = this.state;
+      // Exclude session-only fields (filter), seen (synced separately), and non-serializable objects
+      const { filter, seen, listCache, rules, ...stateToSync } = this.state;
       const stateJson = JSON.stringify(stateToSync);
       const stateSize = (stateJson.length / 1024).toFixed(2);
       console.log(`[StateManager] Saving remote state: ${stateSize} KB (excluding seen)`);
@@ -512,8 +514,8 @@ export class StateManager {
         'Authorization': 'Basic ' + btoa(`${username}:${password}`),
       };
 
-      // Exclude session-only fields (filter) and seen (synced separately) from remote sync
-      const { filter, seen, ...stateToSync } = this.state;
+      // Exclude session-only fields (filter), seen (synced separately), and non-serializable objects
+      const { filter, seen, listCache, rules, ...stateToSync } = this.state;
       const stateJson = JSON.stringify(stateToSync);
       const stateQuery = `USE NS ${namespace} DB ${database}; UPSERT state:current MERGE {${stateJson.slice(1, -1)}, created_at: time::now()}`;
 

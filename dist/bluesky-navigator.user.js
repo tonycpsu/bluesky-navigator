@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+546.1a2bcc15
+// @version     1.0.31+547.55e6a6b6
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -448,7 +448,8 @@
      */
     async saveLocalState() {
       this.cleanupState();
-      const stateJson = JSON.stringify(this.state);
+      const { listCache, rules, ...serializableState } = this.state;
+      const stateJson = JSON.stringify(serializableState);
       const sizeKB = (stateJson.length / 1024).toFixed(2);
       console.log("[StateManager] Saving state:", {
         focusedPostId: this.state.focusedPostId,
@@ -482,7 +483,7 @@
           return;
         }
         this.setSyncStatus("pending");
-        const { filter, seen, ...stateToSync } = this.state;
+        const { filter, seen, listCache, rules, ...stateToSync } = this.state;
         const stateJson = JSON.stringify(stateToSync);
         const stateSize = (stateJson.length / 1024).toFixed(2);
         console.log(`[StateManager] Saving remote state: ${stateSize} KB (excluding seen)`);
@@ -596,7 +597,7 @@
           "Accept": "application/json",
           "Authorization": "Basic " + btoa(`${username}:${password}`)
         };
-        const { filter, seen, ...stateToSync } = this.state;
+        const { filter, seen, listCache, rules, ...stateToSync } = this.state;
         const stateJson = JSON.stringify(stateToSync);
         const stateQuery = `USE NS ${namespace} DB ${database}; UPSERT state:current MERGE {${stateJson.slice(1, -1)}, created_at: time::now()}`;
         const stateSize = (stateJson.length / 1024).toFixed(2);

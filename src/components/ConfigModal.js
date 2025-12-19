@@ -2195,11 +2195,50 @@ export class ConfigModal {
   }
 
   /**
-   * Execute push sync (placeholder for Task 9)
+   * Execute push sync - pushes handles from category rules to a Bluesky list
    */
   async executePushSync(dialog, category, listCache) {
-    // Placeholder - will be implemented in Task 9
-    console.log('Push sync not yet implemented');
+    const api = listCache.api;
+    const isNewList = dialog.querySelector('input[name="listChoice"][value="new"]').checked;
+
+    let listUri;
+    let listName;
+
+    if (isNewList) {
+      listName = dialog.querySelector('.sync-new-list-name').value.trim();
+      if (!listName) throw new Error('Please enter a list name');
+      listUri = await api.createList(listName);
+    } else {
+      listName = dialog.querySelector('.sync-existing-list').value;
+      if (!listName) throw new Error('Please select a list');
+      listUri = await listCache.getListUri(listName);
+    }
+
+    // Get existing list members
+    const existingMembers = await api.getListMembers(listUri);
+    const existingDids = new Set(existingMembers.map(m => m.did));
+
+    // Get handles from rules
+    const categoryIndex = this.parsedRules.findIndex(c => c.name === category);
+    const categoryRules = categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : [];
+    const handles = categoryRules
+      .filter(r => r.type === 'from' && r.value.startsWith('@'))
+      .map(r => r.value.replace(/^@/, ''));
+
+    // Add each handle to list if not already present
+    let added = 0;
+    for (const handle of handles) {
+      const did = await api.resolveHandleToDid(handle);
+      if (did && !existingDids.has(did)) {
+        await api.addToList(listUri, did);
+        added++;
+      }
+    }
+
+    // Invalidate cache
+    listCache.invalidate(listName);
+
+    console.log(`Push sync: added ${added} members to ${listName}`);
   }
 
   /**

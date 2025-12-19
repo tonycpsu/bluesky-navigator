@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+532.9277f364
+// @version     1.0.31+533.d4ac0524
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47149,10 +47149,37 @@ if (cid) {
       }
     }
     /**
-     * Execute push sync (placeholder for Task 9)
+     * Execute push sync - pushes handles from category rules to a Bluesky list
      */
     async executePushSync(dialog, category, listCache) {
-      console.log("Push sync not yet implemented");
+      const api = listCache.api;
+      const isNewList = dialog.querySelector('input[name="listChoice"][value="new"]').checked;
+      let listUri;
+      let listName;
+      if (isNewList) {
+        listName = dialog.querySelector(".sync-new-list-name").value.trim();
+        if (!listName) throw new Error("Please enter a list name");
+        listUri = await api.createList(listName);
+      } else {
+        listName = dialog.querySelector(".sync-existing-list").value;
+        if (!listName) throw new Error("Please select a list");
+        listUri = await listCache.getListUri(listName);
+      }
+      const existingMembers = await api.getListMembers(listUri);
+      const existingDids = new Set(existingMembers.map((m) => m.did));
+      const categoryIndex = this.parsedRules.findIndex((c) => c.name === category);
+      const categoryRules = categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : [];
+      const handles = categoryRules.filter((r) => r.type === "from" && r.value.startsWith("@")).map((r) => r.value.replace(/^@/, ""));
+      let added = 0;
+      for (const handle2 of handles) {
+        const did2 = await api.resolveHandleToDid(handle2);
+        if (did2 && !existingDids.has(did2)) {
+          await api.addToList(listUri, did2);
+          added++;
+        }
+      }
+      listCache.invalidate(listName);
+      console.log(`Push sync: added ${added} members to ${listName}`);
     }
     /**
      * Execute pull sync (placeholder for Task 10)

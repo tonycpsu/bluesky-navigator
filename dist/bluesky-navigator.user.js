@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+518.241b8af2
+// @version     1.0.31+519.7d8c8ab4
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -51864,8 +51864,7 @@ div#statusBar.has-feed-map {
   background: white;
   border: 1px solid #dce2ea;
   border-radius: 12px;
-  min-width: 220px;
-  max-width: 320px;
+  width: 280px;
   overflow: hidden;
   font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }

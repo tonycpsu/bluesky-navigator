@@ -4412,8 +4412,13 @@ export class ItemHandler extends Handler {
       return false; // Circular dependency - stop recursion
     }
 
+    // Skip internal properties like _backingLists
+    if (categoryName.startsWith('_')) {
+      return false;
+    }
+
     const rules = this.state.rules?.[categoryName];
-    if (!rules) return false;
+    if (!rules || !Array.isArray(rules)) return false;
 
     visited.add(categoryName);
 
@@ -4472,7 +4477,8 @@ export class ItemHandler extends Handler {
     // Normalize handle (ensure it has @)
     const normalizedHandle = handle.startsWith('@') ? handle : `@${handle}`;
 
-    const categories = Object.keys(this.state.rules);
+    // Filter out internal properties like _backingLists
+    const categories = Object.keys(this.state.rules).filter(k => !k.startsWith('_'));
     for (let i = 0; i < categories.length; i++) {
       if (this.handleMatchesCategory(normalizedHandle, categories[i])) {
         return i;

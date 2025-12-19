@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+513.da6e384e
+// @version     1.0.31+514.5f2858a1
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45047,7 +45047,6 @@ if (cid) {
   }
   function waitForElement$3(selector, onAdd, onRemove, onChange, ignoreExisting) {
     const observer = new MutationObserver((mutations) => {
-      if (isUserTyping()) return;
       mutations.forEach((mutation) => {
         if (onAdd) {
           mutation.addedNodes.forEach((node) => {

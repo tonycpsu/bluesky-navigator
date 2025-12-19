@@ -31,9 +31,6 @@ export function isUserTyping() {
 
 export function waitForElement(selector, onAdd, onRemove, onChange, ignoreExisting) {
   const observer = new MutationObserver((mutations) => {
-    // Skip processing when user is typing to prevent freezing during compose
-    if (isUserTyping()) return;
-
     mutations.forEach((mutation) => {
       if (onAdd) {
         mutation.addedNodes.forEach((node) => {

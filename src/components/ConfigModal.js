@@ -2256,9 +2256,11 @@ export class ConfigModal {
       throw new Error('List is empty or could not be fetched');
     }
 
-    // Get existing handles in category
+    // Get existing handles in category using findIndex pattern
+    const categoryIndex = this.parsedRules.findIndex(c => c.name === category);
+    const categoryRules = categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : [];
     const existingHandles = new Set(
-      (this.parsedRules[category] || [])
+      categoryRules
         .filter(r => r.type === 'from')
         .map(r => r.value.replace(/^@/, '').toLowerCase())
     );
@@ -2267,14 +2269,22 @@ export class ConfigModal {
     let added = 0;
     for (const handle of members) {
       if (!existingHandles.has(handle.toLowerCase())) {
-        if (!this.parsedRules[category]) {
-          this.parsedRules[category] = [];
+        // Create category if it doesn't exist
+        if (categoryIndex === -1) {
+          this.parsedRules.push({ name: category, rules: [] });
+          const newIndex = this.parsedRules.length - 1;
+          this.parsedRules[newIndex].rules.push({
+            action: ruleAction,
+            type: 'from',
+            value: `@${handle}`,
+          });
+        } else {
+          this.parsedRules[categoryIndex].rules.push({
+            action: ruleAction,
+            type: 'from',
+            value: `@${handle}`,
+          });
         }
-        this.parsedRules[category].push({
-          action: ruleAction,
-          type: 'from',
-          value: `@${handle}`,
-        });
         added++;
       }
     }

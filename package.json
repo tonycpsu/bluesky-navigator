@@ -1,7 +1,7 @@
 {
   "name": "bluesky-navigator",
   "private": true,
-  "version": "1.0.31+534.b9b6960e",
+  "version": "1.0.31+535.830b67af",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch --mode development",

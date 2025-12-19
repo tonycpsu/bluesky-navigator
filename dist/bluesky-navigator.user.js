@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+560.ad45672a
+// @version     1.0.31+561.6f95b034
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -73426,6 +73426,7 @@ div#statusBar.has-feed-map {
       dropdown.find(".bsky-nav-rules-category-btn").on("click", async (e2) => {
         const category = $(e2.target).data("category");
         const backingList = !isContentRule && this.state.rules?._backingLists?.[category];
+        console.log("[bsky-nav] Add rule click:", { category, backingList, hasApi: !!this.api, hasListCache: !!this.state.listCache, isContentRule });
         if (backingList && this.api && this.state.listCache) {
           this.showListBackedAddChoice(e2.target, handle2, category, backingList, selectedAction, closeDropdown, addRule);
         } else {
@@ -73570,9 +73571,9 @@ div#statusBar.has-feed-map {
       const categories = [];
       const lines = configText.split("\n");
       for (const line of lines) {
-        const match2 = line.trim().match(/^\[(.+)\]$/);
+        const match2 = line.trim().match(/^\[([^\]]+?)(?:\s*(?:->|→)\s*.*)?\]$/);
         if (match2) {
-          categories.push(match2[1]);
+          categories.push(match2[1].trim());
         }
       }
       return categories;

@@ -3844,6 +3844,8 @@ export class ItemHandler extends Handler {
       // Check if category has a backing list (only for author rules)
       const backingList = !isContentRule && this.state.rules?._backingLists?.[category];
 
+      console.log('[bsky-nav] Add rule click:', { category, backingList, hasApi: !!this.api, hasListCache: !!this.state.listCache, isContentRule });
+
       if (backingList && this.api && this.state.listCache) {
         // Show choice popup for list-backed categories
         this.showListBackedAddChoice(e.target, handle, category, backingList, selectedAction, closeDropdown, addRule);
@@ -4042,9 +4044,10 @@ export class ItemHandler extends Handler {
     const categories = [];
     const lines = configText.split('\n');
     for (const line of lines) {
-      const match = line.trim().match(/^\[(.+)\]$/);
+      // Match "[category]" or "[category -> List Name]" and extract just the category name
+      const match = line.trim().match(/^\[([^\]]+?)(?:\s*(?:->|→)\s*.*)?\]$/);
       if (match) {
-        categories.push(match[1]);
+        categories.push(match[1].trim());
       }
     }
     return categories;

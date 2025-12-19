@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+545.50f3c6cc
+// @version     1.0.31+546.1a2bcc15
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47313,7 +47313,11 @@ if (cid) {
         }
       }
       this.syncVisualToRaw();
-      this.config.set("rulesConfig", this.pendingChanges["rulesConfig"]);
+      const newRulesConfig = this.pendingChanges["rulesConfig"];
+      this.config.set("rulesConfig", newRulesConfig);
+      if (unsafeWindow.blueskyNavigatorState) {
+        unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
+      }
       this.refreshVisualEditor();
       console.log(`Pull sync: added ${added} handles to ${category}`);
     }
@@ -47462,7 +47466,11 @@ if (cid) {
         this.parsedRules[categoryIndex].rules.splice(dup.ruleIndex, 1);
       }
       this.syncVisualToRaw();
-      this.config.set("rulesConfig", this.pendingChanges["rulesConfig"]);
+      const newRulesConfig = this.pendingChanges["rulesConfig"];
+      this.config.set("rulesConfig", newRulesConfig);
+      if (unsafeWindow.blueskyNavigatorState) {
+        unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
+      }
       this.refreshVisualEditor();
       console.log(`Deduplication: removed ${duplicates.length} duplicate rules from ${category}`);
     }

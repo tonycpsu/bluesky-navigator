@@ -2408,9 +2408,14 @@ export class ConfigModal {
       }
     }
 
-    // Update UI and save immediately
+    // Update UI and save immediately (both local config and remote state)
     this.syncVisualToRaw();
-    this.config.set('rulesConfig', this.pendingChanges['rulesConfig']);
+    const newRulesConfig = this.pendingChanges['rulesConfig'];
+    this.config.set('rulesConfig', newRulesConfig);
+    // Also update state.rulesConfig so remote sync doesn't overwrite on reload
+    if (unsafeWindow.blueskyNavigatorState) {
+      unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
+    }
     this.refreshVisualEditor();
 
     console.log(`Pull sync: added ${added} handles to ${category}`);
@@ -2591,9 +2596,14 @@ export class ConfigModal {
       this.parsedRules[categoryIndex].rules.splice(dup.ruleIndex, 1);
     }
 
-    // Update UI and save immediately
+    // Update UI and save immediately (both local config and remote state)
     this.syncVisualToRaw();
-    this.config.set('rulesConfig', this.pendingChanges['rulesConfig']);
+    const newRulesConfig = this.pendingChanges['rulesConfig'];
+    this.config.set('rulesConfig', newRulesConfig);
+    // Also update state.rulesConfig so remote sync doesn't overwrite on reload
+    if (unsafeWindow.blueskyNavigatorState) {
+      unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
+    }
     this.refreshVisualEditor();
 
     console.log(`Deduplication: removed ${duplicates.length} duplicate rules from ${category}`);

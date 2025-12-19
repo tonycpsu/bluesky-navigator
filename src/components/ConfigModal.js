@@ -1286,6 +1286,10 @@ export class ConfigModal {
             </div>
             <input type="text" class="rules-category-name" value="${this.escapeHtml(category.name)}"
                    data-category="${catIndex}">
+            <button type="button" class="rules-sync-btn" data-category="${this.escapeHtml(category.name)}"
+                    title="Sync with Bluesky list" ${!this.hasApiAccess() ? 'disabled' : ''}>
+              ⟳
+            </button>
             <button type="button" class="rules-category-organize" data-category="${catIndex}"
                     title="Sort rules in this category">⇅</button>
             <button type="button" class="rules-category-delete" data-category="${catIndex}"
@@ -1575,6 +1579,15 @@ export class ConfigModal {
         this.parsedRules.push({ name: 'new-category', rules: [] });
         this.syncVisualToRaw();
         this.refreshVisualEditor();
+      });
+    });
+
+    // Sync button click - show sync menu
+    panel.querySelectorAll('.rules-sync-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const category = btn.dataset.category;
+        this.showSyncMenu(btn, category);
       });
     });
 
@@ -1889,6 +1902,63 @@ export class ConfigModal {
     const div = document.createElement('div');
     div.textContent = String(text);
     return div.innerHTML;
+  }
+
+  /**
+   * Checks if AT Protocol API is available
+   */
+  hasApiAccess() {
+    return !!(unsafeWindow.blueskyNavigatorState?.listCache?.api);
+  }
+
+  /**
+   * Shows the sync options menu
+   */
+  showSyncMenu(anchorEl, category) {
+    // Remove any existing menu
+    this.modalEl.querySelectorAll('.rules-sync-menu').forEach(m => m.remove());
+
+    const menu = document.createElement('div');
+    menu.className = 'rules-sync-menu';
+    menu.innerHTML = `
+      <button class="sync-menu-item" data-action="push">Push to List...</button>
+      <button class="sync-menu-item" data-action="pull">Pull from List...</button>
+      <button class="sync-menu-item" data-action="bidirectional">Bidirectional Sync...</button>
+    `;
+
+    // Position near button
+    const rect = anchorEl.getBoundingClientRect();
+    const modalBody = this.modalEl.querySelector('.config-modal-body');
+    const modalRect = modalBody.getBoundingClientRect();
+
+    menu.style.position = 'absolute';
+    menu.style.top = `${rect.bottom - modalRect.top + 5}px`;
+    menu.style.left = `${rect.left - modalRect.left}px`;
+
+    menu.querySelectorAll('.sync-menu-item').forEach(item => {
+      item.addEventListener('click', () => {
+        menu.remove();
+        this.showSyncDialog(category, item.dataset.action);
+      });
+    });
+
+    // Close on click outside
+    const closeHandler = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeHandler);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeHandler), 0);
+
+    modalBody.appendChild(menu);
+  }
+
+  /**
+   * Shows the sync dialog for a category (placeholder for Task 8)
+   */
+  showSyncDialog(category, action) {
+    alert(`Sync dialog not yet implemented. Category: ${category}, Action: ${action}`);
   }
 
   /**

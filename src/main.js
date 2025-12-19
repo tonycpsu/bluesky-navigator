@@ -1360,8 +1360,9 @@ function getScreenFromElement(element) {
     onSave: onConfigSave,
   });
 
-  // Expose config to window for debugging (e.g., config.clearNewConfig())
+  // Expose config and state to window for debugging and access from ConfigModal
   unsafeWindow.config = config;
+  unsafeWindow.blueskyNavigatorState = state;
 
   $(document).ready(function (e) {
     // Store the original play method

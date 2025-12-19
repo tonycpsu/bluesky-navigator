@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+530.f18297dd
+// @version     1.0.31+531.9ca427c8
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46414,6 +46414,10 @@ if (cid) {
             </div>
             <input type="text" class="rules-category-name" value="${this.escapeHtml(category.name)}"
                    data-category="${catIndex}">
+            <button type="button" class="rules-sync-btn" data-category="${this.escapeHtml(category.name)}"
+                    title="Sync with Bluesky list" ${!this.hasApiAccess() ? "disabled" : ""}>
+              \u27F3
+            </button>
             <button type="button" class="rules-category-organize" data-category="${catIndex}"
                     title="Sort rules in this category">\u21C5</button>
             <button type="button" class="rules-category-delete" data-category="${catIndex}"
@@ -46653,6 +46657,13 @@ if (cid) {
           this.refreshVisualEditor();
         });
       });
+      panel.querySelectorAll(".rules-sync-btn").forEach((btn) => {
+        btn.addEventListener("click", (e2) => {
+          e2.stopPropagation();
+          const category = btn.dataset.category;
+          this.showSyncMenu(btn, category);
+        });
+      });
       panel.querySelectorAll(".rules-category-organize").forEach((btn) => {
         btn.addEventListener("click", (e2) => {
           const catIndex = parseInt(e2.target.dataset.category);
@@ -46889,6 +46900,51 @@ if (cid) {
       const div = document.createElement("div");
       div.textContent = String(text);
       return div.innerHTML;
+    }
+    /**
+     * Checks if AT Protocol API is available
+     */
+    hasApiAccess() {
+      return !!unsafeWindow.blueskyNavigatorState?.listCache?.api;
+    }
+    /**
+     * Shows the sync options menu
+     */
+    showSyncMenu(anchorEl, category) {
+      this.modalEl.querySelectorAll(".rules-sync-menu").forEach((m) => m.remove());
+      const menu = document.createElement("div");
+      menu.className = "rules-sync-menu";
+      menu.innerHTML = `
+      <button class="sync-menu-item" data-action="push">Push to List...</button>
+      <button class="sync-menu-item" data-action="pull">Pull from List...</button>
+      <button class="sync-menu-item" data-action="bidirectional">Bidirectional Sync...</button>
+    `;
+      const rect = anchorEl.getBoundingClientRect();
+      const modalBody = this.modalEl.querySelector(".config-modal-body");
+      const modalRect = modalBody.getBoundingClientRect();
+      menu.style.position = "absolute";
+      menu.style.top = `${rect.bottom - modalRect.top + 5}px`;
+      menu.style.left = `${rect.left - modalRect.left}px`;
+      menu.querySelectorAll(".sync-menu-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          menu.remove();
+          this.showSyncDialog(category, item.dataset.action);
+        });
+      });
+      const closeHandler = (e2) => {
+        if (!menu.contains(e2.target)) {
+          menu.remove();
+          document.removeEventListener("click", closeHandler);
+        }
+      };
+      setTimeout(() => document.addEventListener("click", closeHandler), 0);
+      modalBody.appendChild(menu);
+    }
+    /**
+     * Shows the sync dialog for a category (placeholder for Task 8)
+     */
+    showSyncDialog(category, action) {
+      alert(`Sync dialog not yet implemented. Category: ${category}, Action: ${action}`);
     }
     /**
      * Update feed map preview dynamically when settings change
@@ -51696,6 +51752,58 @@ div#statusBar.has-feed-map {
 .rules-category-organize:hover {
   background: #dbeafe;
   color: #2563eb;
+}
+
+/* Rules sync UI */
+.rules-sync-btn {
+  background: none;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: 8px;
+}
+
+.rules-sync-btn:hover:not(:disabled) {
+  background: var(--hover-bg, #f0f0f0);
+}
+
+.rules-sync-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rules-sync-menu {
+  background: var(--background-color, white);
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10001;
+  min-width: 180px;
+}
+
+.sync-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.sync-menu-item:hover {
+  background: var(--hover-bg, #f0f0f0);
+}
+
+.sync-menu-item:first-child {
+  border-radius: 8px 8px 0 0;
+}
+
+.sync-menu-item:last-child {
+  border-radius: 0 0 8px 8px;
 }
 
 .rules-category-drag-handle {
@@ -78238,6 +78346,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       onSave: onConfigSave
     });
     unsafeWindow.config = config;
+    unsafeWindow.blueskyNavigatorState = state;
     $(document).ready(function(e2) {
       const originalPlay = HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play = function() {

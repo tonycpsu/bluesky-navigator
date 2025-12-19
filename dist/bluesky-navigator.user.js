@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+568.dc890b93
+// @version     1.0.31+569.4773bff0
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47295,7 +47295,7 @@ if (cid) {
           const existingHandles = new Set(
             (categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : []).filter((r) => r.type === "from").map((r) => r.value.replace(/^@/, "").toLowerCase())
           );
-          const newHandles = members ? [...members].filter((h) => !existingHandles.has(h)) : [];
+          const newHandles = members ? [...members.keys()].filter((h) => !existingHandles.has(h)) : [];
           dialog.querySelector(".sync-preview").innerHTML = `<strong>${newHandles.length}</strong> new handles will be added`;
         });
       }
@@ -47400,7 +47400,7 @@ if (cid) {
           return handle2;
         })
       );
-      for (const handle2 of members) {
+      for (const handle2 of members.keys()) {
         if (!existingHandles.has(handle2.toLowerCase())) {
           if (categoryIndex === -1) {
             this.parsedRules.push({ name: category, rules: [] });
@@ -47491,7 +47491,8 @@ if (cid) {
           const members = await listCache.getMembers(listName);
           if (members && members.size > 0) {
             listMembers2.set(listName, {
-              members: new Set([...members].map((h) => h.toLowerCase())),
+              members: new Set(members.keys()),
+              // keys are already lowercase
               action: rule.action
             });
           }

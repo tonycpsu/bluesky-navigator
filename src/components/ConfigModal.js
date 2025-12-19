@@ -2343,7 +2343,7 @@ export class ConfigModal {
             .map(r => r.value.replace(/^@/, '').toLowerCase())
         );
 
-        const newHandles = members ? [...members].filter(h => !existingHandles.has(h)) : [];
+        const newHandles = members ? [...members.keys()].filter(h => !existingHandles.has(h)) : [];
         dialog.querySelector('.sync-preview').innerHTML =
           `<strong>${newHandles.length}</strong> new handles will be added`;
       });
@@ -2492,7 +2492,7 @@ export class ConfigModal {
 
     // Add new handles to rules
     let added = 0;
-    for (const handle of members) {
+    for (const handle of members.keys()) {
       if (!existingHandles.has(handle.toLowerCase())) {
         // Create category if it doesn't exist
         if (categoryIndex === -1) {
@@ -2606,7 +2606,7 @@ export class ConfigModal {
         const members = await listCache.getMembers(listName);
         if (members && members.size > 0) {
           listMembers.set(listName, {
-            members: new Set([...members].map(h => h.toLowerCase())),
+            members: new Set(members.keys()), // keys are already lowercase
             action: rule.action
           });
         }

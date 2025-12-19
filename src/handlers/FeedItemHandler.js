@@ -3530,15 +3530,25 @@ export class FeedItemHandler extends ItemHandler {
       clearTimeout(this._tooltipTimer);
       this._tooltipTimer = null;
 
+      // Clear any existing hide timer and start fresh
+      clearTimeout(this._tooltipHideTimer);
       // Small delay before hiding to allow moving to adjacent segments
       this._tooltipHideTimer = setTimeout(() => {
         this.hideFeedMapTooltip();
       }, 100);
     });
 
-    // Also hide immediately when leaving the feed map container entirely
+    // Also hide when leaving the feed map container entirely
     indicator.on('mouseleave', () => {
-      this.hideFeedMapTooltip();
+      // Clear any pending segment timers
+      clearTimeout(this._tooltipTimer);
+      this._tooltipTimer = null;
+
+      // Clear any existing hide timer and start fresh with shorter delay
+      clearTimeout(this._tooltipHideTimer);
+      this._tooltipHideTimer = setTimeout(() => {
+        this.hideFeedMapTooltip();
+      }, 50);
     });
   }
 

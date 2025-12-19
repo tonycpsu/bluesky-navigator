@@ -5179,12 +5179,90 @@ div#statusBar.has-feed-map {
   font-weight: 700;
 }
 
-.bsky-nav-rules-no-categories {
+.bsky-nav-rules-no-categories,
+.bsky-nav-rules-no-lists {
   padding: 16px 12px;
   font-size: 12px;
   color: #6b7280;
   text-align: center;
   line-height: 1.5;
+}
+
+.bsky-nav-rules-dropdown-tabs {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.bsky-nav-rules-tab {
+  flex: 1;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.bsky-nav-rules-tab:hover {
+  background: #f3f4f6;
+}
+
+.bsky-nav-rules-tab.active {
+  color: #1d4ed8;
+  border-bottom: 2px solid #3b82f6;
+  margin-bottom: -1px;
+}
+
+.bsky-nav-rules-tab-content {
+  display: none;
+}
+
+.bsky-nav-rules-tab-content.active {
+  display: block;
+}
+
+.bsky-nav-rules-dropdown-lists {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.bsky-nav-rules-list-btn {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  color: #374151;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.bsky-nav-rules-list-btn:last-child {
+  margin-bottom: 0;
+}
+
+.bsky-nav-rules-list-btn:hover {
+  background: #f3f4f6;
+}
+
+.bsky-nav-rules-list-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.bsky-nav-rules-lists-loading {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
 }
 
 .bsky-nav-rules-dropdown-footer {
@@ -5537,8 +5615,35 @@ div#statusBar.has-feed-map {
     background: #1e3a5f;
   }
 
-  .bsky-nav-rules-no-categories {
+  .bsky-nav-rules-no-categories,
+  .bsky-nav-rules-no-lists,
+  .bsky-nav-rules-lists-loading {
     color: #9ca3af;
+  }
+
+  .bsky-nav-rules-dropdown-tabs {
+    border-bottom-color: #374151;
+  }
+
+  .bsky-nav-rules-tab {
+    color: #9ca3af;
+  }
+
+  .bsky-nav-rules-tab:hover {
+    background: #374151;
+  }
+
+  .bsky-nav-rules-tab.active {
+    color: #60a5fa;
+    border-bottom-color: #3b82f6;
+  }
+
+  .bsky-nav-rules-list-btn {
+    color: #d1d5db;
+  }
+
+  .bsky-nav-rules-list-btn:hover {
+    background: #374151;
   }
 
   .bsky-nav-rules-dropdown-footer {

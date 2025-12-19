@@ -3623,7 +3623,7 @@ export class ItemHandler extends Handler {
   }
 
   /**
-   * Show dropdown to select which rule category to add a rule to
+   * Show dropdown to select which rule category or list to add to
    * @param {DOMRect} buttonRect - The bounding rect of the button (captured before hover card disappears)
    * @param {Object} options - Either { handle } for author rule or { selectedText } for content rule
    */
@@ -3653,44 +3653,63 @@ export class ItemHandler extends Handler {
       ? `Add "${selectedText.length > 30 ? selectedText.substring(0, 30) + '...' : selectedText}" to:`
       : `Add @${handle} to:`;
 
+    // Check if lists are available (only for author rules, not content)
+    const listCache = this.state.listCache;
+    const hasLists = !isContentRule && listCache && this.api;
+
     // Create dropdown
     const dropdown = $(`
       <div class="bsky-nav-rules-dropdown">
         <div class="bsky-nav-rules-dropdown-header">${headerText}</div>
-        <div class="bsky-nav-rules-dropdown-actions">
-          <button class="bsky-nav-rules-action-btn bsky-nav-rules-allow" data-action="allow">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 6L9 17l-5-5"/>
-            </svg>
-            Allow
-          </button>
-          <button class="bsky-nav-rules-action-btn bsky-nav-rules-deny" data-action="deny">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-            Deny
-          </button>
+        ${hasLists ? `
+        <div class="bsky-nav-rules-dropdown-tabs">
+          <button class="bsky-nav-rules-tab active" data-tab="rules">Rules</button>
+          <button class="bsky-nav-rules-tab" data-tab="lists">Lists</button>
         </div>
-        <div class="bsky-nav-rules-dropdown-categories">
-          ${categories.length > 0
-            ? categories.map((cat, index) => {
-                const color = this.getColorForCategory(cat);
-                const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                const sc = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
-                const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
-                return `
-                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? ' selected' : ''}" data-category="${cat}" style="color: ${color}; text-shadow: ${shadow}">
-                  ${cat}
-                </button>
-              `;
-              }).join('')
-            : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings → Rules.</div>'
-          }
+        ` : ''}
+        <div class="bsky-nav-rules-tab-content bsky-nav-rules-tab-rules active">
+          <div class="bsky-nav-rules-dropdown-actions">
+            <button class="bsky-nav-rules-action-btn bsky-nav-rules-allow" data-action="allow">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+              Allow
+            </button>
+            <button class="bsky-nav-rules-action-btn bsky-nav-rules-deny" data-action="deny">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+              Deny
+            </button>
+          </div>
+          <div class="bsky-nav-rules-dropdown-categories">
+            ${categories.length > 0
+              ? categories.map((cat, index) => {
+                  const color = this.getColorForCategory(cat);
+                  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  const sc = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
+                  const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
+                  return `
+                  <button class="bsky-nav-rules-category-btn${activeCategory === cat ? ' selected' : ''}" data-category="${cat}" style="color: ${color}; text-shadow: ${shadow}">
+                    ${cat}
+                  </button>
+                `;
+                }).join('')
+              : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings → Rules.</div>'
+            }
+          </div>
+          <div class="bsky-nav-rules-dropdown-footer">
+            <input type="text" class="bsky-nav-rules-quick-filter" placeholder="${categories.length > 0 ? 'Type # or name...' : 'Create first category...'}" autocomplete="off" spellcheck="false">
+            <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
+          </div>
         </div>
-        <div class="bsky-nav-rules-dropdown-footer">
-          <input type="text" class="bsky-nav-rules-quick-filter" placeholder="${categories.length > 0 ? 'Type # or name...' : 'Create first category...'}" autocomplete="off" spellcheck="false">
-          <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
+        ${hasLists ? `
+        <div class="bsky-nav-rules-tab-content bsky-nav-rules-tab-lists">
+          <div class="bsky-nav-rules-dropdown-lists">
+            <div class="bsky-nav-rules-lists-loading">Loading lists...</div>
+          </div>
         </div>
+        ` : ''}
       </div>
     `);
 
@@ -3731,6 +3750,83 @@ export class ItemHandler extends Handler {
         this.addAuthorToRules(handle, category, action);
       }
     };
+
+    // Tab switching (if lists are available)
+    if (hasLists) {
+      let listsLoaded = false;
+
+      dropdown.find('.bsky-nav-rules-tab').on('click', async (e) => {
+        const tab = $(e.target).data('tab');
+        dropdown.find('.bsky-nav-rules-tab').removeClass('active');
+        $(e.target).addClass('active');
+        dropdown.find('.bsky-nav-rules-tab-content').removeClass('active');
+        dropdown.find(`.bsky-nav-rules-tab-${tab}`).addClass('active');
+
+        // Load lists on first switch to lists tab
+        if (tab === 'lists' && !listsLoaded) {
+          listsLoaded = true;
+          try {
+            const listNames = await listCache.getListNames();
+            const listsContainer = dropdown.find('.bsky-nav-rules-dropdown-lists');
+
+            if (listNames.length === 0) {
+              listsContainer.html('<div class="bsky-nav-rules-no-lists">No lists found.<br>Create one in Bluesky settings.</div>');
+            } else {
+              listsContainer.html(listNames.map(name => `
+                <button class="bsky-nav-rules-list-btn" data-list="${name}">
+                  ${name}
+                </button>
+              `).join(''));
+
+              // List button click handler
+              listsContainer.find('.bsky-nav-rules-list-btn').on('click', async (e) => {
+                const listName = $(e.target).data('list');
+                const btn = $(e.target);
+
+                // Show loading state
+                btn.text('Adding...').prop('disabled', true);
+
+                try {
+                  // Resolve handle to DID
+                  const did = await this.api.resolveHandleToDid(handle);
+                  if (!did) {
+                    throw new Error('Could not resolve handle');
+                  }
+
+                  // Get list URI
+                  const listUri = await listCache.getListUri(listName);
+                  if (!listUri) {
+                    throw new Error('Could not find list');
+                  }
+
+                  // Add to list
+                  await this.api.addToList(listUri, did);
+
+                  // Invalidate cache so list membership updates
+                  listCache.invalidate(listName);
+
+                  closeDropdown();
+
+                  // Show success toast if available
+                  if (typeof showToast === 'function') {
+                    showToast(`Added @${handle} to ${listName}`);
+                  }
+                } catch (error) {
+                  console.error('Failed to add to list:', error);
+                  btn.text(listName).prop('disabled', false);
+                  alert(`Failed to add to list: ${error.message}`);
+                }
+              });
+            }
+          } catch (error) {
+            console.error('Failed to load lists:', error);
+            dropdown.find('.bsky-nav-rules-dropdown-lists').html(
+              '<div class="bsky-nav-rules-no-lists">Failed to load lists.</div>'
+            );
+          }
+        }
+      });
+    }
 
     // Category button handlers
     dropdown.find('.bsky-nav-rules-category-btn').on('click', (e) => {

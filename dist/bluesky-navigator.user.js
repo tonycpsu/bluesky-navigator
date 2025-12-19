@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+549.9859385b
+// @version     1.0.31+550.2312778d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -53117,12 +53117,90 @@ div#statusBar.has-feed-map {
   font-weight: 700;
 }
 
-.bsky-nav-rules-no-categories {
+.bsky-nav-rules-no-categories,
+.bsky-nav-rules-no-lists {
   padding: 16px 12px;
   font-size: 12px;
   color: #6b7280;
   text-align: center;
   line-height: 1.5;
+}
+
+.bsky-nav-rules-dropdown-tabs {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.bsky-nav-rules-tab {
+  flex: 1;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.bsky-nav-rules-tab:hover {
+  background: #f3f4f6;
+}
+
+.bsky-nav-rules-tab.active {
+  color: #1d4ed8;
+  border-bottom: 2px solid #3b82f6;
+  margin-bottom: -1px;
+}
+
+.bsky-nav-rules-tab-content {
+  display: none;
+}
+
+.bsky-nav-rules-tab-content.active {
+  display: block;
+}
+
+.bsky-nav-rules-dropdown-lists {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.bsky-nav-rules-list-btn {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  color: #374151;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.bsky-nav-rules-list-btn:last-child {
+  margin-bottom: 0;
+}
+
+.bsky-nav-rules-list-btn:hover {
+  background: #f3f4f6;
+}
+
+.bsky-nav-rules-list-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.bsky-nav-rules-lists-loading {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
 }
 
 .bsky-nav-rules-dropdown-footer {
@@ -53475,8 +53553,35 @@ div#statusBar.has-feed-map {
     background: #1e3a5f;
   }
 
-  .bsky-nav-rules-no-categories {
+  .bsky-nav-rules-no-categories,
+  .bsky-nav-rules-no-lists,
+  .bsky-nav-rules-lists-loading {
     color: #9ca3af;
+  }
+
+  .bsky-nav-rules-dropdown-tabs {
+    border-bottom-color: #374151;
+  }
+
+  .bsky-nav-rules-tab {
+    color: #9ca3af;
+  }
+
+  .bsky-nav-rules-tab:hover {
+    background: #374151;
+  }
+
+  .bsky-nav-rules-tab.active {
+    color: #60a5fa;
+    border-bottom-color: #3b82f6;
+  }
+
+  .bsky-nav-rules-list-btn {
+    color: #d1d5db;
+  }
+
+  .bsky-nav-rules-list-btn:hover {
+    background: #374151;
   }
 
   .bsky-nav-rules-dropdown-footer {
@@ -72952,7 +73057,7 @@ div#statusBar.has-feed-map {
       this.showAddToRulesDropdown(rect, { handle: handle2 });
     }
     /**
-     * Show dropdown to select which rule category to add a rule to
+     * Show dropdown to select which rule category or list to add to
      * @param {DOMRect} buttonRect - The bounding rect of the button (captured before hover card disappears)
      * @param {Object} options - Either { handle } for author rule or { selectedText } for content rule
      */
@@ -72968,40 +73073,57 @@ div#statusBar.has-feed-map {
       const activeRuleMatch = activeFilter.match(/\$(\S+)/);
       const activeCategory = activeRuleMatch ? activeRuleMatch[1] : null;
       const headerText = isContentRule ? `Add "${selectedText.length > 30 ? selectedText.substring(0, 30) + "..." : selectedText}" to:` : `Add @${handle2} to:`;
+      const listCache = this.state.listCache;
+      const hasLists = !isContentRule && listCache && this.api;
       const dropdown = $(`
       <div class="bsky-nav-rules-dropdown">
         <div class="bsky-nav-rules-dropdown-header">${headerText}</div>
-        <div class="bsky-nav-rules-dropdown-actions">
-          <button class="bsky-nav-rules-action-btn bsky-nav-rules-allow" data-action="allow">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20 6L9 17l-5-5"/>
-            </svg>
-            Allow
-          </button>
-          <button class="bsky-nav-rules-action-btn bsky-nav-rules-deny" data-action="deny">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-            Deny
-          </button>
+        ${hasLists ? `
+        <div class="bsky-nav-rules-dropdown-tabs">
+          <button class="bsky-nav-rules-tab active" data-tab="rules">Rules</button>
+          <button class="bsky-nav-rules-tab" data-tab="lists">Lists</button>
         </div>
-        <div class="bsky-nav-rules-dropdown-categories">
-          ${categories.length > 0 ? categories.map((cat, index) => {
+        ` : ""}
+        <div class="bsky-nav-rules-tab-content bsky-nav-rules-tab-rules active">
+          <div class="bsky-nav-rules-dropdown-actions">
+            <button class="bsky-nav-rules-action-btn bsky-nav-rules-allow" data-action="allow">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+              Allow
+            </button>
+            <button class="bsky-nav-rules-action-btn bsky-nav-rules-deny" data-action="deny">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+              Deny
+            </button>
+          </div>
+          <div class="bsky-nav-rules-dropdown-categories">
+            ${categories.length > 0 ? categories.map((cat, index) => {
         const color2 = this.getColorForCategory(cat);
         const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
         const sc = isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.9)";
         const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
         return `
-                <button class="bsky-nav-rules-category-btn${activeCategory === cat ? " selected" : ""}" data-category="${cat}" style="color: ${color2}; text-shadow: ${shadow}">
-                  ${cat}
-                </button>
-              `;
+                  <button class="bsky-nav-rules-category-btn${activeCategory === cat ? " selected" : ""}" data-category="${cat}" style="color: ${color2}; text-shadow: ${shadow}">
+                    ${cat}
+                  </button>
+                `;
       }).join("") : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings \u2192 Rules.</div>'}
+          </div>
+          <div class="bsky-nav-rules-dropdown-footer">
+            <input type="text" class="bsky-nav-rules-quick-filter" placeholder="${categories.length > 0 ? "Type # or name..." : "Create first category..."}" autocomplete="off" spellcheck="false">
+            <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
+          </div>
         </div>
-        <div class="bsky-nav-rules-dropdown-footer">
-          <input type="text" class="bsky-nav-rules-quick-filter" placeholder="${categories.length > 0 ? "Type # or name..." : "Create first category..."}" autocomplete="off" spellcheck="false">
-          <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
+        ${hasLists ? `
+        <div class="bsky-nav-rules-tab-content bsky-nav-rules-tab-lists">
+          <div class="bsky-nav-rules-dropdown-lists">
+            <div class="bsky-nav-rules-lists-loading">Loading lists...</div>
+          </div>
         </div>
+        ` : ""}
       </div>
     `);
       dropdown.css({
@@ -73031,6 +73153,62 @@ div#statusBar.has-feed-map {
           this.addAuthorToRules(handle2, category, action);
         }
       };
+      if (hasLists) {
+        let listsLoaded = false;
+        dropdown.find(".bsky-nav-rules-tab").on("click", async (e2) => {
+          const tab = $(e2.target).data("tab");
+          dropdown.find(".bsky-nav-rules-tab").removeClass("active");
+          $(e2.target).addClass("active");
+          dropdown.find(".bsky-nav-rules-tab-content").removeClass("active");
+          dropdown.find(`.bsky-nav-rules-tab-${tab}`).addClass("active");
+          if (tab === "lists" && !listsLoaded) {
+            listsLoaded = true;
+            try {
+              const listNames = await listCache.getListNames();
+              const listsContainer = dropdown.find(".bsky-nav-rules-dropdown-lists");
+              if (listNames.length === 0) {
+                listsContainer.html('<div class="bsky-nav-rules-no-lists">No lists found.<br>Create one in Bluesky settings.</div>');
+              } else {
+                listsContainer.html(listNames.map((name) => `
+                <button class="bsky-nav-rules-list-btn" data-list="${name}">
+                  ${name}
+                </button>
+              `).join(""));
+                listsContainer.find(".bsky-nav-rules-list-btn").on("click", async (e3) => {
+                  const listName = $(e3.target).data("list");
+                  const btn = $(e3.target);
+                  btn.text("Adding...").prop("disabled", true);
+                  try {
+                    const did2 = await this.api.resolveHandleToDid(handle2);
+                    if (!did2) {
+                      throw new Error("Could not resolve handle");
+                    }
+                    const listUri = await listCache.getListUri(listName);
+                    if (!listUri) {
+                      throw new Error("Could not find list");
+                    }
+                    await this.api.addToList(listUri, did2);
+                    listCache.invalidate(listName);
+                    closeDropdown();
+                    if (typeof showToast === "function") {
+                      showToast(`Added @${handle2} to ${listName}`);
+                    }
+                  } catch (error) {
+                    console.error("Failed to add to list:", error);
+                    btn.text(listName).prop("disabled", false);
+                    alert(`Failed to add to list: ${error.message}`);
+                  }
+                });
+              }
+            } catch (error) {
+              console.error("Failed to load lists:", error);
+              dropdown.find(".bsky-nav-rules-dropdown-lists").html(
+                '<div class="bsky-nav-rules-no-lists">Failed to load lists.</div>'
+              );
+            }
+          }
+        });
+      }
       dropdown.find(".bsky-nav-rules-category-btn").on("click", (e2) => {
         const category = $(e2.target).data("category");
         addRule(category, selectedAction);
@@ -78593,7 +78771,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       return notification2;
     }
-    function showToast(notification2) {
+    function showToast2(notification2) {
       if (!toastContainer || !notification2) return;
       const iconSvgs = {
         like: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12.489 21.372c8.528-4.78 10.626-10.47 9.022-14.47-.779-1.941-2.414-3.333-4.342-3.763-1.697-.378-3.552.003-5.169 1.287-1.617-1.284-3.472-1.665-5.17-1.287-1.927.43-3.562 1.822-4.34 3.764-1.605 4 .493 9.69 9.021 14.47a1 1 0 0 0 .978 0Z"></path></svg>',
@@ -78683,7 +78861,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               continue;
             }
           }
-          showToast(notification2);
+          showToast2(notification2);
         }
         if (seenNotifications.size > 1e3) {
           const iterator = seenNotifications.values();
@@ -78709,7 +78887,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const notification2 = parseApiNotification(notifications[0]);
           if (notification2) {
             seenNotifications.clear();
-            showToast(notification2);
+            showToast2(notification2);
           }
         }
       } catch (error) {

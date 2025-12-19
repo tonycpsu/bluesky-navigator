@@ -1410,13 +1410,32 @@ export class ConfigModal {
    * Re-render just the visual editor content
    */
   async refreshVisualEditor() {
-    // Fetch list names for dropdown if API is available
-    await this.updateCachedListNames();
+    // Prevent concurrent refreshes
+    if (this._refreshPending) {
+      this._refreshQueued = true;
+      return;
+    }
+    this._refreshPending = true;
 
-    const visualContainer = this.modalEl.querySelector('.rules-visual');
-    if (visualContainer) {
-      visualContainer.innerHTML = this.renderVisualEditor();
-      this.attachRulesEventListeners();
+    try {
+      // Only fetch list names if not already cached
+      if (!this.cachedListNames || this.cachedListNames.length === 0) {
+        await this.updateCachedListNames();
+      }
+
+      const visualContainer = this.modalEl.querySelector('.rules-visual');
+      if (visualContainer) {
+        visualContainer.innerHTML = this.renderVisualEditor();
+        this.attachRulesEventListeners();
+      }
+    } finally {
+      this._refreshPending = false;
+      // Process queued refresh if any
+      if (this._refreshQueued) {
+        this._refreshQueued = false;
+        // Use setTimeout to yield to event loop
+        setTimeout(() => this.refreshVisualEditor(), 0);
+      }
     }
   }
 
@@ -1432,6 +1451,14 @@ export class ConfigModal {
         console.warn('Failed to fetch list names:', e);
       }
     }
+  }
+
+  /**
+   * Force refresh of cached list names (call after creating/deleting lists)
+   */
+  async refreshListNames() {
+    this.cachedListNames = null;
+    await this.updateCachedListNames();
   }
 
   /**
@@ -2329,6 +2356,8 @@ export class ConfigModal {
       dialog.dataset.createdListUri = listUri;
       // Invalidate cache so the new list appears
       listCache.invalidate();
+      // Also clear local cached list names so dropdown refreshes
+      this.cachedListNames = null;
       // New list is empty, no need to fetch members
     } else {
       listName = dialog.querySelector('.sync-existing-list').value;
@@ -2347,11 +2376,31 @@ export class ConfigModal {
       .filter(r => r.type === 'from' && r.value.startsWith('@'))
       .map(r => r.value.replace(/^@/, ''));
 
+    // Get progress element for updates
+    const progressEl = dialog.querySelector('.sync-progress');
+    const updateProgress = (current, total, status) => {
+      if (progressEl) {
+        progressEl.textContent = `${status} (${current}/${total})`;
+      }
+    };
+
     // Add each handle to list if not already present
     let added = 0;
+    let processed = 0;
+    const total = handles.length;
+
     for (const handle of handles) {
+      processed++;
+      updateProgress(processed, total, `Resolving ${handle}...`);
+
+      // Yield to event loop every 5 handles to prevent UI freeze
+      if (processed % 5 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
       const did = await api.resolveHandleToDid(handle);
       if (did && !existingDids.has(did)) {
+        updateProgress(processed, total, `Adding ${handle}...`);
         await api.addToList(listUri, did);
         added++;
       }

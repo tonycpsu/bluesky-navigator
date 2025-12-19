@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+548.700d8722
+// @version     1.0.31+549.9859385b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46533,11 +46533,26 @@ if (cid) {
      * Re-render just the visual editor content
      */
     async refreshVisualEditor() {
-      await this.updateCachedListNames();
-      const visualContainer = this.modalEl.querySelector(".rules-visual");
-      if (visualContainer) {
-        visualContainer.innerHTML = this.renderVisualEditor();
-        this.attachRulesEventListeners();
+      if (this._refreshPending) {
+        this._refreshQueued = true;
+        return;
+      }
+      this._refreshPending = true;
+      try {
+        if (!this.cachedListNames || this.cachedListNames.length === 0) {
+          await this.updateCachedListNames();
+        }
+        const visualContainer = this.modalEl.querySelector(".rules-visual");
+        if (visualContainer) {
+          visualContainer.innerHTML = this.renderVisualEditor();
+          this.attachRulesEventListeners();
+        }
+      } finally {
+        this._refreshPending = false;
+        if (this._refreshQueued) {
+          this._refreshQueued = false;
+          setTimeout(() => this.refreshVisualEditor(), 0);
+        }
       }
     }
     /**
@@ -46552,6 +46567,13 @@ if (cid) {
           console.warn("Failed to fetch list names:", e2);
         }
       }
+    }
+    /**
+     * Force refresh of cached list names (call after creating/deleting lists)
+     */
+    async refreshListNames() {
+      this.cachedListNames = null;
+      await this.updateCachedListNames();
     }
     /**
      * Get the color index for a category (custom or default based on name hash)
@@ -47263,6 +47285,7 @@ if (cid) {
         dialog.dataset.createdListName = listName;
         dialog.dataset.createdListUri = listUri;
         listCache.invalidate();
+        this.cachedListNames = null;
       } else {
         listName = dialog.querySelector(".sync-existing-list").value;
         if (!listName) throw new Error("Please select a list");
@@ -47274,10 +47297,24 @@ if (cid) {
       const categoryIndex = this.parsedRules.findIndex((c) => c.name === category);
       const categoryRules = categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : [];
       const handles = categoryRules.filter((r) => r.type === "from" && r.value.startsWith("@")).map((r) => r.value.replace(/^@/, ""));
+      const progressEl = dialog.querySelector(".sync-progress");
+      const updateProgress = (current, total2, status) => {
+        if (progressEl) {
+          progressEl.textContent = `${status} (${current}/${total2})`;
+        }
+      };
       let added = 0;
+      let processed = 0;
+      const total = handles.length;
       for (const handle2 of handles) {
+        processed++;
+        updateProgress(processed, total, `Resolving ${handle2}...`);
+        if (processed % 5 === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
         const did2 = await api.resolveHandleToDid(handle2);
         if (did2 && !existingDids.has(did2)) {
+          updateProgress(processed, total, `Adding ${handle2}...`);
           await api.addToList(listUri, did2);
           added++;
         }

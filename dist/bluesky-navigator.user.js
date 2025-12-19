@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+565.770bb202
+// @version     1.0.31+566.29f69d01
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -73744,6 +73744,8 @@ div#statusBar.has-feed-map {
         }
         await this.api.addToList(listUri, did2);
         this.state.listCache.invalidate(listName);
+        await this.state.listCache.getMembers(listName);
+        this.scheduleHighlightRefresh();
         this.showRuleAddedNotification(`Added @${cleanHandle} to list "${listName}"`);
         return true;
       } catch (error) {
@@ -79839,6 +79841,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     });
     unsafeWindow.config = config;
     unsafeWindow.blueskyNavigatorState = state;
+    unsafeWindow.bskyDebug = {
+      rulesSync: () => handlers.feed?.debugRulesSync(),
+      handleMatch: (handle2, category) => handlers.feed?.debugHandleMatch(handle2, category),
+      state: () => state,
+      rules: () => state.rules,
+      config: () => config.get("rulesConfig")
+    };
     $(document).ready(function(e2) {
       const originalPlay = HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play = function() {

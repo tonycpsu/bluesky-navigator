@@ -4189,8 +4189,12 @@ export class ItemHandler extends Handler {
       // Add to list
       await this.api.addToList(listUri, did);
 
-      // Invalidate cache to pick up the new member
+      // Invalidate cache and re-fetch to pick up the new member
       this.state.listCache.invalidate(listName);
+      await this.state.listCache.getMembers(listName);
+
+      // Refresh highlights to show the new member
+      this.scheduleHighlightRefresh();
 
       this.showRuleAddedNotification(`Added @${cleanHandle} to list "${listName}"`);
       return true;

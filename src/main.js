@@ -1369,6 +1369,15 @@ function getScreenFromElement(element) {
   unsafeWindow.config = config;
   unsafeWindow.blueskyNavigatorState = state;
 
+  // Expose debug helpers on window for console access
+  unsafeWindow.bskyDebug = {
+    rulesSync: () => handlers.feed?.debugRulesSync(),
+    handleMatch: (handle, category) => handlers.feed?.debugHandleMatch(handle, category),
+    state: () => state,
+    rules: () => state.rules,
+    config: () => config.get('rulesConfig'),
+  };
+
   $(document).ready(function (e) {
     // Store the original play method
     const originalPlay = HTMLMediaElement.prototype.play;

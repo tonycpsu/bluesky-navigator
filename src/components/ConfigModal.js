@@ -2208,10 +2208,16 @@ export class ConfigModal {
       listName = dialog.querySelector('.sync-new-list-name').value.trim();
       if (!listName) throw new Error('Please enter a list name');
       listUri = await api.createList(listName);
+      // Store list name on dialog for bidirectional sync
+      dialog.dataset.createdListName = listName;
+      dialog.dataset.createdListUri = listUri;
+      // Invalidate cache so the new list appears
+      listCache.invalidate();
     } else {
       listName = dialog.querySelector('.sync-existing-list').value;
       if (!listName) throw new Error('Please select a list');
       listUri = await listCache.getListUri(listName);
+      if (!listUri) throw new Error(`List "${listName}" not found. Try refreshing the page.`);
     }
 
     // Get existing list members
@@ -2245,7 +2251,8 @@ export class ConfigModal {
    * Execute pull sync - imports list members as rules
    */
   async executePullSync(dialog, category, listCache) {
-    const listName = dialog.querySelector('.sync-existing-list').value;
+    // For bidirectional sync with newly created list, use the stored name
+    let listName = dialog.dataset.createdListName || dialog.querySelector('.sync-existing-list').value;
     if (!listName) throw new Error('Please select a list');
 
     const ruleAction = dialog.querySelector('input[name="ruleAction"]:checked')?.value || 'allow';

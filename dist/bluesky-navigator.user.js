@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+537.71b535f5
+// @version     1.0.31+538.bc998568
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47160,10 +47160,14 @@ if (cid) {
         listName = dialog.querySelector(".sync-new-list-name").value.trim();
         if (!listName) throw new Error("Please enter a list name");
         listUri = await api.createList(listName);
+        dialog.dataset.createdListName = listName;
+        dialog.dataset.createdListUri = listUri;
+        listCache.invalidate();
       } else {
         listName = dialog.querySelector(".sync-existing-list").value;
         if (!listName) throw new Error("Please select a list");
         listUri = await listCache.getListUri(listName);
+        if (!listUri) throw new Error(`List "${listName}" not found. Try refreshing the page.`);
       }
       const existingMembers = await api.getListMembers(listUri);
       const existingDids = new Set(existingMembers.map((m) => m.did));
@@ -47185,7 +47189,7 @@ if (cid) {
      * Execute pull sync - imports list members as rules
      */
     async executePullSync(dialog, category, listCache) {
-      const listName = dialog.querySelector(".sync-existing-list").value;
+      let listName = dialog.dataset.createdListName || dialog.querySelector(".sync-existing-list").value;
       if (!listName) throw new Error("Please select a list");
       const ruleAction = dialog.querySelector('input[name="ruleAction"]:checked')?.value || "allow";
       const members = await listCache.getMembers(listName);

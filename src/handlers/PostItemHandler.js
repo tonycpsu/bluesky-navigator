@@ -59,7 +59,8 @@ export class PostItemHandler extends ItemHandler {
       return;
     }
 
-    if (event.key == 'a') {
+    if (event.key == 'A') {
+      // Go to author's profile
       const handle = $.trim($(item).attr('data-testid').split('postThreadItem-by-')[1]);
       $(item)
         .find('div')
@@ -68,6 +69,9 @@ export class PostItemHandler extends ItemHandler {
             $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, '') == `@${handle}`
         )[0]
         .click();
+    } else if (event.key == 'a') {
+      // Show/hide author hover card by simulating mouse hover
+      this.toggleAuthorHoverCard(item);
     }
   }
 }

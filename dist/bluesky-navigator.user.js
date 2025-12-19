@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+515.32652400
+// @version     1.0.31+516.47176176
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -71310,6 +71310,98 @@ div#statusBar.has-feed-map {
     onProfileHoverCardRemove() {
     }
     /**
+     * Toggle author hover card visibility for the current context
+     * (main item, sidecar reply, or thread post)
+     * @param {HTMLElement} item - The selected item
+     */
+    toggleAuthorHoverCard(item) {
+      let $searchContext;
+      if (this._replyIndex != null && this.selectedReply.length) {
+        $searchContext = this.selectedReply;
+      } else if (this._threadIndex != null) {
+        if (this._threadIndex === 0) {
+          $searchContext = $(item);
+        } else {
+          const posts = this.getUnrolledThreadPosts();
+          const post2 = posts[this._threadIndex];
+          $searchContext = $(post2).closest(".unrolled-reply");
+          if (!$searchContext.length) {
+            $searchContext = $(post2);
+          }
+        }
+      } else {
+        $searchContext = $(item);
+      }
+      if (!$searchContext || !$searchContext.length) return;
+      let allProfileLinks = $searchContext.find('a[href*="/profile/"]');
+      console.log("[bsky-nav] toggleAuthorHoverCard search:", {
+        replyIndex: this._replyIndex,
+        threadIndex: this._threadIndex,
+        searchContext: $searchContext[0],
+        searchContextClass: $searchContext.attr("class"),
+        profileLinksInContext: allProfileLinks.length,
+        itemElement: item,
+        itemClass: $(item).attr("class"),
+        profileLinksInItem: $(item).find('a[href*="/profile/"]').length
+      });
+      if (allProfileLinks.length === 0) {
+        $searchContext = $(item);
+        allProfileLinks = $searchContext.find('a[href*="/profile/"]');
+        console.log("[bsky-nav] Fallback to item, found:", allProfileLinks.length);
+      }
+      let profileLink;
+      if (this._replyIndex != null || this._threadIndex != null || allProfileLinks.length <= 1) {
+        profileLink = allProfileLinks.first()[0];
+      } else {
+        profileLink = allProfileLinks.filter((i2, el) => {
+          return $(el).find("img").length > 0 || $(el).siblings().find("img").length > 0;
+        }).first()[0] || allProfileLinks.eq(1)[0];
+      }
+      if (!profileLink) return;
+      const rect = profileLink.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const pageWindow = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+      const pointerOptions = {
+        bubbles: true,
+        cancelable: true,
+        view: pageWindow,
+        clientX: centerX,
+        clientY: centerY,
+        screenX: centerX,
+        screenY: centerY,
+        pointerType: "mouse"
+      };
+      const mouseOptions = {
+        bubbles: true,
+        cancelable: true,
+        view: pageWindow,
+        clientX: centerX,
+        clientY: centerY,
+        screenX: centerX,
+        screenY: centerY
+      };
+      if (this.currentHoverCard) {
+        profileLink.dispatchEvent(new PointerEvent("pointerout", pointerOptions));
+        profileLink.dispatchEvent(new PointerEvent("pointerleave", { ...pointerOptions, bubbles: false }));
+        profileLink.dispatchEvent(new MouseEvent("mouseout", mouseOptions));
+        profileLink.dispatchEvent(new MouseEvent("mouseleave", { ...mouseOptions, bubbles: false }));
+        return;
+      }
+      profileLink.dispatchEvent(new PointerEvent("pointerout", pointerOptions));
+      profileLink.dispatchEvent(new PointerEvent("pointerleave", { ...pointerOptions, bubbles: false }));
+      profileLink.dispatchEvent(new MouseEvent("mouseout", mouseOptions));
+      profileLink.dispatchEvent(new MouseEvent("mouseleave", { ...mouseOptions, bubbles: false }));
+      setTimeout(() => {
+        profileLink.dispatchEvent(new PointerEvent("pointerover", pointerOptions));
+        profileLink.dispatchEvent(new PointerEvent("pointerenter", { ...pointerOptions, bubbles: false }));
+        profileLink.dispatchEvent(new MouseEvent("mouseover", mouseOptions));
+        profileLink.dispatchEvent(new MouseEvent("mouseenter", { ...mouseOptions, bubbles: false }));
+        profileLink.dispatchEvent(new PointerEvent("pointermove", pointerOptions));
+        profileLink.dispatchEvent(new MouseEvent("mousemove", mouseOptions));
+      }, 10);
+    }
+    /**
      * Open Add to Rules dropdown for the author of the selected item,
      * or for selected text if any text is selected.
      * @param {jQuery} item - The selected item
@@ -75480,8 +75572,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return true;
       }
       const item = this.selectedItem;
-      if (event.key == "a") {
+      if (event.key == "A") {
         $(item).find(constants.PROFILE_SELECTOR)[0].click();
+      } else if (event.key == "a") {
+        this.toggleAuthorHoverCard(item);
       } else if (event.key == "u") {
         this.loadNewerItems();
       } else if (event.key == ":") {
@@ -75538,11 +75632,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.isPopupVisible || event.altKey || event.metaKey) {
         return;
       }
-      if (event.key == "a") {
+      if (event.key == "A") {
         const handle2 = $.trim($(item).attr("data-testid").split("postThreadItem-by-")[1]);
         $(item).find("div").filter(
           (i2, el) => $.trim($(el).text()).replace(/[\u200E\u200F\u202A-\u202E]/g, "") == `@${handle2}`
         )[0].click();
+      } else if (event.key == "a") {
+        this.toggleAuthorHoverCard(item);
       }
     }
   }

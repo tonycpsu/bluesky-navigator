@@ -3549,8 +3549,12 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     const item = this.selectedItem;
-    if (event.key == 'a') {
+    if (event.key == 'A') {
+      // Go to author's profile
       $(item).find(constants.PROFILE_SELECTOR)[0].click();
+    } else if (event.key == 'a') {
+      // Show/hide author hover card by simulating mouse hover
+      this.toggleAuthorHoverCard(item);
     } else if (event.key == 'u') {
       this.loadNewerItems();
     } else if (event.key == ':') {

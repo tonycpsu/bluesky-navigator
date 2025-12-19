@@ -3254,6 +3254,132 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Toggle author hover card visibility for the current context
+   * (main item, sidecar reply, or thread post)
+   * @param {HTMLElement} item - The selected item
+   */
+  toggleAuthorHoverCard(item) {
+    // Determine which element to search for the profile link
+    let $searchContext;
+
+    if (this._replyIndex != null && this.selectedReply.length) {
+      // Sidecar navigation mode - use the selected reply
+      $searchContext = this.selectedReply;
+    } else if (this._threadIndex != null) {
+      // Thread navigation mode - unrolled posts are just content divs,
+      // so we need to search in the parent container (selectedItem) for author info
+      // For threadIndex 0 (main post), use the full selectedItem
+      // For other indices (replies), the unrolled reply divs contain the author info
+      if (this._threadIndex === 0) {
+        $searchContext = $(item);
+      } else {
+        // Unrolled replies - look in the unrolled-reply container
+        const posts = this.getUnrolledThreadPosts();
+        const post = posts[this._threadIndex];
+        // The unrolled reply might be wrapped - look for parent with profile links
+        $searchContext = $(post).closest('.unrolled-reply');
+        if (!$searchContext.length) {
+          $searchContext = $(post);
+        }
+      }
+    } else {
+      $searchContext = $(item);
+    }
+
+    if (!$searchContext || !$searchContext.length) return;
+
+    // Find the profile link
+    // Use href*="/profile/" to match both relative (/profile/...) and absolute (https://bsky.app/profile/...) URLs
+    let allProfileLinks = $searchContext.find('a[href*="/profile/"]');
+
+    console.log('[bsky-nav] toggleAuthorHoverCard search:', {
+      replyIndex: this._replyIndex,
+      threadIndex: this._threadIndex,
+      searchContext: $searchContext[0],
+      searchContextClass: $searchContext.attr('class'),
+      profileLinksInContext: allProfileLinks.length,
+      itemElement: item,
+      itemClass: $(item).attr('class'),
+      profileLinksInItem: $(item).find('a[href*="/profile/"]').length
+    });
+
+    // If no profile links found in search context, try the full selected item
+    if (allProfileLinks.length === 0) {
+      $searchContext = $(item);
+      allProfileLinks = $searchContext.find('a[href*="/profile/"]');
+      console.log('[bsky-nav] Fallback to item, found:', allProfileLinks.length);
+    }
+
+    let profileLink;
+
+    // For sidecar/thread context or when there's only one link, just use the first one
+    // For feed items with multiple links (reposts), find the one associated with the post author
+    if (this._replyIndex != null || this._threadIndex != null || allProfileLinks.length <= 1) {
+      profileLink = allProfileLinks.first()[0];
+    } else {
+      // Multiple profile links in main feed item - likely a repost
+      // Find the one with an avatar (the actual post author, not "Reposted by")
+      profileLink = allProfileLinks.filter((i, el) => {
+        return $(el).find('img').length > 0 || $(el).siblings().find('img').length > 0;
+      }).first()[0] || allProfileLinks.eq(1)[0];
+    }
+
+    if (!profileLink) return;
+
+    const rect = profileLink.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+
+    const pointerOptions = {
+      bubbles: true,
+      cancelable: true,
+      view: pageWindow,
+      clientX: centerX,
+      clientY: centerY,
+      screenX: centerX,
+      screenY: centerY,
+      pointerType: 'mouse',
+    };
+
+    const mouseOptions = {
+      bubbles: true,
+      cancelable: true,
+      view: pageWindow,
+      clientX: centerX,
+      clientY: centerY,
+      screenX: centerX,
+      screenY: centerY,
+    };
+
+    // If hover card is currently visible, dismiss it
+    if (this.currentHoverCard) {
+      profileLink.dispatchEvent(new PointerEvent('pointerout', pointerOptions));
+      profileLink.dispatchEvent(new PointerEvent('pointerleave', { ...pointerOptions, bubbles: false }));
+      profileLink.dispatchEvent(new MouseEvent('mouseout', mouseOptions));
+      profileLink.dispatchEvent(new MouseEvent('mouseleave', { ...mouseOptions, bubbles: false }));
+      return;
+    }
+
+    // First dispatch leave events to reset any existing hover state
+    profileLink.dispatchEvent(new PointerEvent('pointerout', pointerOptions));
+    profileLink.dispatchEvent(new PointerEvent('pointerleave', { ...pointerOptions, bubbles: false }));
+    profileLink.dispatchEvent(new MouseEvent('mouseout', mouseOptions));
+    profileLink.dispatchEvent(new MouseEvent('mouseleave', { ...mouseOptions, bubbles: false }));
+
+    // Small delay then dispatch enter events
+    setTimeout(() => {
+      profileLink.dispatchEvent(new PointerEvent('pointerover', pointerOptions));
+      profileLink.dispatchEvent(new PointerEvent('pointerenter', { ...pointerOptions, bubbles: false }));
+      profileLink.dispatchEvent(new MouseEvent('mouseover', mouseOptions));
+      profileLink.dispatchEvent(new MouseEvent('mouseenter', { ...mouseOptions, bubbles: false }));
+      profileLink.dispatchEvent(new PointerEvent('pointermove', pointerOptions));
+      profileLink.dispatchEvent(new MouseEvent('mousemove', mouseOptions));
+    }, 10);
+  }
+
+  /**
    * Open Add to Rules dropdown for the author of the selected item,
    * or for selected text if any text is selected.
    * @param {jQuery} item - The selected item

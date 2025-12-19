@@ -195,7 +195,11 @@ export class BlueskyAPI {
    * @returns {Promise<string|null>} DID or null if not found
    */
   async resolveHandleToDid(handle) {
-    const cleanHandle = handle.replace(/^@/, '');
+    let cleanHandle = handle.replace(/^@/, '');
+    // Add .bsky.social suffix for short handles without a domain
+    if (!cleanHandle.includes('.')) {
+      cleanHandle = `${cleanHandle}.bsky.social`;
+    }
     try {
       const { data } = await this.agent.resolveHandle({ handle: cleanHandle });
       return data.did;

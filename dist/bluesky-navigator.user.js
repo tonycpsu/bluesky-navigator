@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+547.55e6a6b6
+// @version     1.0.31+548.700d8722
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45071,7 +45071,10 @@ if (cid) {
      * @returns {Promise<string|null>} DID or null if not found
      */
     async resolveHandleToDid(handle2) {
-      const cleanHandle = handle2.replace(/^@/, "");
+      let cleanHandle = handle2.replace(/^@/, "");
+      if (!cleanHandle.includes(".")) {
+        cleanHandle = `${cleanHandle}.bsky.social`;
+      }
       try {
         const { data } = await this.agent.resolveHandle({ handle: cleanHandle });
         return data.did;
@@ -47296,7 +47299,13 @@ if (cid) {
       let categoryIndex = this.parsedRules.findIndex((c) => c.name === category);
       const categoryRules = categoryIndex >= 0 ? this.parsedRules[categoryIndex].rules : [];
       const existingHandles = new Set(
-        categoryRules.filter((r) => r.type === "from").map((r) => r.value.replace(/^@/, "").toLowerCase())
+        categoryRules.filter((r) => r.type === "from").map((r) => {
+          let handle2 = r.value.replace(/^@/, "").toLowerCase();
+          if (!handle2.includes(".")) {
+            handle2 = `${handle2}.bsky.social`;
+          }
+          return handle2;
+        })
       );
       let added = 0;
       for (const handle2 of members) {
@@ -47401,7 +47410,10 @@ if (cid) {
       if (listMembers2.size === 0) return [];
       categoryRules.forEach((rule, ruleIndex) => {
         if (rule.type === "from" && rule.value.startsWith("@")) {
-          const handle2 = rule.value.replace(/^@/, "").toLowerCase();
+          let handle2 = rule.value.replace(/^@/, "").toLowerCase();
+          if (!handle2.includes(".")) {
+            handle2 = `${handle2}.bsky.social`;
+          }
           for (const [listName, listInfo] of listMembers2) {
             if (listInfo.members.has(handle2) && listInfo.action === rule.action) {
               duplicates.push({
@@ -47808,6 +47820,19 @@ if (cid) {
       }
     }
     /**
+     * Normalizes a handle by adding .bsky.social suffix if missing
+     * @param {string} handle - Handle to normalize
+     * @returns {string} Normalized handle
+     * @private
+     */
+    normalizeHandle(handle2) {
+      let normalized = handle2.replace(/^@/, "").toLowerCase();
+      if (!normalized.includes(".")) {
+        normalized = `${normalized}.bsky.social`;
+      }
+      return normalized;
+    }
+    /**
      * Checks if a handle is in a list
      * @param {string} handle - Handle to check (with or without @)
      * @param {string} listName - Display name of the list
@@ -47816,7 +47841,7 @@ if (cid) {
     async isInList(handle2, listName) {
       const members = await this.getMembers(listName);
       if (!members) return false;
-      const normalizedHandle = handle2.replace(/^@/, "").toLowerCase();
+      const normalizedHandle = this.normalizeHandle(handle2);
       return members.has(normalizedHandle);
     }
     /**
@@ -47831,7 +47856,7 @@ if (cid) {
       if (!cached || Date.now() - cached.fetchedAt >= this.cacheDurationMs) {
         return void 0;
       }
-      const normalizedHandle = handle2.replace(/^@/, "").toLowerCase();
+      const normalizedHandle = this.normalizeHandle(handle2);
       return cached.members.has(normalizedHandle);
     }
     /**

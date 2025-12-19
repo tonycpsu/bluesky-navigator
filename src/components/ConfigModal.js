@@ -2385,7 +2385,14 @@ export class ConfigModal {
     const existingHandles = new Set(
       categoryRules
         .filter(r => r.type === 'from')
-        .map(r => r.value.replace(/^@/, '').toLowerCase())
+        .map(r => {
+          let handle = r.value.replace(/^@/, '').toLowerCase();
+          // Add .bsky.social suffix for short handles without a domain
+          if (!handle.includes('.')) {
+            handle = `${handle}.bsky.social`;
+          }
+          return handle;
+        })
     );
 
     // Add new handles to rules
@@ -2519,7 +2526,11 @@ export class ConfigModal {
     // Check each @handle rule against list members
     categoryRules.forEach((rule, ruleIndex) => {
       if (rule.type === 'from' && rule.value.startsWith('@')) {
-        const handle = rule.value.replace(/^@/, '').toLowerCase();
+        let handle = rule.value.replace(/^@/, '').toLowerCase();
+        // Add .bsky.social suffix for short handles without a domain
+        if (!handle.includes('.')) {
+          handle = `${handle}.bsky.social`;
+        }
 
         // Check if this handle is in any list with matching action
         for (const [listName, listInfo] of listMembers) {

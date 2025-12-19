@@ -84,6 +84,21 @@ export class ListCache {
   }
 
   /**
+   * Normalizes a handle by adding .bsky.social suffix if missing
+   * @param {string} handle - Handle to normalize
+   * @returns {string} Normalized handle
+   * @private
+   */
+  normalizeHandle(handle) {
+    let normalized = handle.replace(/^@/, '').toLowerCase();
+    // Add .bsky.social suffix for short handles without a domain
+    if (!normalized.includes('.')) {
+      normalized = `${normalized}.bsky.social`;
+    }
+    return normalized;
+  }
+
+  /**
    * Checks if a handle is in a list
    * @param {string} handle - Handle to check (with or without @)
    * @param {string} listName - Display name of the list
@@ -93,7 +108,7 @@ export class ListCache {
     const members = await this.getMembers(listName);
     if (!members) return false;
 
-    const normalizedHandle = handle.replace(/^@/, '').toLowerCase();
+    const normalizedHandle = this.normalizeHandle(handle);
     return members.has(normalizedHandle);
   }
 
@@ -111,7 +126,7 @@ export class ListCache {
       return undefined; // Not cached or expired
     }
 
-    const normalizedHandle = handle.replace(/^@/, '').toLowerCase();
+    const normalizedHandle = this.normalizeHandle(handle);
     return cached.members.has(normalizedHandle);
   }
 

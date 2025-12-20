@@ -50,8 +50,10 @@ Features
     - **rule color coding**: highlight matching authors and content phrases with
       customizable category colors
     - **include rules**: rules can reference other rule categories for reuse
-    - **Add to Rules**: quickly add authors to rules from profile hover cards or
-      via `+` shortcut (supports numeric category selection with 1-9 keys, Enter to confirm)
+    - **Add/Remove from Rules**: quickly add authors to rules from profile hover
+      cards or via `+` shortcut (supports numeric category selection with 1-9
+      keys, Enter to confirm); remove authors with `-` shortcut (shows only
+      categories containing the author, removes from backing list if applicable)
     - optionally disable embedded video previews
     - sync read/unread state between multiple browsers via cloud service(s)
     - optionally disable built-in behavior of loading more items when scrolling
@@ -93,6 +95,7 @@ Press `?` to show the keyboard shortcuts overlay at any time.
  | A            | open post author's profile                         |
  | r            | reply to post                                      |
  | +            | add post author to filter rules                    |
+ | -            | remove post author from filter rules               |
  | l            | like/unlike post                                   |
  | p            | open repost menu                                   |
  | P            | repost immediately                                 |
@@ -209,15 +212,27 @@ with `!`.
 Filter posts based on Bluesky list membership:
 
 ```ini
-[favorites]
-allow from list "My Favorites"      # show posts from list members
+[favorites &"My Favorites"]         # category backed by a list
+allow from @special.bsky.social     # plus individual author rules
+
+[vips]
+allow from list "VIP List"          # show posts from list members
 deny from list "Muted"              # hide posts from list members
 &"Close Friends"                    # shorthand for: allow from list
 
 [combined]
 $favorites                          # include the favorites category
-allow from @special.bsky.social    # plus individual authors
+$vips                               # include other categories
 ```
+
+**Backing Lists:**
+
+Categories can be backed by a Bluesky list using the `&"List Name"` syntax in the
+header. When backed by a list:
+- List members are automatically included in the category filter
+- Using `+` to add an author shows two buttons: "Add to List" and "Add to Rules"
+- Using `-` to remove an author removes from the backing list (if present) or rules
+- The visual editor shows a dropdown to select or change the backing list
 
 **Syncing with Lists:**
 

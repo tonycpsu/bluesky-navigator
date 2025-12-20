@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+570.3aa176fb
+// @version     1.0.31+571.644acf80
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -54419,7 +54419,8 @@ div#statusBar.has-feed-map {
       { keys: ["p"], description: "Repost menu" },
       { keys: ["P"], description: "Repost immediately" },
       { keys: ["r"], description: "Reply" },
-      { keys: ["R"], description: "Add author to rules" },
+      { keys: ["+"], description: "Add author to rules" },
+      { keys: ["-"], description: "Remove author from rules" },
       { keys: ["s"], description: "Save/Unsave post" },
       { keys: ["S"], description: "Share menu" },
       { keys: ["i"], description: "Open first link" },

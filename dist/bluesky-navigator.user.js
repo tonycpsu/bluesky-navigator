@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+572.cdfde348
+// @version     1.0.31+573.a2f39599
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -50652,6 +50652,12 @@ div.item-banner {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  text-shadow:
+    -1px -1px 0 rgba(255, 255, 255, 0.8),
+    1px -1px 0 rgba(255, 255, 255, 0.8),
+    -1px 1px 0 rgba(255, 255, 255, 0.8),
+    1px 1px 0 rgba(255, 255, 255, 0.8),
+    0 0 3px rgba(255, 255, 255, 0.6);
 }
 
 .feed-map-segment-handle-domain {
@@ -50661,6 +50667,11 @@ div.item-banner {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  text-shadow:
+    -1px -1px 0 rgba(255, 255, 255, 0.6),
+    1px -1px 0 rgba(255, 255, 255, 0.6),
+    -1px 1px 0 rgba(255, 255, 255, 0.6),
+    1px 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 
@@ -51012,8 +51023,24 @@ div#statusBar.has-feed-map {
   }
 
   .feed-map-segment-handle {
-    color: rgba(255, 255, 255, 0.6);
-    text-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.8);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .feed-map-segment-handle-name {
+    text-shadow:
+      -1px -1px 0 rgba(0, 0, 0, 0.8),
+      1px -1px 0 rgba(0, 0, 0, 0.8),
+      -1px 1px 0 rgba(0, 0, 0, 0.8),
+      1px 1px 0 rgba(0, 0, 0, 0.8),
+      0 0 3px rgba(0, 0, 0, 0.6);
+  }
+
+  .feed-map-segment-handle-domain {
+    text-shadow:
+      -1px -1px 0 rgba(0, 0, 0, 0.6),
+      1px -1px 0 rgba(0, 0, 0, 0.6),
+      -1px 1px 0 rgba(0, 0, 0, 0.6),
+      1px 1px 0 rgba(0, 0, 0, 0.6);
   }
 
   /* Basic mode dark: theme colors with brightness filter for read */

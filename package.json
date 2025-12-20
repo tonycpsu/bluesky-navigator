@@ -1,14 +1,20 @@
 {
   "name": "bluesky-navigator",
   "private": true,
-  "version": "1.0.31+574.4a9970ae",
+  "version": "1.0.31+575.adbab08b",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch --mode development",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "playwright test --config=tests/playwright.config.js",
+    "test:headed": "playwright test --config=tests/playwright.config.js --headed",
+    "test:ui": "playwright test --config=tests/playwright.config.js --ui",
+    "test:setup": "node tests/setup.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.57.0",
+    "dotenv": "^17.2.3",
     "eslint": "^9.39.1",
     "prettier": "^3.7.1",
     "vite": "^6.0.5",

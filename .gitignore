@@ -25,3 +25,10 @@ dist-ssr
 
 # Git worktrees
 .worktrees/
+
+# Playwright tests
+tests/.env
+tests/extensions/
+tests/user-data/
+test-results/
+playwright-report/

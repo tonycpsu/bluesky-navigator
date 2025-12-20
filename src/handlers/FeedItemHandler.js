@@ -2803,8 +2803,8 @@ export class FeedItemHandler extends ItemHandler {
         const handle = engData.engagement.handle;
         const dotIndex = handle.indexOf('.');
         const handleHtml = dotIndex > 0
-          ? `<b>${handle.substring(0, dotIndex)}</b>${handle.substring(dotIndex)}`
-          : `<b>${handle}</b>`;
+          ? `<span class="feed-map-segment-handle-name">${handle.substring(0, dotIndex)}</span><span class="feed-map-segment-handle-domain">${handle.substring(dotIndex)}</span>`
+          : `<span class="feed-map-segment-handle-name">${handle}</span>`;
         // Apply author rule color if enabled
         let handleStyle = '';
         if (showRuleColors) {
@@ -3058,9 +3058,9 @@ export class FeedItemHandler extends ItemHandler {
         const dotIndex = handle.indexOf('.');
         let handleHtml;
         if (dotIndex > 0) {
-          handleHtml = `<b>${handle.substring(0, dotIndex)}</b>${handle.substring(dotIndex)}`;
+          handleHtml = `<span class="feed-map-segment-handle-name">${handle.substring(0, dotIndex)}</span><span class="feed-map-segment-handle-domain">${handle.substring(dotIndex)}</span>`;
         } else {
-          handleHtml = `<b>${handle}</b>`;
+          handleHtml = `<span class="feed-map-segment-handle-name">${handle}</span>`;
         }
         // Apply author rule color if enabled
         let handleStyle = '';

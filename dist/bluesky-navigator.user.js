@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+571.644acf80
+// @version     1.0.31+572.cdfde348
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -50633,15 +50633,34 @@ div.item-banner {
 /* Handle in zoom segments */
 .feed-map-segment-handle {
   font-family: ui-monospace, monospace;
-  font-size: calc(8px * var(--indicator-scale, 1));
-  line-height: 1.3;
+  line-height: 1.2;
   color: rgba(0, 0, 0, 0.9);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
   padding: 0 calc(2px * var(--indicator-scale, 1));
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.feed-map-segment-handle-name {
+  font-size: calc(11px * var(--indicator-scale, 1));
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.feed-map-segment-handle-domain {
+  font-size: calc(7px * var(--indicator-scale, 1));
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 
@@ -77564,7 +77583,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (showHandles && engData?.engagement?.handle) {
           const handle2 = engData.engagement.handle;
           const dotIndex = handle2.indexOf(".");
-          const handleHtml = dotIndex > 0 ? `<b>${handle2.substring(0, dotIndex)}</b>${handle2.substring(dotIndex)}` : `<b>${handle2}</b>`;
+          const handleHtml = dotIndex > 0 ? `<span class="feed-map-segment-handle-name">${handle2.substring(0, dotIndex)}</span><span class="feed-map-segment-handle-domain">${handle2.substring(dotIndex)}</span>` : `<span class="feed-map-segment-handle-name">${handle2}</span>`;
           let handleStyle = "";
           if (showRuleColors) {
             const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
@@ -77742,9 +77761,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const dotIndex = handle2.indexOf(".");
           let handleHtml;
           if (dotIndex > 0) {
-            handleHtml = `<b>${handle2.substring(0, dotIndex)}</b>${handle2.substring(dotIndex)}`;
+            handleHtml = `<span class="feed-map-segment-handle-name">${handle2.substring(0, dotIndex)}</span><span class="feed-map-segment-handle-domain">${handle2.substring(dotIndex)}</span>`;
           } else {
-            handleHtml = `<b>${handle2}</b>`;
+            handleHtml = `<span class="feed-map-segment-handle-name">${handle2}</span>`;
           }
           let handleStyle = "";
           if (showRuleColors) {

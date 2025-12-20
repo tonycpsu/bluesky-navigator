@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+569.4773bff0
+// @version     1.0.31+570.3aa176fb
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45178,31 +45178,63 @@ if (cid) {
     return false;
   }
   function waitForElement$3(selector, onAdd, onRemove, onChange, ignoreExisting) {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
+    let pendingMutations = [];
+    let rafId = null;
+    const processMutations = () => {
+      rafId = null;
+      const mutations = pendingMutations;
+      pendingMutations = [];
+      const processedAdded = /* @__PURE__ */ new Set();
+      const processedRemoved = /* @__PURE__ */ new Set();
+      for (const mutation of mutations) {
         if (onAdd) {
-          mutation.addedNodes.forEach((node) => {
-            if (node.matches && node.matches(selector)) onAdd(node);
-            node.querySelectorAll?.(selector).forEach((el) => onAdd(el, observer));
-          });
-        }
-        if (onRemove) {
-          mutation.removedNodes.forEach((node) => {
-            if (node.matches && node.matches(selector)) onRemove(node);
-            node.querySelectorAll?.(selector).forEach((el) => onRemove(el, observer));
-          });
-        }
-        if (onChange) {
-          if (mutation.type === "attributes") {
-            const attributeName = mutation.attributeName;
-            const oldValue = mutation.oldValue;
-            const newValue = mutation.target.getAttribute(attributeName);
-            if (oldValue !== newValue) {
-              onChange(attributeName, oldValue, newValue, mutation.target, observer);
+          for (const node of mutation.addedNodes) {
+            if (node.matches && node.matches(selector) && !processedAdded.has(node)) {
+              processedAdded.add(node);
+              onAdd(node, observer);
+            }
+            if (node.querySelectorAll) {
+              for (const el of node.querySelectorAll(selector)) {
+                if (!processedAdded.has(el)) {
+                  processedAdded.add(el);
+                  onAdd(el, observer);
+                }
+              }
             }
           }
         }
-      });
+        if (onRemove) {
+          for (const node of mutation.removedNodes) {
+            if (node.matches && node.matches(selector) && !processedRemoved.has(node)) {
+              processedRemoved.add(node);
+              onRemove(node, observer);
+            }
+            if (node.querySelectorAll) {
+              for (const el of node.querySelectorAll(selector)) {
+                if (!processedRemoved.has(el)) {
+                  processedRemoved.add(el);
+                  onRemove(el, observer);
+                }
+              }
+            }
+          }
+        }
+        if (onChange && mutation.type === "attributes") {
+          const attributeName = mutation.attributeName;
+          const oldValue = mutation.oldValue;
+          const newValue = mutation.target.getAttribute(attributeName);
+          if (oldValue !== newValue) {
+            onChange(attributeName, oldValue, newValue, mutation.target, observer);
+          }
+        }
+      }
+    };
+    const observer = new MutationObserver((mutations) => {
+      if (isUserTyping()) return;
+      pendingMutations.push(...mutations);
+      if (!rafId) {
+        rafId = requestAnimationFrame(processMutations);
+      }
     });
     const processExistingElements = () => {
       const elements = document.querySelectorAll(selector);

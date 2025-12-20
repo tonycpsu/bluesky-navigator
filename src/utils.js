@@ -47,34 +47,75 @@ export function isModalOpen() {
 }
 
 export function waitForElement(selector, onAdd, onRemove, onChange, ignoreExisting) {
-  const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
+  // Track pending mutations to batch process them
+  let pendingMutations = [];
+  let rafId = null;
+
+  const processMutations = () => {
+    rafId = null;
+    const mutations = pendingMutations;
+    pendingMutations = [];
+
+    // Use a Set to track already-processed elements to avoid duplicates
+    const processedAdded = new Set();
+    const processedRemoved = new Set();
+
+    for (const mutation of mutations) {
       if (onAdd) {
-        mutation.addedNodes.forEach((node) => {
-          if (node.matches && node.matches(selector)) onAdd(node);
-          node.querySelectorAll?.(selector).forEach((el) => onAdd(el, observer));
-        });
-      }
-
-      if (onRemove) {
-        mutation.removedNodes.forEach((node) => {
-          if (node.matches && node.matches(selector)) onRemove(node);
-          node.querySelectorAll?.(selector).forEach((el) => onRemove(el, observer));
-        });
-      }
-
-      if (onChange) {
-        if (mutation.type === 'attributes') {
-          const attributeName = mutation.attributeName;
-          const oldValue = mutation.oldValue;
-          const newValue = mutation.target.getAttribute(attributeName);
-
-          if (oldValue !== newValue) {
-            onChange(attributeName, oldValue, newValue, mutation.target, observer);
+        for (const node of mutation.addedNodes) {
+          if (node.matches && node.matches(selector) && !processedAdded.has(node)) {
+            processedAdded.add(node);
+            onAdd(node, observer);
+          }
+          if (node.querySelectorAll) {
+            for (const el of node.querySelectorAll(selector)) {
+              if (!processedAdded.has(el)) {
+                processedAdded.add(el);
+                onAdd(el, observer);
+              }
+            }
           }
         }
       }
-    });
+
+      if (onRemove) {
+        for (const node of mutation.removedNodes) {
+          if (node.matches && node.matches(selector) && !processedRemoved.has(node)) {
+            processedRemoved.add(node);
+            onRemove(node, observer);
+          }
+          if (node.querySelectorAll) {
+            for (const el of node.querySelectorAll(selector)) {
+              if (!processedRemoved.has(el)) {
+                processedRemoved.add(el);
+                onRemove(el, observer);
+              }
+            }
+          }
+        }
+      }
+
+      if (onChange && mutation.type === 'attributes') {
+        const attributeName = mutation.attributeName;
+        const oldValue = mutation.oldValue;
+        const newValue = mutation.target.getAttribute(attributeName);
+
+        if (oldValue !== newValue) {
+          onChange(attributeName, oldValue, newValue, mutation.target, observer);
+        }
+      }
+    }
+  };
+
+  const observer = new MutationObserver((mutations) => {
+    // Skip expensive observer processing while user is typing
+    if (isUserTyping()) return;
+
+    // Batch mutations and process on next animation frame
+    pendingMutations.push(...mutations);
+    if (!rafId) {
+      rafId = requestAnimationFrame(processMutations);
+    }
   });
 
   const processExistingElements = () => {

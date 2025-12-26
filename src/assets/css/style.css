@@ -2389,32 +2389,44 @@ div.item-banner {
   height: 40%;
 }
 
-/* Thread progress bar for unrolled threads */
+/* Thread progress bar for unrolled threads - styled like mini basic feed map */
 .feed-map-segment-progress {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: 1px;
+  left: 2px;
+  right: 2px;
   height: 3px;
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: #e5e7eb;
+  border-radius: 1.5px;
   overflow: hidden;
 }
 
 .feed-map-segment-progress-fill {
   height: 100%;
-  background-color: #3b82f6;
+  background-color: #9ca3af;
+  border-radius: 1.5px;
   transition: width 0.15s ease-out;
 }
 
-/* Theme-specific progress bar colors */
-.feed-map-theme-campfire .feed-map-segment-progress-fill { background-color: #f59e0b; }
-.feed-map-theme-ocean .feed-map-segment-progress-fill { background-color: #0ea5e9; }
-.feed-map-theme-forest .feed-map-segment-progress-fill { background-color: #22c55e; }
-.feed-map-theme-monochrome .feed-map-segment-progress-fill { background-color: #6b7280; }
+/* Theme-specific progress bar colors - match basic feed map segment colors */
+.feed-map-theme-default .feed-map-segment-progress-fill { background-color: #9ca3af; }
+.feed-map-theme-campfire .feed-map-segment-progress { background-color: #fffbeb; }
+.feed-map-theme-campfire .feed-map-segment-progress-fill { background-color: #fcd34d; }
+.feed-map-theme-ocean .feed-map-segment-progress { background-color: #e0f2fe; }
+.feed-map-theme-ocean .feed-map-segment-progress-fill { background-color: #7dd3fc; }
+.feed-map-theme-forest .feed-map-segment-progress { background-color: #dcfce7; }
+.feed-map-theme-forest .feed-map-segment-progress-fill { background-color: #86efac; }
+.feed-map-theme-monochrome .feed-map-segment-progress { background-color: #e5e7eb; }
+.feed-map-theme-monochrome .feed-map-segment-progress-fill { background-color: #d1d5db; }
 
 /* Progress bar in zoom segments - slightly taller for visibility */
 .feed-map-segment-zoom .feed-map-segment-progress {
   height: 4px;
+  border-radius: 2px;
+}
+
+.feed-map-segment-zoom .feed-map-segment-progress-fill {
+  border-radius: 2px;
 }
 
 .feed-map-segment {

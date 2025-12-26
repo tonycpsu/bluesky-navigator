@@ -2508,6 +2508,31 @@ export class ItemHandler extends Handler {
         logging: false,
         useCORS: true,
         allowTaint: true,
+        ignoreElements: (element) => {
+          // Skip elements that might have unsupported color functions
+          return element.tagName === 'STYLE' || element.tagName === 'LINK';
+        },
+        onclone: (clonedDoc, clonedElement) => {
+          // Fix unsupported color() CSS function by replacing with fallback colors
+          const allElements = clonedElement.querySelectorAll('*');
+          allElements.forEach(el => {
+            // Check inline styles
+            const style = el.getAttribute('style');
+            if (style && style.includes('color(')) {
+              const fixedStyle = style.replace(/color\([^)]+\)/g, 'inherit');
+              el.setAttribute('style', fixedStyle);
+            }
+            // Force computed color properties to use standard values
+            const computed = window.getComputedStyle(el);
+            const colorProps = ['color', 'background-color', 'border-color', 'outline-color'];
+            colorProps.forEach(prop => {
+              const value = computed.getPropertyValue(prop);
+              if (value && value.includes('color(')) {
+                el.style.setProperty(prop, 'inherit', 'important');
+              }
+            });
+          });
+        },
       });
 
       // Restore action buttons

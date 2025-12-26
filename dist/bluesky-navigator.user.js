@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+580.b3b67145
+// @version     1.0.31+581.4403f189
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -72670,7 +72670,28 @@ div#statusBar.has-feed-map {
           scale: 2,
           logging: false,
           useCORS: true,
-          allowTaint: true
+          allowTaint: true,
+          ignoreElements: (element) => {
+            return element.tagName === "STYLE" || element.tagName === "LINK";
+          },
+          onclone: (clonedDoc, clonedElement) => {
+            const allElements2 = clonedElement.querySelectorAll("*");
+            allElements2.forEach((el) => {
+              const style2 = el.getAttribute("style");
+              if (style2 && style2.includes("color(")) {
+                const fixedStyle = style2.replace(/color\([^)]+\)/g, "inherit");
+                el.setAttribute("style", fixedStyle);
+              }
+              const computed = window.getComputedStyle(el);
+              const colorProps = ["color", "background-color", "border-color", "outline-color"];
+              colorProps.forEach((prop) => {
+                const value = computed.getPropertyValue(prop);
+                if (value && value.includes("color(")) {
+                  el.style.setProperty(prop, "inherit", "important");
+                }
+              });
+            });
+          }
         });
         hiddenButtons.forEach(({ el, display: display2 }) => {
           el.style.display = display2;

@@ -1,0 +1,33 @@
+name: Auto-merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  check_suite:
+    types: [completed]
+  workflow_run:
+    workflows: ["Playwright Tests"]
+    types: [completed]
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == github.repository_owner || github.actor == github.repository_owner
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Auto-merge PR
+        uses: pascalgn/automerge-action@v0.16.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_LABELS: ""
+          MERGE_METHOD: squash
+          MERGE_COMMIT_MESSAGE: pull-request-title
+          MERGE_FORKS: false
+          MERGE_RETRIES: 6
+          MERGE_RETRY_SLEEP: 10000
+          UPDATE_LABELS: ""
+          MERGE_DELETE_BRANCH: true

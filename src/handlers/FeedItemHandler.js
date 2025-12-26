@@ -2311,8 +2311,9 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     // Detect post type
+    // Look for "Reposted by" indicator - avoid matching repost button (data-testid="repostBtn")
     const isRepost = $item.closest('.thread').find('svg[aria-label*="Reposted"]').length > 0 ||
-                     $item.closest('.thread').find('div[data-testid*="repost"]').length > 0;
+                     $item.closest('.thread').find('a[aria-label*="Reposted by"]').length > 0;
     const isReply = $item.find('div[data-testid*="replyLine"]').length > 0 ||
                     $item.closest('.thread').find('a[href*="/post/"][aria-label*="Reply"]').length > 0;
 

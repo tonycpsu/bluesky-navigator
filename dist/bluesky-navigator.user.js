@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+582.50536179
+// @version     1.0.31+583.85141b17
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -70299,7 +70299,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           this.mediaCache[postId] = { hasImage, hasVideo };
         }
       }
-      const isRepost = $item.closest(".thread").find('svg[aria-label*="Reposted"]').length > 0 || $item.closest(".thread").find('div[data-testid*="repost"]').length > 0;
+      const isRepost = $item.closest(".thread").find('svg[aria-label*="Reposted"]').length > 0 || $item.closest(".thread").find('a[aria-label*="Reposted by"]').length > 0;
       const isReply = $item.find('div[data-testid*="replyLine"]').length > 0 || $item.closest(".thread").find('a[href*="/post/"][aria-label*="Reply"]').length > 0;
       let isSelfThread = false;
       if (postId && this.selfThreadCache && this.selfThreadCache[postId]) {

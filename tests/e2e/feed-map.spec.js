@@ -3,7 +3,7 @@
  * Tests the visual feed overview component
  */
 
-import { test, expect, getAllPosts, getFeedMapSegments, pressKey, waitForScriptReady } from '../fixtures/index.js';
+import { test, expect, getAllPosts, getFeedMapSegments, waitForScriptReady } from '../fixtures/index.js';
 
 test.describe('Feed Map', () => {
   test.beforeEach(async ({ authenticatedPage }) => {
@@ -11,8 +11,8 @@ test.describe('Feed Map', () => {
   });
 
   test('feed map renders with segments', async ({ authenticatedPage: page }) => {
-    // Check feed map exists
-    const feedMap = page.locator('.feed-map');
+    // Check feed map exists (actual class is feed-map-wrapper)
+    const feedMap = page.locator('.feed-map-wrapper');
     await expect(feedMap).toBeVisible();
 
     // Check segments exist
@@ -77,11 +77,14 @@ test.describe('Feed Map', () => {
 
     const initialIndex = await getHighlightedIndex();
 
-    // Navigate down
-    await pressKey(page, 'j');
-    await page.waitForTimeout(200);
-
-    const newIndex = await getHighlightedIndex();
+    // Navigate down - try multiple times as first presses may scroll post into view
+    let newIndex = initialIndex;
+    for (let i = 0; i < 5; i++) {
+      await page.keyboard.press('j');
+      await page.waitForTimeout(300);
+      newIndex = await getHighlightedIndex();
+      if (newIndex !== initialIndex) break;
+    }
 
     // Index should have changed
     expect(newIndex).not.toBe(initialIndex);
@@ -104,17 +107,17 @@ test.describe('Feed Map', () => {
 
   test('zoom window shows around current position', async ({ authenticatedPage: page }) => {
     // Check if zoom is enabled (it may be a setting)
-    const zoomContainer = page.locator('.feed-map-zoom');
+    const zoomContainer = page.locator('.feed-map-zoom-container');
     const isVisible = await zoomContainer.isVisible().catch(() => false);
 
     if (isVisible) {
       // Zoom should have segments
-      const zoomSegments = page.locator('.feed-map-zoom .feed-map-segment');
+      const zoomSegments = page.locator('.feed-map-zoom-container .feed-map-segment');
       const count = await zoomSegments.count();
       expect(count).toBeGreaterThan(0);
 
       // Should have a highlighted segment in zoom too
-      const zoomHighlight = page.locator('.feed-map-zoom .feed-map-segment-current');
+      const zoomHighlight = page.locator('.feed-map-zoom-container .feed-map-segment-current');
       await expect(zoomHighlight).toBeVisible();
     }
   });

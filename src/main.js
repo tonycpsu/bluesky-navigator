@@ -33,7 +33,7 @@ GM_addStyle(style);
 // Show fullscreen loading indicator immediately on first load
 // Check config from GM storage (default to true if not set)
 const storedConfig = JSON.parse(GM_getValue('bluesky_navigator_config', '{}'));
-const showLoadingIndicator = storedConfig.showLoadingIndicator !== false; // default true
+const showLoadingIndicator = storedConfig.showLoadingIndicator === true; // default false
 if (showLoadingIndicator) {
   // Add class to enable CSS hiding of items
   const addLoadingClass = () => document.body.classList.add('bsky-nav-loading-enabled');

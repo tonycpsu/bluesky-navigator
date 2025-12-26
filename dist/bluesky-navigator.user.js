@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+575.adbab08b
+// @version     1.0.31+576.982e0efc
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -54510,7 +54510,7 @@ div#statusBar.has-feed-map {
       this.isVisible = false;
       this.overlayEl = null;
       this.previousActiveElement = null;
-      this.ignoreNextKeydown = false;
+      this.ignoreNextQuestionMark = false;
       instance$1 = this;
     }
     /**
@@ -54537,12 +54537,13 @@ div#statusBar.has-feed-map {
         firstFocusable.focus();
       }
       announceToScreenReader$2("Keyboard shortcuts dialog opened. Press Escape to close.");
-      this.ignoreNextKeydown = true;
+      this.ignoreNextQuestionMark = true;
       this.escapeHandler = (e2) => {
-        if (this.ignoreNextKeydown) {
-          this.ignoreNextKeydown = false;
+        if (this.ignoreNextQuestionMark && e2.key === "?") {
+          this.ignoreNextQuestionMark = false;
           return;
         }
+        this.ignoreNextQuestionMark = false;
         if (e2.key === "Escape" || e2.key === "?") {
           e2.preventDefault();
           e2.stopPropagation();
@@ -79237,7 +79238,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
   const { waitForElement, observeVisibilityChange } = utils$1;
   GM_addStyle(style);
   const storedConfig = JSON.parse(GM_getValue("bluesky_navigator_config", "{}"));
-  const showLoadingIndicator = storedConfig.showLoadingIndicator !== false;
+  const showLoadingIndicator = storedConfig.showLoadingIndicator === true;
   if (showLoadingIndicator) {
     const addLoadingClass = () => document.body.classList.add("bsky-nav-loading-enabled");
     if (document.body) {

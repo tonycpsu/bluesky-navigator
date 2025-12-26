@@ -91,7 +91,7 @@ export class ShortcutOverlay {
     this.isVisible = false;
     this.overlayEl = null;
     this.previousActiveElement = null;
-    this.ignoreNextKeydown = false;
+    this.ignoreNextQuestionMark = false;
 
     instance = this;
   }
@@ -129,16 +129,17 @@ export class ShortcutOverlay {
     // Announce to screen readers
     announceToScreenReader('Keyboard shortcuts dialog opened. Press Escape to close.');
 
-    // Ignore the current keydown event that opened this overlay
-    this.ignoreNextKeydown = true;
+    // Ignore the '?' key that opened this overlay (but allow Escape immediately)
+    this.ignoreNextQuestionMark = true;
 
     // Add escape listener
     this.escapeHandler = (e) => {
-      // Skip if this is the same keydown that opened the overlay
-      if (this.ignoreNextKeydown) {
-        this.ignoreNextKeydown = false;
+      // Skip if this is the same '?' keydown that opened the overlay
+      if (this.ignoreNextQuestionMark && e.key === '?') {
+        this.ignoreNextQuestionMark = false;
         return;
       }
+      this.ignoreNextQuestionMark = false;
 
       if (e.key === 'Escape' || e.key === '?') {
         e.preventDefault();

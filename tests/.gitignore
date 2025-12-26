@@ -1,2 +1,4 @@
 .auth-state.json
+.env
+.env.json
 user-data-firefox/

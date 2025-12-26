@@ -4,7 +4,7 @@ import constants from '../constants.js';
 import * as utils from '../utils.js';
 import * as dateFns from 'date-fns';
 import Handlebars from 'handlebars';
-import html2canvas from 'html2canvas';
+import * as htmlToImage from 'html-to-image';
 import { Handler } from './Handler.js';
 import { formatPost, urlForPost } from './postFormatting.js';
 import { GestureHandler } from '../components/GestureHandler.js';
@@ -2491,7 +2491,7 @@ export class ItemHandler extends Handler {
       // Wait for browser to process DOM changes
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Hide action buttons during capture (html2canvas has issues with flex layouts)
+      // Hide action buttons during capture
       const actionButtons = item.querySelectorAll('[data-testid="repostBtn"], [data-testid="likeBtn"], [data-testid="replyBtn"], [data-testid="postDropdownBtn"]');
       const hiddenButtons = [];
       actionButtons.forEach(btn => {
@@ -2502,36 +2502,16 @@ export class ItemHandler extends Handler {
         }
       });
 
-      const canvas = await html2canvas(item, {
+      // Use html-to-image which handles modern CSS better than html2canvas
+      const blob = await htmlToImage.toBlob(item, {
         backgroundColor: '#ffffff',
-        scale: 2,
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-        ignoreElements: (element) => {
-          // Skip elements that might have unsupported color functions
-          return element.tagName === 'STYLE' || element.tagName === 'LINK';
-        },
-        onclone: (clonedDoc, clonedElement) => {
-          // Fix unsupported color() CSS function by replacing with fallback colors
-          const allElements = clonedElement.querySelectorAll('*');
-          allElements.forEach(el => {
-            // Check inline styles
-            const style = el.getAttribute('style');
-            if (style && style.includes('color(')) {
-              const fixedStyle = style.replace(/color\([^)]+\)/g, 'inherit');
-              el.setAttribute('style', fixedStyle);
-            }
-            // Force computed color properties to use standard values
-            const computed = window.getComputedStyle(el);
-            const colorProps = ['color', 'background-color', 'border-color', 'outline-color'];
-            colorProps.forEach(prop => {
-              const value = computed.getPropertyValue(prop);
-              if (value && value.includes('color(')) {
-                el.style.setProperty(prop, 'inherit', 'important');
-              }
-            });
-          });
+        pixelRatio: 2,
+        skipFonts: true,  // Skip font processing to avoid issues
+        filter: (node) => {
+          // Skip script and style link elements
+          if (node.tagName === 'SCRIPT') return false;
+          if (node.tagName === 'LINK' && node.rel === 'stylesheet') return false;
+          return true;
         },
       });
 
@@ -2540,7 +2520,7 @@ export class ItemHandler extends Handler {
         el.style.display = display;
       });
 
-      // Restore original values
+      // Restore original values (for CDN URL workaround)
       originalValues.forEach(({ el, attr, value }) => {
         if (attr === 'src') {
           el.src = value;
@@ -2549,34 +2529,28 @@ export class ItemHandler extends Handler {
         }
       });
 
-      canvas.toBlob(async (blob) => {
-        try {
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              'image/png': blob,
-            }),
-          ]);
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'image/png': blob,
+        }),
+      ]);
 
-          const notification = $('<div>')
-            .css({
-              position: 'fixed',
-              top: '20px',
-              right: '20px',
-              padding: '10px 20px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              borderRadius: '4px',
-              zIndex: 10000,
-              fontSize: '14px',
-            })
-            .text('Screenshot copied to clipboard!');
+      const notification = $('<div>')
+        .css({
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          padding: '10px 20px',
+          backgroundColor: '#4CAF50',
+          color: 'white',
+          borderRadius: '4px',
+          zIndex: 10000,
+          fontSize: '14px',
+        })
+        .text('Screenshot copied to clipboard!');
 
-          $('body').append(notification);
-          setTimeout(() => notification.fadeOut(500, () => notification.remove()), 2000);
-        } catch (err) {
-          console.error('Failed to copy screenshot to clipboard:', err);
-        }
-      });
+      $('body').append(notification);
+      setTimeout(() => notification.fadeOut(500, () => notification.remove()), 2000);
     } catch (err) {
       console.error('Failed to capture screenshot:', err);
     }

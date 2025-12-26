@@ -1,7 +1,7 @@
 {
   "name": "bluesky-navigator",
   "private": true,
-  "version": "1.0.31+581.4403f189",
+  "version": "1.0.31+582.50536179",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch --mode development",
@@ -27,7 +27,7 @@
     "@atproto/api": "^0.14.1",
     "date-fns": "^4.1.0",
     "handlebars": "^4.7.8",
-    "html2canvas": "^1.4.1",
+    "html-to-image": "^1.11.13",
     "lock": "^1.1.0"
   },
   "overrides": {

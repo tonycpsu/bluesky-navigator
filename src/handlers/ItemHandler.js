@@ -6045,7 +6045,8 @@ export class ItemHandler extends Handler {
     // Filter out embedded posts (posts that are inside another post)
     // Also filter out "View full thread" placeholders (they match selector but have no data-testid)
     // And filter out stale React elements that are disconnected or hidden
-    this.items = $(this.selector).filter(':visible').filter((i, item) => {
+    // Explicitly exclude .filtered items (CSS display:none may not be applied yet for :visible check)
+    this.items = $(this.selector).filter(':visible').not('.filtered').filter((i, item) => {
       // Exclude stale React elements - check both isConnected and offsetParent
       // (offsetParent is null for hidden/detached elements)
       if (!item.isConnected || item.offsetParent === null) return false;

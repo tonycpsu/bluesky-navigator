@@ -2147,12 +2147,16 @@ export class FeedItemHandler extends ItemHandler {
       if (isAdvancedStyle && engagementData[actualIndex]?.engagement?.unrolledCount > 0) {
         const unrolledCount = engagementData[actualIndex].engagement.unrolledCount;
         const totalPosts = unrolledCount + 1; // main post + replies
-        // For current item, show progress based on threadIndex; otherwise show full bar (0%)
-        let progressPercent = 0;
-        if (isCurrent && this.threadIndex != null) {
-          progressPercent = ((this.threadIndex + 1) / totalPosts) * 100;
+        // For current item, determine which posts have been visited based on threadIndex
+        const currentThreadIndex = isCurrent && this.threadIndex != null ? this.threadIndex : -1;
+        // Build segments for each post in thread
+        let segmentsHtml = '';
+        for (let i = 0; i < totalPosts; i++) {
+          const isVisited = i <= currentThreadIndex;
+          const segmentClass = isVisited ? 'feed-map-thread-segment feed-map-thread-segment-visited' : 'feed-map-thread-segment';
+          segmentsHtml += `<div class="${segmentClass}"></div>`;
         }
-        $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
+        $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`);
       }
     });
 
@@ -2839,12 +2843,16 @@ export class FeedItemHandler extends ItemHandler {
       if (engData?.engagement?.unrolledCount > 0) {
         const unrolledCount = engData.engagement.unrolledCount;
         const totalPosts = unrolledCount + 1; // main post + replies
-        // For current item, show progress based on threadIndex; otherwise show 0%
-        let progressPercent = 0;
-        if (isCurrent && this.threadIndex != null) {
-          progressPercent = ((this.threadIndex + 1) / totalPosts) * 100;
+        // For current item, determine which posts have been visited based on threadIndex
+        const currentThreadIndex = isCurrent && this.threadIndex != null ? this.threadIndex : -1;
+        // Build segments for each post in thread
+        let segmentsHtml = '';
+        for (let i = 0; i < totalPosts; i++) {
+          const isVisited = i <= currentThreadIndex;
+          const segmentClass = isVisited ? 'feed-map-thread-segment feed-map-thread-segment-visited' : 'feed-map-thread-segment';
+          segmentsHtml += `<div class="${segmentClass}"></div>`;
         }
-        $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
+        $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`);
       }
     });
 
@@ -3096,12 +3104,16 @@ export class FeedItemHandler extends ItemHandler {
       if (engagementData[actualIndex]?.engagement?.unrolledCount > 0) {
         const unrolledCount = engagementData[actualIndex].engagement.unrolledCount;
         const totalPosts = unrolledCount + 1; // main post + replies
-        // For current item, show progress based on threadIndex; otherwise show 0%
-        let progressPercent = 0;
-        if (isCurrent && this.threadIndex != null) {
-          progressPercent = ((this.threadIndex + 1) / totalPosts) * 100;
+        // For current item, determine which posts have been visited based on threadIndex
+        const currentThreadIndex = isCurrent && this.threadIndex != null ? this.threadIndex : -1;
+        // Build segments for each post in thread
+        let segmentsHtml = '';
+        for (let i = 0; i < totalPosts; i++) {
+          const isVisited = i <= currentThreadIndex;
+          const segmentClass = isVisited ? 'feed-map-thread-segment feed-map-thread-segment-visited' : 'feed-map-thread-segment';
+          segmentsHtml += `<div class="${segmentClass}"></div>`;
         }
-        $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
+        $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`);
       }
     });
 

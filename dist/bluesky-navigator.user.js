@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+579.2d020d56
+// @version     1.0.31+580.b3b67145
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -50540,33 +50540,47 @@ div.item-banner {
   background-color: #e5e7eb;
   border-radius: 1.5px;
   overflow: hidden;
+  display: flex;
 }
 
-.feed-map-segment-progress-fill {
+/* Individual thread segment */
+.feed-map-thread-segment {
+  flex: 1;
   height: 100%;
-  background-color: #9ca3af;
-  border-radius: 1.5px;
-  transition: width 0.15s ease-out;
+  background-color: #d1d5db;
+  border-right: 1px solid #e5e7eb;
+  box-sizing: border-box;
 }
 
-/* Theme-specific progress bar colors - match basic feed map segment colors */
-.feed-map-theme-default .feed-map-segment-progress-fill { background-color: #9ca3af; }
+.feed-map-thread-segment:last-child {
+  border-right: none;
+}
+
+/* Visited segments use darker color */
+.feed-map-thread-segment-visited {
+  background-color: #9ca3af;
+}
+
+/* Theme-specific thread segment colors - match basic feed map */
 .feed-map-theme-campfire .feed-map-segment-progress { background-color: #fffbeb; }
-.feed-map-theme-campfire .feed-map-segment-progress-fill { background-color: #fcd34d; }
+.feed-map-theme-campfire .feed-map-thread-segment { background-color: #fef3c7; border-right-color: #fffbeb; }
+.feed-map-theme-campfire .feed-map-thread-segment-visited { background-color: #fcd34d; }
+
 .feed-map-theme-ocean .feed-map-segment-progress { background-color: #e0f2fe; }
-.feed-map-theme-ocean .feed-map-segment-progress-fill { background-color: #7dd3fc; }
+.feed-map-theme-ocean .feed-map-thread-segment { background-color: #bae6fd; border-right-color: #e0f2fe; }
+.feed-map-theme-ocean .feed-map-thread-segment-visited { background-color: #7dd3fc; }
+
 .feed-map-theme-forest .feed-map-segment-progress { background-color: #dcfce7; }
-.feed-map-theme-forest .feed-map-segment-progress-fill { background-color: #86efac; }
+.feed-map-theme-forest .feed-map-thread-segment { background-color: #bbf7d0; border-right-color: #dcfce7; }
+.feed-map-theme-forest .feed-map-thread-segment-visited { background-color: #86efac; }
+
 .feed-map-theme-monochrome .feed-map-segment-progress { background-color: #e5e7eb; }
-.feed-map-theme-monochrome .feed-map-segment-progress-fill { background-color: #d1d5db; }
+.feed-map-theme-monochrome .feed-map-thread-segment { background-color: #f3f4f6; border-right-color: #e5e7eb; }
+.feed-map-theme-monochrome .feed-map-thread-segment-visited { background-color: #d1d5db; }
 
 /* Progress bar in zoom segments - slightly taller for visibility */
 .feed-map-segment-zoom .feed-map-segment-progress {
   height: 4px;
-  border-radius: 2px;
-}
-
-.feed-map-segment-zoom .feed-map-segment-progress-fill {
   border-radius: 2px;
 }
 
@@ -77153,11 +77167,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (isAdvancedStyle && engagementData[actualIndex]?.engagement?.unrolledCount > 0) {
           const unrolledCount = engagementData[actualIndex].engagement.unrolledCount;
           const totalPosts = unrolledCount + 1;
-          let progressPercent = 0;
-          if (isCurrent && this.threadIndex != null) {
-            progressPercent = (this.threadIndex + 1) / totalPosts * 100;
+          const currentThreadIndex = isCurrent && this.threadIndex != null ? this.threadIndex : -1;
+          let segmentsHtml = "";
+          for (let i3 = 0; i3 < totalPosts; i3++) {
+            const isVisited = i3 <= currentThreadIndex;
+            const segmentClass = isVisited ? "feed-map-thread-segment feed-map-thread-segment-visited" : "feed-map-thread-segment";
+            segmentsHtml += `<div class="${segmentClass}"></div>`;
           }
-          $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
+          $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`);
         }
       });
       if (showIcons && total > 0) {
@@ -77652,11 +77669,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (engData?.engagement?.unrolledCount > 0) {
           const unrolledCount = engData.engagement.unrolledCount;
           const totalPosts = unrolledCount + 1;
-          let progressPercent = 0;
-          if (isCurrent && this.threadIndex != null) {
-            progressPercent = (this.threadIndex + 1) / totalPosts * 100;
+          const currentThreadIndex = isCurrent && this.threadIndex != null ? this.threadIndex : -1;
+          let segmentsHtml = "";
+          for (let i3 = 0; i3 < totalPosts; i3++) {
+            const isVisited = i3 <= currentThreadIndex;
+            const segmentClass = isVisited ? "feed-map-thread-segment feed-map-thread-segment-visited" : "feed-map-thread-segment";
+            segmentsHtml += `<div class="${segmentClass}"></div>`;
           }
-          $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
+          $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`);
         }
       });
       this.updateFeedMapZoomLabels(windowStart, windowEnd);
@@ -77833,11 +77853,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (engagementData[actualIndex]?.engagement?.unrolledCount > 0) {
           const unrolledCount = engagementData[actualIndex].engagement.unrolledCount;
           const totalPosts = unrolledCount + 1;
-          let progressPercent = 0;
-          if (isCurrent && this.threadIndex != null) {
-            progressPercent = (this.threadIndex + 1) / totalPosts * 100;
+          const currentThreadIndex = isCurrent && this.threadIndex != null ? this.threadIndex : -1;
+          let segmentsHtml = "";
+          for (let i3 = 0; i3 < totalPosts; i3++) {
+            const isVisited = i3 <= currentThreadIndex;
+            const segmentClass = isVisited ? "feed-map-thread-segment feed-map-thread-segment-visited" : "feed-map-thread-segment";
+            segmentsHtml += `<div class="${segmentClass}"></div>`;
           }
-          $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}"><div class="feed-map-segment-progress-fill" style="width: ${progressPercent}%"></div></div>`);
+          $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`);
         }
       });
       zoomIndicator.css("--feed-map-icon-display", "flex");

@@ -1319,8 +1319,11 @@ export class FeedItemHandler extends ItemHandler {
     // If filter is active, start periodic enforcement
     if (this.state.filter) {
       this._filterEnforcementInterval = setInterval(() => {
-        // Find items without .filtered class that should be filtered
-        const unfiltered = $('.item').not('.filtered');
+        // Find top-level items without .filtered class that should be filtered
+        // Skip embedded/quoted posts (nested inside another .item)
+        const unfiltered = $('.item').not('.filtered').filter((i, item) => {
+          return $(item).parents('.item').length === 0;
+        });
         let itemsFiltered = false;
         if (unfiltered.length > 0) {
           unfiltered.each((i, item) => {
@@ -1760,7 +1763,11 @@ export class FeedItemHandler extends ItemHandler {
     this.clearAllHighlights();
 
     // Filter all items directly (more robust than relying on .thread wrappers)
-    const allItems = $('.item');
+    // Only filter top-level items, not embedded/quoted posts (which are nested inside another .item)
+    const allItems = $('.item').filter((i, item) => {
+      // Skip items that are nested inside another .item (embedded/quoted posts)
+      return $(item).parents('.item').length === 0;
+    });
     allItems.each((i, item) => {
       const thread = $(item).closest('.thread');
       const passes = this.filterItem(item, thread);

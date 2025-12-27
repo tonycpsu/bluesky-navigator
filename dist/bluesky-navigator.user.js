@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+584.3527de59
+// @version     1.0.31+585.6053552a
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69561,7 +69561,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       if (this.state.filter) {
         this._filterEnforcementInterval = setInterval(() => {
-          const unfiltered = $(".item").not(".filtered");
+          const unfiltered = $(".item").not(".filtered").filter((i, item) => {
+            return $(item).parents(".item").length === 0;
+          });
           let itemsFiltered = false;
           if (unfiltered.length > 0) {
             unfiltered.each((i, item) => {
@@ -69912,7 +69914,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         `show all or unread (currently ${hideRead ? "unread" : "all"})`
       );
       this.clearAllHighlights();
-      const allItems = $(".item");
+      const allItems = $(".item").filter((i, item) => {
+        return $(item).parents(".item").length === 0;
+      });
       allItems.each((i, item) => {
         const thread = $(item).closest(".thread");
         const passes = this.filterItem(item, thread);

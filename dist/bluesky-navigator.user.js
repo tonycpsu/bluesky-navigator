@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+588.41d3d55e
+// @version     1.0.31+589.292c39f6
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -67978,7 +67978,7 @@ ${rule}`;
       const threadIndicator = $(element).find("div.r-lchren, div.r-1mhb1uw > svg");
       const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
       $(element).parent().parent().addClass("thread");
-      $(element).css("scroll-margin-top", `${this.scrollMargin}px`, `!important`);
+      element.style.setProperty("scroll-margin-top", `${this.scrollMargin}px`, "important");
       if (selected) {
         $(element).parent().parent().addClass("thread-selection-active");
         $(element).parent().parent().removeClass("thread-selection-inactive");

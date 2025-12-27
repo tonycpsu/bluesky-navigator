@@ -5504,7 +5504,7 @@ export class ItemHandler extends Handler {
     const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
 
     $(element).parent().parent().addClass('thread');
-    $(element).css('scroll-margin-top', `${this.scrollMargin}px`, `!important`);
+    element.style.setProperty('scroll-margin-top', `${this.scrollMargin}px`, 'important');
 
     if (selected) {
       $(element).parent().parent().addClass('thread-selection-active');

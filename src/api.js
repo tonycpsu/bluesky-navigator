@@ -37,6 +37,7 @@ export class BlueskyAPI {
   async getRepostTimestamps(cursor = null, limit = 100) {
     const data = await this.getTimeline(cursor, limit);
     const repostTimestamps = {};
+    const reposterProfiles = {};
 
     for (const item of data.feed) {
       // Check if this is a repost (has reason with $type containing 'repost')
@@ -47,12 +48,22 @@ export class BlueskyAPI {
           // Extract post ID from URI: at://did:plc:xxx/app.bsky.feed.post/POST_ID
           const postId = postUri.split('/').pop();
           repostTimestamps[postId] = new Date(repostTime);
+
+          // Extract reposter profile info (including avatar)
+          if (item.reason.by) {
+            reposterProfiles[postId] = {
+              handle: item.reason.by.handle,
+              displayName: item.reason.by.displayName,
+              avatar: item.reason.by.avatar,
+            };
+          }
         }
       }
     }
 
     return {
       timestamps: repostTimestamps,
+      reposterProfiles: reposterProfiles,
       cursor: data.cursor,
     };
   }

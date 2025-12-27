@@ -38,6 +38,8 @@ export class FeedItemHandler extends ItemHandler {
     this.mediaCache = {};
     // Cache for repost timestamps (postUri -> Date) from AT Protocol API
     this.repostTimestampCache = {};
+    // Cache for reposter profiles (postId -> { handle, displayName, avatar })
+    this.reposterProfileCache = {};
     this.repostTimestampsFetched = false;
     // Track toolbar observer to prevent duplicates
     this._toolbarObserver = null;
@@ -112,6 +114,7 @@ export class FeedItemHandler extends ItemHandler {
 
       const result = await this.api.getRepostTimestamps();
       Object.assign(this.repostTimestampCache, result.timestamps);
+      Object.assign(this.reposterProfileCache, result.reposterProfiles || {});
       this.repostTimestampsFetched = true;
 
       // Re-apply timestamp formatting now that we have repost timestamps
@@ -2098,6 +2101,7 @@ export class FeedItemHandler extends ItemHandler {
     // Update segment states
     segments.each((i, segment) => {
       const $segment = $(segment);
+      $segment.empty(); // Clear previous content before updating
       const item = displayItems[i];
       const actualIndex = displayIndices[i]; // Map back to actual item index for engagementData
 
@@ -2411,6 +2415,17 @@ export class FeedItemHandler extends ItemHandler {
       }
     }
 
+    // Get reposter profile from cache if this is a repost
+    let reposterAvatarUrl = null;
+    let reposterHandle = null;
+    if (isRepost && postId && this.reposterProfileCache) {
+      const reposterProfile = this.reposterProfileCache[postId];
+      if (reposterProfile) {
+        reposterAvatarUrl = reposterProfile.avatar;
+        reposterHandle = reposterProfile.handle;
+      }
+    }
+
     return {
       likes,
       reposts,
@@ -2427,6 +2442,8 @@ export class FeedItemHandler extends ItemHandler {
       isRatioed,
       avatarUrl,
       handle,
+      reposterAvatarUrl,
+      reposterHandle,
       unrolledCount, // Number of unrolled replies (0 if not unrolled)
     };
   }
@@ -2746,6 +2763,7 @@ export class FeedItemHandler extends ItemHandler {
     const segments = zoomInner.find('.feed-map-segment');
     segments.each((i, segment) => {
       const $segment = $(segment);
+      $segment.empty(); // Clear previous content before updating
       const displayIndex = windowStart + i;
       const item = displayItems[displayIndex];
       const hasItem = displayIndex >= 0 && displayIndex < total && item;
@@ -2795,7 +2813,7 @@ export class FeedItemHandler extends ItemHandler {
         }
       }
 
-      // Add avatar
+      // Add avatar (with reposter overlay for reposts)
       if (showAvatars && engData?.engagement?.avatarUrl) {
         const avatarHeight = Math.round(32 * (avatarScale / 100));
         let avatarStyle = `height: ${avatarHeight}px`;
@@ -2807,7 +2825,28 @@ export class FeedItemHandler extends ItemHandler {
             avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
           }
         }
-        $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">`);
+
+        // For reposts with reposter avatar, wrap in container and add reposter overlay
+        if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
+          const reposterHeight = Math.round(avatarHeight * 0.5); // Reposter avatar is half the size
+          let reposterStyle = `height: ${reposterHeight}px`;
+          // Apply reposter rule color if enabled
+          if (showRuleColors && engData?.engagement?.reposterHandle) {
+            const reposterCategoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.reposterHandle);
+            if (reposterCategoryIndex >= 0) {
+              const color = this.getColorForCategoryIndex(reposterCategoryIndex);
+              reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
+            }
+          }
+          $segment.append(`
+            <span class="feed-map-segment-avatar-container">
+              <img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">
+              <img class="feed-map-segment-reposter-avatar" src="${engData.engagement.reposterAvatarUrl}" alt="" style="${reposterStyle}">
+            </span>
+          `);
+        } else {
+          $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">`);
+        }
       }
 
       // Add handle
@@ -2995,6 +3034,7 @@ export class FeedItemHandler extends ItemHandler {
 
     segments.each((i, segment) => {
       const $segment = $(segment);
+      $segment.empty(); // Clear previous content before updating
       const displayIndex = windowStart + i;
       // Use displayItems passed from caller (already filtered)
       const item = displayItems[displayIndex];
@@ -3051,21 +3091,43 @@ export class FeedItemHandler extends ItemHandler {
         }
       }
 
-      // Add avatar if enabled (appears below icons)
+      // Add avatar if enabled (appears below icons, with reposter overlay for reposts)
       if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
-        const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
+        const engData = engagementData[actualIndex];
+        const avatarUrl = engData.engagement.avatarUrl;
         // Avatar size in pixels: base 32px scaled by user preference (25-100%)
         const avatarHeight = Math.round(32 * (avatarScale / 100));
         let avatarStyle = `height: ${avatarHeight}px`;
         // Apply author rule color border if enabled
-        if (showRuleColors && engagementData[actualIndex]?.engagement?.handle) {
-          const categoryIndex = this.getFilterCategoryIndexForHandle(engagementData[actualIndex].engagement.handle);
+        if (showRuleColors && engData?.engagement?.handle) {
+          const categoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.handle);
           if (categoryIndex >= 0) {
             const color = this.getColorForCategoryIndex(categoryIndex);
             avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
           }
         }
-        $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">`);
+
+        // For reposts with reposter avatar, wrap in container and add reposter overlay
+        if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
+          const reposterHeight = Math.round(avatarHeight * 0.5); // Reposter avatar is half the size
+          let reposterStyle = `height: ${reposterHeight}px`;
+          // Apply reposter rule color if enabled
+          if (showRuleColors && engData?.engagement?.reposterHandle) {
+            const reposterCategoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.reposterHandle);
+            if (reposterCategoryIndex >= 0) {
+              const color = this.getColorForCategoryIndex(reposterCategoryIndex);
+              reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
+            }
+          }
+          $segment.append(`
+            <span class="feed-map-segment-avatar-container">
+              <img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">
+              <img class="feed-map-segment-reposter-avatar" src="${engData.engagement.reposterAvatarUrl}" alt="" style="${reposterStyle}">
+            </span>
+          `);
+        } else {
+          $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">`);
+        }
       }
 
       // Add handle if enabled (appears below avatar)

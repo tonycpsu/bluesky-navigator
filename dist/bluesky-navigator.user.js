@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+585.6053552a
+// @version     1.0.31+586.587490d4
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44936,6 +44936,7 @@ if (cid) {
     async getRepostTimestamps(cursor = null, limit = 100) {
       const data = await this.getTimeline(cursor, limit);
       const repostTimestamps = {};
+      const reposterProfiles = {};
       for (const item of data.feed) {
         if (item.reason && item.reason.$type?.includes("reasonRepost")) {
           const postUri = item.post.uri;
@@ -44943,11 +44944,19 @@ if (cid) {
           if (postUri && repostTime) {
             const postId = postUri.split("/").pop();
             repostTimestamps[postId] = new Date(repostTime);
+            if (item.reason.by) {
+              reposterProfiles[postId] = {
+                handle: item.reason.by.handle,
+                displayName: item.reason.by.displayName,
+                avatar: item.reason.by.avatar
+              };
+            }
           }
         }
       }
       return {
         timestamps: repostTimestamps,
+        reposterProfiles,
         cursor: data.cursor
       };
     }
@@ -50622,6 +50631,25 @@ div.item-banner {
   opacity: 0.9;
   flex-shrink: 0;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+/* Container for avatar with reposter overlay */
+.feed-map-segment-avatar-container {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Reposter avatar - smaller circle at bottom-left */
+.feed-map-segment-reposter-avatar {
+  position: absolute;
+  bottom: -2px;
+  left: -2px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+  background-color: white;
 }
 
 
@@ -68597,6 +68625,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.onSearchAutocomplete = this.onSearchAutocomplete.bind(this);
       this.mediaCache = {};
       this.repostTimestampCache = {};
+      this.reposterProfileCache = {};
       this.repostTimestampsFetched = false;
       this._toolbarObserver = null;
       this.feedTabObserver = waitForElement$1(constants.FEED_TAB_SELECTOR, (tab) => {
@@ -68653,6 +68682,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         const result = await this.api.getRepostTimestamps();
         Object.assign(this.repostTimestampCache, result.timestamps);
+        Object.assign(this.reposterProfileCache, result.reposterProfiles || {});
         this.repostTimestampsFetched = true;
         if (Object.keys(result.timestamps).length > 0) {
           this.refreshItems();
@@ -70151,6 +70181,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       segments.each((i, segment) => {
         const $segment = $(segment);
+        $segment.empty();
         const item = displayItems[i];
         const actualIndex = displayIndices[i];
         if (!item || !document.contains(item)) {
@@ -70365,6 +70396,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           handle2 = match2[1];
         }
       }
+      let reposterAvatarUrl = null;
+      let reposterHandle = null;
+      if (isRepost && postId && this.reposterProfileCache) {
+        const reposterProfile = this.reposterProfileCache[postId];
+        if (reposterProfile) {
+          reposterAvatarUrl = reposterProfile.avatar;
+          reposterHandle = reposterProfile.handle;
+        }
+      }
       return {
         likes,
         reposts,
@@ -70382,6 +70422,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         isRatioed,
         avatarUrl,
         handle: handle2,
+        reposterAvatarUrl,
+        reposterHandle,
         unrolledCount
         // Number of unrolled replies (0 if not unrolled)
       };
@@ -70614,6 +70656,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const segments = zoomInner.find(".feed-map-segment");
       segments.each((i, segment) => {
         const $segment = $(segment);
+        $segment.empty();
         const displayIndex = windowStart + i;
         const item = displayItems[displayIndex];
         const hasItem = displayIndex >= 0 && displayIndex < total && item;
@@ -70655,7 +70698,25 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
             }
           }
-          $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">`);
+          if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
+            const reposterHeight = Math.round(avatarHeight * 0.5);
+            let reposterStyle = `height: ${reposterHeight}px`;
+            if (showRuleColors && engData?.engagement?.reposterHandle) {
+              const reposterCategoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.reposterHandle);
+              if (reposterCategoryIndex >= 0) {
+                const color = this.getColorForCategoryIndex(reposterCategoryIndex);
+                reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
+              }
+            }
+            $segment.append(`
+            <span class="feed-map-segment-avatar-container">
+              <img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">
+              <img class="feed-map-segment-reposter-avatar" src="${engData.engagement.reposterAvatarUrl}" alt="" style="${reposterStyle}">
+            </span>
+          `);
+          } else {
+            $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">`);
+          }
         }
         if (showHandles && engData?.engagement?.handle) {
           const handle2 = engData.engagement.handle;
@@ -70788,6 +70849,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
       segments.each((i, segment) => {
         const $segment = $(segment);
+        $segment.empty();
         const displayIndex = windowStart + i;
         const item = displayItems[displayIndex];
         const actualIndex = displayIndices ? displayIndices[displayIndex] : displayIndex;
@@ -70824,17 +70886,36 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         }
         if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
-          const avatarUrl = engagementData[actualIndex].engagement.avatarUrl;
+          const engData = engagementData[actualIndex];
+          const avatarUrl = engData.engagement.avatarUrl;
           const avatarHeight = Math.round(32 * (avatarScale / 100));
           let avatarStyle = `height: ${avatarHeight}px`;
-          if (showRuleColors && engagementData[actualIndex]?.engagement?.handle) {
-            const categoryIndex = this.getFilterCategoryIndexForHandle(engagementData[actualIndex].engagement.handle);
+          if (showRuleColors && engData?.engagement?.handle) {
+            const categoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.handle);
             if (categoryIndex >= 0) {
               const color = this.getColorForCategoryIndex(categoryIndex);
               avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
             }
           }
-          $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">`);
+          if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
+            const reposterHeight = Math.round(avatarHeight * 0.5);
+            let reposterStyle = `height: ${reposterHeight}px`;
+            if (showRuleColors && engData?.engagement?.reposterHandle) {
+              const reposterCategoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.reposterHandle);
+              if (reposterCategoryIndex >= 0) {
+                const color = this.getColorForCategoryIndex(reposterCategoryIndex);
+                reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
+              }
+            }
+            $segment.append(`
+            <span class="feed-map-segment-avatar-container">
+              <img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">
+              <img class="feed-map-segment-reposter-avatar" src="${engData.engagement.reposterAvatarUrl}" alt="" style="${reposterStyle}">
+            </span>
+          `);
+          } else {
+            $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">`);
+          }
         }
         if (showHandles && engagementData[actualIndex]?.engagement?.handle) {
           const handle2 = engagementData[actualIndex].engagement.handle;

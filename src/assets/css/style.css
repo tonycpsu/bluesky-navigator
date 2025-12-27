@@ -2483,6 +2483,25 @@ div.item-banner {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
 }
 
+/* Container for avatar with reposter overlay */
+.feed-map-segment-avatar-container {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Reposter avatar - smaller circle at bottom-left */
+.feed-map-segment-reposter-avatar {
+  position: absolute;
+  bottom: -2px;
+  left: -2px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9);
+  background-color: white;
+}
+
 
 /* Icons in zoom segments - always at top */
 .feed-map-segment-zoom .feed-map-segment-icon {

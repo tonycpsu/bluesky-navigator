@@ -1819,7 +1819,8 @@ export class FeedItemHandler extends ItemHandler {
 
     // Rebuild this.items to include newly visible items (after filter cleared)
     // Filter out stale React elements that are disconnected or hidden
-    this.items = $(this.selector).filter(':visible').filter((i, item) => {
+    // Explicitly exclude .filtered items (CSS display:none may not be applied yet for :visible check)
+    this.items = $(this.selector).filter(':visible').not('.filtered').filter((i, item) => {
       // Exclude stale React elements - check both isConnected and offsetParent
       if (!item.isConnected || item.offsetParent === null) return false;
       const $item = $(item);

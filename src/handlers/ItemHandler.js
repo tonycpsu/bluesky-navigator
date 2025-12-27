@@ -821,6 +821,63 @@ export class ItemHandler extends Handler {
     }
   }
 
+  /**
+   * Apply author rule highlighting to a sidecar post
+   * @param {HTMLElement} post - The sidecar post element
+   */
+  applySidecarAuthorHighlight(post) {
+    const $post = $(post);
+
+    // Extract handle from the sidecar post (used for rule matching)
+    const handleEl = $post.find('.sidecar-post-handle');
+    if (!handleEl.length) return;
+
+    const handleText = handleEl.text().replace(/^@/, '');
+    if (!handleText) return;
+
+    // Get the display name element (used for visual highlighting)
+    const displayNameEl = $post.find('.sidecar-post-username');
+
+    // Check if color-coding is enabled
+    if (!this.config.get('ruleColorCoding')) {
+      // Clear any added styles
+      if (displayNameEl.length) {
+        displayNameEl.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
+      }
+      $post.find('.sidecar-post-avatar').css('box-shadow', '');
+      return;
+    }
+
+    // Get category index for this handle
+    const categoryIndex = this.getFilterCategoryIndexForHandle(handleText);
+    if (categoryIndex >= 0) {
+      const color = this.getColorForCategoryIndex(categoryIndex);
+
+      // Highlight display name
+      if (displayNameEl.length) {
+        displayNameEl[0].style.setProperty('background-color', `${color}80`, 'important');
+        displayNameEl[0].style.setProperty('border', `1px solid ${color}88`, 'important');
+        displayNameEl[0].style.setProperty('border-radius', '3px', 'important');
+        displayNameEl[0].style.setProperty('padding', '0 2px', 'important');
+      }
+
+      // Highlight avatar
+      const avatar = $post.find('.sidecar-post-avatar');
+      if (avatar.length) {
+        avatar.css({
+          'box-shadow': `0 0 0 3px ${color}`,
+          'border-radius': '50%'
+        });
+      }
+    } else {
+      // Clear styles if no match
+      if (displayNameEl.length) {
+        displayNameEl.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
+      }
+      $post.find('.sidecar-post-avatar').css('box-shadow', '');
+    }
+  }
+
   // ===========================================================================
   // Sidecar & Thread Unrolling
   // ===========================================================================
@@ -1125,6 +1182,12 @@ export class ItemHandler extends Handler {
     // Initialize event handlers for sidecar posts
     contentContainer.find('.sidecar-post').each((i, post) => {
       $(post).on('mouseover', this.onSidecarItemMouseOver);
+      // Apply filter highlights if available (defined in FeedItemHandler)
+      if (this.highlightFilterMatches) {
+        this.highlightFilterMatches(post);
+      }
+      // Apply author rule highlighting
+      this.applySidecarAuthorHighlight(post);
     });
 
     // Initialize collapsible sections
@@ -1511,6 +1574,12 @@ export class ItemHandler extends Handler {
 
     container.find('.sidecar-post').each((i, post) => {
       $(post).on('mouseover', this.onSidecarItemMouseOver);
+      // Apply filter highlights if available (defined in FeedItemHandler)
+      if (this.highlightFilterMatches) {
+        this.highlightFilterMatches(post);
+      }
+      // Apply author rule highlighting
+      this.applySidecarAuthorHighlight(post);
     });
 
     // Initialize collapsible sections
@@ -5973,8 +6042,8 @@ export class ItemHandler extends Handler {
 
       // Only remove sidecar-replies when in fixed sidecar mode (inline sidecar should persist)
       if (this.isFixedSidecar()) {
-        // Exclude elements inside post-view-modal to avoid affecting the modal's sidecar
-        $('.sidecar-replies').not('.post-view-modal *').each((i, el) => {
+        // Exclude elements inside post-view-modal and fixed-sidecar-panel to avoid affecting their content
+        $('.sidecar-replies').not('.post-view-modal *').not('#fixed-sidecar-panel *').each((i, el) => {
           try {
             if (el.parentNode) {
               el.parentNode.removeChild(el);

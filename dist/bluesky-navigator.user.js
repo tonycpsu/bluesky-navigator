@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+587.31cf5830
+// @version     1.0.31+588.41d3d55e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -64406,6 +64406,47 @@ div#statusBar.has-feed-map {
         this.scrollToElement(replyElement, "nearest");
       }
     }
+    /**
+     * Apply author rule highlighting to a sidecar post
+     * @param {HTMLElement} post - The sidecar post element
+     */
+    applySidecarAuthorHighlight(post2) {
+      const $post = $(post2);
+      const handleEl = $post.find(".sidecar-post-handle");
+      if (!handleEl.length) return;
+      const handleText = handleEl.text().replace(/^@/, "");
+      if (!handleText) return;
+      const displayNameEl = $post.find(".sidecar-post-username");
+      if (!this.config.get("ruleColorCoding")) {
+        if (displayNameEl.length) {
+          displayNameEl.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
+        }
+        $post.find(".sidecar-post-avatar").css("box-shadow", "");
+        return;
+      }
+      const categoryIndex = this.getFilterCategoryIndexForHandle(handleText);
+      if (categoryIndex >= 0) {
+        const color = this.getColorForCategoryIndex(categoryIndex);
+        if (displayNameEl.length) {
+          displayNameEl[0].style.setProperty("background-color", `${color}80`, "important");
+          displayNameEl[0].style.setProperty("border", `1px solid ${color}88`, "important");
+          displayNameEl[0].style.setProperty("border-radius", "3px", "important");
+          displayNameEl[0].style.setProperty("padding", "0 2px", "important");
+        }
+        const avatar = $post.find(".sidecar-post-avatar");
+        if (avatar.length) {
+          avatar.css({
+            "box-shadow": `0 0 0 3px ${color}`,
+            "border-radius": "50%"
+          });
+        }
+      } else {
+        if (displayNameEl.length) {
+          displayNameEl.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
+        }
+        $post.find(".sidecar-post-avatar").css("box-shadow", "");
+      }
+    }
     // ===========================================================================
     // Sidecar & Thread Unrolling
     // ===========================================================================
@@ -64641,6 +64682,10 @@ div#statusBar.has-feed-map {
       contentContainer.html(sidecarContent);
       contentContainer.find(".sidecar-post").each((i, post2) => {
         $(post2).on("mouseover", this.onSidecarItemMouseOver);
+        if (this.highlightFilterMatches) {
+          this.highlightFilterMatches(post2);
+        }
+        this.applySidecarAuthorHighlight(post2);
       });
       contentContainer.find(".sidecar-section-toggle").each((i, toggle) => {
         $(toggle).on("click", (e) => {
@@ -64920,6 +64965,10 @@ div#statusBar.has-feed-map {
       }
       container.find(".sidecar-post").each((i, post2) => {
         $(post2).on("mouseover", this.onSidecarItemMouseOver);
+        if (this.highlightFilterMatches) {
+          this.highlightFilterMatches(post2);
+        }
+        this.applySidecarAuthorHighlight(post2);
       });
       container.find(".sidecar-section-toggle").each((i, toggle) => {
         $(toggle).on("click", (e) => {
@@ -68339,7 +68388,7 @@ ${rule}`;
       const hasUnrolledContent = unrolledRepliesCount > 0;
       if (!hasUnrolledContent) {
         if (this.isFixedSidecar()) {
-          $(".sidecar-replies").not(".post-view-modal *").each((i, el) => {
+          $(".sidecar-replies").not(".post-view-modal *").not("#fixed-sidecar-panel *").each((i, el) => {
             try {
               if (el.parentNode) {
                 el.parentNode.removeChild(el);
@@ -69911,7 +69960,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return term.startsWith("%") ? term.substring(1) : term;
       });
       if (terms.length === 0) return;
-      const postText = $(item).find('div[data-testid="postText"]');
+      const postText = $(item).find('div[data-testid="postText"], .sidecar-post-content, .sidecar-quote-content');
       if (!postText.length) return;
       const pattern = new RegExp(`(${terms.map((t) => this.escapeRegex(t)).join("|")})`, "gi");
       postText.contents().each(function() {

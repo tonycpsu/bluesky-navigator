@@ -1721,7 +1721,8 @@ export class FeedItemHandler extends ItemHandler {
 
     if (terms.length === 0) return;
 
-    const postText = $(item).find('div[data-testid="postText"]');
+    // Find text content in both feed items and sidecar posts
+    const postText = $(item).find('div[data-testid="postText"], .sidecar-post-content, .sidecar-quote-content');
     if (!postText.length) return;
 
     // Create a regex for all terms

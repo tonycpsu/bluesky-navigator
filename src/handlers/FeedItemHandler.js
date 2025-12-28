@@ -1580,8 +1580,13 @@ export class FeedItemHandler extends ItemHandler {
       return false;
     }
 
-    if (this.state.feedHideRead && $item.hasClass('item-read')) {
-      return false;
+    // Check if item is read - use state.seen directly instead of DOM class
+    // (DOM class may not be applied yet if React replaced the element)
+    if (this.state.feedHideRead) {
+      const postId = this.postIdForItem($item);
+      if (postId && this.state.seen[postId]) {
+        return false;
+      }
     }
 
     if (!this.state.filter) {

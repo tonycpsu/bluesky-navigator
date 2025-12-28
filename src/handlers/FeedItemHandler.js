@@ -1334,7 +1334,9 @@ export class FeedItemHandler extends ItemHandler {
   /**
    * Starts or stops periodic filter enforcement.
    * React can replace DOM elements, losing our .filtered class.
-   * This ensures filters stay applied.
+   * This ensures TEXT-BASED filters stay applied.
+   * Note: Read status and timeout filtering only happen on loadItems/refresh,
+   * not continuously via this enforcement interval.
    */
   updateFilterEnforcement() {
     // Clear any existing interval
@@ -1343,9 +1345,8 @@ export class FeedItemHandler extends ItemHandler {
       this._filterEnforcementInterval = null;
     }
 
-    // If filter is active or timeouts are active, start periodic enforcement
-    const hasActiveTimeouts = this.state.timeouts && Object.keys(this.state.timeouts).length > 0;
-    if (this.state.filter || hasActiveTimeouts) {
+    // Only enforce text-based filters (not read status or timeouts - those apply on refresh)
+    if (this.state.filter) {
       this._filterEnforcementInterval = setInterval(() => {
         // Skip enforcement during navigation/scrolling to avoid interference
         if (this.ignoreMouseMovement) return;
@@ -1359,7 +1360,8 @@ export class FeedItemHandler extends ItemHandler {
         if (unfiltered.length > 0) {
           unfiltered.each((i, item) => {
             const thread = $(item).closest('.thread');
-            if (!this.filterItem(item, thread)) {
+            // Only check text-based filter rules, not read status or timeouts
+            if (!this.filterItemTextOnly(item)) {
               $(item).addClass('filtered');
               itemsFiltered = true;
               if (thread.length && !this.filterThread(thread[0])) {
@@ -1374,6 +1376,23 @@ export class FeedItemHandler extends ItemHandler {
         }
       }, 200); // Check every 200ms
     }
+  }
+
+  /**
+   * Filters an item based on text-based filter rules only.
+   * Does NOT check read status or timeout status.
+   * Used by filter enforcement interval to avoid hiding items automatically.
+   * @param {Element} item - The feed item element
+   * @returns {boolean} True if item passes text filter, false if filtered out
+   */
+  filterItemTextOnly(item) {
+    if (!this.state.filter) {
+      return true;
+    }
+
+    const activeRules = this.parseFilterRules(this.state.filter);
+    const results = activeRules.map((rule) => this.evaluateFilterRule(item, rule));
+    return results.every((result) => result === true);
   }
 
   /**

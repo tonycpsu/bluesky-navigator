@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+593.ad899f57
+// @version     1.0.31+594.32110f74
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -70341,15 +70341,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     /**
      * Starts or stops periodic filter enforcement.
      * React can replace DOM elements, losing our .filtered class.
-     * This ensures filters stay applied.
+     * This ensures TEXT-BASED filters stay applied.
+     * Note: Read status and timeout filtering only happen on loadItems/refresh,
+     * not continuously via this enforcement interval.
      */
     updateFilterEnforcement() {
       if (this._filterEnforcementInterval) {
         clearInterval(this._filterEnforcementInterval);
         this._filterEnforcementInterval = null;
       }
-      const hasActiveTimeouts = this.state.timeouts && Object.keys(this.state.timeouts).length > 0;
-      if (this.state.filter || hasActiveTimeouts) {
+      if (this.state.filter) {
         this._filterEnforcementInterval = setInterval(() => {
           if (this.ignoreMouseMovement) return;
           const unfiltered = $(".item").not(".filtered").filter((i, item) => {
@@ -70359,7 +70360,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (unfiltered.length > 0) {
             unfiltered.each((i, item) => {
               const thread = $(item).closest(".thread");
-              if (!this.filterItem(item, thread)) {
+              if (!this.filterItemTextOnly(item)) {
                 $(item).addClass("filtered");
                 itemsFiltered = true;
                 if (thread.length && !this.filterThread(thread[0])) {
@@ -70373,6 +70374,21 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         }, 200);
       }
+    }
+    /**
+     * Filters an item based on text-based filter rules only.
+     * Does NOT check read status or timeout status.
+     * Used by filter enforcement interval to avoid hiding items automatically.
+     * @param {Element} item - The feed item element
+     * @returns {boolean} True if item passes text filter, false if filtered out
+     */
+    filterItemTextOnly(item) {
+      if (!this.state.filter) {
+        return true;
+      }
+      const activeRules = this.parseFilterRules(this.state.filter);
+      const results = activeRules.map((rule) => this.evaluateFilterRule(item, rule));
+      return results.every((result) => result === true);
     }
     /**
      * Applies filter after a short delay (debounced).

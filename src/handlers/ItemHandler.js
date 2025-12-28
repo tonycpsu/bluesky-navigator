@@ -1780,6 +1780,10 @@ export class ItemHandler extends Handler {
         this.openShareMenu(item);
         break;
 
+      case '!':
+        this.showTimeoutPopup(item);
+        break;
+
       default:
         if (!isNaN(parseInt(event.key))) {
           this.switchToTab(parseInt(event.key) - 1);
@@ -4276,6 +4280,311 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Parse duration string to milliseconds
+   * @param {string} duration - Duration like '1h', '6h', '1d', '7d', '30d'
+   * @returns {number} Milliseconds
+   */
+  parseDurationToMs(duration) {
+    const match = duration.match(/^(\d+)([hd])$/);
+    if (!match) return 24 * 60 * 60 * 1000; // Default 1 day
+    const value = parseInt(match[1]);
+    const unit = match[2];
+    if (unit === 'h') return value * 60 * 60 * 1000;
+    if (unit === 'd') return value * 24 * 60 * 60 * 1000;
+    return 24 * 60 * 60 * 1000;
+  }
+
+  /**
+   * Format duration string for display
+   * @param {string} duration - Duration like '1h', '1d'
+   * @returns {string} Human readable like '1 hour', '1 day'
+   */
+  formatDurationLabel(duration) {
+    const labels = {
+      '1h': '1 hour',
+      '6h': '6 hours',
+      '12h': '12 hours',
+      '1d': '1 day',
+      '3d': '3 days',
+      '7d': '7 days',
+      '14d': '14 days',
+      '30d': '30 days',
+    };
+    return labels[duration] || duration;
+  }
+
+  /**
+   * Show popup to confirm timing out an author
+   * @param {jQuery} item - The post element
+   */
+  showTimeoutPopup(item) {
+    // Remove any existing timeout popup
+    $('.bsky-nav-timeout-popup').remove();
+
+    const handle = this.getAuthorHandle(item);
+    if (!handle) {
+      console.warn('Could not get author handle for timeout');
+      return;
+    }
+
+    // Check if author is already timed out
+    if (this.isTimedOut(handle)) {
+      // Show option to remove timeout instead
+      this.showRemoveTimeoutPopup(item, handle);
+      return;
+    }
+
+    const defaultDuration = this.config.get('timeoutDefaultDuration') || '1d';
+    const durations = ['1h', '6h', '12h', '1d', '3d', '7d', '14d', '30d'];
+
+    const rect = item[0].getBoundingClientRect();
+
+    const popup = $(`
+      <div class="bsky-nav-timeout-popup">
+        <div class="bsky-nav-timeout-header">
+          Timeout @${handle}
+        </div>
+        <div class="bsky-nav-timeout-body">
+          <label class="bsky-nav-timeout-label">
+            Duration:
+            <select class="bsky-nav-timeout-select">
+              ${durations.map(d => `<option value="${d}" ${d === defaultDuration ? 'selected' : ''}>${this.formatDurationLabel(d)}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+        <div class="bsky-nav-timeout-buttons">
+          <button class="bsky-nav-timeout-btn cancel">Cancel</button>
+          <button class="bsky-nav-timeout-btn confirm">Timeout</button>
+        </div>
+      </div>
+    `);
+
+    popup.css({
+      position: 'fixed',
+      top: Math.min(rect.top, window.innerHeight - 200) + 'px',
+      left: Math.min(rect.left + 50, window.innerWidth - 250) + 'px',
+      zIndex: 10002
+    });
+
+    $('body').append(popup);
+
+    // Handle confirm
+    popup.find('.bsky-nav-timeout-btn.confirm').on('click', () => {
+      const duration = popup.find('.bsky-nav-timeout-select').val();
+      this.addTimeout(handle, duration);
+      popup.remove();
+      $(document).off('.timeout');
+    });
+
+    // Handle cancel
+    popup.find('.bsky-nav-timeout-btn.cancel').on('click', () => {
+      popup.remove();
+      $(document).off('.timeout');
+    });
+
+    // Close on click outside
+    setTimeout(() => {
+      $(document).on('mousedown.timeout', (e) => {
+        if (!$(e.target).closest('.bsky-nav-timeout-popup').length) {
+          popup.remove();
+          $(document).off('.timeout');
+        }
+      });
+    }, 100);
+
+    // Close on Escape
+    $(document).on('keydown.timeout', (e) => {
+      if (e.key === 'Escape') {
+        popup.remove();
+        $(document).off('.timeout');
+      }
+    });
+  }
+
+  /**
+   * Show popup to remove an existing timeout
+   * @param {jQuery} item - The post element
+   * @param {string} handle - The author handle
+   */
+  showRemoveTimeoutPopup(item, handle) {
+    const rect = item[0].getBoundingClientRect();
+    const expiresAt = this.state.timeouts[handle];
+    const expiresDate = new Date(expiresAt);
+    const timeRemaining = this.formatTimeRemaining(expiresAt - Date.now());
+
+    const popup = $(`
+      <div class="bsky-nav-timeout-popup">
+        <div class="bsky-nav-timeout-header">
+          @${handle} is timed out
+        </div>
+        <div class="bsky-nav-timeout-body">
+          <div class="bsky-nav-timeout-info">
+            Expires in ${timeRemaining}
+          </div>
+        </div>
+        <div class="bsky-nav-timeout-buttons">
+          <button class="bsky-nav-timeout-btn cancel">Keep Timeout</button>
+          <button class="bsky-nav-timeout-btn confirm">Remove Timeout</button>
+        </div>
+      </div>
+    `);
+
+    popup.css({
+      position: 'fixed',
+      top: Math.min(rect.top, window.innerHeight - 200) + 'px',
+      left: Math.min(rect.left + 50, window.innerWidth - 250) + 'px',
+      zIndex: 10002
+    });
+
+    $('body').append(popup);
+
+    // Handle remove timeout
+    popup.find('.bsky-nav-timeout-btn.confirm').on('click', () => {
+      this.removeTimeout(handle);
+      popup.remove();
+      $(document).off('.timeout');
+    });
+
+    // Handle cancel
+    popup.find('.bsky-nav-timeout-btn.cancel').on('click', () => {
+      popup.remove();
+      $(document).off('.timeout');
+    });
+
+    // Close on click outside
+    setTimeout(() => {
+      $(document).on('mousedown.timeout', (e) => {
+        if (!$(e.target).closest('.bsky-nav-timeout-popup').length) {
+          popup.remove();
+          $(document).off('.timeout');
+        }
+      });
+    }, 100);
+
+    // Close on Escape
+    $(document).on('keydown.timeout', (e) => {
+      if (e.key === 'Escape') {
+        popup.remove();
+        $(document).off('.timeout');
+      }
+    });
+  }
+
+  /**
+   * Format remaining time for display
+   * @param {number} ms - Milliseconds remaining
+   * @returns {string} Human readable time remaining
+   */
+  formatTimeRemaining(ms) {
+    if (ms <= 0) return 'expired';
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+
+    if (days > 0) {
+      return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days} day${days > 1 ? 's' : ''}`;
+    }
+    if (hours > 0) {
+      return `${hours} hour${hours > 1 ? 's' : ''}`;
+    }
+    const minutes = Math.floor(ms / (1000 * 60));
+    return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+  }
+
+  /**
+   * Add a timeout for an author
+   * @param {string} handle - Author handle
+   * @param {string} duration - Duration string like '1h', '1d'
+   */
+  addTimeout(handle, duration) {
+    const durationMs = this.parseDurationToMs(duration);
+    const expiresAt = Date.now() + durationMs;
+
+    // Create new timeouts object with the new timeout
+    const currentTimeouts = this.state.timeouts || {};
+    const newTimeouts = { ...currentTimeouts, [handle]: expiresAt };
+
+    // Use updateState for proper state persistence
+    this.state.stateManager.updateState({ timeouts: newTimeouts });
+    this.state.stateManager.saveStateImmediately();
+
+    // Trigger filter refresh and start enforcement interval
+    this.filterItems();
+    this.updateFilterEnforcement();
+
+    console.log(`Timed out @${handle} until ${new Date(expiresAt).toLocaleString()}`);
+  }
+
+  /**
+   * Remove a timeout for an author
+   * @param {string} handle - Author handle
+   */
+  removeTimeout(handle) {
+    if (!this.state.timeouts) return;
+
+    // Create new timeouts object without this handle
+    const { [handle]: _removed, ...remainingTimeouts } = this.state.timeouts;
+
+    // Use updateState for proper state persistence
+    this.state.stateManager.updateState({ timeouts: remainingTimeouts });
+    this.state.stateManager.saveStateImmediately();
+
+    // Trigger filter refresh and update enforcement (may stop interval if no more timeouts)
+    this.filterItems();
+    this.updateFilterEnforcement();
+
+    console.log(`Removed timeout for @${handle}`);
+  }
+
+  /**
+   * Check if an author is currently timed out
+   * @param {string} handle - Author handle
+   * @returns {boolean} True if timed out (does not modify state - use cleanupExpiredTimeouts for cleanup)
+   */
+  isTimedOut(handle) {
+    if (!this.state.timeouts) {
+      return false;
+    }
+    const expiresAt = this.state.timeouts[handle];
+    if (!expiresAt) {
+      return false;
+    }
+
+    // Just check if expired, don't modify state here (cleanup happens separately)
+    return Date.now() < expiresAt;
+  }
+
+  /**
+   * Clean up all expired timeouts
+   * @returns {number} Number of expired timeouts removed
+   */
+  cleanupExpiredTimeouts() {
+    if (!this.state.timeouts) return 0;
+
+    const now = Date.now();
+    const currentTimeouts = this.state.timeouts;
+    const activeTimeouts = {};
+    let removed = 0;
+
+    for (const [handle, expiresAt] of Object.entries(currentTimeouts)) {
+      if (now < expiresAt) {
+        activeTimeouts[handle] = expiresAt;
+      } else {
+        removed++;
+        console.log(`Timeout expired for @${handle}`);
+      }
+    }
+
+    if (removed > 0) {
+      // Use updateState for proper state persistence
+      this.state.stateManager.updateState({ timeouts: activeTimeouts });
+      this.state.stateManager.saveStateImmediately();
+    }
+
+    return removed;
+  }
+
+  /**
    * Show dropdown to select which rule category to remove the author from
    * @param {DOMRect} buttonRect - Position rect
    * @param {string} handle - Handle to remove
@@ -5504,7 +5813,11 @@ export class ItemHandler extends Handler {
     const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
 
     $(element).parent().parent().addClass('thread');
-    element.style.setProperty('scroll-margin-top', `${this.scrollMargin}px`, 'important');
+    // Get raw DOM element (handle both jQuery objects and raw elements)
+    const el = element instanceof $ ? element[0] : (element.jquery ? element[0] : element);
+    if (el && el.style) {
+      el.style.setProperty('scroll-margin-top', `${this.scrollMargin}px`, 'important');
+    }
 
     if (selected) {
       $(element).parent().parent().addClass('thread-selection-active');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+589.292c39f6
+// @version     1.0.31+590.4860dfbc
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -338,10 +338,6 @@
     async loadState(defaultState) {
       try {
         const savedState = JSON.parse(GM_getValue(this.key, "{}"));
-        console.log("[StateManager] Loaded state:", {
-          focusedPostId: savedState.focusedPostId,
-          focusedIndex: savedState.focusedIndex
-        });
         const localLastUpdated = savedState.lastUpdated;
         if (this.config.stateSyncEnabled) {
           const remoteState = await this.loadRemoteState();
@@ -352,9 +348,9 @@
             if (localTime > remoteTime) {
               return { ...defaultState, ...savedState };
             } else {
-              const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
+              const { filter: remoteFilter, timeouts: remoteTimeouts, ...remoteWithoutLocalFields } = remoteState;
               const mergedSeen = { ...savedState.seen || {} };
-              const remoteSeen = remoteWithoutFilter.seen || {};
+              const remoteSeen = remoteWithoutLocalFields.seen || {};
               for (const [postId, timestamp] of Object.entries(remoteSeen)) {
                 if (!mergedSeen[postId] || new Date(timestamp) > new Date(mergedSeen[postId])) {
                   mergedSeen[postId] = timestamp;
@@ -362,8 +358,9 @@
               }
               return {
                 ...defaultState,
-                ...remoteWithoutFilter,
+                ...remoteWithoutLocalFields,
                 filter: savedState.filter || defaultState.filter || "",
+                timeouts: savedState.timeouts || defaultState.timeouts || {},
                 seen: mergedSeen
               };
             }
@@ -450,13 +447,6 @@
       this.cleanupState();
       const { listCache, rules, ...serializableState } = this.state;
       const stateJson = JSON.stringify(serializableState);
-      const sizeKB = (stateJson.length / 1024).toFixed(2);
-      console.log("[StateManager] Saving state:", {
-        focusedPostId: this.state.focusedPostId,
-        focusedIndex: this.state.focusedIndex,
-        sizeKB: `${sizeKB} KB`,
-        seenCount: Object.keys(this.state.seen || {}).length
-      });
       GM_setValue(this.key, stateJson);
       this.isLocalStateDirty = false;
       this.notifyListeners();
@@ -723,7 +713,9 @@
     page: "home",
     blocks: { all: [], recent: [] },
     feedSortReverse: false,
-    feedHideRead: false
+    feedHideRead: false,
+    timeouts: {}
+    // { handle: expiresAtTimestamp }
   };
   let stateManager;
   const target = {
@@ -45877,6 +45869,18 @@ if (cid) {
         }
       }
     },
+    Timeouts: {
+      icon: "\u23F1\uFE0F",
+      fields: {
+        timeoutDefaultDuration: {
+          label: "Default timeout duration",
+          type: "select",
+          options: ["1h", "6h", "12h", "1d", "3d", "7d", "14d", "30d"],
+          default: "1d",
+          help: "Default duration when timing out an author (! hotkey)"
+        }
+      }
+    },
     Advanced: {
       icon: "\u2699\uFE0F",
       collapsed: true,
@@ -46184,7 +46188,7 @@ if (cid) {
         <div class="config-panel ${name === this.activeTab ? "active" : ""}"
              role="tabpanel"
              data-panel="${name}">
-          ${name === "Rules" ? this.renderRulesPanel() : this.renderFields(schema2.fields)}
+          ${name === "Rules" ? this.renderRulesPanel() : name === "Timeouts" ? this.renderTimeoutsPanel() : this.renderFields(schema2.fields)}
         </div>
       `
       ).join("");
@@ -46461,6 +46465,137 @@ if (cid) {
         </div>
       </div>
     `;
+    }
+    /**
+     * Render the Timeouts panel
+     */
+    renderTimeoutsPanel() {
+      const defaultDuration = this.config.get("timeoutDefaultDuration") || "1d";
+      const timeouts = state.timeouts || {};
+      const activeTimeouts = Object.entries(timeouts).filter(([, expiresAt]) => Date.now() < expiresAt).sort((a, b) => a[1] - b[1]);
+      return `
+      <div class="timeouts-panel">
+        <div class="config-field">
+          <label class="config-field-label">Default timeout duration</label>
+          <select id="config-timeoutDefaultDuration" name="timeoutDefaultDuration" class="config-field-input">
+            ${["1h", "6h", "12h", "1d", "3d", "7d", "14d", "30d"].map((d) => `
+              <option value="${d}" ${d === defaultDuration ? "selected" : ""}>${this.formatDurationLabel(d)}</option>
+            `).join("")}
+          </select>
+          <span class="config-field-help">Default duration when timing out an author (! hotkey)</span>
+        </div>
+
+        <div class="timeouts-active-section">
+          <h3 class="timeouts-section-title">Active Timeouts</h3>
+          ${activeTimeouts.length === 0 ? `
+            <div class="timeouts-empty">
+              No active timeouts. Press <kbd>!</kbd> on a post to timeout an author.
+            </div>
+          ` : `
+            <div class="timeouts-list">
+              ${activeTimeouts.map(([handle2, expiresAt]) => `
+                <div class="timeout-item" data-handle="${this.escapeHtml(handle2)}">
+                  <span class="timeout-handle">@${this.escapeHtml(handle2)}</span>
+                  <span class="timeout-expires">expires in ${this.formatTimeRemaining(expiresAt - Date.now())}</span>
+                  <button type="button" class="timeout-clear-btn" data-handle="${this.escapeHtml(handle2)}"
+                          title="Remove timeout">\u2715</button>
+                </div>
+              `).join("")}
+            </div>
+            <button type="button" class="timeout-clear-all-btn">Clear All Timeouts</button>
+          `}
+        </div>
+      </div>
+    `;
+    }
+    /**
+     * Format duration string for display
+     */
+    formatDurationLabel(duration) {
+      const labels2 = {
+        "1h": "1 hour",
+        "6h": "6 hours",
+        "12h": "12 hours",
+        "1d": "1 day",
+        "3d": "3 days",
+        "7d": "7 days",
+        "14d": "14 days",
+        "30d": "30 days"
+      };
+      return labels2[duration] || duration;
+    }
+    /**
+     * Format remaining time for display
+     */
+    formatTimeRemaining(ms) {
+      if (ms <= 0) return "expired";
+      const hours = Math.floor(ms / (1e3 * 60 * 60));
+      const days = Math.floor(hours / 24);
+      const remainingHours = hours % 24;
+      if (days > 0) {
+        return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days} day${days > 1 ? "s" : ""}`;
+      }
+      if (hours > 0) {
+        return `${hours} hour${hours > 1 ? "s" : ""}`;
+      }
+      const minutes = Math.floor(ms / (1e3 * 60));
+      return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+    }
+    /**
+     * Refresh the Timeouts panel
+     */
+    refreshTimeoutsPanel() {
+      const panel = this.modalEl.querySelector('[data-panel="Timeouts"]');
+      if (panel) {
+        panel.innerHTML = this.renderTimeoutsPanel();
+        this.attachTimeoutsEventListeners();
+      }
+    }
+    /**
+     * Attach event listeners for the Timeouts panel
+     */
+    attachTimeoutsEventListeners() {
+      const panel = this.modalEl.querySelector(".timeouts-panel");
+      if (!panel) return;
+      const durationSelect = panel.querySelector("#config-timeoutDefaultDuration");
+      if (durationSelect) {
+        durationSelect.addEventListener("change", (e) => {
+          this.handleInputChange(e);
+        });
+      }
+      panel.querySelectorAll(".timeout-clear-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          const handle2 = e.target.dataset.handle;
+          this.clearTimeout(handle2);
+        });
+      });
+      const clearAllBtn = panel.querySelector(".timeout-clear-all-btn");
+      if (clearAllBtn) {
+        clearAllBtn.addEventListener("click", () => {
+          if (confirm("Clear all active timeouts?")) {
+            this.clearAllTimeouts();
+          }
+        });
+      }
+    }
+    /**
+     * Clear a single timeout
+     */
+    clearTimeout(handle2) {
+      const { [handle2]: _removed, ...remainingTimeouts } = state.timeouts || {};
+      state.stateManager.updateState({ timeouts: remainingTimeouts });
+      state.stateManager.saveStateImmediately();
+      this.refreshTimeoutsPanel();
+      window.dispatchEvent(new CustomEvent("bsky-nav-timeout-cleared", { detail: { handle: handle2 } }));
+    }
+    /**
+     * Clear all timeouts
+     */
+    clearAllTimeouts() {
+      state.stateManager.updateState({ timeouts: {} });
+      state.stateManager.saveStateImmediately();
+      this.refreshTimeoutsPanel();
+      window.dispatchEvent(new CustomEvent("bsky-nav-timeout-cleared", { detail: { all: true } }));
     }
     /**
      * Render the visual rule editor
@@ -47038,6 +47173,9 @@ if (cid) {
       this.modalEl.querySelectorAll(".config-panel").forEach((panel) => {
         panel.classList.toggle("active", panel.dataset.panel === tabName);
       });
+      if (tabName === "Timeouts") {
+        this.attachTimeoutsEventListeners();
+      }
     }
     handleInputChange(e) {
       const { name, type, value, checked } = e.target;
@@ -53750,6 +53888,302 @@ div#statusBar.has-feed-map {
   }
 
   .bsky-nav-list-choice-btn.secondary:hover {
+    background: #4b5563;
+  }
+}
+
+/* =============================================================================
+   Timeout Popup
+   ============================================================================= */
+
+.bsky-nav-timeout-popup {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 16px;
+  min-width: 240px;
+  font-family: InterVariable, system-ui, -apple-system, sans-serif;
+}
+
+.bsky-nav-timeout-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 12px;
+}
+
+.bsky-nav-timeout-body {
+  margin-bottom: 16px;
+}
+
+.bsky-nav-timeout-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.bsky-nav-timeout-select {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: white;
+  font-size: 13px;
+  color: #1f2937;
+  cursor: pointer;
+}
+
+.bsky-nav-timeout-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.bsky-nav-timeout-info {
+  font-size: 13px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.bsky-nav-timeout-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.bsky-nav-timeout-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.bsky-nav-timeout-btn:active {
+  transform: scale(0.98);
+}
+
+.bsky-nav-timeout-btn.cancel {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.bsky-nav-timeout-btn.cancel:hover {
+  background: #e5e7eb;
+}
+
+.bsky-nav-timeout-btn.confirm {
+  background: #ef4444;
+  color: white;
+}
+
+.bsky-nav-timeout-btn.confirm:hover {
+  background: #dc2626;
+}
+
+/* Dark mode styles */
+@media (prefers-color-scheme: dark) {
+  .bsky-nav-timeout-popup {
+    background: #1f2937;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+
+  .bsky-nav-timeout-header {
+    color: #f9fafb;
+  }
+
+  .bsky-nav-timeout-label {
+    color: #d1d5db;
+  }
+
+  .bsky-nav-timeout-select {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .bsky-nav-timeout-select:focus {
+    border-color: #3b82f6;
+  }
+
+  .bsky-nav-timeout-info {
+    color: #9ca3af;
+  }
+
+  .bsky-nav-timeout-btn.cancel {
+    background: #374151;
+    color: #f9fafb;
+  }
+
+  .bsky-nav-timeout-btn.cancel:hover {
+    background: #4b5563;
+  }
+
+  .bsky-nav-timeout-btn.confirm {
+    background: #dc2626;
+  }
+
+  .bsky-nav-timeout-btn.confirm:hover {
+    background: #b91c1c;
+  }
+}
+
+/* =============================================================================
+   Timeouts Panel (Config Modal)
+   ============================================================================= */
+
+.timeouts-panel {
+  padding: 0;
+}
+
+.timeouts-active-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.timeouts-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 12px 0;
+}
+
+.timeouts-empty {
+  color: #6b7280;
+  font-size: 13px;
+  padding: 16px;
+  text-align: center;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.timeouts-empty kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-family: monospace;
+  font-size: 12px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+}
+
+.timeouts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.timeout-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.timeout-handle {
+  font-weight: 500;
+  color: #1f2937;
+  flex: 1;
+}
+
+.timeout-expires {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.timeout-clear-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.timeout-clear-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.timeout-clear-all-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #d1d5db;
+  background: white;
+  color: #374151;
+  transition: background 0.15s;
+}
+
+.timeout-clear-all-btn:hover {
+  background: #f3f4f6;
+}
+
+/* Dark mode styles for timeouts panel */
+@media (prefers-color-scheme: dark) {
+  .timeouts-active-section {
+    border-top-color: #374151;
+  }
+
+  .timeouts-section-title {
+    color: #f3f4f6;
+  }
+
+  .timeouts-empty {
+    background: #1f2937;
+    color: #9ca3af;
+  }
+
+  .timeouts-empty kbd {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f3f4f6;
+  }
+
+  .timeout-item {
+    background: #1f2937;
+    border-color: #374151;
+  }
+
+  .timeout-handle {
+    color: #f3f4f6;
+  }
+
+  .timeout-expires {
+    color: #9ca3af;
+  }
+
+  .timeout-clear-btn {
+    color: #6b7280;
+  }
+
+  .timeout-clear-btn:hover {
+    background: #7f1d1d;
+    color: #fecaca;
+  }
+
+  .timeout-clear-all-btn {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f3f4f6;
+  }
+
+  .timeout-clear-all-btn:hover {
     background: #4b5563;
   }
 }
@@ -65114,6 +65548,9 @@ div#statusBar.has-feed-map {
         case "S":
           this.openShareMenu(item);
           break;
+        case "!":
+          this.showTimeoutPopup(item);
+          break;
         default:
           if (!isNaN(parseInt(event.key))) {
             this.switchToTab(parseInt(event.key) - 1);
@@ -67039,6 +67476,250 @@ div#statusBar.has-feed-map {
       });
     }
     /**
+     * Parse duration string to milliseconds
+     * @param {string} duration - Duration like '1h', '6h', '1d', '7d', '30d'
+     * @returns {number} Milliseconds
+     */
+    parseDurationToMs(duration) {
+      const match2 = duration.match(/^(\d+)([hd])$/);
+      if (!match2) return 24 * 60 * 60 * 1e3;
+      const value = parseInt(match2[1]);
+      const unit = match2[2];
+      if (unit === "h") return value * 60 * 60 * 1e3;
+      if (unit === "d") return value * 24 * 60 * 60 * 1e3;
+      return 24 * 60 * 60 * 1e3;
+    }
+    /**
+     * Format duration string for display
+     * @param {string} duration - Duration like '1h', '1d'
+     * @returns {string} Human readable like '1 hour', '1 day'
+     */
+    formatDurationLabel(duration) {
+      const labels2 = {
+        "1h": "1 hour",
+        "6h": "6 hours",
+        "12h": "12 hours",
+        "1d": "1 day",
+        "3d": "3 days",
+        "7d": "7 days",
+        "14d": "14 days",
+        "30d": "30 days"
+      };
+      return labels2[duration] || duration;
+    }
+    /**
+     * Show popup to confirm timing out an author
+     * @param {jQuery} item - The post element
+     */
+    showTimeoutPopup(item) {
+      $(".bsky-nav-timeout-popup").remove();
+      const handle2 = this.getAuthorHandle(item);
+      if (!handle2) {
+        console.warn("Could not get author handle for timeout");
+        return;
+      }
+      if (this.isTimedOut(handle2)) {
+        this.showRemoveTimeoutPopup(item, handle2);
+        return;
+      }
+      const defaultDuration = this.config.get("timeoutDefaultDuration") || "1d";
+      const durations = ["1h", "6h", "12h", "1d", "3d", "7d", "14d", "30d"];
+      const rect = item[0].getBoundingClientRect();
+      const popup = $(`
+      <div class="bsky-nav-timeout-popup">
+        <div class="bsky-nav-timeout-header">
+          Timeout @${handle2}
+        </div>
+        <div class="bsky-nav-timeout-body">
+          <label class="bsky-nav-timeout-label">
+            Duration:
+            <select class="bsky-nav-timeout-select">
+              ${durations.map((d) => `<option value="${d}" ${d === defaultDuration ? "selected" : ""}>${this.formatDurationLabel(d)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="bsky-nav-timeout-buttons">
+          <button class="bsky-nav-timeout-btn cancel">Cancel</button>
+          <button class="bsky-nav-timeout-btn confirm">Timeout</button>
+        </div>
+      </div>
+    `);
+      popup.css({
+        position: "fixed",
+        top: Math.min(rect.top, window.innerHeight - 200) + "px",
+        left: Math.min(rect.left + 50, window.innerWidth - 250) + "px",
+        zIndex: 10002
+      });
+      $("body").append(popup);
+      popup.find(".bsky-nav-timeout-btn.confirm").on("click", () => {
+        const duration = popup.find(".bsky-nav-timeout-select").val();
+        this.addTimeout(handle2, duration);
+        popup.remove();
+        $(document).off(".timeout");
+      });
+      popup.find(".bsky-nav-timeout-btn.cancel").on("click", () => {
+        popup.remove();
+        $(document).off(".timeout");
+      });
+      setTimeout(() => {
+        $(document).on("mousedown.timeout", (e) => {
+          if (!$(e.target).closest(".bsky-nav-timeout-popup").length) {
+            popup.remove();
+            $(document).off(".timeout");
+          }
+        });
+      }, 100);
+      $(document).on("keydown.timeout", (e) => {
+        if (e.key === "Escape") {
+          popup.remove();
+          $(document).off(".timeout");
+        }
+      });
+    }
+    /**
+     * Show popup to remove an existing timeout
+     * @param {jQuery} item - The post element
+     * @param {string} handle - The author handle
+     */
+    showRemoveTimeoutPopup(item, handle2) {
+      const rect = item[0].getBoundingClientRect();
+      const expiresAt = this.state.timeouts[handle2];
+      const timeRemaining = this.formatTimeRemaining(expiresAt - Date.now());
+      const popup = $(`
+      <div class="bsky-nav-timeout-popup">
+        <div class="bsky-nav-timeout-header">
+          @${handle2} is timed out
+        </div>
+        <div class="bsky-nav-timeout-body">
+          <div class="bsky-nav-timeout-info">
+            Expires in ${timeRemaining}
+          </div>
+        </div>
+        <div class="bsky-nav-timeout-buttons">
+          <button class="bsky-nav-timeout-btn cancel">Keep Timeout</button>
+          <button class="bsky-nav-timeout-btn confirm">Remove Timeout</button>
+        </div>
+      </div>
+    `);
+      popup.css({
+        position: "fixed",
+        top: Math.min(rect.top, window.innerHeight - 200) + "px",
+        left: Math.min(rect.left + 50, window.innerWidth - 250) + "px",
+        zIndex: 10002
+      });
+      $("body").append(popup);
+      popup.find(".bsky-nav-timeout-btn.confirm").on("click", () => {
+        this.removeTimeout(handle2);
+        popup.remove();
+        $(document).off(".timeout");
+      });
+      popup.find(".bsky-nav-timeout-btn.cancel").on("click", () => {
+        popup.remove();
+        $(document).off(".timeout");
+      });
+      setTimeout(() => {
+        $(document).on("mousedown.timeout", (e) => {
+          if (!$(e.target).closest(".bsky-nav-timeout-popup").length) {
+            popup.remove();
+            $(document).off(".timeout");
+          }
+        });
+      }, 100);
+      $(document).on("keydown.timeout", (e) => {
+        if (e.key === "Escape") {
+          popup.remove();
+          $(document).off(".timeout");
+        }
+      });
+    }
+    /**
+     * Format remaining time for display
+     * @param {number} ms - Milliseconds remaining
+     * @returns {string} Human readable time remaining
+     */
+    formatTimeRemaining(ms) {
+      if (ms <= 0) return "expired";
+      const hours = Math.floor(ms / (1e3 * 60 * 60));
+      const days = Math.floor(hours / 24);
+      const remainingHours = hours % 24;
+      if (days > 0) {
+        return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days} day${days > 1 ? "s" : ""}`;
+      }
+      if (hours > 0) {
+        return `${hours} hour${hours > 1 ? "s" : ""}`;
+      }
+      const minutes = Math.floor(ms / (1e3 * 60));
+      return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+    }
+    /**
+     * Add a timeout for an author
+     * @param {string} handle - Author handle
+     * @param {string} duration - Duration string like '1h', '1d'
+     */
+    addTimeout(handle2, duration) {
+      const durationMs = this.parseDurationToMs(duration);
+      const expiresAt = Date.now() + durationMs;
+      const currentTimeouts = this.state.timeouts || {};
+      const newTimeouts = { ...currentTimeouts, [handle2]: expiresAt };
+      this.state.stateManager.updateState({ timeouts: newTimeouts });
+      this.state.stateManager.saveStateImmediately();
+      this.filterItems();
+      this.updateFilterEnforcement();
+      console.log(`Timed out @${handle2} until ${new Date(expiresAt).toLocaleString()}`);
+    }
+    /**
+     * Remove a timeout for an author
+     * @param {string} handle - Author handle
+     */
+    removeTimeout(handle2) {
+      if (!this.state.timeouts) return;
+      const { [handle2]: _removed, ...remainingTimeouts } = this.state.timeouts;
+      this.state.stateManager.updateState({ timeouts: remainingTimeouts });
+      this.state.stateManager.saveStateImmediately();
+      this.filterItems();
+      this.updateFilterEnforcement();
+      console.log(`Removed timeout for @${handle2}`);
+    }
+    /**
+     * Check if an author is currently timed out
+     * @param {string} handle - Author handle
+     * @returns {boolean} True if timed out (does not modify state - use cleanupExpiredTimeouts for cleanup)
+     */
+    isTimedOut(handle2) {
+      if (!this.state.timeouts) {
+        return false;
+      }
+      const expiresAt = this.state.timeouts[handle2];
+      if (!expiresAt) {
+        return false;
+      }
+      return Date.now() < expiresAt;
+    }
+    /**
+     * Clean up all expired timeouts
+     * @returns {number} Number of expired timeouts removed
+     */
+    cleanupExpiredTimeouts() {
+      if (!this.state.timeouts) return 0;
+      const now = Date.now();
+      const currentTimeouts = this.state.timeouts;
+      const activeTimeouts = {};
+      let removed = 0;
+      for (const [handle2, expiresAt] of Object.entries(currentTimeouts)) {
+        if (now < expiresAt) {
+          activeTimeouts[handle2] = expiresAt;
+        } else {
+          removed++;
+          console.log(`Timeout expired for @${handle2}`);
+        }
+      }
+      if (removed > 0) {
+        this.state.stateManager.updateState({ timeouts: activeTimeouts });
+        this.state.stateManager.saveStateImmediately();
+      }
+      return removed;
+    }
+    /**
      * Show dropdown to select which rule category to remove the author from
      * @param {DOMRect} buttonRect - Position rect
      * @param {string} handle - Handle to remove
@@ -67978,7 +68659,10 @@ ${rule}`;
       const threadIndicator = $(element).find("div.r-lchren, div.r-1mhb1uw > svg");
       const avatarDiv = $(element).find('div[data-testid="userAvatarImage"]');
       $(element).parent().parent().addClass("thread");
-      element.style.setProperty("scroll-margin-top", `${this.scrollMargin}px`, "important");
+      const el = element instanceof $ ? element[0] : element.jquery ? element[0] : element;
+      if (el && el.style) {
+        el.style.setProperty("scroll-margin-top", `${this.scrollMargin}px`, "important");
+      }
       if (selected) {
         $(element).parent().parent().addClass("thread-selection-active");
         $(element).parent().parent().removeClass("thread-selection-inactive");
@@ -69352,6 +70036,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this._scrollHandler = this._throttledScrollUpdate.bind(this);
       window.addEventListener("scroll", this._scrollHandler, { passive: true });
       this.updateFilterEnforcement();
+      this._timeoutCleanupInterval = setInterval(() => {
+        const removed = this.cleanupExpiredTimeouts();
+        if (removed > 0) {
+          this.filterItems();
+        }
+      }, 60 * 1e3);
+      this._timeoutClearedHandler = () => this.filterItems();
+      window.addEventListener("bsky-nav-timeout-cleared", this._timeoutClearedHandler);
       const postId = this._savedPostId ?? this.state.focusedPostId;
       const index = this._savedIndex ?? this.state.focusedIndex;
       this.loadItems({ postId, index });
@@ -69367,6 +70059,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this._filterEnforcementInterval) {
         clearInterval(this._filterEnforcementInterval);
         this._filterEnforcementInterval = null;
+      }
+      if (this._timeoutCleanupInterval) {
+        clearInterval(this._timeoutCleanupInterval);
+        this._timeoutCleanupInterval = null;
+      }
+      if (this._timeoutClearedHandler) {
+        window.removeEventListener("bsky-nav-timeout-cleared", this._timeoutClearedHandler);
+        this._timeoutClearedHandler = null;
       }
       if (this._toolbarObserver) {
         this._toolbarObserver.disconnect();
@@ -69638,8 +70338,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         clearInterval(this._filterEnforcementInterval);
         this._filterEnforcementInterval = null;
       }
-      if (this.state.filter) {
+      const hasActiveTimeouts = this.state.timeouts && Object.keys(this.state.timeouts).length > 0;
+      if (this.state.filter || hasActiveTimeouts) {
         this._filterEnforcementInterval = setInterval(() => {
+          if (this.ignoreMouseMovement) return;
           const unfiltered = $(".item").not(".filtered").filter((i, item) => {
             return $(item).parents(".item").length === 0;
           });
@@ -69656,7 +70358,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               }
             });
           }
-          if (itemsFiltered) {
+          if (itemsFiltered && !this.ignoreMouseMovement) {
             this.updateScrollPosition(true);
           }
         }, 200);
@@ -69781,13 +70483,34 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       setTimeout(() => this.saveSearchBtn.removeClass("save-search-btn-saved"), 300);
     }
     /**
+     * Gets the reposter handle from a reposted item
+     * @param {jQuery} $item - The feed item element wrapped in jQuery
+     * @returns {string|null} Reposter handle or null if not a repost
+     */
+    getReposterHandle($item) {
+      const repostLink = $item.closest(".thread").find('a[aria-label*="Reposted by"]').first();
+      if (!repostLink.length) return null;
+      const href = repostLink.attr("href") || "";
+      const match2 = href.match(/\/profile\/([^/]+)/);
+      return match2 ? match2[1] : null;
+    }
+    /**
      * Determines if an item should be shown based on read status and filter rules.
      * @param {Element} item - The feed item element
      * @param {Element} _thread - The parent thread element (unused)
      * @returns {boolean} True if item should be shown, false if filtered out
      */
     filterItem(item, _thread) {
-      if (this.state.feedHideRead && $(item).hasClass("item-read")) {
+      const $item = $(item);
+      const handle2 = this.getAuthorHandle($item);
+      if (handle2 && this.isTimedOut(handle2)) {
+        return false;
+      }
+      const reposterHandle = this.getReposterHandle($item);
+      if (reposterHandle && this.isTimedOut(reposterHandle)) {
+        return false;
+      }
+      if (this.state.feedHideRead && $item.hasClass("item-read")) {
         return false;
       }
       if (!this.state.filter) {

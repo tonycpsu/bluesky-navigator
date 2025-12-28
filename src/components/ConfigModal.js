@@ -2,6 +2,7 @@
 
 import { announceToScreenReader, getAnimationDuration } from '../utils.js';
 import constants from '../constants.js';
+import { state } from '../state.js';
 
 /**
  * Configuration schema organized by tabs
@@ -548,6 +549,18 @@ const CONFIG_SCHEMA = {
       },
     },
   },
+  Timeouts: {
+    icon: '⏱️',
+    fields: {
+      timeoutDefaultDuration: {
+        label: 'Default timeout duration',
+        type: 'select',
+        options: ['1h', '6h', '12h', '1d', '3d', '7d', '14d', '30d'],
+        default: '1d',
+        help: 'Default duration when timing out an author (! hotkey)',
+      },
+    },
+  },
   Advanced: {
     icon: '⚙️',
     collapsed: true,
@@ -932,7 +945,7 @@ export class ConfigModal {
         <div class="config-panel ${name === this.activeTab ? 'active' : ''}"
              role="tabpanel"
              data-panel="${name}">
-          ${name === 'Rules' ? this.renderRulesPanel() : this.renderFields(schema.fields)}
+          ${name === 'Rules' ? this.renderRulesPanel() : name === 'Timeouts' ? this.renderTimeoutsPanel() : this.renderFields(schema.fields)}
         </div>
       `
       )
@@ -1264,6 +1277,162 @@ export class ConfigModal {
         </div>
       </div>
     `;
+  }
+
+  /**
+   * Render the Timeouts panel
+   */
+  renderTimeoutsPanel() {
+    const defaultDuration = this.config.get('timeoutDefaultDuration') || '1d';
+    const timeouts = state.timeouts || {};
+    const activeTimeouts = Object.entries(timeouts)
+      .filter(([, expiresAt]) => Date.now() < expiresAt)
+      .sort((a, b) => a[1] - b[1]); // Sort by expiration time
+
+    return `
+      <div class="timeouts-panel">
+        <div class="config-field">
+          <label class="config-field-label">Default timeout duration</label>
+          <select id="config-timeoutDefaultDuration" name="timeoutDefaultDuration" class="config-field-input">
+            ${['1h', '6h', '12h', '1d', '3d', '7d', '14d', '30d'].map(d => `
+              <option value="${d}" ${d === defaultDuration ? 'selected' : ''}>${this.formatDurationLabel(d)}</option>
+            `).join('')}
+          </select>
+          <span class="config-field-help">Default duration when timing out an author (! hotkey)</span>
+        </div>
+
+        <div class="timeouts-active-section">
+          <h3 class="timeouts-section-title">Active Timeouts</h3>
+          ${activeTimeouts.length === 0 ? `
+            <div class="timeouts-empty">
+              No active timeouts. Press <kbd>!</kbd> on a post to timeout an author.
+            </div>
+          ` : `
+            <div class="timeouts-list">
+              ${activeTimeouts.map(([handle, expiresAt]) => `
+                <div class="timeout-item" data-handle="${this.escapeHtml(handle)}">
+                  <span class="timeout-handle">@${this.escapeHtml(handle)}</span>
+                  <span class="timeout-expires">expires in ${this.formatTimeRemaining(expiresAt - Date.now())}</span>
+                  <button type="button" class="timeout-clear-btn" data-handle="${this.escapeHtml(handle)}"
+                          title="Remove timeout">✕</button>
+                </div>
+              `).join('')}
+            </div>
+            <button type="button" class="timeout-clear-all-btn">Clear All Timeouts</button>
+          `}
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Format duration string for display
+   */
+  formatDurationLabel(duration) {
+    const labels = {
+      '1h': '1 hour',
+      '6h': '6 hours',
+      '12h': '12 hours',
+      '1d': '1 day',
+      '3d': '3 days',
+      '7d': '7 days',
+      '14d': '14 days',
+      '30d': '30 days',
+    };
+    return labels[duration] || duration;
+  }
+
+  /**
+   * Format remaining time for display
+   */
+  formatTimeRemaining(ms) {
+    if (ms <= 0) return 'expired';
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+
+    if (days > 0) {
+      return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days} day${days > 1 ? 's' : ''}`;
+    }
+    if (hours > 0) {
+      return `${hours} hour${hours > 1 ? 's' : ''}`;
+    }
+    const minutes = Math.floor(ms / (1000 * 60));
+    return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+  }
+
+  /**
+   * Refresh the Timeouts panel
+   */
+  refreshTimeoutsPanel() {
+    const panel = this.modalEl.querySelector('[data-panel="Timeouts"]');
+    if (panel) {
+      panel.innerHTML = this.renderTimeoutsPanel();
+      this.attachTimeoutsEventListeners();
+    }
+  }
+
+  /**
+   * Attach event listeners for the Timeouts panel
+   */
+  attachTimeoutsEventListeners() {
+    const panel = this.modalEl.querySelector('.timeouts-panel');
+    if (!panel) return;
+
+    // Duration select change
+    const durationSelect = panel.querySelector('#config-timeoutDefaultDuration');
+    if (durationSelect) {
+      durationSelect.addEventListener('change', (e) => {
+        this.handleInputChange(e);
+      });
+    }
+
+    // Individual timeout clear buttons
+    panel.querySelectorAll('.timeout-clear-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const handle = e.target.dataset.handle;
+        this.clearTimeout(handle);
+      });
+    });
+
+    // Clear all button
+    const clearAllBtn = panel.querySelector('.timeout-clear-all-btn');
+    if (clearAllBtn) {
+      clearAllBtn.addEventListener('click', () => {
+        if (confirm('Clear all active timeouts?')) {
+          this.clearAllTimeouts();
+        }
+      });
+    }
+  }
+
+  /**
+   * Clear a single timeout
+   */
+  clearTimeout(handle) {
+    // Create new timeouts object without this handle
+    const { [handle]: _removed, ...remainingTimeouts } = state.timeouts || {};
+
+    // Use updateState for proper state persistence
+    state.stateManager.updateState({ timeouts: remainingTimeouts });
+    state.stateManager.saveStateImmediately();
+    this.refreshTimeoutsPanel();
+
+    // Dispatch event to notify handlers to refresh filter
+    window.dispatchEvent(new CustomEvent('bsky-nav-timeout-cleared', { detail: { handle } }));
+  }
+
+  /**
+   * Clear all timeouts
+   */
+  clearAllTimeouts() {
+    // Use updateState for proper state persistence
+    state.stateManager.updateState({ timeouts: {} });
+    state.stateManager.saveStateImmediately();
+    this.refreshTimeoutsPanel();
+
+    // Dispatch event to notify handlers to refresh filter
+    window.dispatchEvent(new CustomEvent('bsky-nav-timeout-cleared', { detail: { all: true } }));
   }
 
   /**
@@ -1977,6 +2146,11 @@ export class ConfigModal {
     this.modalEl.querySelectorAll('.config-panel').forEach((panel) => {
       panel.classList.toggle('active', panel.dataset.panel === tabName);
     });
+
+    // Attach event listeners for special panels
+    if (tabName === 'Timeouts') {
+      this.attachTimeoutsEventListeners();
+    }
   }
 
   handleInputChange(e) {

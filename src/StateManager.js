@@ -192,10 +192,6 @@ export class StateManager {
   async loadState(defaultState) {
     try {
       const savedState = JSON.parse(GM_getValue(this.key, '{}'));
-      console.log('[StateManager] Loaded state:', {
-        focusedPostId: savedState.focusedPostId,
-        focusedIndex: savedState.focusedIndex,
-      });
       const localLastUpdated = savedState.lastUpdated;
 
       if (this.config.stateSyncEnabled) {
@@ -210,13 +206,13 @@ export class StateManager {
           if (localTime > remoteTime) {
             return { ...defaultState, ...savedState };
           } else {
-            // Preserve filter from local state - it's session-only and shouldn't be synced
-            const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
+            // Preserve filter and timeouts from local state - they're session/device-specific
+            const { filter: remoteFilter, timeouts: remoteTimeouts, ...remoteWithoutLocalFields } = remoteState;
 
             // Merge seen entries from both local and remote to prevent data loss
             // Local may have entries not yet synced to remote, remote may have entries from other sessions
             const mergedSeen = { ...(savedState.seen || {}) };
-            const remoteSeen = remoteWithoutFilter.seen || {};
+            const remoteSeen = remoteWithoutLocalFields.seen || {};
             for (const [postId, timestamp] of Object.entries(remoteSeen)) {
               // Take remote entry if local doesn't have it, or if remote is newer
               if (!mergedSeen[postId] || new Date(timestamp) > new Date(mergedSeen[postId])) {
@@ -226,8 +222,9 @@ export class StateManager {
 
             return {
               ...defaultState,
-              ...remoteWithoutFilter,
+              ...remoteWithoutLocalFields,
               filter: savedState.filter || defaultState.filter || '',
+              timeouts: savedState.timeouts || defaultState.timeouts || {},
               seen: mergedSeen
             };
           }
@@ -330,13 +327,6 @@ export class StateManager {
     // Exclude non-serializable fields (objects with circular refs or complex instances)
     const { listCache, rules, ...serializableState } = this.state;
     const stateJson = JSON.stringify(serializableState);
-    const sizeKB = (stateJson.length / 1024).toFixed(2);
-    console.log('[StateManager] Saving state:', {
-      focusedPostId: this.state.focusedPostId,
-      focusedIndex: this.state.focusedIndex,
-      sizeKB: `${sizeKB} KB`,
-      seenCount: Object.keys(this.state.seen || {}).length,
-    });
     GM_setValue(this.key, stateJson);
     this.isLocalStateDirty = false; // Reset dirty flag
     this.notifyListeners();

@@ -5605,6 +5605,302 @@ div#statusBar.has-feed-map {
 }
 
 /* =============================================================================
+   Timeout Popup
+   ============================================================================= */
+
+.bsky-nav-timeout-popup {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 16px;
+  min-width: 240px;
+  font-family: InterVariable, system-ui, -apple-system, sans-serif;
+}
+
+.bsky-nav-timeout-header {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 12px;
+}
+
+.bsky-nav-timeout-body {
+  margin-bottom: 16px;
+}
+
+.bsky-nav-timeout-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.bsky-nav-timeout-select {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: white;
+  font-size: 13px;
+  color: #1f2937;
+  cursor: pointer;
+}
+
+.bsky-nav-timeout-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.bsky-nav-timeout-info {
+  font-size: 13px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.bsky-nav-timeout-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.bsky-nav-timeout-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.bsky-nav-timeout-btn:active {
+  transform: scale(0.98);
+}
+
+.bsky-nav-timeout-btn.cancel {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.bsky-nav-timeout-btn.cancel:hover {
+  background: #e5e7eb;
+}
+
+.bsky-nav-timeout-btn.confirm {
+  background: #ef4444;
+  color: white;
+}
+
+.bsky-nav-timeout-btn.confirm:hover {
+  background: #dc2626;
+}
+
+/* Dark mode styles */
+@media (prefers-color-scheme: dark) {
+  .bsky-nav-timeout-popup {
+    background: #1f2937;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+
+  .bsky-nav-timeout-header {
+    color: #f9fafb;
+  }
+
+  .bsky-nav-timeout-label {
+    color: #d1d5db;
+  }
+
+  .bsky-nav-timeout-select {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .bsky-nav-timeout-select:focus {
+    border-color: #3b82f6;
+  }
+
+  .bsky-nav-timeout-info {
+    color: #9ca3af;
+  }
+
+  .bsky-nav-timeout-btn.cancel {
+    background: #374151;
+    color: #f9fafb;
+  }
+
+  .bsky-nav-timeout-btn.cancel:hover {
+    background: #4b5563;
+  }
+
+  .bsky-nav-timeout-btn.confirm {
+    background: #dc2626;
+  }
+
+  .bsky-nav-timeout-btn.confirm:hover {
+    background: #b91c1c;
+  }
+}
+
+/* =============================================================================
+   Timeouts Panel (Config Modal)
+   ============================================================================= */
+
+.timeouts-panel {
+  padding: 0;
+}
+
+.timeouts-active-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.timeouts-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 12px 0;
+}
+
+.timeouts-empty {
+  color: #6b7280;
+  font-size: 13px;
+  padding: 16px;
+  text-align: center;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.timeouts-empty kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-family: monospace;
+  font-size: 12px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+}
+
+.timeouts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.timeout-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.timeout-handle {
+  font-weight: 500;
+  color: #1f2937;
+  flex: 1;
+}
+
+.timeout-expires {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.timeout-clear-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.timeout-clear-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.timeout-clear-all-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #d1d5db;
+  background: white;
+  color: #374151;
+  transition: background 0.15s;
+}
+
+.timeout-clear-all-btn:hover {
+  background: #f3f4f6;
+}
+
+/* Dark mode styles for timeouts panel */
+@media (prefers-color-scheme: dark) {
+  .timeouts-active-section {
+    border-top-color: #374151;
+  }
+
+  .timeouts-section-title {
+    color: #f3f4f6;
+  }
+
+  .timeouts-empty {
+    background: #1f2937;
+    color: #9ca3af;
+  }
+
+  .timeouts-empty kbd {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f3f4f6;
+  }
+
+  .timeout-item {
+    background: #1f2937;
+    border-color: #374151;
+  }
+
+  .timeout-handle {
+    color: #f3f4f6;
+  }
+
+  .timeout-expires {
+    color: #9ca3af;
+  }
+
+  .timeout-clear-btn {
+    color: #6b7280;
+  }
+
+  .timeout-clear-btn:hover {
+    background: #7f1d1d;
+    color: #fecaca;
+  }
+
+  .timeout-clear-all-btn {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f3f4f6;
+  }
+
+  .timeout-clear-all-btn:hover {
+    background: #4b5563;
+  }
+}
+
+/* =============================================================================
    Custom Profile Hover Card (for sidecar replies)
    ============================================================================= */
 

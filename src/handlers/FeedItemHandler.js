@@ -957,6 +957,18 @@ export class FeedItemHandler extends ItemHandler {
     // Start filter enforcement if a filter is active
     this.updateFilterEnforcement();
 
+    // Start timeout cleanup interval (every minute)
+    this._timeoutCleanupInterval = setInterval(() => {
+      const removed = this.cleanupExpiredTimeouts();
+      if (removed > 0) {
+        this.filterItems();
+      }
+    }, 60 * 1000);
+
+    // Listen for timeout cleared events from config modal
+    this._timeoutClearedHandler = () => this.filterItems();
+    window.addEventListener('bsky-nav-timeout-cleared', this._timeoutClearedHandler);
+
     // Re-scan DOM for items when reactivating (e.g., after navigating back from post detail)
     // This ensures this.items array is fresh and not holding stale DOM references
     // Priority: in-memory saved values (from deactivate) > persisted state (from page reload)
@@ -983,6 +995,18 @@ export class FeedItemHandler extends ItemHandler {
     if (this._filterEnforcementInterval) {
       clearInterval(this._filterEnforcementInterval);
       this._filterEnforcementInterval = null;
+    }
+
+    // Stop timeout cleanup interval
+    if (this._timeoutCleanupInterval) {
+      clearInterval(this._timeoutCleanupInterval);
+      this._timeoutCleanupInterval = null;
+    }
+
+    // Remove timeout cleared event listener
+    if (this._timeoutClearedHandler) {
+      window.removeEventListener('bsky-nav-timeout-cleared', this._timeoutClearedHandler);
+      this._timeoutClearedHandler = null;
     }
 
     // Disconnect any pending toolbar observer
@@ -1319,9 +1343,13 @@ export class FeedItemHandler extends ItemHandler {
       this._filterEnforcementInterval = null;
     }
 
-    // If filter is active, start periodic enforcement
-    if (this.state.filter) {
+    // If filter is active or timeouts are active, start periodic enforcement
+    const hasActiveTimeouts = this.state.timeouts && Object.keys(this.state.timeouts).length > 0;
+    if (this.state.filter || hasActiveTimeouts) {
       this._filterEnforcementInterval = setInterval(() => {
+        // Skip enforcement during navigation/scrolling to avoid interference
+        if (this.ignoreMouseMovement) return;
+
         // Find top-level items without .filtered class that should be filtered
         // Skip embedded/quoted posts (nested inside another .item)
         const unfiltered = $('.item').not('.filtered').filter((i, item) => {
@@ -1340,8 +1368,8 @@ export class FeedItemHandler extends ItemHandler {
             }
           });
         }
-        // Update feed map if any items were filtered
-        if (itemsFiltered) {
+        // Update feed map if any items were filtered (skip during navigation)
+        if (itemsFiltered && !this.ignoreMouseMovement) {
           this.updateScrollPosition(true);
         }
       }, 200); // Check every 200ms
@@ -1498,13 +1526,42 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   /**
+   * Gets the reposter handle from a reposted item
+   * @param {jQuery} $item - The feed item element wrapped in jQuery
+   * @returns {string|null} Reposter handle or null if not a repost
+   */
+  getReposterHandle($item) {
+    const repostLink = $item.closest('.thread').find('a[aria-label*="Reposted by"]').first();
+    if (!repostLink.length) return null;
+
+    // Extract handle from href (format: /profile/handle or /profile/did)
+    const href = repostLink.attr('href') || '';
+    const match = href.match(/\/profile\/([^/]+)/);
+    return match ? match[1] : null;
+  }
+
+  /**
    * Determines if an item should be shown based on read status and filter rules.
    * @param {Element} item - The feed item element
    * @param {Element} _thread - The parent thread element (unused)
    * @returns {boolean} True if item should be shown, false if filtered out
    */
   filterItem(item, _thread) {
-    if (this.state.feedHideRead && $(item).hasClass('item-read')) {
+    const $item = $(item);
+
+    // Check if author is timed out
+    const handle = this.getAuthorHandle($item);
+    if (handle && this.isTimedOut(handle)) {
+      return false;
+    }
+
+    // Check if reposter is timed out (for reposts)
+    const reposterHandle = this.getReposterHandle($item);
+    if (reposterHandle && this.isTimedOut(reposterHandle)) {
+      return false;
+    }
+
+    if (this.state.feedHideRead && $item.hasClass('item-read')) {
       return false;
     }
 

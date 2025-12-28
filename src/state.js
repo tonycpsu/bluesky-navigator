@@ -7,6 +7,7 @@ const DEFAULT_STATE = {
   blocks: { all: [], recent: [] },
   feedSortReverse: false,
   feedHideRead: false,
+  timeouts: {}, // { handle: expiresAtTimestamp }
 };
 
 let stateManager;

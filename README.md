@@ -158,7 +158,7 @@ Press `?` to show the keyboard shortcuts overlay at any time.
 Dynamic Post Filtering
 ----------------------
 
-The text box at the right of the toolbar allows you to filter posts using search
+The text box at the left of the toolbar allows you to filter posts using search
 terms.
 
 A plain search string will be interpreted as a search of words/phrases in either

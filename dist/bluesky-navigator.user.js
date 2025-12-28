@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+592.17454450
+// @version     1.0.31+593.4d68bde8
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -348,19 +348,26 @@
             if (localTime > remoteTime) {
               return { ...defaultState, ...savedState };
             } else {
-              const { filter: remoteFilter, timeouts: remoteTimeouts, ...remoteWithoutLocalFields } = remoteState;
+              const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
               const mergedSeen = { ...savedState.seen || {} };
-              const remoteSeen = remoteWithoutLocalFields.seen || {};
+              const remoteSeen = remoteWithoutFilter.seen || {};
               for (const [postId, timestamp] of Object.entries(remoteSeen)) {
                 if (!mergedSeen[postId] || new Date(timestamp) > new Date(mergedSeen[postId])) {
                   mergedSeen[postId] = timestamp;
                 }
               }
+              const mergedTimeouts = { ...savedState.timeouts || {} };
+              const remoteTimeouts = remoteWithoutFilter.timeouts || {};
+              for (const [handle2, expiresAt] of Object.entries(remoteTimeouts)) {
+                if (!mergedTimeouts[handle2] || expiresAt > mergedTimeouts[handle2]) {
+                  mergedTimeouts[handle2] = expiresAt;
+                }
+              }
               return {
                 ...defaultState,
-                ...remoteWithoutLocalFields,
+                ...remoteWithoutFilter,
                 filter: savedState.filter || defaultState.filter || "",
-                timeouts: savedState.timeouts || defaultState.timeouts || {},
+                timeouts: mergedTimeouts,
                 seen: mergedSeen
               };
             }
@@ -474,11 +481,12 @@
         }
         this.setSyncStatus("pending");
         const { filter, seen, listCache, rules, ...stateToSync } = this.state;
+        stateToSync.created_at = (/* @__PURE__ */ new Date()).toISOString();
         const stateJson = JSON.stringify(stateToSync);
         const stateSize = (stateJson.length / 1024).toFixed(2);
         console.log(`[StateManager] Saving remote state: ${stateSize} KB (excluding seen)`);
         await this.executeRemoteQuery(
-          `UPSERT state:current MERGE {${stateJson.slice(1, -1)}, created_at: time::now()}`,
+          `UPSERT state:current CONTENT ${stateJson}`,
           "success"
         );
         this.isRemoteSyncPending = false;
@@ -588,8 +596,9 @@
           "Authorization": "Basic " + btoa(`${username}:${password}`)
         };
         const { filter, seen, listCache, rules, ...stateToSync } = this.state;
+        stateToSync.created_at = (/* @__PURE__ */ new Date()).toISOString();
         const stateJson = JSON.stringify(stateToSync);
-        const stateQuery = `USE NS ${namespace} DB ${database}; UPSERT state:current MERGE {${stateJson.slice(1, -1)}, created_at: time::now()}`;
+        const stateQuery = `USE NS ${namespace} DB ${database}; UPSERT state:current CONTENT ${stateJson}`;
         const stateSize = (stateJson.length / 1024).toFixed(2);
         console.log(`[StateManager] Saving remote state on unload: ${stateSize} KB (excluding seen)`);
         fetch(sqlUrl, {
@@ -46584,7 +46593,7 @@ if (cid) {
     clearTimeout(handle2) {
       const { [handle2]: _removed, ...remainingTimeouts } = state.timeouts || {};
       state.stateManager.updateState({ timeouts: remainingTimeouts });
-      state.stateManager.saveStateImmediately();
+      state.stateManager.saveStateImmediately(true, true);
       this.refreshTimeoutsPanel();
       window.dispatchEvent(new CustomEvent("bsky-nav-timeout-cleared", { detail: { handle: handle2 } }));
     }
@@ -46593,7 +46602,7 @@ if (cid) {
      */
     clearAllTimeouts() {
       state.stateManager.updateState({ timeouts: {} });
-      state.stateManager.saveStateImmediately();
+      state.stateManager.saveStateImmediately(true, true);
       this.refreshTimeoutsPanel();
       window.dispatchEvent(new CustomEvent("bsky-nav-timeout-cleared", { detail: { all: true } }));
     }
@@ -54955,6 +54964,7 @@ div#statusBar.has-feed-map {
       { keys: ["r"], description: "Reply" },
       { keys: ["+"], description: "Add author to rules" },
       { keys: ["-"], description: "Remove author from rules" },
+      { keys: ["!"], description: "Timeout author" },
       { keys: ["s"], description: "Save/Unsave post" },
       { keys: ["S"], description: "Share menu" },
       { keys: ["i"], description: "Open first link" },
@@ -67662,7 +67672,7 @@ div#statusBar.has-feed-map {
       const currentTimeouts = this.state.timeouts || {};
       const newTimeouts = { ...currentTimeouts, [handle2]: expiresAt };
       this.state.stateManager.updateState({ timeouts: newTimeouts });
-      this.state.stateManager.saveStateImmediately();
+      this.state.stateManager.saveStateImmediately(true, true);
       this.filterItems();
       this.updateFilterEnforcement();
       console.log(`Timed out @${handle2} until ${new Date(expiresAt).toLocaleString()}`);
@@ -67675,7 +67685,7 @@ div#statusBar.has-feed-map {
       if (!this.state.timeouts) return;
       const { [handle2]: _removed, ...remainingTimeouts } = this.state.timeouts;
       this.state.stateManager.updateState({ timeouts: remainingTimeouts });
-      this.state.stateManager.saveStateImmediately();
+      this.state.stateManager.saveStateImmediately(true, true);
       this.filterItems();
       this.updateFilterEnforcement();
       console.log(`Removed timeout for @${handle2}`);
@@ -67715,7 +67725,7 @@ div#statusBar.has-feed-map {
       }
       if (removed > 0) {
         this.state.stateManager.updateState({ timeouts: activeTimeouts });
-        this.state.stateManager.saveStateImmediately();
+        this.state.stateManager.saveStateImmediately(true, true);
       }
       return removed;
     }

@@ -40,6 +40,7 @@ const SHORTCUTS = {
     { keys: ['r'], description: 'Reply' },
     { keys: ['+'], description: 'Add author to rules' },
     { keys: ['-'], description: 'Remove author from rules' },
+    { keys: ['!'], description: 'Timeout author' },
     { keys: ['s'], description: 'Save/Unsave post' },
     { keys: ['S'], description: 'Share menu' },
     { keys: ['i'], description: 'Open first link' },

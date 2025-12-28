@@ -206,13 +206,13 @@ export class StateManager {
           if (localTime > remoteTime) {
             return { ...defaultState, ...savedState };
           } else {
-            // Preserve filter and timeouts from local state - they're session/device-specific
-            const { filter: remoteFilter, timeouts: remoteTimeouts, ...remoteWithoutLocalFields } = remoteState;
+            // Preserve filter from local state - it's session/device-specific
+            const { filter: remoteFilter, ...remoteWithoutFilter } = remoteState;
 
             // Merge seen entries from both local and remote to prevent data loss
             // Local may have entries not yet synced to remote, remote may have entries from other sessions
             const mergedSeen = { ...(savedState.seen || {}) };
-            const remoteSeen = remoteWithoutLocalFields.seen || {};
+            const remoteSeen = remoteWithoutFilter.seen || {};
             for (const [postId, timestamp] of Object.entries(remoteSeen)) {
               // Take remote entry if local doesn't have it, or if remote is newer
               if (!mergedSeen[postId] || new Date(timestamp) > new Date(mergedSeen[postId])) {
@@ -220,11 +220,21 @@ export class StateManager {
               }
             }
 
+            // Merge timeouts from both local and remote
+            // Take the later expiration time for each handle
+            const mergedTimeouts = { ...(savedState.timeouts || {}) };
+            const remoteTimeouts = remoteWithoutFilter.timeouts || {};
+            for (const [handle, expiresAt] of Object.entries(remoteTimeouts)) {
+              if (!mergedTimeouts[handle] || expiresAt > mergedTimeouts[handle]) {
+                mergedTimeouts[handle] = expiresAt;
+              }
+            }
+
             return {
               ...defaultState,
-              ...remoteWithoutLocalFields,
+              ...remoteWithoutFilter,
               filter: savedState.filter || defaultState.filter || '',
-              timeouts: savedState.timeouts || defaultState.timeouts || {},
+              timeouts: mergedTimeouts,
               seen: mergedSeen
             };
           }
@@ -359,11 +369,13 @@ export class StateManager {
       this.setSyncStatus('pending');
       // Exclude session-only fields (filter), seen (synced separately), and non-serializable objects
       const { filter, seen, listCache, rules, ...stateToSync } = this.state;
+      stateToSync.created_at = new Date().toISOString();
       const stateJson = JSON.stringify(stateToSync);
       const stateSize = (stateJson.length / 1024).toFixed(2);
       console.log(`[StateManager] Saving remote state: ${stateSize} KB (excluding seen)`);
+      // Use CONTENT instead of MERGE to fully replace state (MERGE doesn't remove cleared fields)
       await this.executeRemoteQuery(
-        `UPSERT state:current MERGE {${stateJson.slice(1, -1)}, created_at: time::now()}`,
+        `UPSERT state:current CONTENT ${stateJson}`,
         'success'
       );
       this.isRemoteSyncPending = false; // Clear pending flag on success
@@ -506,8 +518,10 @@ export class StateManager {
 
       // Exclude session-only fields (filter), seen (synced separately), and non-serializable objects
       const { filter, seen, listCache, rules, ...stateToSync } = this.state;
+      stateToSync.created_at = new Date().toISOString();
       const stateJson = JSON.stringify(stateToSync);
-      const stateQuery = `USE NS ${namespace} DB ${database}; UPSERT state:current MERGE {${stateJson.slice(1, -1)}, created_at: time::now()}`;
+      // Use CONTENT instead of MERGE to fully replace state (MERGE doesn't remove cleared fields)
+      const stateQuery = `USE NS ${namespace} DB ${database}; UPSERT state:current CONTENT ${stateJson}`;
 
       const stateSize = (stateJson.length / 1024).toFixed(2);
       console.log(`[StateManager] Saving remote state on unload: ${stateSize} KB (excluding seen)`);

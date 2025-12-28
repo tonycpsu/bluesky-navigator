@@ -54,6 +54,8 @@ Features
       cards or via `+` shortcut (supports numeric category selection with 1-9
       keys, Enter to confirm); remove authors with `-` shortcut (shows only
       categories containing the author, removes from backing list if applicable)
+    - **Author Timeouts**: temporarily hide posts from specific authors using
+      the `!` shortcut (1 hour to 30 days, syncs across devices)
     - optionally disable embedded video previews
     - sync read/unread state between multiple browsers via cloud service(s)
     - optionally disable built-in behavior of loading more items when scrolling
@@ -96,6 +98,7 @@ Press `?` to show the keyboard shortcuts overlay at any time.
  | r            | reply to post                                      |
  | +            | add post author to filter rules                    |
  | -            | remove post author from filter rules               |
+ | !            | timeout author (temporarily hide their posts)      |
  | l            | like/unlike post                                   |
  | p            | open repost menu                                   |
  | P            | repost immediately                                 |
@@ -199,7 +202,8 @@ news categories plus an additional author. This matching is not case sensitive.
 **Rule color coding**: When enabled, posts matching rules are visually
 highlighted - author names get a colored background when matching `from` rules,
 and matching phrases in post content are highlighted when matching `content`
-rules. Each category can have its own custom color.
+rules. Each category can have its own custom color. Highlights also apply to
+posts in the sidecar panel.
 
 You can also quickly activate rules using `Alt+1` through `Alt+9` to apply rules
 by their order, `Alt+Shift+1-9` to negate them, or `Alt+0` to clear the filter.
@@ -263,7 +267,10 @@ be positioned at the top toolbar or bottom status bar (or hidden).
 - **Content icons**: Visual indicators for post type (post, reply, repost,
   thread) and media (image, video, embed)
 - **Avatars**: Show user avatars in zoom segments (configurable scale)
-- **Handles**: Show user handles with domain highlighting
+- **Reposter overlay**: For reposts, shows original author's avatar with a
+  small reposter indicator overlay
+- **Handles**: Show user handles with domain highlighting (two-line display
+  with larger username)
 - **Timestamps**: Show relative timestamps in zoom segments
 - **Zoom window**: Shows a magnified view of posts around your current selection
   with smooth scroll animation
@@ -319,6 +326,28 @@ on Bluesky. Requires the AT Protocol agent to be configured.
 **Configuration:**
 Enable in Settings → Notifications. Test mode shows your most recent
 notification on page load to verify the feature is working.
+
+
+Author Timeouts
+---------------
+
+Temporarily hide posts from specific authors for a configurable duration.
+Useful for taking a break from certain accounts without permanently blocking
+or muting them.
+
+**How to use:**
+1. Press `!` on any post to open the timeout popup
+2. Select duration (1 hour to 30 days)
+3. Confirm to start the timeout
+
+**Features:**
+- Hides both posts and reposts from timed-out authors
+- Timeouts sync across devices (when remote sync is enabled)
+- View and manage active timeouts in Settings → Timeouts
+- Timeouts automatically expire after the configured duration
+
+**Configuration:**
+Configure the default timeout duration in Settings → Timeouts.
 
 
 AT Protocol Agent (beta)

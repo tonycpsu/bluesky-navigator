@@ -4504,9 +4504,9 @@ export class ItemHandler extends Handler {
     const currentTimeouts = this.state.timeouts || {};
     const newTimeouts = { ...currentTimeouts, [handle]: expiresAt };
 
-    // Use updateState for proper state persistence
+    // Use updateState for proper state persistence, sync to remote immediately
     this.state.stateManager.updateState({ timeouts: newTimeouts });
-    this.state.stateManager.saveStateImmediately();
+    this.state.stateManager.saveStateImmediately(true, true);
 
     // Trigger filter refresh and start enforcement interval
     this.filterItems();
@@ -4525,9 +4525,9 @@ export class ItemHandler extends Handler {
     // Create new timeouts object without this handle
     const { [handle]: _removed, ...remainingTimeouts } = this.state.timeouts;
 
-    // Use updateState for proper state persistence
+    // Use updateState for proper state persistence, sync to remote immediately
     this.state.stateManager.updateState({ timeouts: remainingTimeouts });
-    this.state.stateManager.saveStateImmediately();
+    this.state.stateManager.saveStateImmediately(true, true);
 
     // Trigger filter refresh and update enforcement (may stop interval if no more timeouts)
     this.filterItems();
@@ -4576,9 +4576,9 @@ export class ItemHandler extends Handler {
     }
 
     if (removed > 0) {
-      // Use updateState for proper state persistence
+      // Use updateState for proper state persistence, sync to remote immediately
       this.state.stateManager.updateState({ timeouts: activeTimeouts });
-      this.state.stateManager.saveStateImmediately();
+      this.state.stateManager.saveStateImmediately(true, true);
     }
 
     return removed;

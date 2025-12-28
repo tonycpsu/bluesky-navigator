@@ -1413,9 +1413,9 @@ export class ConfigModal {
     // Create new timeouts object without this handle
     const { [handle]: _removed, ...remainingTimeouts } = state.timeouts || {};
 
-    // Use updateState for proper state persistence
+    // Use updateState for proper state persistence, sync to remote immediately
     state.stateManager.updateState({ timeouts: remainingTimeouts });
-    state.stateManager.saveStateImmediately();
+    state.stateManager.saveStateImmediately(true, true);
     this.refreshTimeoutsPanel();
 
     // Dispatch event to notify handlers to refresh filter
@@ -1426,9 +1426,9 @@ export class ConfigModal {
    * Clear all timeouts
    */
   clearAllTimeouts() {
-    // Use updateState for proper state persistence
+    // Use updateState for proper state persistence, sync to remote immediately
     state.stateManager.updateState({ timeouts: {} });
-    state.stateManager.saveStateImmediately();
+    state.stateManager.saveStateImmediately(true, true);
     this.refreshTimeoutsPanel();
 
     // Dispatch event to notify handlers to refresh filter

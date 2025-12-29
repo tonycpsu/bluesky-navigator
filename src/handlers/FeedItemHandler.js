@@ -1433,8 +1433,11 @@ export class FeedItemHandler extends ItemHandler {
     // Call parent implementation first
     super.onItemAdded(element);
 
-    // Apply filter to new item if a filter is active
-    if (this.state.filter) {
+    // Check if item should be filtered (timeout, text filter, etc.)
+    // This runs before the debounced loadItems() to immediately hide items
+    // from timed-out authors as they're added
+    const hasActiveTimeouts = this.state.timeouts && Object.keys(this.state.timeouts).length > 0;
+    if (this.state.filter || hasActiveTimeouts) {
       const thread = $(element).closest('.thread');
       const passes = this.filterItem(element, thread);
       if (!passes) {

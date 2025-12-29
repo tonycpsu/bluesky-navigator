@@ -91,7 +91,7 @@ export class Handler {
         this.config.close();
       } else if (event.key === '?') {
         event.preventDefault();
-        this.shortcutOverlay.toggle();
+        this.shortcutOverlay.toggle(this.name);
       }
     }
   }

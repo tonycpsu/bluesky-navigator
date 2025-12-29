@@ -71,7 +71,9 @@ Features
 Keyboard Shortcuts
 ------------------
 
-Press `?` to show the keyboard shortcuts overlay at any time.
+Press `?` to show the keyboard shortcuts overlay at any time. The overlay is
+context-sensitive and shows only shortcuts relevant to the current page (feed,
+post, or profile).
 
 ### Navigation
 
@@ -137,6 +139,9 @@ Press `?` to show the keyboard shortcuts overlay at any time.
  | f            | follow author                                      |
  | F            | unfollow author                                    |
  | L            | add author to list                                 |
+ | M            | mute author                                        |
+ | B            | block author                                       |
+ | R            | report author                                      |
 
 ### Global Navigation
 

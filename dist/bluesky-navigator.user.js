@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+595.8765b840
+// @version     1.0.31+596.ec97b15d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -54930,72 +54930,113 @@ div#statusBar.has-feed-map {
 `;
   const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-section sidecar-parent-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Parent</span>\n    </button>\n    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">\n      <div class="sidecar-parent">\n        <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n        {{> postTemplate parent}}\n      </div>\n    </div>\n  </div>\n  {{/if}}\n  {{#if replies.length}}\n  <div class="sidecar-section sidecar-replies-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Replies ({{replies.length}})</span>\n    </button>\n    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">\n      {{#each replies}}\n      {{> postTemplate this}}\n      {{/each}}\n    </div>\n  </div>\n  {{/if}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this}}\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title="{{alt}}"></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">\n  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">\n      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>\n      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{{text}}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images" style="margin-top: 8px;">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a href="{{uri}}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">\n  <div class="sidecar-embed-external" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; margin-top: 8px; overflow: hidden;">\n    {{#if thumb}}\n    <div class="sidecar-external-thumb" style="width: 100%; max-height: 200px; overflow: hidden;">\n      <img src="{{thumb}}" alt="{{title}}" style="width: 100%; object-fit: cover;" loading="lazy">\n    </div>\n    {{/if}}\n    <div class="sidecar-external-info" style="padding: 12px;">\n      <div class="sidecar-external-domain" style="font-size: 12px; color: rgb(112, 127, 140); margin-bottom: 4px;">{{domain}}</div>\n      <div class="sidecar-external-title" style="font-weight: 600; margin-bottom: 4px;">{{title}}</div>\n      {{#if description}}\n      <div class="sidecar-external-description" style="font-size: 14px; color: rgb(66, 87, 108); line-height: 1.3;">{{description}}</div>\n      {{/if}}\n    </div>\n  </div>\n</a>\n<\/script>\n\n<script id="sidecar-skeleton-template" type="text/x-handlebars-template">\n<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <span class="sr-only">Loading replies...</span>\n</div>\n<\/script>\n';
   const SHORTCUTS = {
-    "Global Navigation": [
-      { keys: ["Alt+H"], description: "Home" },
-      { keys: ["Alt+E"], description: "Explore (Search)" },
-      { keys: ["Alt+S"], description: "Saved" },
-      { keys: ["Alt+N"], description: "Notifications" },
-      { keys: ["Alt+M"], description: "Messages" },
-      { keys: ["Alt+F"], description: "Feeds" },
-      { keys: ["Alt+L"], description: "Lists" },
-      { keys: ["Alt+P"], description: "Profile" },
-      { keys: ["Alt+,"], description: "Settings" },
-      { keys: ["Alt+."], description: "Extension preferences" }
-    ],
-    Navigation: [
-      { keys: ["j", "\u2193"], description: "Next item" },
-      { keys: ["k", "\u2191"], description: "Previous item" },
-      { keys: ["PgDn"], description: "Page down (multiple items)" },
-      { keys: ["PgUp"], description: "Page up (multiple items)" },
-      { keys: ["Home"], description: "Go to first item" },
-      { keys: ["End"], description: "Go to last item" },
-      { keys: ["J"], description: "Next unread item" },
-      { keys: ["g", "g"], description: "Go to first item (vim)" },
-      { keys: ["G"], description: "Go to last item (vim)" },
-      { keys: ["h"], description: "Go back" },
-      { keys: ["\u2190", "\u2192"], description: "Toggle focus (post/replies)" }
-    ],
-    "Post Actions": [
-      { keys: ["o", "Enter"], description: "Open post" },
-      { keys: ["O"], description: "Open inner post" },
-      { keys: ["l"], description: "Like/Unlike" },
-      { keys: ["p"], description: "Repost menu" },
-      { keys: ["P"], description: "Repost immediately" },
-      { keys: ["r"], description: "Reply" },
-      { keys: ["+"], description: "Add author to rules" },
-      { keys: ["-"], description: "Remove author from rules" },
-      { keys: ["!"], description: "Timeout author" },
-      { keys: ["s"], description: "Save/Unsave post" },
-      { keys: ["S"], description: "Share menu" },
-      { keys: ["i"], description: "Open first link" },
-      { keys: ["m"], description: "Toggle media/video" },
-      { keys: ["c"], description: "Screenshot to clipboard" },
-      { keys: ["v"], description: "Full-screen post view" },
-      { keys: ["V"], description: "Reader mode (thread)" },
-      { keys: ["t"], description: "Toggle thread context" },
-      { keys: ["a"], description: "Show author hover card" },
-      { keys: ["A"], description: "Open author profile" }
-    ],
-    "Feed Controls": [
-      { keys: ["/"], description: "Focus search" },
-      { keys: ["u"], description: "Load newer posts" },
-      { keys: ["U"], description: "Load older posts" },
-      { keys: [":"], description: "Toggle sort order" },
-      { keys: ['"'], description: "Toggle hide read" },
-      { keys: [","], description: "Refresh items" },
-      { keys: ["."], description: "Toggle read status" }
-    ],
-    "Quick Filters": [
-      { keys: ["Alt+1-9"], description: "Apply filter rule" },
-      { keys: ["Alt+Shift+1-9"], description: "Negate filter rule" },
-      { keys: ["Alt+0"], description: "Clear filter" }
-    ],
-    Other: [
-      { keys: [";"], description: "Expand sidecar" },
-      { keys: ["1-9"], description: "Switch to tab" },
-      { keys: ["?"], description: "Show/hide this help" },
-      { keys: ["Esc"], description: "Close overlay" }
-    ]
+    "Global Navigation": {
+      contexts: null,
+      // Show in all contexts
+      shortcuts: [
+        { keys: ["Alt+H"], description: "Home" },
+        { keys: ["Alt+E"], description: "Explore (Search)" },
+        { keys: ["Alt+S"], description: "Saved" },
+        { keys: ["Alt+N"], description: "Notifications" },
+        { keys: ["Alt+M"], description: "Messages" },
+        { keys: ["Alt+F"], description: "Feeds" },
+        { keys: ["Alt+L"], description: "Lists" },
+        { keys: ["Alt+P"], description: "Profile" },
+        { keys: ["Alt+,"], description: "Settings" },
+        { keys: ["Alt+."], description: "Extension preferences" }
+      ]
+    },
+    Navigation: {
+      contexts: null,
+      // Show in all contexts
+      shortcuts: [
+        { keys: ["j", "\u2193"], description: "Next item" },
+        { keys: ["k", "\u2191"], description: "Previous item" },
+        { keys: ["PgDn"], description: "Page down (multiple items)" },
+        { keys: ["PgUp"], description: "Page up (multiple items)" },
+        { keys: ["Home"], description: "Go to first item" },
+        { keys: ["End"], description: "Go to last item" },
+        { keys: ["J"], description: "Next unread item" },
+        { keys: ["g", "g"], description: "Go to first item (vim)" },
+        { keys: ["G"], description: "Go to last item (vim)" },
+        { keys: ["h"], description: "Go back" },
+        { keys: ["\u2190", "\u2192"], description: "Toggle focus (post/replies)" }
+      ]
+    },
+    "Post Actions": {
+      contexts: ["feed", "post", "profile"],
+      // Show on pages with posts
+      shortcuts: [
+        { keys: ["o", "Enter"], description: "Open post" },
+        { keys: ["O"], description: "Open inner post" },
+        { keys: ["l"], description: "Like/Unlike" },
+        { keys: ["p"], description: "Repost menu" },
+        { keys: ["P"], description: "Repost immediately" },
+        { keys: ["r"], description: "Reply" },
+        { keys: ["+"], description: "Add author to rules" },
+        { keys: ["-"], description: "Remove author from rules" },
+        { keys: ["!"], description: "Timeout author" },
+        { keys: ["s"], description: "Save/Unsave post" },
+        { keys: ["S"], description: "Share menu" },
+        { keys: ["i"], description: "Open first link" },
+        { keys: ["m"], description: "Toggle media/video" },
+        { keys: ["c"], description: "Screenshot to clipboard" },
+        { keys: ["v"], description: "Full-screen post view" },
+        { keys: ["V"], description: "Reader mode (thread)" },
+        { keys: ["t"], description: "Toggle thread context" },
+        { keys: ["a"], description: "Show author hover card" },
+        { keys: ["A"], description: "Open author profile" }
+      ]
+    },
+    "Feed Controls": {
+      contexts: ["feed", "profile"],
+      // Feed and profile pages have feed controls
+      shortcuts: [
+        { keys: ["/"], description: "Focus search" },
+        { keys: ["u"], description: "Load newer posts" },
+        { keys: ["U"], description: "Load older posts" },
+        { keys: [":"], description: "Toggle sort order" },
+        { keys: ['"'], description: "Toggle hide read" },
+        { keys: [","], description: "Refresh items" },
+        { keys: ["."], description: "Toggle read status" }
+      ]
+    },
+    "Quick Filters": {
+      contexts: ["feed", "profile"],
+      // Filters apply to feeds
+      shortcuts: [
+        { keys: ["Alt+1-9"], description: "Apply filter rule" },
+        { keys: ["Alt+Shift+1-9"], description: "Negate filter rule" },
+        { keys: ["Alt+0"], description: "Clear filter" }
+      ]
+    },
+    "Profile Actions": {
+      contexts: ["profile"],
+      // Only on profile pages
+      shortcuts: [
+        { keys: ["f"], description: "Follow" },
+        { keys: ["F"], description: "Unfollow" },
+        { keys: ["L"], description: "Add to list" },
+        { keys: ["M"], description: "Mute" },
+        { keys: ["B"], description: "Block" },
+        { keys: ["R"], description: "Report" }
+      ]
+    },
+    Other: {
+      contexts: null,
+      // Show in all contexts
+      shortcuts: [
+        { keys: [";"], description: "Expand sidecar" },
+        { keys: ["1-9"], description: "Switch to tab" },
+        { keys: ["?"], description: "Show/hide this help" },
+        { keys: ["Esc"], description: "Close overlay" }
+      ]
+    }
+  };
+  const CONTEXT_NAMES = {
+    feed: "Feed",
+    post: "Post",
+    profile: "Profile"
   };
   let instance$1 = null;
   class ShortcutOverlay {
@@ -55009,23 +55050,27 @@ div#statusBar.has-feed-map {
       this.overlayEl = null;
       this.previousActiveElement = null;
       this.ignoreNextQuestionMark = false;
+      this.currentContext = null;
       instance$1 = this;
     }
     /**
      * Toggle overlay visibility
+     * @param {string} context - The current handler context ('feed', 'post', 'profile')
      */
-    toggle() {
+    toggle(context) {
       if (this.isVisible) {
         this.hide();
       } else {
-        this.show();
+        this.show(context);
       }
     }
     /**
      * Show the overlay
+     * @param {string} context - The current handler context
      */
-    show() {
+    show(context) {
       if (this.isVisible) return;
+      this.currentContext = context;
       this.previousActiveElement = document.activeElement;
       this.isVisible = true;
       this.overlayEl = this.createOverlay();
@@ -55063,6 +55108,7 @@ div#statusBar.has-feed-map {
         }
         this.overlayEl = null;
         this.isVisible = false;
+        this.currentContext = null;
         if (this.previousActiveElement) {
           this.previousActiveElement.focus();
         }
@@ -55079,11 +55125,13 @@ div#statusBar.has-feed-map {
       overlay.setAttribute("role", "dialog");
       overlay.setAttribute("aria-modal", "true");
       overlay.setAttribute("aria-labelledby", "shortcut-overlay-title");
+      const contextName = CONTEXT_NAMES[this.currentContext] || "Page";
+      const title = `Keyboard Shortcuts \u2014 ${contextName}`;
       overlay.innerHTML = `
       <div class="shortcut-overlay-backdrop"></div>
       <div class="shortcut-overlay-content">
         <div class="shortcut-overlay-header">
-          <h2 id="shortcut-overlay-title">Keyboard Shortcuts</h2>
+          <h2 id="shortcut-overlay-title">${title}</h2>
           <button class="shortcut-overlay-close" aria-label="Close">\xD7</button>
         </div>
         <div class="shortcut-overlay-body">
@@ -55099,14 +55147,22 @@ div#statusBar.has-feed-map {
       return overlay;
     }
     /**
-     * Render all shortcut categories
+     * Check if a category should be shown for the current context
+     */
+    shouldShowCategory(category) {
+      const contexts = category.contexts;
+      if (!contexts) return true;
+      return contexts.includes(this.currentContext);
+    }
+    /**
+     * Render all shortcut categories for the current context
      */
     renderCategories() {
-      return Object.entries(SHORTCUTS).map(([category, shortcuts]) => `
+      return Object.entries(SHORTCUTS).filter(([, category]) => this.shouldShowCategory(category)).map(([name, category]) => `
         <div class="shortcut-category">
-          <h3 class="shortcut-category-title">${category}</h3>
+          <h3 class="shortcut-category-title">${name}</h3>
           <dl class="shortcut-list">
-            ${shortcuts.map((s) => this.renderShortcut(s)).join("")}
+            ${category.shortcuts.map((s) => this.renderShortcut(s)).join("")}
           </dl>
         </div>
       `).join("");
@@ -55204,7 +55260,7 @@ div#statusBar.has-feed-map {
           this.config.close();
         } else if (event.key === "?") {
           event.preventDefault();
-          this.shortcutOverlay.toggle();
+          this.shortcutOverlay.toggle(this.name);
         }
       }
     }
@@ -70419,7 +70475,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      */
     onItemAdded(element) {
       super.onItemAdded(element);
-      if (this.state.filter) {
+      const hasActiveTimeouts = this.state.timeouts && Object.keys(this.state.timeouts).length > 0;
+      if (this.state.filter || hasActiveTimeouts) {
         const thread = $(element).closest(".thread");
         const passes = this.filterItem(element, thread);
         if (!passes) {

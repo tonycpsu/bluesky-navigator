@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+598.6597c366
+// @version     1.0.31+599.94487be4
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -53508,7 +53508,7 @@ div#statusBar.has-feed-map {
   background: white;
   border: 1px solid #dce2ea;
   border-radius: 12px;
-  width: 280px;
+  min-width: 320px;
   overflow: hidden;
   font-family: InterVariable, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
@@ -53777,8 +53777,8 @@ div#statusBar.has-feed-map {
 }
 
 .bsky-nav-rules-cancel-btn {
-  flex: 1;
-  padding: 8px 16px;
+  flex-shrink: 0;
+  padding: 6px 12px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   background: #f3f4f6;
@@ -67242,7 +67242,7 @@ div#statusBar.has-feed-map {
             <div class="bsky-nav-rules-lists-loading">Loading lists...</div>
           </div>
           <div class="bsky-nav-rules-dropdown-footer">
-            <button class="bsky-nav-rules-cancel-btn" style="flex: 1;">Cancel</button>
+            <button class="bsky-nav-rules-cancel-btn">Cancel</button>
           </div>
         </div>
         ` : ""}

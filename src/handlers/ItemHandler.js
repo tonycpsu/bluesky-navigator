@@ -3836,7 +3836,7 @@ export class ItemHandler extends Handler {
             <div class="bsky-nav-rules-lists-loading">Loading lists...</div>
           </div>
           <div class="bsky-nav-rules-dropdown-footer">
-            <button class="bsky-nav-rules-cancel-btn" style="flex: 1;">Cancel</button>
+            <button class="bsky-nav-rules-cancel-btn">Cancel</button>
           </div>
         </div>
         ` : ''}

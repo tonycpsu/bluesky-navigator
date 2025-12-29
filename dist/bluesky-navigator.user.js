@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+602.5c7d73f4
+// @version     1.0.31+603.35c84eec
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -48478,14 +48478,6 @@ div#bsky-navigator-toolbar {
     align-items: center;
     width: 100%;
     height: 32px;
-    overflow: visible;
-}
-
-.toolbar-row-1 {
-    border-bottom: 1px solid rgba(192, 192, 192, 0.5);
-}
-
-.toolbar-row-2 {
     gap: 8px;
     padding: 0 8px;
     overflow: visible;
@@ -48494,9 +48486,6 @@ div#bsky-navigator-toolbar {
 @media (prefers-color-scheme: dark) {
     div#bsky-navigator-toolbar {
         background-color: #29333d
-    }
-    .toolbar-row-1 {
-        border-bottom-color: rgba(100, 100, 100, 0.5);
     }
 }
 
@@ -48520,9 +48509,7 @@ div#bsky-navigator-toolbar {
     display: flex;
     align-items: center;
     gap: 4px;
-    margin-left: auto;
     padding: 0 4px;
-    order: 999;
 }
 
 .width-btn {
@@ -51601,6 +51588,7 @@ div#statusBar.has-feed-map {
   position: relative;
   gap: 4px;
   flex: 0 0 auto;
+  margin-left: auto;
   min-width: 150px;
   max-width: 300px;
   z-index: var(--z-toolbar);
@@ -69810,16 +69798,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.feedMapWrapper.append(this.feedMapZoomContainer);
         this.zoomWindowStart = null;
       }
-      this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1"/>`);
-      $(this.toolbarDiv).append(this.toolbarRow1);
+      this.toolbarRow = $(`<div class="toolbar-row"/>`);
+      $(this.toolbarDiv).append(this.toolbarRow);
       this.topLoadIndicator = $(`
 <div id="topLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
 </div>`);
-      $(this.toolbarRow1).append(this.topLoadIndicator);
+      $(this.toolbarRow).append(this.topLoadIndicator);
       this.sortIndicator = $(
         `<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[+this.state.feedSortReverse]}"/></div>`
       );
-      $(this.toolbarRow1).append(this.sortIndicator);
+      $(this.toolbarRow).append(this.sortIndicator);
       $(".indicator-image path").attr("fill", "currentColor");
       $("#sortIndicator").on("click", (event) => {
         event.preventDefault();
@@ -69828,15 +69816,29 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.filterIndicator = $(
         `<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[+this.state.feedHideRead]}"/></div>`
       );
-      $(this.toolbarRow1).append(this.filterIndicator);
+      $(this.toolbarRow).append(this.filterIndicator);
       $("#filterIndicator").on("click", (event) => {
         event.preventDefault();
         this.toggleHideRead();
       });
-      this.toolbarRow2 = $(`<div class="toolbar-row toolbar-row-2"/>`);
-      $(this.toolbarDiv).append(this.toolbarRow2);
+      this.widthControls = $(`
+      <div id="widthControls" class="width-controls">
+        <button id="narrowWidth" title="Narrow content" class="width-btn">\u2212</button>
+        <span id="widthDisplay" class="width-display">${this.config.get("postWidthDesktop") || 600}</span>
+        <button id="widenWidth" title="Widen content" class="width-btn">+</button>
+      </div>
+    `);
+      $(this.toolbarRow).append(this.widthControls);
+      $("#narrowWidth").on("click", (event) => {
+        event.preventDefault();
+        this.adjustContentWidth(-50);
+      });
+      $("#widenWidth").on("click", (event) => {
+        event.preventDefault();
+        this.adjustContentWidth(50);
+      });
       this.searchWrapper = $(`<div class="search-wrapper"></div>`);
-      $(this.toolbarRow2).append(this.searchWrapper);
+      $(this.toolbarRow).append(this.searchWrapper);
       this.savedSearchesBtn = $(`
       <button id="saved-searches-btn" class="saved-searches-btn" title="Saved searches" aria-label="Saved searches" aria-haspopup="listbox">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -69974,24 +69976,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           this.commitFilter($(this.searchField).val());
         }, 0);
       });
-      if (this.config.get("hideRightSidebar")) {
-        this.widthControls = $(`
-        <div id="widthControls" class="width-controls">
-          <button id="narrowWidth" title="Narrow content" class="width-btn">\u2212</button>
-          <span id="widthDisplay" class="width-display">${this.config.get("postWidthDesktop") || 600}</span>
-          <button id="widenWidth" title="Widen content" class="width-btn">+</button>
-        </div>
-      `);
-        $(this.toolbarRow2).append(this.widthControls);
-        $("#narrowWidth").on("click", (event) => {
-          event.preventDefault();
-          this.adjustContentWidth(-50);
-        });
-        $("#widenWidth").on("click", (event) => {
-          event.preventDefault();
-          this.adjustContentWidth(50);
-        });
-      }
       if (indicatorPosition === "Top toolbar" && this.feedMapWrapper) {
         $(this.toolbarDiv).append(this.feedMapWrapper);
         this.setupScrollIndicatorZoomClick();
@@ -70994,7 +70978,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       let breadcrumb = $("#bsky-navigator-breadcrumb");
       if (!breadcrumb.length) {
         breadcrumb = $(`<nav id="bsky-navigator-breadcrumb" class="breadcrumb" aria-label="Current location"></nav>`);
-        $(".toolbar-row-2").append(breadcrumb);
+        $(".toolbar-row").append(breadcrumb);
       }
       if (!this.selectedItem || !this.items.length) {
         breadcrumb.empty();

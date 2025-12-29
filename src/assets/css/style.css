@@ -181,14 +181,6 @@ div#bsky-navigator-toolbar {
     align-items: center;
     width: 100%;
     height: 32px;
-    overflow: visible;
-}
-
-.toolbar-row-1 {
-    border-bottom: 1px solid rgba(192, 192, 192, 0.5);
-}
-
-.toolbar-row-2 {
     gap: 8px;
     padding: 0 8px;
     overflow: visible;
@@ -197,9 +189,6 @@ div#bsky-navigator-toolbar {
 @media (prefers-color-scheme: dark) {
     div#bsky-navigator-toolbar {
         background-color: #29333d
-    }
-    .toolbar-row-1 {
-        border-bottom-color: rgba(100, 100, 100, 0.5);
     }
 }
 
@@ -223,9 +212,7 @@ div#bsky-navigator-toolbar {
     display: flex;
     align-items: center;
     gap: 4px;
-    margin-left: auto;
     padding: 0 4px;
-    order: 999;
 }
 
 .width-btn {
@@ -3304,6 +3291,7 @@ div#statusBar.has-feed-map {
   position: relative;
   gap: 4px;
   flex: 0 0 auto;
+  margin-left: auto;
   min-width: 150px;
   max-width: 300px;
   z-index: var(--z-toolbar);

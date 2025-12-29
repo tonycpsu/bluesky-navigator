@@ -428,41 +428,60 @@ export class FeedItemHandler extends ItemHandler {
       this.zoomWindowStart = null;
     }
 
-    // First row: icons
-    this.toolbarRow1 = $(`<div class="toolbar-row toolbar-row-1"/>`);
-    $(this.toolbarDiv).append(this.toolbarRow1);
+    // Single toolbar row: [load] [sort] [show all/new] [width] [filters]
+    this.toolbarRow = $(`<div class="toolbar-row"/>`);
+    $(this.toolbarDiv).append(this.toolbarRow);
 
+    // Load older/newer indicator
     this.topLoadIndicator = $(`
 <div id="topLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
 </div>`);
-    $(this.toolbarRow1).append(this.topLoadIndicator);
+    $(this.toolbarRow).append(this.topLoadIndicator);
 
+    // Sort indicator
     this.sortIndicator = $(
       `<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[+this.state.feedSortReverse]}"/></div>`
     );
-    $(this.toolbarRow1).append(this.sortIndicator);
+    $(this.toolbarRow).append(this.sortIndicator);
     $('.indicator-image path').attr('fill', 'currentColor');
     $('#sortIndicator').on('click', (event) => {
       event.preventDefault();
       this.toggleSortOrder();
     });
 
+    // Show all/unread filter indicator
     this.filterIndicator = $(
       `<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[+this.state.feedHideRead]}"/></div>`
     );
-    $(this.toolbarRow1).append(this.filterIndicator);
+    $(this.toolbarRow).append(this.filterIndicator);
     $('#filterIndicator').on('click', (event) => {
       event.preventDefault();
       this.toggleHideRead();
     });
 
-    // Second row: search, filter pill, breadcrumbs
-    this.toolbarRow2 = $(`<div class="toolbar-row toolbar-row-2"/>`);
-    $(this.toolbarDiv).append(this.toolbarRow2);
+    // Width controls
+    this.widthControls = $(`
+      <div id="widthControls" class="width-controls">
+        <button id="narrowWidth" title="Narrow content" class="width-btn">−</button>
+        <span id="widthDisplay" class="width-display">${this.config.get('postWidthDesktop') || 600}</span>
+        <button id="widenWidth" title="Widen content" class="width-btn">+</button>
+      </div>
+    `);
+    $(this.toolbarRow).append(this.widthControls);
 
-    // Search wrapper with saved searches
+    $('#narrowWidth').on('click', (event) => {
+      event.preventDefault();
+      this.adjustContentWidth(-50);
+    });
+
+    $('#widenWidth').on('click', (event) => {
+      event.preventDefault();
+      this.adjustContentWidth(50);
+    });
+
+    // Search wrapper with saved searches (filters)
     this.searchWrapper = $(`<div class="search-wrapper"></div>`);
-    $(this.toolbarRow2).append(this.searchWrapper);
+    $(this.toolbarRow).append(this.searchWrapper);
 
     // Saved searches dropdown
     this.savedSearchesBtn = $(`
@@ -650,29 +669,7 @@ export class FeedItemHandler extends ItemHandler {
       }, 0);
     });
 
-    // Width controls (only show when hideRightSidebar is enabled)
-    if (this.config.get('hideRightSidebar')) {
-      this.widthControls = $(`
-        <div id="widthControls" class="width-controls">
-          <button id="narrowWidth" title="Narrow content" class="width-btn">−</button>
-          <span id="widthDisplay" class="width-display">${this.config.get('postWidthDesktop') || 600}</span>
-          <button id="widenWidth" title="Widen content" class="width-btn">+</button>
-        </div>
-      `);
-      $(this.toolbarRow2).append(this.widthControls);
-
-      $('#narrowWidth').on('click', (event) => {
-        event.preventDefault();
-        this.adjustContentWidth(-50);
-      });
-
-      $('#widenWidth').on('click', (event) => {
-        event.preventDefault();
-        this.adjustContentWidth(50);
-      });
-    }
-
-    // Append feed maps after toolbar rows (so they appear below)
+    // Append feed maps after toolbar row (so they appear below)
     if (indicatorPosition === 'Top toolbar' && this.feedMapWrapper) {
       $(this.toolbarDiv).append(this.feedMapWrapper);
       this.setupScrollIndicatorZoomClick();
@@ -1977,7 +1974,7 @@ export class FeedItemHandler extends ItemHandler {
     let breadcrumb = $('#bsky-navigator-breadcrumb');
     if (!breadcrumb.length) {
       breadcrumb = $(`<nav id="bsky-navigator-breadcrumb" class="breadcrumb" aria-label="Current location"></nav>`);
-      $('.toolbar-row-2').append(breadcrumb);
+      $('.toolbar-row').append(breadcrumb);
     }
 
     if (!this.selectedItem || !this.items.length) {

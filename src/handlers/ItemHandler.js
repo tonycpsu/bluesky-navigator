@@ -2774,7 +2774,8 @@ export class ItemHandler extends Handler {
       this.applyItemStyle(this.items[index], index == this.index);
     }
     // When marking as unread, remove filtered class so item becomes visible again
-    if (!markedRead) {
+    // But only if there's no active text filter - otherwise the filter rules should still apply
+    if (!markedRead && !this.state.filter) {
       $(mainItem).removeClass('filtered');
       $(mainItem).closest('.thread').removeClass('filtered');
     }
@@ -6387,8 +6388,10 @@ export class ItemHandler extends Handler {
       // Clear tracked unrolled post IDs when unrolled content is removed
       this.unrolledPostIds.clear();
       // Remove unrolled-duplicate class from items (safely)
+      // Note: Only remove unrolled-duplicate class, NOT filtered class
+      // The filtered class may have been set by an active filter rule and should persist
       try {
-        $('.unrolled-duplicate').removeClass('unrolled-duplicate filtered');
+        $('.unrolled-duplicate').removeClass('unrolled-duplicate');
       } catch (e) {
         // Ignore - elements may have been removed
       }

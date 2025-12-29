@@ -872,9 +872,21 @@ export class FeedItemHandler extends ItemHandler {
       this.feedMapZoomHighlight = this.feedMap.find('.feed-map-position-zoom-highlight');
       // Create wrapper for both indicators and connector (styleClass + themeClass on wrapper so CSS can target children)
       this.feedMapWrapper = $(`<div class="feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-      this.feedMapWrapper.append(this.feedMapContainer);
 
-      // Add connector div between main indicator and zoom with SVG inside
+      // For bottom position, order is: zoom (top), connector, main map (bottom)
+      this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
+      this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+      this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+      this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
+      // Inner wrapper for smooth scroll animation
+      this.feedMapZoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
+      this.feedMapZoom.append(this.feedMapZoomInner);
+      this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
+      this.feedMapZoomContainer.append(this.feedMapZoom);
+      this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
+      this.feedMapWrapper.append(this.feedMapZoomContainer);
+
+      // Add connector div between zoom and main indicator with SVG inside
       this.feedMapConnector = $(`<div class="feed-map-connector">
         <svg class="feed-map-connector-svg" preserveAspectRatio="none">
           <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
@@ -883,14 +895,9 @@ export class FeedItemHandler extends ItemHandler {
       </div>`);
       this.feedMapWrapper.append(this.feedMapConnector);
 
-      this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
-      this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-      this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-      this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
-      this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
-      this.feedMapZoomContainer.append(this.feedMapZoom);
-      this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
-      this.feedMapWrapper.append(this.feedMapZoomContainer);
+      this.feedMapWrapper.append(this.feedMapContainer);
+      // Track previous window position for smooth scrolling
+      this.zoomWindowStart = null;
 
       $(this.statusBar).append(this.feedMapWrapper);
       this.setupScrollIndicatorZoomClick();
@@ -3341,22 +3348,39 @@ export class FeedItemHandler extends ItemHandler {
     // The S-curve goes: start at top, curve down and outward, then curve to meet bottom
     const midY = height / 2;
 
+    // Check if statusbar mode (zoom on top, main on bottom)
+    const isStatusbar = this.feedMapWrapper && this.feedMapWrapper.hasClass('feed-map-wrapper-statusbar');
+
     if (leftPath) {
-      // Left S-curve: starts at mainStartX top, ends at zoomStartX bottom
-      // First curve goes down, second curve goes to the left edge
-      leftPath.setAttribute('d',
-        `M ${mainStartX} 0 ` +
-        `C ${mainStartX} ${midY}, ${zoomStartX} ${midY}, ${zoomStartX} ${height}`
-      );
+      if (isStatusbar) {
+        // Statusbar: zoom on top (Y=0), main on bottom (Y=height)
+        leftPath.setAttribute('d',
+          `M ${zoomStartX} 0 ` +
+          `C ${zoomStartX} ${midY}, ${mainStartX} ${midY}, ${mainStartX} ${height}`
+        );
+      } else {
+        // Toolbar: main on top (Y=0), zoom on bottom (Y=height)
+        leftPath.setAttribute('d',
+          `M ${mainStartX} 0 ` +
+          `C ${mainStartX} ${midY}, ${zoomStartX} ${midY}, ${zoomStartX} ${height}`
+        );
+      }
     }
 
     if (rightPath) {
-      // Right S-curve: starts at mainEndX top, ends at zoomEndX bottom
-      // First curve goes down, second curve goes to the right edge
-      rightPath.setAttribute('d',
-        `M ${mainEndX} 0 ` +
-        `C ${mainEndX} ${midY}, ${zoomEndX} ${midY}, ${zoomEndX} ${height}`
-      );
+      if (isStatusbar) {
+        // Statusbar: zoom on top (Y=0), main on bottom (Y=height)
+        rightPath.setAttribute('d',
+          `M ${zoomEndX} 0 ` +
+          `C ${zoomEndX} ${midY}, ${mainEndX} ${midY}, ${mainEndX} ${height}`
+        );
+      } else {
+        // Toolbar: main on top (Y=0), zoom on bottom (Y=height)
+        rightPath.setAttribute('d',
+          `M ${mainEndX} 0 ` +
+          `C ${mainEndX} ${midY}, ${zoomEndX} ${midY}, ${zoomEndX} ${height}`
+        );
+      }
     }
 
     // Update zoom highlight on main indicator

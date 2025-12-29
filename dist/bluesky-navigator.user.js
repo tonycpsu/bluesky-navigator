@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+603.35c84eec
+// @version     1.0.31+604.ae3c129d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -70127,7 +70127,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.feedMapContainer.append(this.feedMapLabelEnd);
         this.feedMapZoomHighlight = this.feedMap.find(".feed-map-position-zoom-highlight");
         this.feedMapWrapper = $(`<div class="feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-        this.feedMapWrapper.append(this.feedMapContainer);
+        this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
+        this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+        this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+        this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
+        this.feedMapZoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
+        this.feedMapZoom.append(this.feedMapZoomInner);
+        this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
+        this.feedMapZoomContainer.append(this.feedMapZoom);
+        this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
+        this.feedMapWrapper.append(this.feedMapZoomContainer);
         this.feedMapConnector = $(`<div class="feed-map-connector">
         <svg class="feed-map-connector-svg" preserveAspectRatio="none">
           <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
@@ -70135,14 +70144,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         </svg>
       </div>`);
         this.feedMapWrapper.append(this.feedMapConnector);
-        this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
-        this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-        this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-        this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
-        this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
-        this.feedMapZoomContainer.append(this.feedMapZoom);
-        this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
-        this.feedMapWrapper.append(this.feedMapZoomContainer);
+        this.feedMapWrapper.append(this.feedMapContainer);
+        this.zoomWindowStart = null;
         $(this.statusBar).append(this.feedMapWrapper);
         this.setupScrollIndicatorZoomClick();
         this.setupScrollIndicatorClick();
@@ -71948,17 +71951,32 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const leftPath = svg.querySelector(".feed-map-connector-left");
       const rightPath = svg.querySelector(".feed-map-connector-right");
       const midY = height / 2;
+      const isStatusbar = this.feedMapWrapper && this.feedMapWrapper.hasClass("feed-map-wrapper-statusbar");
       if (leftPath) {
-        leftPath.setAttribute(
-          "d",
-          `M ${mainStartX} 0 C ${mainStartX} ${midY}, ${zoomStartX} ${midY}, ${zoomStartX} ${height}`
-        );
+        if (isStatusbar) {
+          leftPath.setAttribute(
+            "d",
+            `M ${zoomStartX} 0 C ${zoomStartX} ${midY}, ${mainStartX} ${midY}, ${mainStartX} ${height}`
+          );
+        } else {
+          leftPath.setAttribute(
+            "d",
+            `M ${mainStartX} 0 C ${mainStartX} ${midY}, ${zoomStartX} ${midY}, ${zoomStartX} ${height}`
+          );
+        }
       }
       if (rightPath) {
-        rightPath.setAttribute(
-          "d",
-          `M ${mainEndX} 0 C ${mainEndX} ${midY}, ${zoomEndX} ${midY}, ${zoomEndX} ${height}`
-        );
+        if (isStatusbar) {
+          rightPath.setAttribute(
+            "d",
+            `M ${zoomEndX} 0 C ${zoomEndX} ${midY}, ${mainEndX} ${midY}, ${mainEndX} ${height}`
+          );
+        } else {
+          rightPath.setAttribute(
+            "d",
+            `M ${mainEndX} 0 C ${mainEndX} ${midY}, ${zoomEndX} ${midY}, ${zoomEndX} ${height}`
+          );
+        }
       }
       if (this.feedMapZoomHighlight) {
         const highlightLeft = startPercent * 100;

@@ -4628,6 +4628,9 @@ export class ItemHandler extends Handler {
           `;
           }).join('')}
         </div>
+        <div class="bsky-nav-rules-dropdown-footer">
+          <button class="bsky-nav-rules-cancel-btn">Cancel</button>
+        </div>
       </div>
     `);
 
@@ -4660,6 +4663,11 @@ export class ItemHandler extends Handler {
       btn.text('Removing...').prop('disabled', true);
 
       await this.removeAuthorFromCategory(handle, category, inList, inRules, listName);
+      closeDropdown();
+    });
+
+    // Handle cancel button click
+    dropdown.find('.bsky-nav-rules-cancel-btn').on('click', () => {
       closeDropdown();
     });
 

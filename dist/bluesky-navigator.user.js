@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+596.ec97b15d
+// @version     1.0.31+597.6e04b27e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -53776,6 +53776,24 @@ div#statusBar.has-feed-map {
   background: #2563eb;
 }
 
+.bsky-nav-rules-cancel-btn {
+  flex: 1;
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.bsky-nav-rules-cancel-btn:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
 /* Rule Added Notification */
 .bsky-nav-rule-notification {
   position: fixed;
@@ -54522,6 +54540,17 @@ div#statusBar.has-feed-map {
 
   .bsky-nav-rules-quick-filter::placeholder {
     color: #9ca3af;
+  }
+
+  .bsky-nav-rules-cancel-btn {
+    background: #374151;
+    border-color: #4b5563;
+    color: #d1d5db;
+  }
+
+  .bsky-nav-rules-cancel-btn:hover {
+    background: #4b5563;
+    border-color: #6b7280;
   }
 
   .bsky-nav-rule-notification {
@@ -67821,6 +67850,9 @@ div#statusBar.has-feed-map {
           `;
       }).join("")}
         </div>
+        <div class="bsky-nav-rules-dropdown-footer">
+          <button class="bsky-nav-rules-cancel-btn">Cancel</button>
+        </div>
       </div>
     `);
       dropdown.css({
@@ -67844,6 +67876,9 @@ div#statusBar.has-feed-map {
         const listName = btn.data("list-name");
         btn.text("Removing...").prop("disabled", true);
         await this.removeAuthorFromCategory(handle2, category, inList, inRules, listName);
+        closeDropdown();
+      });
+      dropdown.find(".bsky-nav-rules-cancel-btn").on("click", () => {
         closeDropdown();
       });
       dropdown.on("mousedown mouseup click", (e) => {

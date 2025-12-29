@@ -3827,12 +3827,16 @@ export class ItemHandler extends Handler {
           <div class="bsky-nav-rules-dropdown-footer">
             <input type="text" class="bsky-nav-rules-quick-filter" placeholder="${categories.length > 0 ? 'Type # or name...' : 'Create first category...'}" autocomplete="off" spellcheck="false">
             <button class="bsky-nav-rules-create-btn" title="Create new category">+</button>
+            <button class="bsky-nav-rules-cancel-btn">Cancel</button>
           </div>
         </div>
         ${hasLists ? `
         <div class="bsky-nav-rules-tab-content bsky-nav-rules-tab-lists">
           <div class="bsky-nav-rules-dropdown-lists">
             <div class="bsky-nav-rules-lists-loading">Loading lists...</div>
+          </div>
+          <div class="bsky-nav-rules-dropdown-footer">
+            <button class="bsky-nav-rules-cancel-btn" style="flex: 1;">Cancel</button>
           </div>
         </div>
         ` : ''}
@@ -3867,6 +3871,11 @@ export class ItemHandler extends Handler {
       $(document).off('mousedown.rulesDropdown');
       $(document).off('keydown.rulesDropdown');
     };
+
+    // Cancel button handler
+    dropdown.find('.bsky-nav-rules-cancel-btn').on('click', () => {
+      closeDropdown();
+    });
 
     // Helper to add the appropriate rule type
     const addRule = (category, action) => {

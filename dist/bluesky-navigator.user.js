@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+599.94487be4
+// @version     1.0.31+600.c0e77a09
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -70866,19 +70866,21 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           $(thread).addClass("filtered");
         }
       });
-      $(unseenThreads).map((i, thread) => {
-        $(thread).find(".item").each((i2, item) => {
-          const offset = parseInt($(item).data("bsky-navigator-thread-offset"));
-          if (offset > 0 && $(item).hasClass("item-unread") && this.config.get("showReplyContext")) {
-            const index = parseInt($(thread).data("bsky-navigator-thread-index"));
-            const prev = $(
-              `div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset - 1}"]`
-            );
-            $(prev).removeClass("filtered");
-            $(prev).closest(".thread").removeClass("filtered");
-          }
+      if (!this.state.filter) {
+        $(unseenThreads).map((i, thread) => {
+          $(thread).find(".item").each((i2, item) => {
+            const offset = parseInt($(item).data("bsky-navigator-thread-offset"));
+            if (offset > 0 && $(item).hasClass("item-unread") && this.config.get("showReplyContext")) {
+              const index = parseInt($(thread).data("bsky-navigator-thread-index"));
+              const prev = $(
+                `div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset - 1}"]`
+              );
+              $(prev).removeClass("filtered");
+              $(prev).closest(".thread").removeClass("filtered");
+            }
+          });
         });
-      });
+      }
       this.refreshItems();
       this.updateInfoIndicator();
       this.items = $(this.selector).filter(":visible").not(".filtered").filter((i, item) => {

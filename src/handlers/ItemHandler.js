@@ -1978,7 +1978,11 @@ export class ItemHandler extends Handler {
   toggleMedia(item, event) {
     const media = $(item).find("img[src*='feed_thumbnail']");
     if (media.length > 0) {
+      // Hide fixed sidecar panel while viewing media
+      this.hideThreadContextForMedia();
       media[0].click();
+      // Watch for the lightbox to close
+      this.watchForMediaClose();
       return;
     }
 
@@ -1989,11 +1993,85 @@ export class ItemHandler extends Handler {
         video.muted = false;
       }
       if (video.paused) {
+        this.hideThreadContextForMedia();
         this.playVideo(video);
       } else {
         this.pauseVideo(video);
+        this.restoreThreadContextAfterMedia();
       }
     }
+  }
+
+  /**
+   * Hide the thread context panel when viewing media
+   */
+  hideThreadContextForMedia() {
+    if (this.isFixedSidecar()) {
+      const panel = $('#fixed-sidecar-panel');
+      if (panel.length) {
+        this._sidecarWasVisibleBeforeMedia = panel.hasClass('visible');
+        // Force hide with !important inline style
+        panel[0].style.setProperty('display', 'none', 'important');
+      }
+    } else {
+      // Inline sidecar mode
+      const sidecar = $(this.selectedItem).parent().find('.sidecar-replies');
+      if (sidecar.length && sidecar.is(':visible')) {
+        this._sidecarWasVisibleBeforeMedia = true;
+        sidecar.hide();
+      }
+    }
+  }
+
+  /**
+   * Restore the thread context panel after media is closed
+   */
+  restoreThreadContextAfterMedia() {
+    if (this._sidecarWasVisibleBeforeMedia) {
+      this._sidecarWasVisibleBeforeMedia = false;
+      if (this.isFixedSidecar()) {
+        // Remove the inline display style and let the visible class control it
+        const panel = $('#fixed-sidecar-panel')[0];
+        if (panel) {
+          panel.style.removeProperty('display');
+        }
+      } else {
+        // Inline sidecar mode
+        const sidecar = $(this.selectedItem).parent().find('.sidecar-replies');
+        sidecar.show();
+      }
+    }
+  }
+
+  /**
+   * Watch for Bluesky's media lightbox to close
+   */
+  watchForMediaClose() {
+    // Clean up any existing listener
+    if (this._mediaCloseHandler) {
+      document.removeEventListener('click', this._mediaCloseHandler, true);
+      document.removeEventListener('keydown', this._mediaCloseHandler, true);
+    }
+
+    // Wait a moment for the lightbox to fully appear
+    setTimeout(() => {
+      // Listen for click or Escape to close the lightbox
+      this._mediaCloseHandler = (e) => {
+        // Escape key or click (lightbox closes on click anywhere)
+        if (e.key === 'Escape' || e.type === 'click') {
+          // Small delay to let the lightbox close first
+          setTimeout(() => {
+            this.restoreThreadContextAfterMedia();
+            document.removeEventListener('click', this._mediaCloseHandler, true);
+            document.removeEventListener('keydown', this._mediaCloseHandler, true);
+            this._mediaCloseHandler = null;
+          }, 100);
+        }
+      };
+
+      document.addEventListener('click', this._mediaCloseHandler, true);
+      document.addEventListener('keydown', this._mediaCloseHandler, true);
+    }, 300);
   }
 
   openReplyDialog(item) {

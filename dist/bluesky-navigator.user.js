@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+601.0c9a1db7
+// @version     1.0.31+602.5c7d73f4
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -65812,7 +65812,9 @@ div#statusBar.has-feed-map {
     toggleMedia(item, event) {
       const media = $(item).find("img[src*='feed_thumbnail']");
       if (media.length > 0) {
+        this.hideThreadContextForMedia();
         media[0].click();
+        this.watchForMediaClose();
         return;
       }
       const video2 = $(item).find("video")[0];
@@ -65822,11 +65824,71 @@ div#statusBar.has-feed-map {
           video2.muted = false;
         }
         if (video2.paused) {
+          this.hideThreadContextForMedia();
           this.playVideo(video2);
         } else {
           this.pauseVideo(video2);
+          this.restoreThreadContextAfterMedia();
         }
       }
+    }
+    /**
+     * Hide the thread context panel when viewing media
+     */
+    hideThreadContextForMedia() {
+      if (this.isFixedSidecar()) {
+        const panel = $("#fixed-sidecar-panel");
+        if (panel.length) {
+          this._sidecarWasVisibleBeforeMedia = panel.hasClass("visible");
+          panel[0].style.setProperty("display", "none", "important");
+        }
+      } else {
+        const sidecar = $(this.selectedItem).parent().find(".sidecar-replies");
+        if (sidecar.length && sidecar.is(":visible")) {
+          this._sidecarWasVisibleBeforeMedia = true;
+          sidecar.hide();
+        }
+      }
+    }
+    /**
+     * Restore the thread context panel after media is closed
+     */
+    restoreThreadContextAfterMedia() {
+      if (this._sidecarWasVisibleBeforeMedia) {
+        this._sidecarWasVisibleBeforeMedia = false;
+        if (this.isFixedSidecar()) {
+          const panel = $("#fixed-sidecar-panel")[0];
+          if (panel) {
+            panel.style.removeProperty("display");
+          }
+        } else {
+          const sidecar = $(this.selectedItem).parent().find(".sidecar-replies");
+          sidecar.show();
+        }
+      }
+    }
+    /**
+     * Watch for Bluesky's media lightbox to close
+     */
+    watchForMediaClose() {
+      if (this._mediaCloseHandler) {
+        document.removeEventListener("click", this._mediaCloseHandler, true);
+        document.removeEventListener("keydown", this._mediaCloseHandler, true);
+      }
+      setTimeout(() => {
+        this._mediaCloseHandler = (e) => {
+          if (e.key === "Escape" || e.type === "click") {
+            setTimeout(() => {
+              this.restoreThreadContextAfterMedia();
+              document.removeEventListener("click", this._mediaCloseHandler, true);
+              document.removeEventListener("keydown", this._mediaCloseHandler, true);
+              this._mediaCloseHandler = null;
+            }, 100);
+          }
+        };
+        document.addEventListener("click", this._mediaCloseHandler, true);
+        document.addEventListener("keydown", this._mediaCloseHandler, true);
+      }, 300);
     }
     openReplyDialog(item) {
       const button = $(item).find("button[aria-label^='Reply']");

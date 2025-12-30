@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+604.ae3c129d
+// @version     1.0.31+605.7af270b1
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -51115,7 +51115,18 @@ div.item-banner {
   flex: 0 0 100% !important;
   background: transparent;
   order: -1 !important;
-  margin: 0 0 2px 0 !important;
+  margin: 0 !important;
+}
+
+/* Statusbar: connector between zoom (above) and main (below) - match toolbar styling */
+.feed-map-wrapper-statusbar .feed-map-connector {
+  height: calc(16px * var(--indicator-scale, 1));
+  margin-top: calc(-2px * var(--indicator-scale, 1));
+  margin-bottom: calc(-2px * var(--indicator-scale, 1));
+}
+
+.feed-map-wrapper-statusbar .feed-map-connector .feed-map-connector-path {
+  stroke-width: 2 !important;
 }
 
 /* Reset the indicator width inside status bar */
@@ -71945,13 +71956,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const mainEndX = labelWidth + mainWidth * endPercent;
       const zoomStartX = zoomLabelWidth;
       const zoomEndX = zoomLabelWidth + zoomWidth;
-      const height = 16;
+      const isStatusbar = this.feedMapWrapper && this.feedMapWrapper.hasClass("feed-map-wrapper-statusbar");
+      const height = isStatusbar ? 16 : 20;
       const svgWidth = wrapperWidth;
       svg.setAttribute("viewBox", `0 0 ${svgWidth} ${height}`);
       const leftPath = svg.querySelector(".feed-map-connector-left");
       const rightPath = svg.querySelector(".feed-map-connector-right");
       const midY = height / 2;
-      const isStatusbar = this.feedMapWrapper && this.feedMapWrapper.hasClass("feed-map-wrapper-statusbar");
       if (leftPath) {
         if (isStatusbar) {
           leftPath.setAttribute(

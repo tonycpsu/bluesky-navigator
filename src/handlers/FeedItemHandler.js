@@ -3334,8 +3334,11 @@ export class FeedItemHandler extends ItemHandler {
     const zoomStartX = zoomLabelWidth;
     const zoomEndX = zoomLabelWidth + zoomWidth;
 
-    // SVG dimensions (must match CSS height)
-    const height = 16;
+    // Check if statusbar mode (zoom on top, main on bottom)
+    const isStatusbar = this.feedMapWrapper && this.feedMapWrapper.hasClass('feed-map-wrapper-statusbar');
+
+    // SVG dimensions (must match CSS height - 20px for toolbar, 16px for statusbar)
+    const height = isStatusbar ? 16 : 20;
     const svgWidth = wrapperWidth;
 
     // Set viewBox on the SVG element
@@ -3347,9 +3350,6 @@ export class FeedItemHandler extends ItemHandler {
     // S-curve control points for zoom effect
     // The S-curve goes: start at top, curve down and outward, then curve to meet bottom
     const midY = height / 2;
-
-    // Check if statusbar mode (zoom on top, main on bottom)
-    const isStatusbar = this.feedMapWrapper && this.feedMapWrapper.hasClass('feed-map-wrapper-statusbar');
 
     if (leftPath) {
       if (isStatusbar) {

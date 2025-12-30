@@ -6664,6 +6664,9 @@ export class ItemHandler extends Handler {
         $('#messageActions').append($('<div id="loadNewerAction"><a>Load newer posts</a></div>'));
         $('#loadNewerAction > a').on('click', () => this.loadNewerItems());
       }
+      // Hide and clear fixed sidecar panel since there's no selected post
+      this.hideFixedSidecarPanel();
+      this.clearFixedSidecarPanel();
     } else {
       this.hideMessage();
     }

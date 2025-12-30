@@ -1883,8 +1883,9 @@ export class FeedItemHandler extends ItemHandler {
     });
 
     // Show reply context (previous post) for unread replies
-    // But only when no text filter is active - otherwise non-matching posts would appear
-    if (!this.state.filter) {
+    // But only when no text filter is active and feedHideRead is off
+    // Otherwise non-matching or read posts would appear
+    if (!this.state.filter && !this.state.feedHideRead) {
       $(unseenThreads).map((i, thread) => {
         $(thread)
           .find('.item')

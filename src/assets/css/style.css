@@ -2645,7 +2645,7 @@ div.item-banner {
 }
 
 .feed-map-zoom-inner.feed-map-zoom-animating {
-  transition: transform calc(var(--animation-duration, 300ms) * var(--zoom-animation-speed, 1)) ease-out;
+  transition: transform calc(800ms * var(--zoom-animation-speed, 1)) ease-out;
 }
 
 /* When zoom is enabled, allow brackets to overflow */

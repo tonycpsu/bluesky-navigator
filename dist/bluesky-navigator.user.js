@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+606.1b1ed1cc
+// @version     1.0.31+607.547c362d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -50942,7 +50942,7 @@ div.item-banner {
 }
 
 .feed-map-zoom-inner.feed-map-zoom-animating {
-  transition: transform calc(var(--animation-duration, 300ms) * var(--zoom-animation-speed, 1)) ease-out;
+  transition: transform calc(800ms * var(--zoom-animation-speed, 1)) ease-out;
 }
 
 /* When zoom is enabled, allow brackets to overflow */

@@ -354,11 +354,11 @@ export class ProfileItemHandler extends FeedItemHandler {
       return;
     }
     if (event.key == 'f') {
-      // f = follow
-      $("button[data-testid='followBtn']").click();
+      // f = follow (with confirmation)
+      this.showProfileFollowConfirmation(true);
     } else if (event.key == 'F') {
-      // F = unfollow (distinct shortcut for safety)
-      $("button[data-testid='unfollowBtn']").click();
+      // F = unfollow (with confirmation)
+      this.showProfileFollowConfirmation(false);
     } else if (event.key == 'L') {
       // L = add to list
       $("button[aria-label^='More options']").click();
@@ -384,5 +384,92 @@ export class ProfileItemHandler extends FeedItemHandler {
         $("div[data-testid='profileHeaderDropdownReportBtn']").click();
       }, 200);
     }
+  }
+
+  /**
+   * Show confirmation popup for following/unfollowing on profile page
+   * @param {boolean} isFollow - True for follow, false for unfollow
+   */
+  showProfileFollowConfirmation(isFollow) {
+    // Remove any existing follow popup
+    $('.bsky-nav-follow-popup').remove();
+
+    // Get the handle from the profile page URL or header
+    const pathParts = window.location.pathname.split('/');
+    const profileIndex = pathParts.indexOf('profile');
+    const handle = profileIndex >= 0 ? pathParts[profileIndex + 1] : null;
+
+    if (!handle) {
+      console.warn('Could not get profile handle for follow action');
+      return;
+    }
+
+    const action = isFollow ? 'Follow' : 'Unfollow';
+    const buttonTestId = isFollow ? 'followBtn' : 'unfollowBtn';
+
+    // Check if the appropriate button exists
+    const targetBtn = $(`button[data-testid='${buttonTestId}']`);
+    if (!targetBtn.length) {
+      console.warn(`${action} button not found - user may already be ${isFollow ? 'followed' : 'unfollowed'}`);
+      return;
+    }
+
+    const popup = $(`
+      <div class="bsky-nav-follow-popup bsky-nav-timeout-popup">
+        <div class="bsky-nav-timeout-header">
+          ${action} @${handle}?
+        </div>
+        <div class="bsky-nav-timeout-buttons">
+          <button class="bsky-nav-timeout-btn cancel">Cancel</button>
+          <button class="bsky-nav-timeout-btn confirm">${action}</button>
+        </div>
+      </div>
+    `);
+
+    popup.css({
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      zIndex: 10002
+    });
+
+    $('body').append(popup);
+
+    // Handle confirm
+    popup.find('.bsky-nav-timeout-btn.confirm').on('click', () => {
+      popup.remove();
+      $(document).off('.follow');
+      $(`button[data-testid='${buttonTestId}']`).click();
+    });
+
+    // Handle cancel
+    popup.find('.bsky-nav-timeout-btn.cancel').on('click', () => {
+      popup.remove();
+      $(document).off('.follow');
+    });
+
+    // Close on click outside
+    setTimeout(() => {
+      $(document).on('mousedown.follow', (e) => {
+        if (!$(e.target).closest('.bsky-nav-follow-popup').length) {
+          popup.remove();
+          $(document).off('.follow');
+        }
+      });
+    }, 100);
+
+    // Handle Enter to confirm, Escape to cancel
+    $(document).on('keydown.follow', (e) => {
+      if (e.key === 'Escape') {
+        popup.remove();
+        $(document).off('.follow');
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        popup.remove();
+        $(document).off('.follow');
+        $(`button[data-testid='${buttonTestId}']`).click();
+      }
+    });
   }
 }

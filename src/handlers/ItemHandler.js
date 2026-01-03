@@ -1784,6 +1784,14 @@ export class ItemHandler extends Handler {
         this.showTimeoutPopup(item);
         break;
 
+      case 'f':
+        this.showFollowConfirmation(item, true);
+        break;
+
+      case 'F':
+        this.showFollowConfirmation(item, false);
+        break;
+
       default:
         if (!isNaN(parseInt(event.key))) {
           this.switchToTab(parseInt(event.key) - 1);
@@ -3747,17 +3755,7 @@ export class ItemHandler extends Handler {
     }
 
     // No text selected - add author rule
-    let handle = this.handleFromItem(item);
-
-    // Fallback: try data-testid
-    if (!handle) {
-      const testId = $(item).attr('data-testid') || '';
-      const match = testId.match(/^feedItem-by-(.+)$/);
-      if (match) {
-        handle = match[1];
-      }
-    }
-
+    const handle = this.getAuthorHandle(item);
     if (!handle) return;
 
     // Find the author name element to position the dropdown near it
@@ -3786,17 +3784,7 @@ export class ItemHandler extends Handler {
   openRemoveFromRulesForItem(item) {
     if (!item || !item.length) return;
 
-    let handle = this.handleFromItem(item);
-
-    // Fallback: try data-testid
-    if (!handle) {
-      const testId = $(item).attr('data-testid') || '';
-      const match = testId.match(/^feedItem-by-(.+)$/);
-      if (match) {
-        handle = match[1];
-      }
-    }
-
+    const handle = this.getAuthorHandle(item);
     if (!handle) return;
 
     // Find the author name element to position the dropdown near it
@@ -4559,6 +4547,237 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Show confirmation popup for following/unfollowing an author
+   * @param {jQuery} item - The post element
+   * @param {boolean} isFollow - True for follow, false for unfollow
+   */
+  showFollowConfirmation(item, isFollow) {
+    // Remove any existing follow popup
+    $('.bsky-nav-follow-popup').remove();
+
+    const handle = this.getAuthorHandle(item);
+    if (!handle) {
+      console.warn('Could not get author handle for follow action');
+      return;
+    }
+
+    const action = isFollow ? 'Follow' : 'Unfollow';
+    const rect = item[0].getBoundingClientRect();
+
+    const popup = $(`
+      <div class="bsky-nav-follow-popup bsky-nav-timeout-popup">
+        <div class="bsky-nav-timeout-header">
+          ${action} @${handle}?
+        </div>
+        <div class="bsky-nav-timeout-buttons">
+          <button class="bsky-nav-timeout-btn cancel">Cancel</button>
+          <button class="bsky-nav-timeout-btn confirm">${action}</button>
+        </div>
+      </div>
+    `);
+
+    popup.css({
+      position: 'fixed',
+      top: Math.min(rect.top, window.innerHeight - 150) + 'px',
+      left: Math.min(rect.left + 50, window.innerWidth - 250) + 'px',
+      zIndex: 10002
+    });
+
+    $('body').append(popup);
+
+    // Block main input handler while popup is open
+    this.isPopupVisible = true;
+
+    const closePopup = () => {
+      popup.remove();
+      $(document).off('.follow');
+      this.isPopupVisible = false;
+    };
+
+    // Handle confirm
+    popup.find('.bsky-nav-timeout-btn.confirm').on('click', () => {
+      closePopup();
+      this.executeFollowAction(item, isFollow, handle);
+    });
+
+    // Handle cancel
+    popup.find('.bsky-nav-timeout-btn.cancel').on('click', () => {
+      closePopup();
+    });
+
+    // Close on click outside
+    setTimeout(() => {
+      $(document).on('mousedown.follow', (e) => {
+        if (!$(e.target).closest('.bsky-nav-follow-popup').length) {
+          closePopup();
+        }
+      });
+    }, 100);
+
+    // Handle Enter to confirm, Escape to cancel
+    $(document).on('keydown.follow', (e) => {
+      if (e.key === 'Escape') {
+        closePopup();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        closePopup();
+        this.executeFollowAction(item, isFollow, handle);
+      }
+    });
+  }
+
+  /**
+   * Execute the follow/unfollow action by triggering the hover card and clicking the button
+   * Falls back to direct API call if hover card doesn't appear
+   * @param {jQuery} item - The post element
+   * @param {boolean} isFollow - True for follow, false for unfollow
+   * @param {string} handle - The author's handle
+   */
+  async executeFollowAction(item, isFollow, handle) {
+    // Find the profile link specifically for this handle
+    const $item = $(item);
+    const allProfileLinks = $item.find('a[href*="/profile/"]');
+
+    // Find link that matches the target handle
+    let profileLink = null;
+    allProfileLinks.each((i, el) => {
+      const href = $(el).attr('href') || '';
+      // Match /profile/handle or /profile/handle/...
+      const match = href.match(/\/profile\/([^/]+)/);
+      if (match && match[1] === handle) {
+        // Prefer non-avatar links for better popup positioning
+        if (!profileLink || $(el).find('img').length === 0) {
+          profileLink = el;
+        }
+      }
+    });
+
+    if (!profileLink) {
+      // No profile link found - use API directly
+      await this.executeFollowViaAPI(handle, isFollow);
+      return;
+    }
+
+    // Trigger hover on the specific profile link
+    const rect = profileLink.getBoundingClientRect();
+    const pageWindow = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+
+    const pointerOptions = {
+      bubbles: true,
+      cancelable: true,
+      view: pageWindow,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+      pointerType: 'mouse',
+    };
+
+    const mouseOptions = {
+      bubbles: true,
+      cancelable: true,
+      view: pageWindow,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+    };
+
+    profileLink.dispatchEvent(new PointerEvent('pointerenter', { ...pointerOptions, bubbles: false }));
+    profileLink.dispatchEvent(new PointerEvent('pointerover', pointerOptions));
+    profileLink.dispatchEvent(new MouseEvent('mouseenter', { ...mouseOptions, bubbles: false }));
+    profileLink.dispatchEvent(new MouseEvent('mouseover', mouseOptions));
+
+    // Wait for hover card to appear and click the follow/unfollow button
+    const buttonLabel = isFollow ? 'Follow' : 'Following';
+    const maxAttempts = 15; // Reduced since we have API fallback
+    let attempts = 0;
+
+    const dismissHoverCard = () => {
+      profileLink.dispatchEvent(new PointerEvent('pointerout', pointerOptions));
+      profileLink.dispatchEvent(new PointerEvent('pointerleave', { ...pointerOptions, bubbles: false }));
+      profileLink.dispatchEvent(new MouseEvent('mouseout', mouseOptions));
+      profileLink.dispatchEvent(new MouseEvent('mouseleave', { ...mouseOptions, bubbles: false }));
+    };
+
+    const tryClickButton = async () => {
+      attempts++;
+      // Look for the follow button in the hover card
+      // Try multiple selectors: data-testid is more reliable than aria-label
+      const buttonTestId = isFollow ? 'followBtn' : 'unfollowBtn';
+      const hoverCard = document.querySelector('div[data-testid="profileHoverCard"]');
+
+      let followBtn = null;
+      if (hoverCard) {
+        // First try data-testid (most reliable)
+        followBtn = hoverCard.querySelector(`button[data-testid="${buttonTestId}"]`);
+        // Fallback to aria-label
+        if (!followBtn) {
+          followBtn = hoverCard.querySelector(`button[aria-label="${buttonLabel}"]`);
+        }
+      }
+
+      if (followBtn) {
+        followBtn.click();
+        // Dismiss hover card after action
+        setTimeout(dismissHoverCard, 300);
+        return;
+      }
+
+      // Also check our custom profile card
+      const customCardBtn = document.querySelector(
+        `.bsky-nav-profile-card button[aria-label="${buttonLabel}"]`
+      );
+      if (customCardBtn) {
+        customCardBtn.click();
+        setTimeout(() => {
+          const card = document.querySelector('.bsky-nav-profile-card');
+          if (card) card.remove();
+        }, 300);
+        return;
+      }
+
+      if (attempts < maxAttempts) {
+        setTimeout(tryClickButton, 100);
+      } else {
+        // Hover card didn't appear - fall back to API
+        dismissHoverCard();
+        await this.executeFollowViaAPI(handle, isFollow);
+      }
+    };
+
+    // Start trying after a short delay for the hover card to appear
+    setTimeout(tryClickButton, 200);
+  }
+
+  /**
+   * Follow/unfollow a user directly via the Bluesky API
+   * @param {string} handle - The user's handle
+   * @param {boolean} isFollow - True for follow, false for unfollow
+   */
+  async executeFollowViaAPI(handle, isFollow) {
+    try {
+      // Get follow status and DID
+      const { did, followUri } = await this.api.getFollowStatus(handle);
+
+      if (isFollow) {
+        if (followUri) {
+          this.showRuleAddedNotification(`Already following @${handle}`, 'info');
+          return;
+        }
+        await this.api.follow(did);
+        this.showRuleAddedNotification(`Followed @${handle}`, 'success');
+      } else {
+        if (!followUri) {
+          this.showRuleAddedNotification(`Not following @${handle}`, 'info');
+          return;
+        }
+        await this.api.unfollow(followUri);
+        this.showRuleAddedNotification(`Unfollowed @${handle}`, 'success');
+      }
+    } catch (error) {
+      console.error(`Failed to ${isFollow ? 'follow' : 'unfollow'} @${handle}:`, error);
+      this.showRuleAddedNotification(`Failed to ${isFollow ? 'follow' : 'unfollow'} @${handle}`, 'error');
+    }
+  }
+
+  /**
    * Format remaining time for display
    * @param {number} ms - Milliseconds remaining
    * @returns {string} Human readable time remaining
@@ -4972,11 +5191,11 @@ export class ItemHandler extends Handler {
         return false;
       }
 
-      // Add to list
-      await this.api.addToList(listUri, did);
+      // Add to list - returns the listitem URI needed for future deletion
+      const listitemUri = await this.api.addToList(listUri, did);
 
-      // Optimistically add to local cache (don't wait for API eventual consistency)
-      this.state.listCache.addMemberToCache(cleanHandle, listName);
+      // Optimistically add to local cache with the listitem URI for immediate remove support
+      this.state.listCache.addMemberToCache(cleanHandle, listName, listitemUri);
 
       // Refresh highlights to show the new member
       this.scheduleHighlightRefresh();
@@ -5555,17 +5774,24 @@ export class ItemHandler extends Handler {
 
   /**
    * Show notification that rule was added
-   * Can be called with (message) or (handle, category, action)
+   * Can be called with:
+   * - (message) - info notification
+   * - (message, type) - notification with type ('error', 'info', 'success')
+   * - (handle, category, action) - rule added notification
    */
-  showRuleAddedNotification(handleOrMessage, category, action) {
+  showRuleAddedNotification(handleOrMessage, categoryOrType, action) {
     let message, icon;
-    if (category === undefined) {
+    if (categoryOrType === undefined) {
       // Called with single message string
       message = handleOrMessage;
       icon = 'ℹ';
+    } else if (categoryOrType === 'error' || categoryOrType === 'info' || categoryOrType === 'success') {
+      // Called with (message, type)
+      message = handleOrMessage;
+      icon = categoryOrType === 'error' ? '✗' : categoryOrType === 'success' ? '✓' : 'ℹ';
     } else {
       // Called with handle, category, action
-      message = `@${handleOrMessage} added to "${category}" (${action})`;
+      message = `@${handleOrMessage} added to "${categoryOrType}" (${action})`;
       icon = action === 'allow' ? '✓' : '✗';
     }
 
@@ -5800,6 +6026,36 @@ export class ItemHandler extends Handler {
     ).slice(1);
   }
 
+  /**
+   * Get the author handle from an item
+   * Works for both feed items and post thread items
+   * @param {jQuery|Element} item - The post element
+   * @returns {string|null} The author's handle without @ prefix
+   */
+  getAuthorHandle(item) {
+    // First try the standard feed item approach
+    let handle = this.handleFromItem(item);
+    if (handle) return handle;
+
+    // Try extracting from data-testid (post thread items use postThreadItem-by-{handle})
+    const testId = $(item).attr('data-testid') || '';
+    if (testId.startsWith('postThreadItem-by-')) {
+      return testId.replace('postThreadItem-by-', '');
+    }
+    if (testId.startsWith('feedItem-by-')) {
+      return testId.replace('feedItem-by-', '');
+    }
+
+    // Try finding it from the profile link
+    const profileLink = $(item).find('a[href*="/profile/"]').first().attr('href');
+    if (profileLink) {
+      const match = profileLink.match(/\/profile\/([^/]+)/);
+      if (match) return match[1];
+    }
+
+    return null;
+  }
+
   displayNameFromItem(item) {
     return $.trim(
       $(item)
@@ -5972,18 +6228,39 @@ export class ItemHandler extends Handler {
 
   applyRuleColorStyling(element) {
     const $el = $(element);
-    const profileLink = $el.find(constants.PROFILE_SELECTOR).first();
     const avatar = $el.find('div[data-testid="userAvatarImage"]').first();
-    const postText = $el.find('div[data-testid="postText"]').first();
+    // Try postText first (feed items), then data-word-wrap (post view items)
+    let postText = $el.find('div[data-testid="postText"]').first();
+    if (!postText.length) {
+      postText = $el.find('div[data-word-wrap="1"]').first();
+    }
 
-    // Get handle - try handleFromItem first, fallback to data-testid
-    let handle = this.handleFromItem(element);
-    if (!handle) {
-      const testId = $el.attr('data-testid') || '';
-      const match = testId.match(/^feedItem-by-(.+)$/);
-      if (match) {
-        handle = match[1];
+    // Get handle using shared method that handles both feed and post pages
+    const handle = this.getAuthorHandle(element);
+
+    // Find the display name element (not the handle)
+    // Try profile link first, then fall back to finding by handle URL
+    let profileLink = $el.find(constants.PROFILE_SELECTOR).first();
+    if (!profileLink.length && handle) {
+      // Fallback: find link to author's profile (excluding avatar links which contain img)
+      profileLink = $el.find(`a[href="/profile/${handle}"]`).not(':has(img)').first();
+    }
+    // Get just the display name - find div[dir="auto"] that doesn't start with @ (handle starts with @)
+    let displayNameEl = null;
+    if (profileLink.length) {
+      const textDivs = profileLink.find('div[dir="auto"]');
+      textDivs.each((i, div) => {
+        const text = $(div).text().trim();
+        // Display name doesn't start with @ and isn't empty
+        if (text && !text.startsWith('@') && !displayNameEl) {
+          displayNameEl = $(div);
+        }
+      });
+      if (!displayNameEl) {
+        displayNameEl = profileLink; // Fall back to the link itself
       }
+    } else {
+      displayNameEl = $(); // Empty jQuery object
     }
 
     const authorCategoryIndex = handle ? this.getFilterCategoryIndexForHandle(handle) : -1;
@@ -6005,8 +6282,8 @@ export class ItemHandler extends Handler {
     // Check if color-coding is enabled
     if (!this.config.get('ruleColorCoding')) {
       // Clear any added styles
-      if (profileLink.length) {
-        profileLink.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
+      if (displayNameEl.length) {
+        displayNameEl.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
       }
       if (avatar.length) avatar.css('box-shadow', '');
       // Clear reposter styles
@@ -6027,11 +6304,11 @@ export class ItemHandler extends Handler {
     if (authorCategoryIndex >= 0) {
       const color = this.getColorForCategoryIndex(authorCategoryIndex);
 
-      if (profileLink.length) {
-        profileLink[0].style.setProperty('background-color', `${color}80`, 'important');
-        profileLink[0].style.setProperty('border', `1px solid ${color}88`, 'important');
-        profileLink[0].style.setProperty('border-radius', '3px', 'important');
-        profileLink[0].style.setProperty('padding', '0 2px', 'important');
+      if (displayNameEl.length) {
+        displayNameEl[0].style.setProperty('background-color', `${color}80`, 'important');
+        displayNameEl[0].style.setProperty('border', `1px solid ${color}88`, 'important');
+        displayNameEl[0].style.setProperty('border-radius', '3px', 'important');
+        displayNameEl[0].style.setProperty('padding', '0 2px', 'important');
       }
 
       if (avatar.length) {
@@ -6042,8 +6319,8 @@ export class ItemHandler extends Handler {
       }
     } else {
       // No author match - clear styles
-      if (profileLink.length) {
-        profileLink.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
+      if (displayNameEl.length) {
+        displayNameEl.css({ 'background-color': '', 'border': '', 'border-radius': '', 'padding': '' });
       }
       if (avatar.length) avatar.css('box-shadow', '');
     }

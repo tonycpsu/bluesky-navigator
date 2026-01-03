@@ -275,6 +275,38 @@ export class BlueskyAPI {
     await this.agent.updateSeenNotifications({ seenAt: new Date().toISOString() });
   }
 
+  /**
+   * Follow a user by DID
+   * @param {string} did - The DID of the user to follow
+   * @returns {Promise<{uri: string, cid: string}>} The follow record info
+   */
+  async follow(did) {
+    const { uri, cid } = await this.agent.follow(did);
+    return { uri, cid };
+  }
+
+  /**
+   * Unfollow a user by deleting the follow record
+   * @param {string} followUri - The URI of the follow record to delete
+   * @returns {Promise<void>}
+   */
+  async unfollow(followUri) {
+    await this.agent.deleteFollow(followUri);
+  }
+
+  /**
+   * Get a user's profile to check follow status
+   * @param {string} actor - Handle or DID
+   * @returns {Promise<{did: string, following: string|null}>} Profile with follow URI if following
+   */
+  async getFollowStatus(actor) {
+    const profile = await this.getProfile(actor);
+    return {
+      did: profile.did,
+      followUri: profile.viewer?.following || null,
+    };
+  }
+
   async unrollThread(thread) {
     const originalAuthor = thread.post.author.did;
 

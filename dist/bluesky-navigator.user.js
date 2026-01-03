@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+607.547c362d
+// @version     1.0.31+608.9d742236
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45142,6 +45142,35 @@ if (cid) {
     async markNotificationsSeen() {
       await this.agent.updateSeenNotifications({ seenAt: (/* @__PURE__ */ new Date()).toISOString() });
     }
+    /**
+     * Follow a user by DID
+     * @param {string} did - The DID of the user to follow
+     * @returns {Promise<{uri: string, cid: string}>} The follow record info
+     */
+    async follow(did2) {
+      const { uri, cid: cid2 } = await this.agent.follow(did2);
+      return { uri, cid: cid2 };
+    }
+    /**
+     * Unfollow a user by deleting the follow record
+     * @param {string} followUri - The URI of the follow record to delete
+     * @returns {Promise<void>}
+     */
+    async unfollow(followUri) {
+      await this.agent.deleteFollow(followUri);
+    }
+    /**
+     * Get a user's profile to check follow status
+     * @param {string} actor - Handle or DID
+     * @returns {Promise<{did: string, following: string|null}>} Profile with follow URI if following
+     */
+    async getFollowStatus(actor) {
+      const profile2 = await this.getProfile(actor);
+      return {
+        did: profile2.did,
+        followUri: profile2.viewer?.following || null
+      };
+    }
     async unrollThread(thread) {
       const originalAuthor = thread.post.author.did;
       const collectPosts = async (threadNode, parentAuthorDid, posts = []) => {
@@ -65645,6 +65674,12 @@ div#statusBar.has-feed-map {
         case "!":
           this.showTimeoutPopup(item);
           break;
+        case "f":
+          this.showFollowConfirmation(item, true);
+          break;
+        case "F":
+          this.showFollowConfirmation(item, false);
+          break;
         default:
           if (!isNaN(parseInt(event.key))) {
             this.switchToTab(parseInt(event.key) - 1);
@@ -67177,14 +67212,7 @@ div#statusBar.has-feed-map {
         this.showAddToRulesDropdown(rect2, { selectedText });
         return;
       }
-      let handle2 = this.handleFromItem(item);
-      if (!handle2) {
-        const testId = $(item).attr("data-testid") || "";
-        const match2 = testId.match(/^feedItem-by-(.+)$/);
-        if (match2) {
-          handle2 = match2[1];
-        }
-      }
+      const handle2 = this.getAuthorHandle(item);
       if (!handle2) return;
       const authorElement = $(item).find(constants.PROFILE_SELECTOR).find("span").eq(0)[0];
       let rect;
@@ -67205,14 +67233,7 @@ div#statusBar.has-feed-map {
      */
     openRemoveFromRulesForItem(item) {
       if (!item || !item.length) return;
-      let handle2 = this.handleFromItem(item);
-      if (!handle2) {
-        const testId = $(item).attr("data-testid") || "";
-        const match2 = testId.match(/^feedItem-by-(.+)$/);
-        if (match2) {
-          handle2 = match2[1];
-        }
-      }
+      const handle2 = this.getAuthorHandle(item);
       if (!handle2) return;
       const authorElement = $(item).find(constants.PROFILE_SELECTOR).find("span").eq(0)[0];
       let rect;
@@ -67796,6 +67817,186 @@ div#statusBar.has-feed-map {
       });
     }
     /**
+     * Show confirmation popup for following/unfollowing an author
+     * @param {jQuery} item - The post element
+     * @param {boolean} isFollow - True for follow, false for unfollow
+     */
+    showFollowConfirmation(item, isFollow) {
+      $(".bsky-nav-follow-popup").remove();
+      const handle2 = this.getAuthorHandle(item);
+      if (!handle2) {
+        console.warn("Could not get author handle for follow action");
+        return;
+      }
+      const action = isFollow ? "Follow" : "Unfollow";
+      const rect = item[0].getBoundingClientRect();
+      const popup = $(`
+      <div class="bsky-nav-follow-popup bsky-nav-timeout-popup">
+        <div class="bsky-nav-timeout-header">
+          ${action} @${handle2}?
+        </div>
+        <div class="bsky-nav-timeout-buttons">
+          <button class="bsky-nav-timeout-btn cancel">Cancel</button>
+          <button class="bsky-nav-timeout-btn confirm">${action}</button>
+        </div>
+      </div>
+    `);
+      popup.css({
+        position: "fixed",
+        top: Math.min(rect.top, window.innerHeight - 150) + "px",
+        left: Math.min(rect.left + 50, window.innerWidth - 250) + "px",
+        zIndex: 10002
+      });
+      $("body").append(popup);
+      this.isPopupVisible = true;
+      const closePopup = () => {
+        popup.remove();
+        $(document).off(".follow");
+        this.isPopupVisible = false;
+      };
+      popup.find(".bsky-nav-timeout-btn.confirm").on("click", () => {
+        closePopup();
+        this.executeFollowAction(item, isFollow, handle2);
+      });
+      popup.find(".bsky-nav-timeout-btn.cancel").on("click", () => {
+        closePopup();
+      });
+      setTimeout(() => {
+        $(document).on("mousedown.follow", (e) => {
+          if (!$(e.target).closest(".bsky-nav-follow-popup").length) {
+            closePopup();
+          }
+        });
+      }, 100);
+      $(document).on("keydown.follow", (e) => {
+        if (e.key === "Escape") {
+          closePopup();
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          closePopup();
+          this.executeFollowAction(item, isFollow, handle2);
+        }
+      });
+    }
+    /**
+     * Execute the follow/unfollow action by triggering the hover card and clicking the button
+     * Falls back to direct API call if hover card doesn't appear
+     * @param {jQuery} item - The post element
+     * @param {boolean} isFollow - True for follow, false for unfollow
+     * @param {string} handle - The author's handle
+     */
+    async executeFollowAction(item, isFollow, handle2) {
+      const $item = $(item);
+      const allProfileLinks = $item.find('a[href*="/profile/"]');
+      let profileLink = null;
+      allProfileLinks.each((i, el) => {
+        const href = $(el).attr("href") || "";
+        const match2 = href.match(/\/profile\/([^/]+)/);
+        if (match2 && match2[1] === handle2) {
+          if (!profileLink || $(el).find("img").length === 0) {
+            profileLink = el;
+          }
+        }
+      });
+      if (!profileLink) {
+        await this.executeFollowViaAPI(handle2, isFollow);
+        return;
+      }
+      const rect = profileLink.getBoundingClientRect();
+      const pageWindow = typeof unsafeWindow !== "undefined" ? unsafeWindow : window;
+      const pointerOptions = {
+        bubbles: true,
+        cancelable: true,
+        view: pageWindow,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        pointerType: "mouse"
+      };
+      const mouseOptions = {
+        bubbles: true,
+        cancelable: true,
+        view: pageWindow,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2
+      };
+      profileLink.dispatchEvent(new PointerEvent("pointerenter", { ...pointerOptions, bubbles: false }));
+      profileLink.dispatchEvent(new PointerEvent("pointerover", pointerOptions));
+      profileLink.dispatchEvent(new MouseEvent("mouseenter", { ...mouseOptions, bubbles: false }));
+      profileLink.dispatchEvent(new MouseEvent("mouseover", mouseOptions));
+      const buttonLabel = isFollow ? "Follow" : "Following";
+      const maxAttempts = 15;
+      let attempts = 0;
+      const dismissHoverCard = () => {
+        profileLink.dispatchEvent(new PointerEvent("pointerout", pointerOptions));
+        profileLink.dispatchEvent(new PointerEvent("pointerleave", { ...pointerOptions, bubbles: false }));
+        profileLink.dispatchEvent(new MouseEvent("mouseout", mouseOptions));
+        profileLink.dispatchEvent(new MouseEvent("mouseleave", { ...mouseOptions, bubbles: false }));
+      };
+      const tryClickButton = async () => {
+        attempts++;
+        const buttonTestId = isFollow ? "followBtn" : "unfollowBtn";
+        const hoverCard = document.querySelector('div[data-testid="profileHoverCard"]');
+        let followBtn = null;
+        if (hoverCard) {
+          followBtn = hoverCard.querySelector(`button[data-testid="${buttonTestId}"]`);
+          if (!followBtn) {
+            followBtn = hoverCard.querySelector(`button[aria-label="${buttonLabel}"]`);
+          }
+        }
+        if (followBtn) {
+          followBtn.click();
+          setTimeout(dismissHoverCard, 300);
+          return;
+        }
+        const customCardBtn = document.querySelector(
+          `.bsky-nav-profile-card button[aria-label="${buttonLabel}"]`
+        );
+        if (customCardBtn) {
+          customCardBtn.click();
+          setTimeout(() => {
+            const card = document.querySelector(".bsky-nav-profile-card");
+            if (card) card.remove();
+          }, 300);
+          return;
+        }
+        if (attempts < maxAttempts) {
+          setTimeout(tryClickButton, 100);
+        } else {
+          dismissHoverCard();
+          await this.executeFollowViaAPI(handle2, isFollow);
+        }
+      };
+      setTimeout(tryClickButton, 200);
+    }
+    /**
+     * Follow/unfollow a user directly via the Bluesky API
+     * @param {string} handle - The user's handle
+     * @param {boolean} isFollow - True for follow, false for unfollow
+     */
+    async executeFollowViaAPI(handle2, isFollow) {
+      try {
+        const { did: did2, followUri } = await this.api.getFollowStatus(handle2);
+        if (isFollow) {
+          if (followUri) {
+            this.showRuleAddedNotification(`Already following @${handle2}`, "info");
+            return;
+          }
+          await this.api.follow(did2);
+          this.showRuleAddedNotification(`Followed @${handle2}`, "success");
+        } else {
+          if (!followUri) {
+            this.showRuleAddedNotification(`Not following @${handle2}`, "info");
+            return;
+          }
+          await this.api.unfollow(followUri);
+          this.showRuleAddedNotification(`Unfollowed @${handle2}`, "success");
+        }
+      } catch (error) {
+        console.error(`Failed to ${isFollow ? "follow" : "unfollow"} @${handle2}:`, error);
+        this.showRuleAddedNotification(`Failed to ${isFollow ? "follow" : "unfollow"} @${handle2}`, "error");
+      }
+    }
+    /**
      * Format remaining time for display
      * @param {number} ms - Milliseconds remaining
      * @returns {string} Human readable time remaining
@@ -68108,8 +68309,8 @@ div#statusBar.has-feed-map {
           this.showRuleAddedNotification(`Could not resolve @${cleanHandle}`, "error");
           return false;
         }
-        await this.api.addToList(listUri, did2);
-        this.state.listCache.addMemberToCache(cleanHandle, listName);
+        const listitemUri = await this.api.addToList(listUri, did2);
+        this.state.listCache.addMemberToCache(cleanHandle, listName, listitemUri);
         this.scheduleHighlightRefresh();
         this.showRuleAddedNotification(`Added @${cleanHandle} to list "${listName}"`);
         return true;
@@ -68567,15 +68768,21 @@ ${rule}`;
     }
     /**
      * Show notification that rule was added
-     * Can be called with (message) or (handle, category, action)
+     * Can be called with:
+     * - (message) - info notification
+     * - (message, type) - notification with type ('error', 'info', 'success')
+     * - (handle, category, action) - rule added notification
      */
-    showRuleAddedNotification(handleOrMessage, category, action) {
+    showRuleAddedNotification(handleOrMessage, categoryOrType, action) {
       let message2, icon;
-      if (category === void 0) {
+      if (categoryOrType === void 0) {
         message2 = handleOrMessage;
         icon = "\u2139";
+      } else if (categoryOrType === "error" || categoryOrType === "info" || categoryOrType === "success") {
+        message2 = handleOrMessage;
+        icon = categoryOrType === "error" ? "\u2717" : categoryOrType === "success" ? "\u2713" : "\u2139";
       } else {
-        message2 = `@${handleOrMessage} added to "${category}" (${action})`;
+        message2 = `@${handleOrMessage} added to "${categoryOrType}" (${action})`;
         icon = action === "allow" ? "\u2713" : "\u2717";
       }
       const notification2 = $(`
@@ -68744,6 +68951,29 @@ ${rule}`;
         $(item).find(constants.PROFILE_SELECTOR).find("span").eq(1).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")
       ).slice(1);
     }
+    /**
+     * Get the author handle from an item
+     * Works for both feed items and post thread items
+     * @param {jQuery|Element} item - The post element
+     * @returns {string|null} The author's handle without @ prefix
+     */
+    getAuthorHandle(item) {
+      let handle2 = this.handleFromItem(item);
+      if (handle2) return handle2;
+      const testId = $(item).attr("data-testid") || "";
+      if (testId.startsWith("postThreadItem-by-")) {
+        return testId.replace("postThreadItem-by-", "");
+      }
+      if (testId.startsWith("feedItem-by-")) {
+        return testId.replace("feedItem-by-", "");
+      }
+      const profileLink = $(item).find('a[href*="/profile/"]').first().attr("href");
+      if (profileLink) {
+        const match2 = profileLink.match(/\/profile\/([^/]+)/);
+        if (match2) return match2[1];
+      }
+      return null;
+    }
     displayNameFromItem(item) {
       return $.trim(
         $(item).find(constants.PROFILE_SELECTOR).find("span").eq(0).text().replace(/[\u200E\u200F\u202A-\u202E]/g, "")
@@ -68884,16 +69114,30 @@ ${rule}`;
     }
     applyRuleColorStyling(element) {
       const $el = $(element);
-      const profileLink = $el.find(constants.PROFILE_SELECTOR).first();
       const avatar = $el.find('div[data-testid="userAvatarImage"]').first();
-      const postText = $el.find('div[data-testid="postText"]').first();
-      let handle2 = this.handleFromItem(element);
-      if (!handle2) {
-        const testId = $el.attr("data-testid") || "";
-        const match2 = testId.match(/^feedItem-by-(.+)$/);
-        if (match2) {
-          handle2 = match2[1];
+      let postText = $el.find('div[data-testid="postText"]').first();
+      if (!postText.length) {
+        postText = $el.find('div[data-word-wrap="1"]').first();
+      }
+      const handle2 = this.getAuthorHandle(element);
+      let profileLink = $el.find(constants.PROFILE_SELECTOR).first();
+      if (!profileLink.length && handle2) {
+        profileLink = $el.find(`a[href="/profile/${handle2}"]`).not(":has(img)").first();
+      }
+      let displayNameEl = null;
+      if (profileLink.length) {
+        const textDivs = profileLink.find('div[dir="auto"]');
+        textDivs.each((i, div) => {
+          const text = $(div).text().trim();
+          if (text && !text.startsWith("@") && !displayNameEl) {
+            displayNameEl = $(div);
+          }
+        });
+        if (!displayNameEl) {
+          displayNameEl = profileLink;
         }
+      } else {
+        displayNameEl = $();
       }
       const authorCategoryIndex = handle2 ? this.getFilterCategoryIndexForHandle(handle2) : -1;
       const $thread = $el.closest(".thread");
@@ -68909,8 +69153,8 @@ ${rule}`;
         }
       }
       if (!this.config.get("ruleColorCoding")) {
-        if (profileLink.length) {
-          profileLink.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
+        if (displayNameEl.length) {
+          displayNameEl.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
         }
         if (avatar.length) avatar.css("box-shadow", "");
         if (repostLink.length) {
@@ -68926,11 +69170,11 @@ ${rule}`;
       }
       if (authorCategoryIndex >= 0) {
         const color = this.getColorForCategoryIndex(authorCategoryIndex);
-        if (profileLink.length) {
-          profileLink[0].style.setProperty("background-color", `${color}80`, "important");
-          profileLink[0].style.setProperty("border", `1px solid ${color}88`, "important");
-          profileLink[0].style.setProperty("border-radius", "3px", "important");
-          profileLink[0].style.setProperty("padding", "0 2px", "important");
+        if (displayNameEl.length) {
+          displayNameEl[0].style.setProperty("background-color", `${color}80`, "important");
+          displayNameEl[0].style.setProperty("border", `1px solid ${color}88`, "important");
+          displayNameEl[0].style.setProperty("border-radius", "3px", "important");
+          displayNameEl[0].style.setProperty("padding", "0 2px", "important");
         }
         if (avatar.length) {
           avatar.css({
@@ -68939,8 +69183,8 @@ ${rule}`;
           });
         }
       } else {
-        if (profileLink.length) {
-          profileLink.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
+        if (displayNameEl.length) {
+          displayNameEl.css({ "background-color": "", "border": "", "border-radius": "", "padding": "" });
         }
         if (avatar.length) avatar.css("box-shadow", "");
       }
@@ -72729,9 +72973,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return;
       }
       if (event.key == "f") {
-        $("button[data-testid='followBtn']").click();
+        this.showProfileFollowConfirmation(true);
       } else if (event.key == "F") {
-        $("button[data-testid='unfollowBtn']").click();
+        this.showProfileFollowConfirmation(false);
       } else if (event.key == "L") {
         $("button[aria-label^='More options']").click();
         setTimeout(function() {
@@ -72753,6 +72997,74 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           $("div[data-testid='profileHeaderDropdownReportBtn']").click();
         }, 200);
       }
+    }
+    /**
+     * Show confirmation popup for following/unfollowing on profile page
+     * @param {boolean} isFollow - True for follow, false for unfollow
+     */
+    showProfileFollowConfirmation(isFollow) {
+      $(".bsky-nav-follow-popup").remove();
+      const pathParts = window.location.pathname.split("/");
+      const profileIndex = pathParts.indexOf("profile");
+      const handle2 = profileIndex >= 0 ? pathParts[profileIndex + 1] : null;
+      if (!handle2) {
+        console.warn("Could not get profile handle for follow action");
+        return;
+      }
+      const action = isFollow ? "Follow" : "Unfollow";
+      const buttonTestId = isFollow ? "followBtn" : "unfollowBtn";
+      const targetBtn = $(`button[data-testid='${buttonTestId}']`);
+      if (!targetBtn.length) {
+        console.warn(`${action} button not found - user may already be ${isFollow ? "followed" : "unfollowed"}`);
+        return;
+      }
+      const popup = $(`
+      <div class="bsky-nav-follow-popup bsky-nav-timeout-popup">
+        <div class="bsky-nav-timeout-header">
+          ${action} @${handle2}?
+        </div>
+        <div class="bsky-nav-timeout-buttons">
+          <button class="bsky-nav-timeout-btn cancel">Cancel</button>
+          <button class="bsky-nav-timeout-btn confirm">${action}</button>
+        </div>
+      </div>
+    `);
+      popup.css({
+        position: "fixed",
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        zIndex: 10002
+      });
+      $("body").append(popup);
+      popup.find(".bsky-nav-timeout-btn.confirm").on("click", () => {
+        popup.remove();
+        $(document).off(".follow");
+        $(`button[data-testid='${buttonTestId}']`).click();
+      });
+      popup.find(".bsky-nav-timeout-btn.cancel").on("click", () => {
+        popup.remove();
+        $(document).off(".follow");
+      });
+      setTimeout(() => {
+        $(document).on("mousedown.follow", (e) => {
+          if (!$(e.target).closest(".bsky-nav-follow-popup").length) {
+            popup.remove();
+            $(document).off(".follow");
+          }
+        });
+      }, 100);
+      $(document).on("keydown.follow", (e) => {
+        if (e.key === "Escape") {
+          popup.remove();
+          $(document).off(".follow");
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          popup.remove();
+          $(document).off(".follow");
+          $(`button[data-testid='${buttonTestId}']`).click();
+        }
+      });
     }
   }
   class SavedItemHandler extends FeedItemHandler {

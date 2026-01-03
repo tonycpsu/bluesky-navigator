@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+608.9d742236
+// @version     1.0.31+609.954997b4
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44911,6 +44911,57 @@ if (cid) {
       this.identifier = identifier;
       this.password = password;
       this.agent = new distExports.BskyAgent({ service: this.service });
+      this.rateLimitedAt = null;
+      this.rateLimitCooldownMs = 60 * 1e3;
+    }
+    /**
+     * Check if we're currently rate limited
+     * @returns {boolean} True if in rate limit cooldown period
+     */
+    isRateLimited() {
+      if (!this.rateLimitedAt) return false;
+      const elapsed = Date.now() - this.rateLimitedAt;
+      if (elapsed >= this.rateLimitCooldownMs) {
+        this.rateLimitedAt = null;
+        return false;
+      }
+      return true;
+    }
+    /**
+     * Get remaining cooldown time in seconds
+     * @returns {number} Seconds until rate limit expires, or 0 if not limited
+     */
+    getRateLimitRemaining() {
+      if (!this.rateLimitedAt) return 0;
+      const remaining = this.rateLimitCooldownMs - (Date.now() - this.rateLimitedAt);
+      return Math.max(0, Math.ceil(remaining / 1e3));
+    }
+    /**
+     * Handle API errors, detecting rate limits
+     * @param {Error} error - The error to check
+     * @throws {Error} Re-throws the error after handling
+     */
+    handleApiError(error) {
+      const isRateLimit = error.status === 429 || error.message?.includes("429") || error.message?.toLowerCase().includes("rate limit") || error.error?.includes("RateLimitExceeded");
+      if (isRateLimit) {
+        this.rateLimitedAt = Date.now();
+        const cooldownSecs = Math.ceil(this.rateLimitCooldownMs / 1e3);
+        console.warn(`API rate limited (429). Cooling down for ${cooldownSecs} seconds.`);
+      }
+      throw error;
+    }
+    /**
+     * Check rate limit before making a request
+     * @throws {Error} If currently rate limited
+     */
+    checkRateLimit() {
+      if (this.isRateLimited()) {
+        const remaining = this.getRateLimitRemaining();
+        const error = new Error(`Rate limited. Please wait ${remaining} seconds.`);
+        error.status = 429;
+        error.isRateLimitCooldown = true;
+        throw error;
+      }
     }
     async login() {
       return this.agent.login({
@@ -44922,12 +44973,17 @@ if (cid) {
       await this.agent.getPostThread({ uri: "at://..." });
     }
     async getTimeline(cursor = null, limit = 100) {
-      const params = { limit };
-      if (cursor) {
-        params.cursor = cursor;
+      this.checkRateLimit();
+      try {
+        const params = { limit };
+        if (cursor) {
+          params.cursor = cursor;
+        }
+        const { data } = await this.agent.getTimeline(params);
+        return data;
+      } catch (error) {
+        this.handleApiError(error);
       }
-      const { data } = await this.agent.getTimeline(params);
-      return data;
     }
     /**
      * Fetches timeline and extracts repost timestamps.
@@ -44983,9 +45039,14 @@ if (cid) {
       }
     }
     async getThread(uri) {
-      const res = await this.agent.getPostThread({ uri });
-      const { thread } = res.data;
-      return thread;
+      this.checkRateLimit();
+      try {
+        const res = await this.agent.getPostThread({ uri });
+        const { thread } = res.data;
+        return thread;
+      } catch (error) {
+        this.handleApiError(error);
+      }
     }
     /**
      * Fetches a user's profile by handle or DID
@@ -44993,8 +45054,13 @@ if (cid) {
      * @returns {Promise<Object>} Profile data including displayName, description, avatar, followersCount, etc.
      */
     async getProfile(actor) {
-      const { data } = await this.agent.getProfile({ actor });
-      return data;
+      this.checkRateLimit();
+      try {
+        const { data } = await this.agent.getProfile({ actor });
+        return data;
+      } catch (error) {
+        this.handleApiError(error);
+      }
     }
     /**
      * Fetches all lists owned by an actor
@@ -45002,16 +45068,21 @@ if (cid) {
      * @returns {Promise<Array>} Array of list objects with uri, name, purpose
      */
     async getLists(actor = null) {
+      this.checkRateLimit();
       const params = { actor: actor || this.agent.session?.did, limit: 100 };
       const lists = [];
       let cursor = null;
-      do {
-        if (cursor) params.cursor = cursor;
-        const { data } = await this.agent.app.bsky.graph.getLists(params);
-        lists.push(...data.lists);
-        cursor = data.cursor;
-      } while (cursor);
-      return lists;
+      try {
+        do {
+          if (cursor) params.cursor = cursor;
+          const { data } = await this.agent.app.bsky.graph.getLists(params);
+          lists.push(...data.lists);
+          cursor = data.cursor;
+        } while (cursor);
+        return lists;
+      } catch (error) {
+        this.handleApiError(error);
+      }
     }
     /**
      * Fetches all members of a list
@@ -45019,21 +45090,26 @@ if (cid) {
      * @returns {Promise<Array>} Array of member objects with did, handle, uri (listitem record URI)
      */
     async getListMembers(listUri) {
+      this.checkRateLimit();
       const params = { list: listUri, limit: 100 };
       const members = [];
       let cursor = null;
-      do {
-        if (cursor) params.cursor = cursor;
-        const { data } = await this.agent.app.bsky.graph.getList(params);
-        members.push(...data.items.map((item) => ({
-          did: item.subject.did,
-          handle: item.subject.handle,
-          uri: item.uri
-          // listitem record URI for deletion
-        })));
-        cursor = data.cursor;
-      } while (cursor);
-      return members;
+      try {
+        do {
+          if (cursor) params.cursor = cursor;
+          const { data } = await this.agent.app.bsky.graph.getList(params);
+          members.push(...data.items.map((item) => ({
+            did: item.subject.did,
+            handle: item.subject.handle,
+            uri: item.uri
+            // listitem record URI for deletion
+          })));
+          cursor = data.cursor;
+        } while (cursor);
+        return members;
+      } catch (error) {
+        this.handleApiError(error);
+      }
     }
     /**
      * Creates a new list
@@ -45100,6 +45176,7 @@ if (cid) {
      * @returns {Promise<string|null>} DID or null if not found
      */
     async resolveHandleToDid(handle2) {
+      this.checkRateLimit();
       let cleanHandle = handle2.replace(/^@/, "");
       if (!cleanHandle.includes(".")) {
         cleanHandle = `${cleanHandle}.bsky.social`;
@@ -45108,6 +45185,9 @@ if (cid) {
         const { data } = await this.agent.resolveHandle({ handle: cleanHandle });
         return data.did;
       } catch (error) {
+        if (error.status === 429 || error.isRateLimitCooldown) {
+          this.handleApiError(error);
+        }
         console.warn(`Failed to resolve handle ${cleanHandle}:`, error);
         return null;
       }
@@ -45125,16 +45205,21 @@ if (cid) {
      * @returns {Promise<{notifications: Array, cursor: string, seenAt: string}>}
      */
     async getNotifications(limit = 20, cursor = null) {
-      const params = { limit };
-      if (cursor) {
-        params.cursor = cursor;
+      this.checkRateLimit();
+      try {
+        const params = { limit };
+        if (cursor) {
+          params.cursor = cursor;
+        }
+        const { data } = await this.agent.listNotifications(params);
+        return {
+          notifications: data.notifications,
+          cursor: data.cursor,
+          seenAt: data.seenAt
+        };
+      } catch (error) {
+        this.handleApiError(error);
       }
-      const { data } = await this.agent.listNotifications(params);
-      return {
-        notifications: data.notifications,
-        cursor: data.cursor,
-        seenAt: data.seenAt
-      };
     }
     /**
      * Mark notifications as seen up to the current time

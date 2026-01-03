@@ -6,6 +6,69 @@ export class BlueskyAPI {
     this.identifier = identifier;
     this.password = password;
     this.agent = new BskyAgent({ service: this.service });
+
+    // Rate limit tracking
+    this.rateLimitedAt = null;
+    this.rateLimitCooldownMs = 60 * 1000; // 1 minute cooldown after 429
+  }
+
+  /**
+   * Check if we're currently rate limited
+   * @returns {boolean} True if in rate limit cooldown period
+   */
+  isRateLimited() {
+    if (!this.rateLimitedAt) return false;
+    const elapsed = Date.now() - this.rateLimitedAt;
+    if (elapsed >= this.rateLimitCooldownMs) {
+      this.rateLimitedAt = null; // Cooldown expired
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Get remaining cooldown time in seconds
+   * @returns {number} Seconds until rate limit expires, or 0 if not limited
+   */
+  getRateLimitRemaining() {
+    if (!this.rateLimitedAt) return 0;
+    const remaining = this.rateLimitCooldownMs - (Date.now() - this.rateLimitedAt);
+    return Math.max(0, Math.ceil(remaining / 1000));
+  }
+
+  /**
+   * Handle API errors, detecting rate limits
+   * @param {Error} error - The error to check
+   * @throws {Error} Re-throws the error after handling
+   */
+  handleApiError(error) {
+    // Check for rate limit (429) - check status and message
+    const isRateLimit = error.status === 429 ||
+      error.message?.includes('429') ||
+      error.message?.toLowerCase().includes('rate limit') ||
+      error.error?.includes('RateLimitExceeded');
+
+    if (isRateLimit) {
+      this.rateLimitedAt = Date.now();
+      const cooldownSecs = Math.ceil(this.rateLimitCooldownMs / 1000);
+      console.warn(`API rate limited (429). Cooling down for ${cooldownSecs} seconds.`);
+    }
+
+    throw error;
+  }
+
+  /**
+   * Check rate limit before making a request
+   * @throws {Error} If currently rate limited
+   */
+  checkRateLimit() {
+    if (this.isRateLimited()) {
+      const remaining = this.getRateLimitRemaining();
+      const error = new Error(`Rate limited. Please wait ${remaining} seconds.`);
+      error.status = 429;
+      error.isRateLimitCooldown = true;
+      throw error;
+    }
   }
 
   async login() {
@@ -21,12 +84,18 @@ export class BlueskyAPI {
   }
 
   async getTimeline(cursor = null, limit = 100) {
-    const params = { limit };
-    if (cursor) {
-      params.cursor = cursor;
+    this.checkRateLimit();
+
+    try {
+      const params = { limit };
+      if (cursor) {
+        params.cursor = cursor;
+      }
+      const { data } = await this.agent.getTimeline(params);
+      return data;
+    } catch (error) {
+      this.handleApiError(error);
     }
-    const { data } = await this.agent.getTimeline(params);
-    return data;
   }
 
   /**
@@ -98,9 +167,15 @@ export class BlueskyAPI {
   }
 
   async getThread(uri) {
-    const res = await this.agent.getPostThread({ uri: uri });
-    const { thread } = res.data;
-    return thread;
+    this.checkRateLimit();
+
+    try {
+      const res = await this.agent.getPostThread({ uri: uri });
+      const { thread } = res.data;
+      return thread;
+    } catch (error) {
+      this.handleApiError(error);
+    }
   }
 
   /**
@@ -109,8 +184,14 @@ export class BlueskyAPI {
    * @returns {Promise<Object>} Profile data including displayName, description, avatar, followersCount, etc.
    */
   async getProfile(actor) {
-    const { data } = await this.agent.getProfile({ actor });
-    return data;
+    this.checkRateLimit();
+
+    try {
+      const { data } = await this.agent.getProfile({ actor });
+      return data;
+    } catch (error) {
+      this.handleApiError(error);
+    }
   }
 
   /**
@@ -119,18 +200,24 @@ export class BlueskyAPI {
    * @returns {Promise<Array>} Array of list objects with uri, name, purpose
    */
   async getLists(actor = null) {
+    this.checkRateLimit();
+
     const params = { actor: actor || this.agent.session?.did, limit: 100 };
     const lists = [];
     let cursor = null;
 
-    do {
-      if (cursor) params.cursor = cursor;
-      const { data } = await this.agent.app.bsky.graph.getLists(params);
-      lists.push(...data.lists);
-      cursor = data.cursor;
-    } while (cursor);
+    try {
+      do {
+        if (cursor) params.cursor = cursor;
+        const { data } = await this.agent.app.bsky.graph.getLists(params);
+        lists.push(...data.lists);
+        cursor = data.cursor;
+      } while (cursor);
 
-    return lists;
+      return lists;
+    } catch (error) {
+      this.handleApiError(error);
+    }
   }
 
   /**
@@ -139,22 +226,28 @@ export class BlueskyAPI {
    * @returns {Promise<Array>} Array of member objects with did, handle, uri (listitem record URI)
    */
   async getListMembers(listUri) {
+    this.checkRateLimit();
+
     const params = { list: listUri, limit: 100 };
     const members = [];
     let cursor = null;
 
-    do {
-      if (cursor) params.cursor = cursor;
-      const { data } = await this.agent.app.bsky.graph.getList(params);
-      members.push(...data.items.map(item => ({
-        did: item.subject.did,
-        handle: item.subject.handle,
-        uri: item.uri, // listitem record URI for deletion
-      })));
-      cursor = data.cursor;
-    } while (cursor);
+    try {
+      do {
+        if (cursor) params.cursor = cursor;
+        const { data } = await this.agent.app.bsky.graph.getList(params);
+        members.push(...data.items.map(item => ({
+          did: item.subject.did,
+          handle: item.subject.handle,
+          uri: item.uri, // listitem record URI for deletion
+        })));
+        cursor = data.cursor;
+      } while (cursor);
 
-    return members;
+      return members;
+    } catch (error) {
+      this.handleApiError(error);
+    }
   }
 
   /**
@@ -228,6 +321,8 @@ export class BlueskyAPI {
    * @returns {Promise<string|null>} DID or null if not found
    */
   async resolveHandleToDid(handle) {
+    this.checkRateLimit();
+
     let cleanHandle = handle.replace(/^@/, '');
     // Add .bsky.social suffix for short handles without a domain
     if (!cleanHandle.includes('.')) {
@@ -237,6 +332,10 @@ export class BlueskyAPI {
       const { data } = await this.agent.resolveHandle({ handle: cleanHandle });
       return data.did;
     } catch (error) {
+      // Let rate limit errors propagate
+      if (error.status === 429 || error.isRateLimitCooldown) {
+        this.handleApiError(error);
+      }
       console.warn(`Failed to resolve handle ${cleanHandle}:`, error);
       return null;
     }
@@ -256,16 +355,22 @@ export class BlueskyAPI {
    * @returns {Promise<{notifications: Array, cursor: string, seenAt: string}>}
    */
   async getNotifications(limit = 20, cursor = null) {
-    const params = { limit };
-    if (cursor) {
-      params.cursor = cursor;
+    this.checkRateLimit();
+
+    try {
+      const params = { limit };
+      if (cursor) {
+        params.cursor = cursor;
+      }
+      const { data } = await this.agent.listNotifications(params);
+      return {
+        notifications: data.notifications,
+        cursor: data.cursor,
+        seenAt: data.seenAt,
+      };
+    } catch (error) {
+      this.handleApiError(error);
     }
-    const { data } = await this.agent.listNotifications(params);
-    return {
-      notifications: data.notifications,
-      cursor: data.cursor,
-      seenAt: data.seenAt,
-    };
   }
 
   /**

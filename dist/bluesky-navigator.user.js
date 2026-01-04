@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+609.954997b4
+// @version     1.0.31+610.c5b91c6d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -54695,13 +54695,11 @@ div#statusBar.has-feed-map {
 .bsky-nav-toast-container.bottom-right {
   bottom: 100px;
   right: 10px;
-  flex-direction: column-reverse;
 }
 
 .bsky-nav-toast-container.bottom-left {
   bottom: 100px;
   left: 10px;
-  flex-direction: column-reverse;
 }
 
 .bsky-nav-toast {
@@ -74079,6 +74077,23 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const positionClass = position.toLowerCase().replace(" ", "-");
       toastContainer = $(`<div class="bsky-nav-toast-container ${positionClass}"></div>`);
       $("body").append(toastContainer);
+      $(document).off("keydown.toastDismiss");
+      setupToastKeyboardHandler();
+    }
+    function dismissOldestToast() {
+      if (!toastContainer) return;
+      const $oldest = toastContainer.find(".bsky-nav-toast").first();
+      if ($oldest.length) {
+        removeToast($oldest, true);
+      }
+    }
+    function setupToastKeyboardHandler() {
+      $(document).on("keydown.toastDismiss", (e) => {
+        if (e.key !== "x") return;
+        if (isUserTyping()) return;
+        if (isModalOpen()) return;
+        dismissOldestToast();
+      });
     }
     function parseApiNotification(apiNotification) {
       const notification2 = {
@@ -74181,7 +74196,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const durationSeconds = durationValues[sliderPos] ?? 5;
       const duration = durationSeconds === Infinity ? null : durationSeconds * 1e3;
       const $toast = $(`
-      <div class="bsky-nav-toast">
+      <div class="bsky-nav-toast" data-indexed-at="${notification2.indexedAt || ""}">
         <div class="bsky-nav-toast-icon ${notification2.type}">
           ${iconSvgs[notification2.type] || ""}
         </div>
@@ -74200,36 +74215,54 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       $toast.on("click", (e) => {
         if (!$(e.target).is(".bsky-nav-toast-close")) {
           window.location.href = "/notifications";
-          removeToast($toast);
+          removeToast($toast, true);
         }
       });
       $toast.find(".bsky-nav-toast-close").on("click", (e) => {
         e.stopPropagation();
-        removeToast($toast);
+        removeToast($toast, true);
       });
       toastContainer.append($toast);
       setTimeout(() => $toast.addClass("visible"), 10);
       if (duration !== null) {
-        setTimeout(() => removeToast($toast), duration);
+        setTimeout(() => removeToast($toast, false), duration);
       }
     }
-    function removeToast($toast) {
+    function removeToast($toast, markAsRead = false) {
+      if (markAsRead && toastApi) {
+        const indexedAt = $toast.data("indexed-at");
+        if (indexedAt) {
+          markNotificationsSeenUpTo(indexedAt);
+        }
+      }
       $toast.removeClass("visible");
       setTimeout(() => $toast.remove(), 300);
+    }
+    async function markNotificationsSeenUpTo(indexedAt) {
+      if (!toastApi) return;
+      try {
+        await toastApi.agent.updateSeenNotifications({ seenAt: indexedAt });
+        const notificationDate = new Date(indexedAt);
+        if (!lastSeenAt || notificationDate > lastSeenAt) {
+          lastSeenAt = notificationDate;
+        }
+      } catch (error) {
+        console.warn("Failed to mark notification as read:", error);
+      }
     }
     function startNotificationPolling() {
       if (notificationPollInterval) {
         clearInterval(notificationPollInterval);
       }
       const pollIntervalMs = 3e4;
-      fetchNotifications(true);
+      fetchNotifications();
       notificationPollInterval = setInterval(() => {
         if (config.get("toastNotifications") && toastApi) {
-          fetchNotifications(false);
+          fetchNotifications();
         }
       }, pollIntervalMs);
     }
-    async function fetchNotifications(isInitial = false) {
+    async function fetchNotifications() {
       if (!toastApi) return;
       try {
         if (!toastApi.agent.session) {
@@ -74247,9 +74280,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             continue;
           }
           seenNotifications.add(notification2.id);
-          if (isInitial) {
-            continue;
-          }
           if (lastSeenAt && notification2.indexedAt) {
             const notificationDate = new Date(notification2.indexedAt);
             if (notificationDate <= lastSeenAt) {

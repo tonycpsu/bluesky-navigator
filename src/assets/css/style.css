@@ -6284,13 +6284,11 @@ div#statusBar.has-feed-map {
 .bsky-nav-toast-container.bottom-right {
   bottom: 100px;
   right: 10px;
-  flex-direction: column-reverse;
 }
 
 .bsky-nav-toast-container.bottom-left {
   bottom: 100px;
   left: 10px;
-  flex-direction: column-reverse;
 }
 
 .bsky-nav-toast {

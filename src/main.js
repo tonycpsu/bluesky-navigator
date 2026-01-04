@@ -487,6 +487,40 @@ function getScreenFromElement(element) {
 
     toastContainer = $(`<div class="bsky-nav-toast-container ${positionClass}"></div>`);
     $('body').append(toastContainer);
+
+    // Setup keyboard handler (remove first to avoid duplicates)
+    $(document).off('keydown.toastDismiss');
+    setupToastKeyboardHandler();
+  }
+
+  /**
+   * Dismiss the oldest visible toast notification and mark it as read
+   */
+  function dismissOldestToast() {
+    if (!toastContainer) return;
+    const $oldest = toastContainer.find('.bsky-nav-toast').first();
+    if ($oldest.length) {
+      removeToast($oldest, true);
+    }
+  }
+
+  /**
+   * Setup keyboard listener for toast dismissal
+   */
+  function setupToastKeyboardHandler() {
+    $(document).on('keydown.toastDismiss', (e) => {
+      // Only handle 'x' key
+      if (e.key !== 'x') return;
+
+      // Skip if user is typing in an input field
+      if (utils.isUserTyping()) return;
+
+      // Skip if a modal is open
+      if (utils.isModalOpen()) return;
+
+      // Dismiss oldest toast
+      dismissOldestToast();
+    });
   }
 
   /**
@@ -617,7 +651,7 @@ function getScreenFromElement(element) {
     const duration = durationSeconds === Infinity ? null : durationSeconds * 1000;
 
     const $toast = $(`
-      <div class="bsky-nav-toast">
+      <div class="bsky-nav-toast" data-indexed-at="${notification.indexedAt || ''}">
         <div class="bsky-nav-toast-icon ${notification.type}">
           ${iconSvgs[notification.type] || ''}
         </div>
@@ -638,14 +672,14 @@ function getScreenFromElement(element) {
     $toast.on('click', (e) => {
       if (!$(e.target).is('.bsky-nav-toast-close')) {
         window.location.href = '/notifications';
-        removeToast($toast);
+        removeToast($toast, true);
       }
     });
 
-    // Close button
+    // Close button - mark as read when explicitly dismissed
     $toast.find('.bsky-nav-toast-close').on('click', (e) => {
       e.stopPropagation();
-      removeToast($toast);
+      removeToast($toast, true);
     });
 
     toastContainer.append($toast);
@@ -654,17 +688,49 @@ function getScreenFromElement(element) {
     setTimeout(() => $toast.addClass('visible'), 10);
 
     // Auto-remove after duration (unless "Until dismissed")
+    // Don't mark as read on auto-timeout - user didn't interact with it
     if (duration !== null) {
-      setTimeout(() => removeToast($toast), duration);
+      setTimeout(() => removeToast($toast, false), duration);
     }
   }
 
   /**
    * Remove a toast with animation
+   * @param {jQuery} $toast - The toast element to remove
+   * @param {boolean} markAsRead - Whether to mark notifications as read up to this toast's time
    */
-  function removeToast($toast) {
+  function removeToast($toast, markAsRead = false) {
+    if (markAsRead && toastApi) {
+      const indexedAt = $toast.data('indexed-at');
+      if (indexedAt) {
+        // Mark notifications as seen up to this notification's time
+        markNotificationsSeenUpTo(indexedAt);
+      }
+    }
+
     $toast.removeClass('visible');
     setTimeout(() => $toast.remove(), 300);
+  }
+
+  /**
+   * Mark notifications as seen up to a specific timestamp
+   * @param {string} indexedAt - ISO timestamp to mark as seen up to
+   */
+  async function markNotificationsSeenUpTo(indexedAt) {
+    if (!toastApi) return;
+
+    try {
+      // Update the seenAt to the notification's timestamp
+      await toastApi.agent.updateSeenNotifications({ seenAt: indexedAt });
+
+      // Update local lastSeenAt so we don't re-show this notification
+      const notificationDate = new Date(indexedAt);
+      if (!lastSeenAt || notificationDate > lastSeenAt) {
+        lastSeenAt = notificationDate;
+      }
+    } catch (error) {
+      console.warn('Failed to mark notification as read:', error);
+    }
   }
 
   /**
@@ -678,22 +744,21 @@ function getScreenFromElement(element) {
     // Poll every 30 seconds
     const pollIntervalMs = 30000;
 
-    // Initial fetch to set the baseline (don't show toasts for existing notifications)
-    fetchNotifications(true);
+    // Initial fetch - show unread notifications as toasts
+    fetchNotifications();
 
     // Start polling
     notificationPollInterval = setInterval(() => {
       if (config.get('toastNotifications') && toastApi) {
-        fetchNotifications(false);
+        fetchNotifications();
       }
     }, pollIntervalMs);
   }
 
   /**
-   * Fetch notifications from the API
-   * @param {boolean} isInitial - If true, just record seen notifications without showing toasts
+   * Fetch notifications from the API and show toasts for unread ones
    */
-  async function fetchNotifications(isInitial = false) {
+  async function fetchNotifications() {
     if (!toastApi) return;
 
     try {
@@ -714,20 +779,16 @@ function getScreenFromElement(element) {
         const notification = parseApiNotification(apiNotification);
         if (!notification) continue;
 
-        // Skip if we've already seen this notification
+        // Skip if we've already seen this notification in this session
         if (seenNotifications.has(notification.id)) {
           continue;
         }
 
-        // Mark as seen
+        // Mark as seen for this session
         seenNotifications.add(notification.id);
 
-        // On initial load, don't show toasts - just record what we've seen
-        if (isInitial) {
-          continue;
-        }
-
-        // Only show toast if this notification is newer than our last seen time
+        // Only show toast if this notification is newer than API's last seen time
+        // (i.e., it's an unread notification)
         if (lastSeenAt && notification.indexedAt) {
           const notificationDate = new Date(notification.indexedAt);
           if (notificationDate <= lastSeenAt) {

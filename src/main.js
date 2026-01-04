@@ -583,9 +583,14 @@ function getScreenFromElement(element) {
         return null; // Unknown notification type
     }
 
-    // Extract preview text from the record if available
+    // Extract preview text based on notification type
+    // For replies, quotes, mentions - the record contains the text
     if (apiNotification.record?.text) {
-      notification.preview = apiNotification.record.text.substring(0, 150);
+      notification.preview = apiNotification.record.text.substring(0, 100);
+    }
+    // For likes and reposts - store the subject URI so we can fetch it later
+    if (!notification.preview && apiNotification.reasonSubject) {
+      notification.subjectUri = apiNotification.reasonSubject;
     }
 
     // Format relative time
@@ -659,6 +664,7 @@ function getScreenFromElement(element) {
           <div class="bsky-nav-toast-header">
             ${notification.avatar ? `<img class="bsky-nav-toast-avatar" src="${notification.avatar}" alt="">` : ''}
             <span class="bsky-nav-toast-author">${notification.author || 'Someone'}</span>
+            ${notification.handle ? `<span class="bsky-nav-toast-handle">@${notification.handle}</span>` : ''}
           </div>
           <span class="bsky-nav-toast-action">${notification.action}</span>
           ${notification.preview ? `<div class="bsky-nav-toast-preview">${notification.preview}</div>` : ''}
@@ -701,8 +707,11 @@ function getScreenFromElement(element) {
    */
   function removeToast($toast, markAsRead = false) {
     if (markAsRead && toastApi) {
-      const indexedAt = $toast.data('indexed-at');
-      if (indexedAt) {
+      // Use native DOM to get the raw attribute value
+      const toastEl = $toast[0];
+      const indexedAt = toastEl?.getAttribute('data-indexed-at');
+      console.log('removeToast indexedAt:', indexedAt, 'type:', typeof indexedAt);
+      if (indexedAt && indexedAt.length > 0) {
         // Mark notifications as seen up to this notification's time
         markNotificationsSeenUpTo(indexedAt);
       }
@@ -718,18 +727,56 @@ function getScreenFromElement(element) {
    */
   async function markNotificationsSeenUpTo(indexedAt) {
     if (!toastApi) return;
+    console.log('markNotificationsSeenUpTo called with:', indexedAt, 'type:', typeof indexedAt);
+    if (!indexedAt || typeof indexedAt !== 'string') {
+      console.warn('markNotificationsSeenUpTo: invalid indexedAt:', indexedAt);
+      return;
+    }
 
     try {
       // Update the seenAt to the notification's timestamp
-      await toastApi.agent.updateSeenNotifications({ seenAt: indexedAt });
+      console.log('Calling markNotificationsSeen with:', indexedAt);
+      await toastApi.markNotificationsSeen(indexedAt);
 
       // Update local lastSeenAt so we don't re-show this notification
       const notificationDate = new Date(indexedAt);
       if (!lastSeenAt || notificationDate > lastSeenAt) {
         lastSeenAt = notificationDate;
       }
+
+      // Update the notification badge in the UI
+      updateNotificationBadge();
     } catch (error) {
       console.warn('Failed to mark notification as read:', error);
+    }
+  }
+
+  /**
+   * Update the notification badge count in the UI
+   */
+  function updateNotificationBadge() {
+    // Find the notifications link and its badge
+    const notifLink = $('a[aria-label="Notifications"]');
+    if (!notifLink.length) return;
+
+    const badge = notifLink.find('div[aria-label*="unread"]');
+    if (!badge.length) return;
+
+    // Get current count from aria-label (e.g., "2 unread items")
+    const ariaLabel = badge.attr('aria-label') || '';
+    const match = ariaLabel.match(/(\d+)\s+unread/);
+    if (!match) return;
+
+    const currentCount = parseInt(match[1], 10);
+    const newCount = Math.max(0, currentCount - 1);
+
+    if (newCount === 0) {
+      // Remove the badge entirely when count reaches 0
+      badge.remove();
+    } else {
+      // Update the count
+      badge.text(newCount);
+      badge.attr('aria-label', `${newCount} unread item${newCount === 1 ? '' : 's'}`);
     }
   }
 
@@ -793,6 +840,19 @@ function getScreenFromElement(element) {
           const notificationDate = new Date(notification.indexedAt);
           if (notificationDate <= lastSeenAt) {
             continue;
+          }
+        }
+
+        // Fetch post content for likes/reposts if we have a subject URI
+        if (!notification.preview && notification.subjectUri) {
+          try {
+            const thread = await toastApi.getThread(notification.subjectUri);
+            if (thread?.post?.record?.text) {
+              notification.preview = thread.post.record.text.substring(0, 100);
+            }
+          } catch (err) {
+            // Silently fail - we'll just show the notification without preview
+            console.warn('Failed to fetch post for notification preview:', err);
           }
         }
 

@@ -1589,7 +1589,8 @@ export class FeedItemHandler extends ItemHandler {
 
     // Check if item is read - use state.seen directly instead of DOM class
     // (DOM class may not be applied yet if React replaced the element)
-    if (this.state.feedHideRead) {
+    // Don't hide read items when viewing a single post (post view)
+    if (this.state.feedHideRead && this.name !== 'post') {
       const postId = this.postIdForItem($item);
       if (postId && this.state.seen[postId]) {
         return false;

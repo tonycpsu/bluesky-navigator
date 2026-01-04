@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+610.c5b91c6d
+// @version     1.0.31+611.10097e48
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45222,10 +45222,12 @@ if (cid) {
       }
     }
     /**
-     * Mark notifications as seen up to the current time
+     * Mark notifications as seen up to a specific time
+     * @param {string} seenAt - ISO timestamp to mark as seen up to (defaults to current time)
      */
-    async markNotificationsSeen() {
-      await this.agent.updateSeenNotifications({ seenAt: (/* @__PURE__ */ new Date()).toISOString() });
+    async markNotificationsSeen(seenAt = null) {
+      const timestamp = seenAt || (/* @__PURE__ */ new Date()).toISOString();
+      await this.agent.api.app.bsky.notification.updateSeen({ seenAt: timestamp });
     }
     /**
      * Follow a user by DID
@@ -54808,6 +54810,14 @@ div#statusBar.has-feed-map {
   text-overflow: ellipsis;
 }
 
+.bsky-nav-toast-handle {
+  font-size: 13px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .bsky-nav-toast-action {
   font-size: 14px;
   color: #6b7280;
@@ -54864,6 +54874,10 @@ div#statusBar.has-feed-map {
 
   .bsky-nav-toast-author {
     color: #f9fafb;
+  }
+
+  .bsky-nav-toast-handle {
+    color: #9ca3af;
   }
 
   .bsky-nav-toast-action {
@@ -65774,7 +65788,6 @@ div#statusBar.has-feed-map {
     }
     handleMovementKey(event) {
       let moved = false;
-      let mark = false;
       if (this.isPopupVisible) {
         return;
       }
@@ -65890,8 +65903,11 @@ div#statusBar.has-feed-map {
             event.preventDefault();
             moved = this.setIndex(this.items.length - 1, false, true);
           } else if (event.key == "J") {
-            mark = true;
-            this.jumpToNextUnseenItem(mark);
+            event.preventDefault();
+            this.markThreadReadAndAdvance(1);
+          } else if (event.key == "K") {
+            event.preventDefault();
+            this.markThreadReadAndAdvance(-1);
           }
           moved = true;
         } else if (event.key == "g") {
@@ -66302,6 +66318,35 @@ div#statusBar.has-feed-map {
       }
       this.setIndex(i, mark);
       this.updateItems();
+    }
+    /**
+     * Mark the entire current thread (main post + unrolled replies) as read
+     * and advance to the next or previous thread
+     * @param {number} direction - 1 for next, -1 for previous
+     */
+    markThreadReadAndAdvance(direction) {
+      const mainItem = this.items[this.index];
+      const mainPostId = this.postIdForItem(mainItem);
+      if (mainPostId) {
+        this.markPostRead(mainPostId, true);
+        this.applyItemStyle(mainItem, false);
+      }
+      if (this.unrolledReplies.length) {
+        this.unrolledReplies.each((i, reply) => {
+          const replyPostId = this.postIdForItem(reply);
+          if (replyPostId) {
+            this.markPostRead(replyPostId, true);
+          }
+          $(reply).addClass("item-read").removeClass("item-unread");
+        });
+      }
+      this.threadIndex = null;
+      if (direction > 0) {
+        this.jumpToNext(false);
+      } else {
+        this.jumpToPrev(false);
+      }
+      this.updateInfoIndicator();
     }
     jumpToPost(postId, skipScroll = false) {
       for (const [i, item] of $(this.items).get().entries()) {
@@ -71024,7 +71069,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (reposterHandle && this.isTimedOut(reposterHandle)) {
         return false;
       }
-      if (this.state.feedHideRead) {
+      if (this.state.feedHideRead && this.name !== "post") {
         const postId = this.postIdForItem($item);
         if (postId && this.state.seen[postId]) {
           return false;
@@ -74148,7 +74193,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           return null;
       }
       if (apiNotification.record?.text) {
-        notification2.preview = apiNotification.record.text.substring(0, 150);
+        notification2.preview = apiNotification.record.text.substring(0, 100);
+      }
+      if (!notification2.preview && apiNotification.reasonSubject) {
+        notification2.subjectUri = apiNotification.reasonSubject;
       }
       if (apiNotification.indexedAt) {
         const date = new Date(apiNotification.indexedAt);
@@ -74204,6 +74252,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           <div class="bsky-nav-toast-header">
             ${notification2.avatar ? `<img class="bsky-nav-toast-avatar" src="${notification2.avatar}" alt="">` : ""}
             <span class="bsky-nav-toast-author">${notification2.author || "Someone"}</span>
+            ${notification2.handle ? `<span class="bsky-nav-toast-handle">@${notification2.handle}</span>` : ""}
           </div>
           <span class="bsky-nav-toast-action">${notification2.action}</span>
           ${notification2.preview ? `<div class="bsky-nav-toast-preview">${notification2.preview}</div>` : ""}
@@ -74230,8 +74279,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     function removeToast($toast, markAsRead = false) {
       if (markAsRead && toastApi) {
-        const indexedAt = $toast.data("indexed-at");
-        if (indexedAt) {
+        const toastEl = $toast[0];
+        const indexedAt = toastEl?.getAttribute("data-indexed-at");
+        console.log("removeToast indexedAt:", indexedAt, "type:", typeof indexedAt);
+        if (indexedAt && indexedAt.length > 0) {
           markNotificationsSeenUpTo(indexedAt);
         }
       }
@@ -74240,14 +74291,38 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     async function markNotificationsSeenUpTo(indexedAt) {
       if (!toastApi) return;
+      console.log("markNotificationsSeenUpTo called with:", indexedAt, "type:", typeof indexedAt);
+      if (!indexedAt || typeof indexedAt !== "string") {
+        console.warn("markNotificationsSeenUpTo: invalid indexedAt:", indexedAt);
+        return;
+      }
       try {
-        await toastApi.agent.updateSeenNotifications({ seenAt: indexedAt });
+        console.log("Calling markNotificationsSeen with:", indexedAt);
+        await toastApi.markNotificationsSeen(indexedAt);
         const notificationDate = new Date(indexedAt);
         if (!lastSeenAt || notificationDate > lastSeenAt) {
           lastSeenAt = notificationDate;
         }
+        updateNotificationBadge();
       } catch (error) {
         console.warn("Failed to mark notification as read:", error);
+      }
+    }
+    function updateNotificationBadge() {
+      const notifLink = $('a[aria-label="Notifications"]');
+      if (!notifLink.length) return;
+      const badge = notifLink.find('div[aria-label*="unread"]');
+      if (!badge.length) return;
+      const ariaLabel = badge.attr("aria-label") || "";
+      const match2 = ariaLabel.match(/(\d+)\s+unread/);
+      if (!match2) return;
+      const currentCount = parseInt(match2[1], 10);
+      const newCount = Math.max(0, currentCount - 1);
+      if (newCount === 0) {
+        badge.remove();
+      } else {
+        badge.text(newCount);
+        badge.attr("aria-label", `${newCount} unread item${newCount === 1 ? "" : "s"}`);
       }
     }
     function startNotificationPolling() {
@@ -74284,6 +74359,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             const notificationDate = new Date(notification2.indexedAt);
             if (notificationDate <= lastSeenAt) {
               continue;
+            }
+          }
+          if (!notification2.preview && notification2.subjectUri) {
+            try {
+              const thread = await toastApi.getThread(notification2.subjectUri);
+              if (thread?.post?.record?.text) {
+                notification2.preview = thread.post.record.text.substring(0, 100);
+              }
+            } catch (err) {
+              console.warn("Failed to fetch post for notification preview:", err);
             }
           }
           showToast2(notification2);

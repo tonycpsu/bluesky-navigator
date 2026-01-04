@@ -1943,8 +1943,11 @@ export class ItemHandler extends Handler {
           event.preventDefault();
           moved = this.setIndex(this.items.length - 1, false, true);
         } else if (event.key == 'J') {
-          mark = true;
-          this.jumpToNextUnseenItem(mark);
+          event.preventDefault();
+          this.markThreadReadAndAdvance(1);
+        } else if (event.key == 'K') {
+          event.preventDefault();
+          this.markThreadReadAndAdvance(-1);
         }
         moved = true;
       } else if (event.key == 'g') {
@@ -2453,6 +2456,44 @@ export class ItemHandler extends Handler {
     }
     this.setIndex(i, mark);
     this.updateItems();
+  }
+
+  /**
+   * Mark the entire current thread (main post + unrolled replies) as read
+   * and advance to the next or previous thread
+   * @param {number} direction - 1 for next, -1 for previous
+   */
+  markThreadReadAndAdvance(direction) {
+    // Mark the main post as read
+    const mainItem = this.items[this.index];
+    const mainPostId = this.postIdForItem(mainItem);
+    if (mainPostId) {
+      this.markPostRead(mainPostId, true);
+      this.applyItemStyle(mainItem, false);
+    }
+
+    // Mark all unrolled replies as read
+    if (this.unrolledReplies.length) {
+      this.unrolledReplies.each((i, reply) => {
+        const replyPostId = this.postIdForItem(reply);
+        if (replyPostId) {
+          this.markPostRead(replyPostId, true);
+        }
+        $(reply).addClass('item-read').removeClass('item-unread');
+      });
+    }
+
+    // Reset thread navigation state
+    this.threadIndex = null;
+
+    // Advance to next/previous item
+    if (direction > 0) {
+      this.jumpToNext(false);
+    } else {
+      this.jumpToPrev(false);
+    }
+
+    this.updateInfoIndicator();
   }
 
   jumpToPost(postId, skipScroll = false) {

@@ -374,10 +374,13 @@ export class BlueskyAPI {
   }
 
   /**
-   * Mark notifications as seen up to the current time
+   * Mark notifications as seen up to a specific time
+   * @param {string} seenAt - ISO timestamp to mark as seen up to (defaults to current time)
    */
-  async markNotificationsSeen() {
-    await this.agent.updateSeenNotifications({ seenAt: new Date().toISOString() });
+  async markNotificationsSeen(seenAt = null) {
+    const timestamp = seenAt || new Date().toISOString();
+    // Use direct XRPC call instead of agent wrapper
+    await this.agent.api.app.bsky.notification.updateSeen({ seenAt: timestamp });
   }
 
   /**

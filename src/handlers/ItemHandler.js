@@ -2464,8 +2464,11 @@ export class ItemHandler extends Handler {
    * @param {number} direction - 1 for next, -1 for previous
    */
   markThreadReadAndAdvance(direction) {
+    // Capture current index before any operations that might affect it
+    const startIndex = this.index;
+
     // Mark the main post as read
-    const mainItem = this.items[this.index];
+    const mainItem = this.items[startIndex];
     const mainPostId = this.postIdForItem(mainItem);
     if (mainPostId) {
       this.markPostRead(mainPostId, true);
@@ -2486,11 +2489,29 @@ export class ItemHandler extends Handler {
     // Reset thread navigation state
     this.threadIndex = null;
 
-    // Advance to next/previous item
-    if (direction > 0) {
-      this.jumpToNext(false);
-    } else {
-      this.jumpToPrev(false);
+    // Calculate target index from captured start index
+    const targetIndex = startIndex + direction;
+
+    // Navigate to target if in bounds
+    if (targetIndex >= 0 && targetIndex < this.items.length) {
+      // Navigate without auto-scroll
+      this.setIndex(targetIndex, false, false);
+
+      // Scroll to align top of new post with top of visible area (below toolbar)
+      const el = this.selectedItem[0];
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const toolbarHeight = this.getToolbarHeight();
+        const scrollAmount = rect.top - toolbarHeight;
+        this.ignoreMouseMovement = true;
+        window.scrollBy({
+          top: scrollAmount,
+          behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+        });
+        setTimeout(() => {
+          this.ignoreMouseMovement = false;
+        }, 500);
+      }
     }
 
     this.updateInfoIndicator();

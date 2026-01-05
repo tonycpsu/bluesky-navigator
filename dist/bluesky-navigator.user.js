@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+611.10097e48
+// @version     1.0.31+612.ce1f921b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -66325,7 +66325,8 @@ div#statusBar.has-feed-map {
      * @param {number} direction - 1 for next, -1 for previous
      */
     markThreadReadAndAdvance(direction) {
-      const mainItem = this.items[this.index];
+      const startIndex = this.index;
+      const mainItem = this.items[startIndex];
       const mainPostId = this.postIdForItem(mainItem);
       if (mainPostId) {
         this.markPostRead(mainPostId, true);
@@ -66341,10 +66342,23 @@ div#statusBar.has-feed-map {
         });
       }
       this.threadIndex = null;
-      if (direction > 0) {
-        this.jumpToNext(false);
-      } else {
-        this.jumpToPrev(false);
+      const targetIndex = startIndex + direction;
+      if (targetIndex >= 0 && targetIndex < this.items.length) {
+        this.setIndex(targetIndex, false, false);
+        const el = this.selectedItem[0];
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const toolbarHeight = this.getToolbarHeight();
+          const scrollAmount = rect.top - toolbarHeight;
+          this.ignoreMouseMovement = true;
+          window.scrollBy({
+            top: scrollAmount,
+            behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
+          });
+          setTimeout(() => {
+            this.ignoreMouseMovement = false;
+          }, 500);
+        }
       }
       this.updateInfoIndicator();
     }

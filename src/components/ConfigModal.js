@@ -295,6 +295,47 @@ const CONFIG_SCHEMA = {
       },
     },
   },
+  Clearsky: {
+    icon: '🚫',
+    fields: {
+      clearskyEnabled: {
+        label: 'Enable Clearsky integration',
+        type: 'checkbox',
+        default: true,
+        help: 'Highlight users who appear on Clearsky most-blocked lists',
+      },
+      clearskyStyleTypeAll: {
+        label: 'Top blocked style',
+        type: 'select',
+        options: ['Background', 'Border', 'Underline', 'Text color', 'None'],
+        default: 'Background',
+        help: 'Style type for all-time most blocked list',
+        showWhen: { clearskyEnabled: true },
+      },
+      clearskyColorAll: {
+        label: 'Top blocked color',
+        type: 'color',
+        default: '#ff8080',
+        help: 'Color for all-time most blocked users',
+        showWhen: { clearskyEnabled: true },
+      },
+      clearskyStyleTypeRecent: {
+        label: 'Recently blocked style',
+        type: 'select',
+        options: ['Background', 'Border', 'Underline', 'Text color', 'None'],
+        default: 'Background',
+        help: 'Style type for recently blocked list',
+        showWhen: { clearskyEnabled: true },
+      },
+      clearskyColorRecent: {
+        label: 'Recently blocked color',
+        type: 'color',
+        default: '#cc4040',
+        help: 'Color for recently blocked users',
+        showWhen: { clearskyEnabled: true },
+      },
+    },
+  },
   'Threads & Sidecar': {
     icon: '💬',
     fields: {

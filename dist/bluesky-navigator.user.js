@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+614.c63938e1
+// @version     1.0.31+615.9d405f41
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -218,9 +218,17 @@
     ensureBlockState() {
       if (!this.state.blocks) {
         this.state.blocks = {
-          all: { updated: null, handles: [] },
-          recent: { updated: null, handles: [] }
+          all: { updated: null, dids: [] },
+          recent: { updated: null, dids: [] }
         };
+      }
+      if (this.state.blocks.all && "handles" in this.state.blocks.all) {
+        this.state.blocks.all.dids = [];
+        delete this.state.blocks.all.handles;
+      }
+      if (this.state.blocks.recent && "handles" in this.state.blocks.recent) {
+        this.state.blocks.recent.dids = [];
+        delete this.state.blocks.recent.handles;
       }
     }
     setSyncStatus(status, title) {
@@ -683,15 +691,16 @@
     handleBlockListResponse(response, responseKey, stateKey) {
       const jsonResponse = $.parseJSON(response.response);
       try {
-        this.state.blocks[stateKey].handles = jsonResponse.data[responseKey].map(
-          (entry) => entry.Handle
+        this.state.blocks[stateKey].dids = jsonResponse.data[responseKey].map(
+          (entry) => entry.did
         );
         this.state.blocks[stateKey].updated = Date.now();
       } catch (_error) {
-        console.warn("couldn't fetch block list");
+        console.warn("[Clearsky] couldn't fetch block list");
       }
     }
     updateBlockList() {
+      if (this.config.get && !this.config.get("clearskyEnabled")) return;
       const blockConfig = {
         all: {
           url: "https://api.clearsky.services/api/v1/anon/lists/fun-facts",
@@ -699,11 +708,11 @@
         },
         recent: {
           url: "https://api.clearsky.services/api/v1/anon/lists/funer-facts",
-          responseKey: "blocked24"
+          responseKey: "blocked"
         }
       };
       for (const [stateKey, cfg] of Object.entries(blockConfig)) {
-        if (this.state.blocks[stateKey].updated == null || Date.now() + constants.CLEARSKY_LIST_REFRESH_INTERVAL > this.state.blocks[stateKey].updated) {
+        if (this.state.blocks[stateKey].updated == null || Date.now() - this.state.blocks[stateKey].updated > constants.CLEARSKY_LIST_REFRESH_INTERVAL * 1e3) {
           GM_xmlhttpRequest({
             method: "GET",
             url: cfg.url,
@@ -45740,6 +45749,47 @@ if (cid) {
         }
       }
     },
+    Clearsky: {
+      icon: "\u{1F6AB}",
+      fields: {
+        clearskyEnabled: {
+          label: "Enable Clearsky integration",
+          type: "checkbox",
+          default: true,
+          help: "Highlight users who appear on Clearsky most-blocked lists"
+        },
+        clearskyStyleTypeAll: {
+          label: "Top blocked style",
+          type: "select",
+          options: ["Background", "Border", "Underline", "Text color", "None"],
+          default: "Background",
+          help: "Style type for all-time most blocked list",
+          showWhen: { clearskyEnabled: true }
+        },
+        clearskyColorAll: {
+          label: "Top blocked color",
+          type: "color",
+          default: "#ff8080",
+          help: "Color for all-time most blocked users",
+          showWhen: { clearskyEnabled: true }
+        },
+        clearskyStyleTypeRecent: {
+          label: "Recently blocked style",
+          type: "select",
+          options: ["Background", "Border", "Underline", "Text color", "None"],
+          default: "Background",
+          help: "Style type for recently blocked list",
+          showWhen: { clearskyEnabled: true }
+        },
+        clearskyColorRecent: {
+          label: "Recently blocked color",
+          type: "color",
+          default: "#cc4040",
+          help: "Color for recently blocked users",
+          showWhen: { clearskyEnabled: true }
+        }
+      }
+    },
     "Threads & Sidecar": {
       icon: "\u{1F4AC}",
       fields: {
@@ -64489,6 +64539,7 @@ div#statusBar.has-feed-map {
       this.scrollDirection = 0;
       this.selfThreadCache = {};
       this.unrolledPostIds = /* @__PURE__ */ new Set();
+      this.handleToDidCache = /* @__PURE__ */ new Map();
       this.hoverDebounceTimeout = null;
       this.hoverDebounceDelay = 100;
       this.userInitiatedScroll = false;
@@ -69100,6 +69151,20 @@ ${rule}`;
       ).slice(1);
     }
     /**
+     * Extract DID from a post's profile link.
+     * Returns the DID if the profile link uses a DID, null otherwise.
+     * @param {jQuery|Element} item - The post element
+     * @returns {string|null} The author's DID or null
+     */
+    didFromItem(item) {
+      const profileLink = $(item).find('a[href*="/profile/"]').first().attr("href");
+      if (profileLink) {
+        const match2 = profileLink.match(/\/profile\/(did:[^/]+)/);
+        if (match2) return match2[1];
+      }
+      return null;
+    }
+    /**
      * Get the author handle from an item
      * Works for both feed items and post thread items
      * @param {jQuery|Element} item - The post element
@@ -69133,7 +69198,18 @@ ${rule}`;
       const uri = await this.api.getAtprotoUri(url);
       if (!uri) return;
       try {
-        return await this.api.getThread(uri);
+        const thread = await this.api.getThread(uri);
+        if (thread?.post?.author?.handle && thread?.post?.author?.did) {
+          this.handleToDidCache.set(thread.post.author.handle, thread.post.author.did);
+        }
+        if (thread?.replies) {
+          for (const reply of thread.replies) {
+            if (reply?.post?.author?.handle && reply?.post?.author?.did) {
+              this.handleToDidCache.set(reply.post.author.handle, reply.post.author.did);
+            }
+          }
+        }
+        return thread;
       } catch (error) {
         if (error.message?.includes("not found") || error.name === "NotFoundError") {
           console.warn(`[ItemHandler] Post not found: ${uri}`);
@@ -69517,12 +69593,58 @@ ${rule}`;
       });
     }
     applyBlockStatus(element) {
-      const handle2 = this.handleFromItem(element);
-      if (this.state.blocks.all.includes(handle2)) {
-        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_ALL_CSS);
+      if (!this.config.get("clearskyEnabled")) return;
+      let did2 = this.didFromItem(element);
+      const handle2 = this.getAuthorHandle(element);
+      if (!did2 && handle2) {
+        did2 = this.handleToDidCache.get(handle2);
+        if (!did2 && this.api) {
+          this.api.resolveHandleToDid(handle2).then((resolvedDid) => {
+            if (resolvedDid) {
+              this.handleToDidCache.set(handle2, resolvedDid);
+              this.applyBlockStatusWithDid(element, resolvedDid);
+            }
+          }).catch(() => {
+          });
+        }
       }
-      if (this.state.blocks.recent.includes(handle2)) {
-        $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_RECENT_CSS);
+      if (did2) {
+        this.applyBlockStatusWithDid(element, did2);
+      }
+    }
+    getClearskyStyle(styleType, color) {
+      if (styleType === "None" || !color) return null;
+      switch (styleType) {
+        case "Background":
+          return { "background-color": color };
+        case "Border":
+          return { "border": `2px solid ${color}`, "border-radius": "4px" };
+        case "Underline":
+          return { "text-decoration": "underline", "text-decoration-color": color, "text-underline-offset": "2px" };
+        case "Text color":
+          return { "color": color };
+        default:
+          return null;
+      }
+    }
+    applyBlockStatusWithDid(element, did2) {
+      const allBlocks = this.state.blocks?.all?.dids || [];
+      const recentBlocks = this.state.blocks?.recent?.dids || [];
+      if (allBlocks.includes(did2)) {
+        const styleType = this.config.get("clearskyStyleTypeAll");
+        const color = this.config.get("clearskyColorAll");
+        const style2 = this.getClearskyStyle(styleType, color);
+        if (style2) {
+          $(element).find(constants.PROFILE_SELECTOR).css(style2);
+        }
+      }
+      if (recentBlocks.includes(did2)) {
+        const styleType = this.config.get("clearskyStyleTypeRecent");
+        const color = this.config.get("clearskyColorRecent");
+        const style2 = this.getClearskyStyle(styleType, color);
+        if (style2) {
+          $(element).find(constants.PROFILE_SELECTOR).css(style2);
+        }
       }
     }
     // ===========================================================================

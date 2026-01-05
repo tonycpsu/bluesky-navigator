@@ -64,9 +64,18 @@ export class StateManager {
   ensureBlockState() {
     if (!this.state.blocks) {
       this.state.blocks = {
-        all: { updated: null, handles: [] },
-        recent: { updated: null, handles: [] },
+        all: { updated: null, dids: [] },
+        recent: { updated: null, dids: [] },
       };
+    }
+    // Migrate old handles format to dids
+    if (this.state.blocks.all && 'handles' in this.state.blocks.all) {
+      this.state.blocks.all.dids = [];
+      delete this.state.blocks.all.handles;
+    }
+    if (this.state.blocks.recent && 'handles' in this.state.blocks.recent) {
+      this.state.blocks.recent.dids = [];
+      delete this.state.blocks.recent.handles;
     }
   }
 
@@ -622,22 +631,22 @@ export class StateManager {
   }
 
   handleBlockListResponse(response, responseKey, stateKey) {
-    // console.dir(responseKey, stateKey)
     const jsonResponse = $.parseJSON(response.response);
-    // console.dir(jsonResponse.data)
 
     try {
-      this.state.blocks[stateKey].handles = jsonResponse.data[responseKey].map(
-        (entry) => entry.Handle
+      this.state.blocks[stateKey].dids = jsonResponse.data[responseKey].map(
+        (entry) => entry.did
       );
       this.state.blocks[stateKey].updated = Date.now();
     } catch (_error) {
-      console.warn("couldn't fetch block list");
+      console.warn("[Clearsky] couldn't fetch block list");
     }
   }
 
   updateBlockList() {
-    // console.log("updateBlockList")
+    // Skip if Clearsky is disabled
+    if (this.config.get && !this.config.get('clearskyEnabled')) return;
+
     const blockConfig = {
       all: {
         url: 'https://api.clearsky.services/api/v1/anon/lists/fun-facts',
@@ -645,15 +654,14 @@ export class StateManager {
       },
       recent: {
         url: 'https://api.clearsky.services/api/v1/anon/lists/funer-facts',
-        responseKey: 'blocked24',
+        responseKey: 'blocked',
       },
     };
 
     for (const [stateKey, cfg] of Object.entries(blockConfig)) {
-      // console.log(stateKey, cfg)
       if (
         this.state.blocks[stateKey].updated == null ||
-        Date.now() + constants.CLEARSKY_LIST_REFRESH_INTERVAL > this.state.blocks[stateKey].updated
+        Date.now() - this.state.blocks[stateKey].updated > constants.CLEARSKY_LIST_REFRESH_INTERVAL * 1000
       ) {
         GM_xmlhttpRequest({
           method: 'GET',

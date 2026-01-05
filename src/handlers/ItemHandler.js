@@ -64,6 +64,7 @@ export class ItemHandler extends Handler {
     this.scrollDirection = 0;
     this.selfThreadCache = {}; // Cache for API-detected self-threads (postId -> true)
     this.unrolledPostIds = new Set(); // Track post IDs shown in unrolled threads
+    this.handleToDidCache = new Map(); // Cache handle -> DID mappings for Clearsky block checking
 
     // Hover debounce for mouse focus
     this.hoverDebounceTimeout = null;
@@ -6089,6 +6090,21 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Extract DID from a post's profile link.
+   * Returns the DID if the profile link uses a DID, null otherwise.
+   * @param {jQuery|Element} item - The post element
+   * @returns {string|null} The author's DID or null
+   */
+  didFromItem(item) {
+    const profileLink = $(item).find('a[href*="/profile/"]').first().attr('href');
+    if (profileLink) {
+      const match = profileLink.match(/\/profile\/(did:[^/]+)/);
+      if (match) return match[1];
+    }
+    return null;
+  }
+
+  /**
    * Get the author handle from an item
    * Works for both feed items and post thread items
    * @param {jQuery|Element} item - The post element
@@ -6135,7 +6151,20 @@ export class ItemHandler extends Handler {
     const uri = await this.api.getAtprotoUri(url);
     if (!uri) return;
     try {
-      return await this.api.getThread(uri);
+      const thread = await this.api.getThread(uri);
+      // Cache author DID for Clearsky block checking
+      if (thread?.post?.author?.handle && thread?.post?.author?.did) {
+        this.handleToDidCache.set(thread.post.author.handle, thread.post.author.did);
+      }
+      // Also cache reply authors
+      if (thread?.replies) {
+        for (const reply of thread.replies) {
+          if (reply?.post?.author?.handle && reply?.post?.author?.did) {
+            this.handleToDidCache.set(reply.post.author.handle, reply.post.author.did);
+          }
+        }
+      }
+      return thread;
     } catch (error) {
       // Handle deleted/unavailable posts gracefully
       if (error.message?.includes('not found') || error.name === 'NotFoundError') {
@@ -6629,12 +6658,73 @@ export class ItemHandler extends Handler {
   }
 
   applyBlockStatus(element) {
-    const handle = this.handleFromItem(element);
-    if (this.state.blocks.all.includes(handle)) {
-      $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_ALL_CSS);
+    // Check if Clearsky is enabled
+    if (!this.config.get('clearskyEnabled')) return;
+
+    // Try to get DID from profile link (when posts use DID-based URLs)
+    let did = this.didFromItem(element);
+    // Use getAuthorHandle which has multiple fallback strategies
+    const handle = this.getAuthorHandle(element);
+
+    // If no DID in URL, try the cache
+    if (!did && handle) {
+      did = this.handleToDidCache.get(handle);
+
+      // If not in cache and API available, resolve async (non-blocking)
+      if (!did && this.api) {
+        this.api.resolveHandleToDid(handle).then((resolvedDid) => {
+          if (resolvedDid) {
+            this.handleToDidCache.set(handle, resolvedDid);
+            // Re-apply block status now that we have the DID
+            this.applyBlockStatusWithDid(element, resolvedDid);
+          }
+        }).catch(() => {
+          // Silently ignore resolution failures (rate limits, etc)
+        });
+      }
     }
-    if (this.state.blocks.recent.includes(handle)) {
-      $(element).find(constants.PROFILE_SELECTOR).css(constants.CLEARSKY_BLOCKED_RECENT_CSS);
+
+    if (did) {
+      this.applyBlockStatusWithDid(element, did);
+    }
+  }
+
+  getClearskyStyle(styleType, color) {
+    if (styleType === 'None' || !color) return null;
+
+    switch (styleType) {
+      case 'Background':
+        return { 'background-color': color };
+      case 'Border':
+        return { 'border': `2px solid ${color}`, 'border-radius': '4px' };
+      case 'Underline':
+        return { 'text-decoration': 'underline', 'text-decoration-color': color, 'text-underline-offset': '2px' };
+      case 'Text color':
+        return { 'color': color };
+      default:
+        return null;
+    }
+  }
+
+  applyBlockStatusWithDid(element, did) {
+    const allBlocks = this.state.blocks?.all?.dids || [];
+    const recentBlocks = this.state.blocks?.recent?.dids || [];
+
+    if (allBlocks.includes(did)) {
+      const styleType = this.config.get('clearskyStyleTypeAll');
+      const color = this.config.get('clearskyColorAll');
+      const style = this.getClearskyStyle(styleType, color);
+      if (style) {
+        $(element).find(constants.PROFILE_SELECTOR).css(style);
+      }
+    }
+    if (recentBlocks.includes(did)) {
+      const styleType = this.config.get('clearskyStyleTypeRecent');
+      const color = this.config.get('clearskyColorRecent');
+      const style = this.getClearskyStyle(styleType, color);
+      if (style) {
+        $(element).find(constants.PROFILE_SELECTOR).css(style);
+      }
     }
   }
 

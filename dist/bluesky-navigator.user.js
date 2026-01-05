@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+612.ce1f921b
+// @version     1.0.31+613.64f09121
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -55106,11 +55106,12 @@ div#statusBar.has-feed-map {
       shortcuts: [
         { keys: ["j", "\u2193"], description: "Next item" },
         { keys: ["k", "\u2191"], description: "Previous item" },
+        { keys: ["J"], description: "Mark read, next post" },
+        { keys: ["K"], description: "Mark read, previous post" },
         { keys: ["PgDn"], description: "Page down (multiple items)" },
         { keys: ["PgUp"], description: "Page up (multiple items)" },
         { keys: ["Home"], description: "Go to first item" },
         { keys: ["End"], description: "Go to last item" },
-        { keys: ["J"], description: "Next unread item" },
         { keys: ["g", "g"], description: "Go to first item (vim)" },
         { keys: ["G"], description: "Go to last item (vim)" },
         { keys: ["h"], description: "Go back" },
@@ -55127,6 +55128,8 @@ div#statusBar.has-feed-map {
         { keys: ["p"], description: "Repost menu" },
         { keys: ["P"], description: "Repost immediately" },
         { keys: ["r"], description: "Reply" },
+        { keys: ["f"], description: "Follow author" },
+        { keys: ["F"], description: "Unfollow author" },
         { keys: ["+"], description: "Add author to rules" },
         { keys: ["-"], description: "Remove author from rules" },
         { keys: ["!"], description: "Timeout author" },
@@ -55181,6 +55184,7 @@ div#statusBar.has-feed-map {
       // Show in all contexts
       shortcuts: [
         { keys: [";"], description: "Expand sidecar" },
+        { keys: ["x"], description: "Dismiss oldest toast" },
         { keys: ["1-9"], description: "Switch to tab" },
         { keys: ["?"], description: "Show/hide this help" },
         { keys: ["Esc"], description: "Close overlay" }

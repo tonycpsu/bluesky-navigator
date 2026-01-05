@@ -17,8 +17,9 @@ Features
 
 - Navigation:
     - navigate between posts with Vim-like keyboard shortcuts (`j`/`k` for
-      next/previous, `gg` / `G` to go to top/bottom of page)
-    - keyboard shortcuts for post actions, e.g. like, reply, repost
+      next/previous, `J`/`K` to mark read and advance, `gg` / `G` to go to
+      top/bottom of page)
+    - keyboard shortcuts for post actions, e.g. like, reply, repost, follow
     - keyboard shortcuts to switch between feeds
     - keyboard shortcuts to switch between home, search, notifications, chat, etc.
     - press `?` to view all keyboard shortcuts
@@ -81,7 +82,8 @@ post, or profile).
  | -------------|----------------------------------------------------|
  | j / ↓        | move to next item                                  |
  | k / ↑        | move to previous item                              |
- | J            | move to next unread item, or last item if all read |
+ | J            | mark thread read, move to next post                |
+ | K            | mark thread read, move to previous post            |
  | gg           | move to first item                                 |
  | G            | move to last item                                  |
  | h            | go back to previous page                           |
@@ -98,6 +100,8 @@ post, or profile).
  | a            | show author hover card (press again to dismiss)    |
  | A            | open post author's profile                         |
  | r            | reply to post                                      |
+ | f            | follow post author                                 |
+ | F            | unfollow post author                               |
  | +            | add post author to filter rules                    |
  | -            | remove post author from filter rules               |
  | !            | timeout author (temporarily hide their posts)      |
@@ -157,6 +161,7 @@ post, or profile).
  | Alt+p        | open profile page                                  |
  | Alt+,        | open settings page                                 |
  | Alt+.        | open Bluesky Navigator config panel                |
+ | x            | dismiss oldest toast notification                  |
  | ?            | show keyboard shortcuts help                       |
  | Esc          | close overlay/modal                                |
 
@@ -324,7 +329,8 @@ on Bluesky. Requires the AT Protocol agent to be configured.
 - Configurable display duration (2-15 seconds)
 - Position options: Top Right, Top Left, Bottom Right, Bottom Left
 - Click any toast to go to the notifications page
-- Close button to dismiss early
+- Close button or `x` hotkey to dismiss (marks notification as read)
+- Shows post content preview for likes and reposts
 - Polls for new notifications every 30 seconds
 - Test mode to verify toasts are working
 

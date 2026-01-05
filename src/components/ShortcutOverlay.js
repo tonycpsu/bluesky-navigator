@@ -29,11 +29,12 @@ const SHORTCUTS = {
     shortcuts: [
       { keys: ['j', '↓'], description: 'Next item' },
       { keys: ['k', '↑'], description: 'Previous item' },
+      { keys: ['J'], description: 'Mark read, next post' },
+      { keys: ['K'], description: 'Mark read, previous post' },
       { keys: ['PgDn'], description: 'Page down (multiple items)' },
       { keys: ['PgUp'], description: 'Page up (multiple items)' },
       { keys: ['Home'], description: 'Go to first item' },
       { keys: ['End'], description: 'Go to last item' },
-      { keys: ['J'], description: 'Next unread item' },
       { keys: ['g', 'g'], description: 'Go to first item (vim)' },
       { keys: ['G'], description: 'Go to last item (vim)' },
       { keys: ['h'], description: 'Go back' },
@@ -49,6 +50,8 @@ const SHORTCUTS = {
       { keys: ['p'], description: 'Repost menu' },
       { keys: ['P'], description: 'Repost immediately' },
       { keys: ['r'], description: 'Reply' },
+      { keys: ['f'], description: 'Follow author' },
+      { keys: ['F'], description: 'Unfollow author' },
       { keys: ['+'], description: 'Add author to rules' },
       { keys: ['-'], description: 'Remove author from rules' },
       { keys: ['!'], description: 'Timeout author' },
@@ -99,6 +102,7 @@ const SHORTCUTS = {
     contexts: null, // Show in all contexts
     shortcuts: [
       { keys: [';'], description: 'Expand sidecar' },
+      { keys: ['x'], description: 'Dismiss oldest toast' },
       { keys: ['1-9'], description: 'Switch to tab' },
       { keys: ['?'], description: 'Show/hide this help' },
       { keys: ['Esc'], description: 'Close overlay' },

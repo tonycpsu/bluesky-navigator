@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+615.9d405f41
+// @version     1.0.31+616.a4df5a6d
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69598,8 +69598,8 @@ ${rule}`;
       const handle2 = this.getAuthorHandle(element);
       if (!did2 && handle2) {
         did2 = this.handleToDidCache.get(handle2);
-        if (!did2 && this.api) {
-          this.api.resolveHandleToDid(handle2).then((resolvedDid) => {
+        if (!did2) {
+          this.resolveHandleToDidForClearsky(handle2).then((resolvedDid) => {
             if (resolvedDid) {
               this.handleToDidCache.set(handle2, resolvedDid);
               this.applyBlockStatusWithDid(element, resolvedDid);
@@ -69611,6 +69611,35 @@ ${rule}`;
       if (did2) {
         this.applyBlockStatusWithDid(element, did2);
       }
+    }
+    /**
+     * Resolve a handle to DID for Clearsky block checking.
+     * Uses AT Protocol API if available, otherwise falls back to Clearsky's API.
+     */
+    async resolveHandleToDidForClearsky(handle2) {
+      if (this.api) {
+        try {
+          const did2 = await this.api.resolveHandleToDid(handle2);
+          if (did2) return did2;
+        } catch (_e) {
+        }
+      }
+      return new Promise((resolve) => {
+        GM_xmlhttpRequest({
+          method: "GET",
+          url: `https://api.clearsky.services/api/v1/anon/get-did/${encodeURIComponent(handle2)}`,
+          headers: { Accept: "application/json" },
+          onload: (response) => {
+            try {
+              const data = JSON.parse(response.responseText);
+              resolve(data?.did || null);
+            } catch (_e) {
+              resolve(null);
+            }
+          },
+          onerror: () => resolve(null)
+        });
+      });
     }
     getClearskyStyle(styleType, color) {
       if (styleType === "None" || !color) return null;
@@ -69627,24 +69656,64 @@ ${rule}`;
           return null;
       }
     }
+    /**
+     * Get Clearsky block info for a handle (synchronous, uses cache).
+     * Returns { type: 'all'|'recent'|null, color: string|null, styleType: string|null }
+     */
+    getClearskyBlockInfo(handle2) {
+      if (!this.config.get("clearskyEnabled") || !handle2) {
+        return { type: null, color: null, styleType: null };
+      }
+      const did2 = this.handleToDidCache.get(handle2);
+      if (!did2) {
+        return { type: null, color: null, styleType: null };
+      }
+      const allBlocks = this.state.blocks?.all?.dids || [];
+      const recentBlocks = this.state.blocks?.recent?.dids || [];
+      if (recentBlocks.includes(did2)) {
+        return {
+          type: "recent",
+          color: this.config.get("clearskyColorRecent"),
+          styleType: this.config.get("clearskyStyleTypeRecent")
+        };
+      }
+      if (allBlocks.includes(did2)) {
+        return {
+          type: "all",
+          color: this.config.get("clearskyColorAll"),
+          styleType: this.config.get("clearskyStyleTypeAll")
+        };
+      }
+      return { type: null, color: null, styleType: null };
+    }
     applyBlockStatusWithDid(element, did2) {
       const allBlocks = this.state.blocks?.all?.dids || [];
       const recentBlocks = this.state.blocks?.recent?.dids || [];
-      if (allBlocks.includes(did2)) {
-        const styleType = this.config.get("clearskyStyleTypeAll");
-        const color = this.config.get("clearskyColorAll");
+      const $el = $(element);
+      const avatar = $el.find('div[data-testid="userAvatarImage"]').first();
+      const applyBlockStyle = (styleType, color) => {
         const style2 = this.getClearskyStyle(styleType, color);
         if (style2) {
-          $(element).find(constants.PROFILE_SELECTOR).css(style2);
+          $el.find(constants.PROFILE_SELECTOR).css(style2);
         }
+        if (avatar.length && color) {
+          avatar.css({
+            "box-shadow": `0 0 0 3px ${color}`,
+            "border-radius": "50%"
+          });
+        }
+      };
+      if (allBlocks.includes(did2)) {
+        applyBlockStyle(
+          this.config.get("clearskyStyleTypeAll"),
+          this.config.get("clearskyColorAll")
+        );
       }
       if (recentBlocks.includes(did2)) {
-        const styleType = this.config.get("clearskyStyleTypeRecent");
-        const color = this.config.get("clearskyColorRecent");
-        const style2 = this.getClearskyStyle(styleType, color);
-        if (style2) {
-          $(element).find(constants.PROFILE_SELECTOR).css(style2);
-        }
+        applyBlockStyle(
+          this.config.get("clearskyStyleTypeRecent"),
+          this.config.get("clearskyColorRecent")
+        );
       }
     }
     // ===========================================================================
@@ -72176,6 +72245,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
             }
           }
+          const blockInfo = this.getClearskyBlockInfo(engData?.engagement?.handle);
+          if (blockInfo.type && blockInfo.color) {
+            avatarStyle += `; box-shadow: 0 0 0 3px ${blockInfo.color}; border-radius: 50%`;
+          }
           if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
             const reposterHeight = Math.round(avatarHeight * 0.5);
             let reposterStyle = `height: ${reposterHeight}px`;
@@ -72185,6 +72258,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
                 const color = this.getColorForCategoryIndex(reposterCategoryIndex);
                 reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
               }
+            }
+            const reposterBlockInfo = this.getClearskyBlockInfo(engData?.engagement?.reposterHandle);
+            if (reposterBlockInfo.type && reposterBlockInfo.color) {
+              reposterStyle += `; box-shadow: 0 0 0 2px ${reposterBlockInfo.color}`;
             }
             $segment.append(`
             <span class="feed-map-segment-avatar-container">
@@ -72207,6 +72284,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               const color = this.getColorForCategoryIndex(categoryIndex);
               handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
             }
+          }
+          const blockInfo = this.getClearskyBlockInfo(handle2);
+          if (blockInfo.type && blockInfo.color) {
+            handleStyle = ` style="background-color: ${blockInfo.color}55; border: 2px solid ${blockInfo.color}; border-radius: 3px; padding: 0 2px;"`;
           }
           $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
         }
@@ -72375,6 +72456,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
             }
           }
+          const blockInfo = this.getClearskyBlockInfo(engData?.engagement?.handle);
+          if (blockInfo.type && blockInfo.color) {
+            avatarStyle += `; box-shadow: 0 0 0 3px ${blockInfo.color}; border-radius: 50%`;
+          }
           if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
             const reposterHeight = Math.round(avatarHeight * 0.5);
             let reposterStyle = `height: ${reposterHeight}px`;
@@ -72384,6 +72469,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
                 const color = this.getColorForCategoryIndex(reposterCategoryIndex);
                 reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
               }
+            }
+            const reposterBlockInfo = this.getClearskyBlockInfo(engData?.engagement?.reposterHandle);
+            if (reposterBlockInfo.type && reposterBlockInfo.color) {
+              reposterStyle += `; box-shadow: 0 0 0 2px ${reposterBlockInfo.color}`;
             }
             $segment.append(`
             <span class="feed-map-segment-avatar-container">
@@ -72411,6 +72500,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               const color = this.getColorForCategoryIndex(categoryIndex);
               handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
             }
+          }
+          const blockInfo = this.getClearskyBlockInfo(handle2);
+          if (blockInfo.type && blockInfo.color) {
+            handleStyle = ` style="background-color: ${blockInfo.color}55; border: 2px solid ${blockInfo.color}; border-radius: 3px; padding: 0 2px;"`;
           }
           $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
         }

@@ -2921,6 +2921,11 @@ export class FeedItemHandler extends ItemHandler {
             avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
           }
         }
+        // Apply Clearsky block styling (overrides rule color if blocked)
+        const blockInfo = this.getClearskyBlockInfo(engData?.engagement?.handle);
+        if (blockInfo.type && blockInfo.color) {
+          avatarStyle += `; box-shadow: 0 0 0 3px ${blockInfo.color}; border-radius: 50%`;
+        }
 
         // For reposts with reposter avatar, wrap in container and add reposter overlay
         if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
@@ -2933,6 +2938,11 @@ export class FeedItemHandler extends ItemHandler {
               const color = this.getColorForCategoryIndex(reposterCategoryIndex);
               reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
             }
+          }
+          // Apply Clearsky block styling to reposter
+          const reposterBlockInfo = this.getClearskyBlockInfo(engData?.engagement?.reposterHandle);
+          if (reposterBlockInfo.type && reposterBlockInfo.color) {
+            reposterStyle += `; box-shadow: 0 0 0 2px ${reposterBlockInfo.color}`;
           }
           $segment.append(`
             <span class="feed-map-segment-avatar-container">
@@ -2960,6 +2970,11 @@ export class FeedItemHandler extends ItemHandler {
             const color = this.getColorForCategoryIndex(categoryIndex);
             handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
           }
+        }
+        // Apply Clearsky block styling (overrides rule color if blocked)
+        const blockInfo = this.getClearskyBlockInfo(handle);
+        if (blockInfo.type && blockInfo.color) {
+          handleStyle = ` style="background-color: ${blockInfo.color}55; border: 2px solid ${blockInfo.color}; border-radius: 3px; padding: 0 2px;"`;
         }
         $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
       }
@@ -3202,6 +3217,11 @@ export class FeedItemHandler extends ItemHandler {
             avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
           }
         }
+        // Apply Clearsky block styling (overrides rule color if blocked)
+        const blockInfo = this.getClearskyBlockInfo(engData?.engagement?.handle);
+        if (blockInfo.type && blockInfo.color) {
+          avatarStyle += `; box-shadow: 0 0 0 3px ${blockInfo.color}; border-radius: 50%`;
+        }
 
         // For reposts with reposter avatar, wrap in container and add reposter overlay
         if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
@@ -3214,6 +3234,11 @@ export class FeedItemHandler extends ItemHandler {
               const color = this.getColorForCategoryIndex(reposterCategoryIndex);
               reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
             }
+          }
+          // Apply Clearsky block styling to reposter
+          const reposterBlockInfo = this.getClearskyBlockInfo(engData?.engagement?.reposterHandle);
+          if (reposterBlockInfo.type && reposterBlockInfo.color) {
+            reposterStyle += `; box-shadow: 0 0 0 2px ${reposterBlockInfo.color}`;
           }
           $segment.append(`
             <span class="feed-map-segment-avatar-container">
@@ -3244,6 +3269,11 @@ export class FeedItemHandler extends ItemHandler {
             const color = this.getColorForCategoryIndex(categoryIndex);
             handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
           }
+        }
+        // Apply Clearsky block styling (overrides rule color if blocked)
+        const blockInfo = this.getClearskyBlockInfo(handle);
+        if (blockInfo.type && blockInfo.color) {
+          handleStyle = ` style="background-color: ${blockInfo.color}55; border: 2px solid ${blockInfo.color}; border-radius: 3px; padding: 0 2px;"`;
         }
         $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
       }

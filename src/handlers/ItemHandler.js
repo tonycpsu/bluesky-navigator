@@ -6670,9 +6670,9 @@ export class ItemHandler extends Handler {
     if (!did && handle) {
       did = this.handleToDidCache.get(handle);
 
-      // If not in cache and API available, resolve async (non-blocking)
-      if (!did && this.api) {
-        this.api.resolveHandleToDid(handle).then((resolvedDid) => {
+      // If not in cache, resolve async (non-blocking)
+      if (!did) {
+        this.resolveHandleToDidForClearsky(handle).then((resolvedDid) => {
           if (resolvedDid) {
             this.handleToDidCache.set(handle, resolvedDid);
             // Re-apply block status now that we have the DID
@@ -6687,6 +6687,40 @@ export class ItemHandler extends Handler {
     if (did) {
       this.applyBlockStatusWithDid(element, did);
     }
+  }
+
+  /**
+   * Resolve a handle to DID for Clearsky block checking.
+   * Uses AT Protocol API if available, otherwise falls back to Clearsky's API.
+   */
+  async resolveHandleToDidForClearsky(handle) {
+    // Try AT Protocol API first if available
+    if (this.api) {
+      try {
+        const did = await this.api.resolveHandleToDid(handle);
+        if (did) return did;
+      } catch (_e) {
+        // Fall through to Clearsky
+      }
+    }
+
+    // Fallback to Clearsky API (works without AT Protocol)
+    return new Promise((resolve) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: `https://api.clearsky.services/api/v1/anon/get-did/${encodeURIComponent(handle)}`,
+        headers: { Accept: 'application/json' },
+        onload: (response) => {
+          try {
+            const data = JSON.parse(response.responseText);
+            resolve(data?.did || null);
+          } catch (_e) {
+            resolve(null);
+          }
+        },
+        onerror: () => resolve(null),
+      });
+    });
   }
 
   getClearskyStyle(styleType, color) {
@@ -6706,25 +6740,77 @@ export class ItemHandler extends Handler {
     }
   }
 
+  /**
+   * Get Clearsky block info for a handle (synchronous, uses cache).
+   * Returns { type: 'all'|'recent'|null, color: string|null, styleType: string|null }
+   */
+  getClearskyBlockInfo(handle) {
+    if (!this.config.get('clearskyEnabled') || !handle) {
+      return { type: null, color: null, styleType: null };
+    }
+
+    const did = this.handleToDidCache.get(handle);
+    if (!did) {
+      return { type: null, color: null, styleType: null };
+    }
+
+    const allBlocks = this.state.blocks?.all?.dids || [];
+    const recentBlocks = this.state.blocks?.recent?.dids || [];
+
+    // Check recent first (more severe)
+    if (recentBlocks.includes(did)) {
+      return {
+        type: 'recent',
+        color: this.config.get('clearskyColorRecent'),
+        styleType: this.config.get('clearskyStyleTypeRecent'),
+      };
+    }
+
+    if (allBlocks.includes(did)) {
+      return {
+        type: 'all',
+        color: this.config.get('clearskyColorAll'),
+        styleType: this.config.get('clearskyStyleTypeAll'),
+      };
+    }
+
+    return { type: null, color: null, styleType: null };
+  }
+
   applyBlockStatusWithDid(element, did) {
     const allBlocks = this.state.blocks?.all?.dids || [];
     const recentBlocks = this.state.blocks?.recent?.dids || [];
 
-    if (allBlocks.includes(did)) {
-      const styleType = this.config.get('clearskyStyleTypeAll');
-      const color = this.config.get('clearskyColorAll');
+    const $el = $(element);
+    const avatar = $el.find('div[data-testid="userAvatarImage"]').first();
+
+    // Helper to apply styling to both profile link and avatar
+    const applyBlockStyle = (styleType, color) => {
       const style = this.getClearskyStyle(styleType, color);
       if (style) {
-        $(element).find(constants.PROFILE_SELECTOR).css(style);
+        $el.find(constants.PROFILE_SELECTOR).css(style);
       }
+      // Also apply to avatar (consistent with rule color styling)
+      if (avatar.length && color) {
+        avatar.css({
+          'box-shadow': `0 0 0 3px ${color}`,
+          'border-radius': '50%'
+        });
+      }
+    };
+
+    // Recent blocks take priority (checked second, overwrites all blocks styling)
+    if (allBlocks.includes(did)) {
+      applyBlockStyle(
+        this.config.get('clearskyStyleTypeAll'),
+        this.config.get('clearskyColorAll')
+      );
     }
     if (recentBlocks.includes(did)) {
-      const styleType = this.config.get('clearskyStyleTypeRecent');
-      const color = this.config.get('clearskyColorRecent');
-      const style = this.getClearskyStyle(styleType, color);
-      if (style) {
-        $(element).find(constants.PROFILE_SELECTOR).css(style);
-      }
+      applyBlockStyle(
+        this.config.get('clearskyStyleTypeRecent'),
+        this.config.get('clearskyColorRecent')
+      );
     }
   }
 

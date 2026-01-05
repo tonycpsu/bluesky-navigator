@@ -27,10 +27,12 @@ const SHORTCUTS = {
   Navigation: {
     contexts: null, // Show in all contexts
     shortcuts: [
-      { keys: ['j', '↓'], description: 'Next item' },
-      { keys: ['k', '↑'], description: 'Previous item' },
-      { keys: ['J'], description: 'Mark read, next post' },
-      { keys: ['K'], description: 'Mark read, previous post' },
+      { keys: ['j'], description: 'Next item (mark read)' },
+      { keys: ['k'], description: 'Previous item (mark read)' },
+      { keys: ['↓'], description: 'Next item' },
+      { keys: ['↑'], description: 'Previous item' },
+      { keys: ['J'], description: 'Mark thread read, next post' },
+      { keys: ['K'], description: 'Mark thread read, previous post' },
       { keys: ['PgDn'], description: 'Page down (multiple items)' },
       { keys: ['PgUp'], description: 'Page up (multiple items)' },
       { keys: ['Home'], description: 'Go to first item' },

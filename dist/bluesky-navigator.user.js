@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+613.64f09121
+// @version     1.0.31+614.c63938e1
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -55104,10 +55104,12 @@ div#statusBar.has-feed-map {
       contexts: null,
       // Show in all contexts
       shortcuts: [
-        { keys: ["j", "\u2193"], description: "Next item" },
-        { keys: ["k", "\u2191"], description: "Previous item" },
-        { keys: ["J"], description: "Mark read, next post" },
-        { keys: ["K"], description: "Mark read, previous post" },
+        { keys: ["j"], description: "Next item (mark read)" },
+        { keys: ["k"], description: "Previous item (mark read)" },
+        { keys: ["\u2193"], description: "Next item" },
+        { keys: ["\u2191"], description: "Previous item" },
+        { keys: ["J"], description: "Mark thread read, next post" },
+        { keys: ["K"], description: "Mark thread read, previous post" },
         { keys: ["PgDn"], description: "Page down (multiple items)" },
         { keys: ["PgUp"], description: "Page up (multiple items)" },
         { keys: ["Home"], description: "Go to first item" },

@@ -1309,6 +1309,20 @@ export class ItemHandler extends Handler {
         parent.append(div);
       }
       const totalPosts = unrolledPosts.length;
+
+      // Add first post badge to the content area (parent has overflow-y: scroll)
+      const firstPostUrl = urlForPost(unrolledPosts[0]);
+      let firstBadge = parent.find('.unrolled-post-first');
+      if (!firstBadge.length) {
+        // Add padding to make room for badge, like unrolled-reply does
+        parent.css('padding-left', '44px');
+        parent.css('position', 'relative');
+        firstBadge = $(`<a href="${firstPostUrl}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`);
+        parent.prepend(firstBadge);
+      } else {
+        firstBadge.attr('title', `Post 1 of ${totalPosts}`);
+        firstBadge.html(`1<span class="unrolled-post-total">/${totalPosts}</span>`);
+      }
       // Track post IDs of unrolled replies to filter duplicates from main feed
       const unrolledIds = [];
       unrolledPosts.slice(1).map((p, i) => {
@@ -1320,9 +1334,11 @@ export class ItemHandler extends Handler {
         const reply = $('<div class="unrolled-reply"/>');
         reply.attr('data-unrolled-post-id', postId);
         reply.append($('<hr class="unrolled-divider"/>'));
+        const isLastPost = postNum === totalPosts;
+        const postNumberClass = isLastPost ? 'unrolled-post-number unrolled-post-last' : 'unrolled-post-number';
         reply.append(
           $(
-            `<a href="${urlForPost(p)}" class="unrolled-post-number" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
+            `<a href="${urlForPost(p)}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
           )
         );
         reply.append($(this.bodyTemplate(formatPost(p))));
@@ -7239,7 +7255,7 @@ export class ItemHandler extends Handler {
     const filterStats = this.itemStats.filteredCount > 0 ? `<strong>${this.itemStats.filteredCount}</strong> filtered, ` : '';
     $('div#infoIndicatorText').html(`
 <div id="itemCountStats">
-<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong> (${filterStats}<strong>${this.itemStats.unreadCount}</strong> new)
+<strong>${index}</strong>${this.threadIndex != null ? `<span>.${this.threadIndex + 1}</span>` : ''}/<strong>${this.itemStats.shownCount}</strong> (${filterStats}<strong>${this.itemStats.unreadCount}</strong> new)
 </div>
 <div id="itemTimestampStats">
 ${
@@ -7261,7 +7277,7 @@ ${
             .children('.item-banner')
             .last();
       $(bannerDiv).html(
-        `<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}/${this.unrolledReplies.length + 1}</small>` : ''}</strong>/<strong>${this.itemStats.shownCount}</strong>`
+        `<strong>${index}</strong>${this.threadIndex != null ? `<span>.${this.threadIndex + 1}/${this.unrolledReplies.length + 1}</span>` : ''}/<strong>${this.itemStats.shownCount}</strong>`
       );
     }
   }

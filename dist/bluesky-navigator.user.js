@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+616.a4df5a6d
+// @version     1.0.31+617.f90fe56e
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -49178,6 +49178,24 @@ div.item-banner {
     text-decoration: none;
 }
 
+/* First post in unrolled thread - green text */
+.unrolled-post-first {
+    color: #16a34a !important;
+}
+
+.unrolled-post-first:hover {
+    color: #15803d !important;
+}
+
+/* Last post in unrolled thread - red text */
+.unrolled-post-last {
+    color: #dc2626 !important;
+}
+
+.unrolled-post-last:hover {
+    color: #b91c1c !important;
+}
+
 .unrolled-divider {
     margin-top: 1em;
     margin-bottom: 0.5em;
@@ -65496,6 +65514,17 @@ div#statusBar.has-feed-map {
           parent.append(div);
         }
         const totalPosts = unrolledPosts.length;
+        const firstPostUrl = urlForPost(unrolledPosts[0]);
+        let firstBadge = parent.find(".unrolled-post-first");
+        if (!firstBadge.length) {
+          parent.css("padding-left", "44px");
+          parent.css("position", "relative");
+          firstBadge = $(`<a href="${firstPostUrl}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`);
+          parent.prepend(firstBadge);
+        } else {
+          firstBadge.attr("title", `Post 1 of ${totalPosts}`);
+          firstBadge.html(`1<span class="unrolled-post-total">/${totalPosts}</span>`);
+        }
         const unrolledIds = [];
         unrolledPosts.slice(1).map((p, i) => {
           const postNum = i + 2;
@@ -65505,9 +65534,11 @@ div#statusBar.has-feed-map {
           const reply = $('<div class="unrolled-reply"/>');
           reply.attr("data-unrolled-post-id", postId2);
           reply.append($('<hr class="unrolled-divider"/>'));
+          const isLastPost = postNum === totalPosts;
+          const postNumberClass = isLastPost ? "unrolled-post-number unrolled-post-last" : "unrolled-post-number";
           reply.append(
             $(
-              `<a href="${urlForPost(p)}" class="unrolled-post-number" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
+              `<a href="${urlForPost(p)}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
             )
           );
           reply.append($(this.bodyTemplate(formatPost(p))));
@@ -69997,14 +70028,14 @@ ${rule}`;
       const filterStats = this.itemStats.filteredCount > 0 ? `<strong>${this.itemStats.filteredCount}</strong> filtered, ` : "";
       $("div#infoIndicatorText").html(`
 <div id="itemCountStats">
-<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong> (${filterStats}<strong>${this.itemStats.unreadCount}</strong> new)
+<strong>${index}</strong>${this.threadIndex != null ? `<span>.${this.threadIndex + 1}</span>` : ""}/<strong>${this.itemStats.shownCount}</strong> (${filterStats}<strong>${this.itemStats.unreadCount}</strong> new)
 </div>
 <div id="itemTimestampStats">
 ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa")} - ${format(this.itemStats.newest, "yyyy-MM-dd hh:mmaaa")}</div>` : ``}`);
       if (this.config.get("showPostCounts") == "All" || this.selectedItem && this.config.get("showPostCounts") == "Selection") {
         const bannerDiv = $(this.selectedItem).find("div.item-banner").first().length ? $(this.selectedItem).find("div.item-banner").first() : $(this.selectedItem).find("div").first().prepend($('<div class="item-banner"/>')).children(".item-banner").last();
         $(bannerDiv).html(
-          `<strong>${index}${this.threadIndex != null ? `<small>.${this.threadIndex + 1}/${this.unrolledReplies.length + 1}</small>` : ""}</strong>/<strong>${this.itemStats.shownCount}</strong>`
+          `<strong>${index}</strong>${this.threadIndex != null ? `<span>.${this.threadIndex + 1}/${this.unrolledReplies.length + 1}</span>` : ""}/<strong>${this.itemStats.shownCount}</strong>`
         );
       }
     }

@@ -715,6 +715,24 @@ div.item-banner {
     text-decoration: none;
 }
 
+/* First post in unrolled thread - green text */
+.unrolled-post-first {
+    color: #16a34a !important;
+}
+
+.unrolled-post-first:hover {
+    color: #15803d !important;
+}
+
+/* Last post in unrolled thread - red text */
+.unrolled-post-last {
+    color: #dc2626 !important;
+}
+
+.unrolled-post-last:hover {
+    color: #b91c1c !important;
+}
+
 .unrolled-divider {
     margin-top: 1em;
     margin-bottom: 0.5em;

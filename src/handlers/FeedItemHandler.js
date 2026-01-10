@@ -2131,7 +2131,7 @@ export class FeedItemHandler extends ItemHandler {
       }
     }
 
-    // Store display items for click handler (actual DOM elements)
+    // Store display items for click handler and tooltips
     this._displayItems = displayItems;
 
     const total = displayItems.length;
@@ -2154,8 +2154,8 @@ export class FeedItemHandler extends ItemHandler {
 
       for (let i = 0; i < total; i++) {
         const segment = $('<div class="feed-map-segment"></div>');
-        // Store actual item index for navigation
-        segment.attr('data-index', displayIndices[i]);
+        // Store display index (position in _displayItems) for tooltip handler
+        segment.attr('data-index', i);
         indicator.append(segment);
       }
 
@@ -2200,6 +2200,9 @@ export class FeedItemHandler extends ItemHandler {
       $segment.empty(); // Clear previous content before updating
       const item = displayItems[i];
       const actualIndex = displayIndices[i]; // Map back to actual item index for engagementData
+
+      // Store item reference on segment for tooltip handler
+      $segment.data('item', item || null);
 
       // Skip if item doesn't exist or is no longer in DOM (virtualized away)
       if (!item || !document.contains(item)) {
@@ -2866,8 +2869,8 @@ export class FeedItemHandler extends ItemHandler {
       const isRead = item && $(item).hasClass('item-read');
       const isCurrent = displayIndex === currentIndex;
 
-      // Update data-index
-      $segment.attr('data-index', hasItem ? displayIndex : -1);
+      // Store item reference on segment for tooltip handler
+      $segment.data('item', hasItem ? item : null);
 
       // Remove all state classes
       $segment.removeClass(
@@ -3155,8 +3158,8 @@ export class FeedItemHandler extends ItemHandler {
       const isRead = item && $(item).hasClass('item-read');
       const isCurrent = displayIndex === currentIndex;
 
-      // Update data-index in case window shifted
-      $segment.attr('data-index', hasItem ? displayIndex : -1);
+      // Store item reference on segment for tooltip handler
+      $segment.data('item', hasItem ? item : null);
 
       // Remove all state classes
       $segment.removeClass(
@@ -3791,10 +3794,16 @@ export class FeedItemHandler extends ItemHandler {
 
     indicator.on('mouseenter', '.feed-map-segment', (e) => {
       const segment = e.currentTarget;
-      const itemIndex = $(segment).data('index');
+      const $segment = $(segment);
+
+      // Get the item directly from the segment (stored during update)
+      const item = $segment.data('item');
 
       // Clear any pending hide
       clearTimeout(this._tooltipHideTimer);
+
+      // Skip if no item
+      if (!item) return;
 
       // Get delay from config (0 for Instant, 300 for Delayed)
       const tooltipMode = this.config.get('feedMapTooltip') || 'Instant';
@@ -3807,16 +3816,14 @@ export class FeedItemHandler extends ItemHandler {
 
       if (delay === 0) {
         // Instant: show immediately
-        const item = this.items[itemIndex];
-        if (item) {
-          this.showFeedMapTooltip(item, segment);
-        }
+        this.showFeedMapTooltip(item, segment);
       } else {
         // Delayed: use timeout
         this._tooltipTimer = setTimeout(() => {
-          const item = this.items[itemIndex];
-          if (item) {
-            this.showFeedMapTooltip(item, segment);
+          // Re-fetch item in case it changed during delay
+          const currentItem = $segment.data('item');
+          if (currentItem) {
+            this.showFeedMapTooltip(currentItem, segment);
           }
         }, delay);
       }

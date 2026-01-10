@@ -734,9 +734,13 @@ function getScreenFromElement(element) {
     }
 
     try {
-      // Update the seenAt to the notification's timestamp
-      console.log('Calling markNotificationsSeen with:', indexedAt);
-      await toastApi.markNotificationsSeen(indexedAt);
+      // Update the seenAt to slightly after the notification's timestamp
+      // to ensure this notification is marked as seen (API uses <= comparison)
+      const notifDate = new Date(indexedAt);
+      notifDate.setMilliseconds(notifDate.getMilliseconds() + 1);
+      const seenAt = notifDate.toISOString();
+      console.log('Calling markNotificationsSeen with:', seenAt, '(original:', indexedAt, ')');
+      await toastApi.markNotificationsSeen(seenAt);
 
       // Update local lastSeenAt so we don't re-show this notification
       const notificationDate = new Date(indexedAt);

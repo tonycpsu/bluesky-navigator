@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+617.f90fe56e
+// @version     1.0.31+618.7f2762e3
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -71728,7 +71728,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         indicator.find(".feed-map-viewport-indicator").remove();
         for (let i = 0; i < total; i++) {
           const segment = $('<div class="feed-map-segment"></div>');
-          segment.attr("data-index", displayIndices[i]);
+          segment.attr("data-index", i);
           indicator.append(segment);
         }
         indicator.append('<div class="feed-map-viewport-indicator"></div>');
@@ -71762,6 +71762,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         $segment.empty();
         const item = displayItems[i];
         const actualIndex = displayIndices[i];
+        $segment.data("item", item || null);
         if (!item || !document.contains(item)) {
           $segment.addClass("feed-map-segment-virtualized");
           return;
@@ -72240,7 +72241,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const hasItem = displayIndex >= 0 && displayIndex < total && item;
         const isRead = item && $(item).hasClass("item-read");
         const isCurrent = displayIndex === currentIndex;
-        $segment.attr("data-index", hasItem ? displayIndex : -1);
+        $segment.data("item", hasItem ? item : null);
         $segment.removeClass(
           "feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8"
         );
@@ -72446,7 +72447,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const hasItem = displayIndex >= 0 && displayIndex < total && item;
         const isRead = item && $(item).hasClass("item-read");
         const isCurrent = displayIndex === currentIndex;
-        $segment.attr("data-index", hasItem ? displayIndex : -1);
+        $segment.data("item", hasItem ? item : null);
         $segment.removeClass(
           "feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8"
         );
@@ -72909,23 +72910,22 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       indicator.off("mouseleave");
       indicator.on("mouseenter", ".feed-map-segment", (e) => {
         const segment = e.currentTarget;
-        const itemIndex = $(segment).data("index");
+        const $segment = $(segment);
+        const item = $segment.data("item");
         clearTimeout(this._tooltipHideTimer);
+        if (!item) return;
         const tooltipMode = this.config.get("feedMapTooltip") || "Instant";
         const delay = tooltipMode === "Delayed" ? 300 : 0;
         if (this._tooltipTimer) {
           clearTimeout(this._tooltipTimer);
         }
         if (delay === 0) {
-          const item = this.items[itemIndex];
-          if (item) {
-            this.showFeedMapTooltip(item, segment);
-          }
+          this.showFeedMapTooltip(item, segment);
         } else {
           this._tooltipTimer = setTimeout(() => {
-            const item = this.items[itemIndex];
-            if (item) {
-              this.showFeedMapTooltip(item, segment);
+            const currentItem = $segment.data("item");
+            if (currentItem) {
+              this.showFeedMapTooltip(currentItem, segment);
             }
           }, delay);
         }
@@ -74563,8 +74563,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return;
       }
       try {
-        console.log("Calling markNotificationsSeen with:", indexedAt);
-        await toastApi.markNotificationsSeen(indexedAt);
+        const notifDate = new Date(indexedAt);
+        notifDate.setMilliseconds(notifDate.getMilliseconds() + 1);
+        const seenAt = notifDate.toISOString();
+        console.log("Calling markNotificationsSeen with:", seenAt, "(original:", indexedAt, ")");
+        await toastApi.markNotificationsSeen(seenAt);
         const notificationDate = new Date(indexedAt);
         if (!lastSeenAt || notificationDate > lastSeenAt) {
           lastSeenAt = notificationDate;

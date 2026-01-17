@@ -1429,18 +1429,8 @@ function getScreenFromElement(element) {
       const hideRightSidebar = config.get('hideRightSidebar');
 
       if (hideRightSidebar) {
+        // Add class - CSS rules handle hiding the sidebar
         document.body.classList.add('bsky-nav-hide-right-sidebar');
-
-        waitForElement('input[role="search"]', (searchInput) => {
-          // Find the fixed-position container ancestor
-          let rightSidebar = searchInput.parentElement;
-          while (rightSidebar && !rightSidebar.style.cssText.includes('position: fixed')) {
-            rightSidebar = rightSidebar.parentElement;
-          }
-          if (rightSidebar) {
-            rightSidebar.style.display = 'none';
-          }
-        });
 
         // Apply custom width
         updateContentWidth();

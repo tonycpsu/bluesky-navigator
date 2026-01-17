@@ -5142,6 +5142,12 @@ div#statusBar.has-feed-map {
   }
 }
 
+/* Hide right sidebar - target the fixed-position feeds panel */
+.bsky-nav-hide-right-sidebar div[style*="position: fixed"][style*="width: 330px"],
+.bsky-nav-hide-right-sidebar div[style*="position: fixed"][style*="translateX(300px)"] {
+  display: none !important;
+}
+
 /* Hide vertical column dividers when right sidebar is hidden */
 .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-left"],
 .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-right"],

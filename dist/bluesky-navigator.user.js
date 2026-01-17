@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+619.fe36ddf2
+// @version     1.0.31+620.a4ca0bb7
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -53605,6 +53605,12 @@ div#statusBar.has-feed-map {
   }
 }
 
+/* Hide right sidebar - target the fixed-position feeds panel */
+.bsky-nav-hide-right-sidebar div[style*="position: fixed"][style*="width: 330px"],
+.bsky-nav-hide-right-sidebar div[style*="position: fixed"][style*="translateX(300px)"] {
+  display: none !important;
+}
+
 /* Hide vertical column dividers when right sidebar is hidden */
 .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-left"],
 .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-right"],
@@ -75098,15 +75104,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const hideRightSidebar = config.get("hideRightSidebar");
         if (hideRightSidebar) {
           document.body.classList.add("bsky-nav-hide-right-sidebar");
-          waitForElement('input[role="search"]', (searchInput) => {
-            let rightSidebar = searchInput.parentElement;
-            while (rightSidebar && !rightSidebar.style.cssText.includes("position: fixed")) {
-              rightSidebar = rightSidebar.parentElement;
-            }
-            if (rightSidebar) {
-              rightSidebar.style.display = "none";
-            }
-          });
           updateContentWidth();
         }
         if (config.get("hideSuggestedFollows")) {

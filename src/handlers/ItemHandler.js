@@ -349,8 +349,11 @@ export class ItemHandler extends Handler {
     }
 
     // Expand sidecar for new item (unless skipSidecar was set)
+    // Store promise so updateItems can wait for it before scrolling
     if (!this._skipSidecar) {
-      this.expandItem($(item));
+      this._expandPromise = this.expandItem($(item));
+    } else {
+      this._expandPromise = null;
     }
 
     // Handle video playback
@@ -6054,7 +6057,18 @@ export class ItemHandler extends Handler {
     return this.getToolbarHeight();
   }
 
-  updateItems() {
+  async updateItems() {
+    // Wait for any pending expand/unroll to complete before scrolling
+    // This prevents scroll position from being thrown off by DOM changes
+    if (this._expandPromise) {
+      try {
+        await this._expandPromise;
+      } catch (e) {
+        // Ignore expand errors - still scroll to the item
+      }
+      this._expandPromise = null;
+    }
+
     // Temporarily suppress focus changes during programmatic scroll
     this.ignoreMouseMovement = true;
     if (this.index == 0) {

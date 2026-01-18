@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+621.c165e9a4
+// @version     1.0.31+622.c49a5df8
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69921,6 +69921,58 @@ ${rule}`;
           }
         }
       });
+      try {
+        $(".self-thread-continuation").removeClass("filtered self-thread-continuation");
+        $(".has-self-thread-continuation").removeClass("has-self-thread-continuation");
+      } catch (e) {
+      }
+      const threadGroups = {};
+      $(this.selector).filter(":visible").each((i, item) => {
+        const threadIdx = $(item).closest(".thread").data("bsky-navigator-thread-index");
+        if (threadIdx !== void 0) {
+          if (!threadGroups[threadIdx]) {
+            threadGroups[threadIdx] = [];
+          }
+          threadGroups[threadIdx].push(item);
+        }
+      });
+      const unrollingEnabled = this.shouldUnroll && this.shouldUnroll();
+      for (const [threadIdx, items] of Object.entries(threadGroups)) {
+        if (items.length > 1) {
+          const handles = items.map((item) => this.getAuthorHandle(item)).filter(Boolean);
+          const uniqueHandles = new Set(handles);
+          if (uniqueHandles.size === 1 && handles.length === items.length) {
+            if (unrollingEnabled) {
+              items.forEach((item) => {
+                const offset = parseInt($(item).data("bsky-navigator-thread-offset"));
+                if (offset > 0) {
+                  $(item).addClass("filtered self-thread-continuation");
+                  $(item).closest(".thread").addClass("has-self-thread-continuation");
+                }
+              });
+            } else {
+              const sortedItems = [...items].sort((a, b) => {
+                const $threadA = $(a).closest(".thread");
+                const $threadB = $(b).closest(".thread");
+                const getPriority = ($thread) => {
+                  if ($thread.hasClass("thread-first") && !$thread.hasClass("thread-middle") && !$thread.hasClass("thread-last")) return 0;
+                  if ($thread.hasClass("thread-last") && !$thread.hasClass("thread-first")) return 2;
+                  return 1;
+                };
+                return getPriority($threadA) - getPriority($threadB);
+              });
+              const needsReorder = items.some((item, i) => item !== sortedItems[i]);
+              if (needsReorder) {
+                for (let i = 1; i < sortedItems.length; i++) {
+                  const threadDiv = $(sortedItems[i]).closest(".thread");
+                  const prevThreadDiv = $(sortedItems[i - 1]).closest(".thread");
+                  threadDiv.insertAfter(prevThreadDiv);
+                }
+              }
+            }
+          }
+        }
+      }
       this.sortItems();
       this.filterItems();
       this.items = $(this.selector).filter(":visible").not(".filtered").filter((i, item) => {

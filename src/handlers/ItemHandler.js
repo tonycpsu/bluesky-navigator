@@ -7074,6 +7074,81 @@ export class ItemHandler extends Handler {
         }
       });
 
+    // Clear any previous self-thread-continuation filtering (settings may have changed)
+    try {
+      $('.self-thread-continuation').removeClass('filtered self-thread-continuation');
+      $('.has-self-thread-continuation').removeClass('has-self-thread-continuation');
+    } catch (e) {
+      // Ignore - elements may have been removed
+    }
+
+    // Group items by thread-index for self-thread handling
+    const threadGroups = {};
+    $(this.selector).filter(':visible').each((i, item) => {
+      const threadIdx = $(item).closest('.thread').data('bsky-navigator-thread-index');
+      if (threadIdx !== undefined) {
+        if (!threadGroups[threadIdx]) {
+          threadGroups[threadIdx] = [];
+        }
+        threadGroups[threadIdx].push(item);
+      }
+    });
+
+    // Handle self-thread posts based on unrolling setting
+    const unrollingEnabled = this.shouldUnroll && this.shouldUnroll();
+
+    for (const [threadIdx, items] of Object.entries(threadGroups)) {
+      if (items.length > 1) {
+        // Get author handles for all items in the thread group
+        const handles = items.map(item => this.getAuthorHandle(item)).filter(Boolean);
+        const uniqueHandles = new Set(handles);
+
+        // If all posts are by the same author, it's a self-thread
+        if (uniqueHandles.size === 1 && handles.length === items.length) {
+          if (unrollingEnabled) {
+            // Proactively filter self-thread continuation posts when unrolling is enabled
+            // This hides post 2, 3, etc. since they'll be shown when the root post is unrolled
+            items.forEach(item => {
+              const offset = parseInt($(item).data('bsky-navigator-thread-offset'));
+              if (offset > 0) {
+                $(item).addClass('filtered self-thread-continuation');
+                $(item).closest('.thread').addClass('has-self-thread-continuation');
+              }
+            });
+          } else {
+            // When unrolling is disabled, reorder self-thread posts to be in correct order
+            // thread-first (root) -> thread-middle -> thread-last (final reply)
+            const sortedItems = [...items].sort((a, b) => {
+              const $threadA = $(a).closest('.thread');
+              const $threadB = $(b).closest('.thread');
+
+              // Priority: thread-first (0) < thread-middle (1) < thread-last (2)
+              const getPriority = ($thread) => {
+                if ($thread.hasClass('thread-first') && !$thread.hasClass('thread-middle') && !$thread.hasClass('thread-last')) return 0;
+                if ($thread.hasClass('thread-last') && !$thread.hasClass('thread-first')) return 2;
+                return 1; // thread-middle or has multiple classes
+              };
+
+              return getPriority($threadA) - getPriority($threadB);
+            });
+
+            // Check if reordering is needed
+            const needsReorder = items.some((item, i) => item !== sortedItems[i]);
+
+            if (needsReorder) {
+              // Reorder the thread containers in the DOM
+              // Insert each thread container in the correct order after the previous one
+              for (let i = 1; i < sortedItems.length; i++) {
+                const threadDiv = $(sortedItems[i]).closest('.thread');
+                const prevThreadDiv = $(sortedItems[i - 1]).closest('.thread');
+                threadDiv.insertAfter(prevThreadDiv);
+              }
+            }
+          }
+        }
+      }
+    }
+
     this.sortItems();
     this.filterItems();
 

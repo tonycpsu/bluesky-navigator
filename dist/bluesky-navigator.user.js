@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+620.a4ca0bb7
+// @version     1.0.31+621.c165e9a4
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -65280,13 +65280,9 @@ div#statusBar.has-feed-map {
     positionFixedSidecarPanel() {
       const panel = $("#fixed-sidecar-panel");
       if (!panel.length) return;
-      let feedContainer = null;
-      if (this.selectedItem) {
-        feedContainer = $(this.selectedItem).closest(".thread")[0];
-      }
-      if (!feedContainer) {
-        feedContainer = document.querySelector('main[role="main"] [style*="max-width"]');
-      }
+      let feedContainer = document.querySelector('[data-testid="homeScreen"]') || document.querySelector('main[role="main"] [style*="max-width"]');
+      const toolbarHeight = this.getToolbarHeight() || 60;
+      const top = toolbarHeight + 8;
       if (feedContainer) {
         const rect = feedContainer.getBoundingClientRect();
         const gap = 16;
@@ -65297,15 +65293,21 @@ div#statusBar.has-feed-map {
           panel.css({
             left: `${left}px`,
             right: "auto",
-            top: `${rect.top}px`
+            top: `${top}px`
           });
         } else {
           panel.css({
             left: "auto",
             right: "16px",
-            top: `${rect.top}px`
+            top: `${top}px`
           });
         }
+      } else {
+        panel.css({
+          left: "auto",
+          right: "16px",
+          top: `${top}px`
+        });
       }
     }
     /**
@@ -69159,6 +69161,9 @@ ${rule}`;
         } catch (e) {
         }
         this._expandPromise = null;
+        await new Promise((resolve) => requestAnimationFrame(() => {
+          requestAnimationFrame(resolve);
+        }));
       }
       this.ignoreMouseMovement = true;
       if (this.index == 0) {

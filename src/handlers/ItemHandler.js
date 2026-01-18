@@ -999,15 +999,13 @@ export class ItemHandler extends Handler {
     const panel = $('#fixed-sidecar-panel');
     if (!panel.length) return;
 
-    // Find the feed container or use the selected item's thread container
-    let feedContainer = null;
-    if (this.selectedItem) {
-      feedContainer = $(this.selectedItem).closest('.thread')[0];
-    }
-    if (!feedContainer) {
-      // Fallback: find the main feed area
-      feedContainer = document.querySelector('main[role="main"] [style*="max-width"]');
-    }
+    // Find the feed container to position next to
+    let feedContainer = document.querySelector('[data-testid="homeScreen"]') ||
+                        document.querySelector('main[role="main"] [style*="max-width"]');
+
+    // Use consistent top position (below toolbar)
+    const toolbarHeight = this.getToolbarHeight() || 60;
+    const top = toolbarHeight + 8;
 
     if (feedContainer) {
       const rect = feedContainer.getBoundingClientRect();
@@ -1023,16 +1021,23 @@ export class ItemHandler extends Handler {
         panel.css({
           left: `${left}px`,
           right: 'auto',
-          top: `${rect.top}px`
+          top: `${top}px`
         });
       } else {
         // Fall back to right-aligned if not enough space
         panel.css({
           left: 'auto',
           right: '16px',
-          top: `${rect.top}px`
+          top: `${top}px`
         });
       }
+    } else {
+      // Fallback positioning
+      panel.css({
+        left: 'auto',
+        right: '16px',
+        top: `${top}px`
+      });
     }
   }
 
@@ -6067,6 +6072,11 @@ export class ItemHandler extends Handler {
         // Ignore expand errors - still scroll to the item
       }
       this._expandPromise = null;
+
+      // Wait for browser to complete layout after DOM changes
+      await new Promise(resolve => requestAnimationFrame(() => {
+        requestAnimationFrame(resolve);
+      }));
     }
 
     // Temporarily suppress focus changes during programmatic scroll

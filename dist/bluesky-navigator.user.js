@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+622.c49a5df8
+// @version     1.0.31+623.e71e3952
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -69942,24 +69942,64 @@ ${rule}`;
           const handles = items.map((item) => this.getAuthorHandle(item)).filter(Boolean);
           const uniqueHandles = new Set(handles);
           if (uniqueHandles.size === 1 && handles.length === items.length) {
+            const getThreadPosition = (item) => {
+              const threadIndicator = $(item).find("div.r-lchren, div.r-1mhb1uw > svg");
+              const avatarDiv = $(item).find('div[data-testid="userAvatarImage"]');
+              if (threadIndicator.length === 0) {
+                return "standalone";
+              }
+              if (threadIndicator.length === 1) {
+                const parent = threadIndicator.parents().has(avatarDiv).first();
+                const children = parent.find("*");
+                if (children.index(threadIndicator) < children.index(avatarDiv)) {
+                  return "last";
+                } else {
+                  return "first";
+                }
+              }
+              return "middle";
+            };
             if (unrollingEnabled) {
-              items.forEach((item) => {
-                const offset = parseInt($(item).data("bsky-navigator-thread-offset"));
-                if (offset > 0) {
+              const positions = items.map((item) => ({ item, position: getThreadPosition(item), handle: this.getAuthorHandle(item) }));
+              const hasRoot = positions.some((p) => p.position === "first");
+              console.log("[bsky-navigator] Self-thread detection:", {
+                threadIdx,
+                itemCount: items.length,
+                positions: positions.map((p) => p.position),
+                hasRoot,
+                handles: positions.map((p) => p.handle)
+              });
+              if (hasRoot) {
+                items.forEach((item) => {
+                  const position = getThreadPosition(item);
+                  if (position === "last" || position === "middle") {
+                    $(item).addClass("filtered self-thread-continuation");
+                    $(item).closest(".thread").addClass("has-self-thread-continuation");
+                  }
+                });
+              } else {
+                const sortedByPosition = [...items].sort((a, b) => {
+                  const posA = getThreadPosition(a);
+                  const posB = getThreadPosition(b);
+                  const priority = { "middle": 1, "last": 2, "standalone": 0 };
+                  return (priority[posA] || 0) - (priority[posB] || 0);
+                });
+                const firstPost = sortedByPosition[0];
+                sortedByPosition.slice(1).forEach((item) => {
                   $(item).addClass("filtered self-thread-continuation");
                   $(item).closest(".thread").addClass("has-self-thread-continuation");
+                });
+                if (!this._pendingProactiveUnrolls) {
+                  this._pendingProactiveUnrolls = [];
                 }
-              });
+                this._pendingProactiveUnrolls.push(firstPost);
+              }
             } else {
               const sortedItems = [...items].sort((a, b) => {
-                const $threadA = $(a).closest(".thread");
-                const $threadB = $(b).closest(".thread");
-                const getPriority = ($thread) => {
-                  if ($thread.hasClass("thread-first") && !$thread.hasClass("thread-middle") && !$thread.hasClass("thread-last")) return 0;
-                  if ($thread.hasClass("thread-last") && !$thread.hasClass("thread-first")) return 2;
-                  return 1;
-                };
-                return getPriority($threadA) - getPriority($threadB);
+                const posA = getThreadPosition(a);
+                const posB = getThreadPosition(b);
+                const priority = { "first": 0, "standalone": 0, "middle": 1, "last": 2 };
+                return (priority[posA] ?? 1) - (priority[posB] ?? 1);
               });
               const needsReorder = items.some((item, i) => item !== sortedItems[i]);
               if (needsReorder) {
@@ -70064,6 +70104,126 @@ ${rule}`;
       }
       this.ignoreMouseMovement = false;
       this.hideFeedLoading();
+      if (this._pendingProactiveUnrolls?.length > 0) {
+        console.log("[bsky-navigator] Processing proactive unrolls:", this._pendingProactiveUnrolls.length);
+        const pendingItems = this._pendingProactiveUnrolls;
+        this._pendingProactiveUnrolls = [];
+        this._processProactiveUnrolls(pendingItems);
+      }
+    }
+    /**
+     * Process proactive unrolls for self-thread continuation posts where the root is missing.
+     * This fetches the full thread via API and renders an unrolled view starting from the root.
+     * @param {Array} items - Array of DOM elements (continuation posts) to proactively unroll
+     * @private
+     */
+    async _processProactiveUnrolls(items) {
+      for (const item of items) {
+        try {
+          if (!document.contains(item)) {
+            console.log("[bsky-navigator] Proactive unroll: item no longer in DOM");
+            continue;
+          }
+          console.log("[bsky-navigator] Proactive unroll: fetching thread for item");
+          const thread = await this.getThreadForItem(item);
+          if (!thread) {
+            console.log("[bsky-navigator] Proactive unroll: no thread data");
+            continue;
+          }
+          console.log("[bsky-navigator] Proactive unroll: got thread, author:", thread.post?.author?.handle);
+          let rootThread = thread;
+          const authorDid = thread.post?.author?.did;
+          while (rootThread.parent?.post?.author?.did === authorDid) {
+            const parentThread = await this.api.getThread(rootThread.parent.post.uri);
+            if (parentThread) {
+              rootThread = parentThread;
+            } else {
+              break;
+            }
+          }
+          if (rootThread.post?.author?.did === authorDid) {
+            const unrolledPosts = await this.api.unrollThread(rootThread);
+            if (unrolledPosts.length > 1) {
+              await this._renderProactiveUnroll(item, rootThread, unrolledPosts);
+            }
+          }
+        } catch (e) {
+          console.warn("[bsky-navigator] Error in proactive unroll:", e);
+        }
+      }
+    }
+    /**
+     * Render an unrolled thread view for a continuation post where the root was missing.
+     * Shows all posts starting from the root (which may have been read/filtered).
+     * @param {Element} item - The continuation post DOM element
+     * @param {Object} rootThread - The thread data starting from the root post
+     * @param {Array} unrolledPosts - Array of all posts in the self-thread
+     * @private
+     */
+    async _renderProactiveUnroll(item, rootThread, unrolledPosts) {
+      const parent = $(item).find('div[data-testid="contentHider-post"]').first().parent();
+      if (!parent.length) return;
+      parent.css({
+        "overflow-y": "scroll",
+        "max-height": "80vH",
+        "padding-top": "1em",
+        "overscroll-behavior": "contain",
+        "padding-left": "44px",
+        "position": "relative"
+      });
+      parent.find(".unrolled-replies").remove();
+      parent.find(".unrolled-post-first").remove();
+      parent.find(".proactive-unroll-root").remove();
+      const totalPosts = unrolledPosts.length;
+      const rootPost = unrolledPosts[0];
+      const rootPostUrl = urlForPost(rootPost);
+      const rootDiv = $('<div class="proactive-unroll-root"/>');
+      rootDiv.append($(`<a href="${rootPostUrl}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`));
+      rootDiv.append($(this.bodyTemplate(formatPost(rootPost))));
+      rootDiv.append($(this.footerTemplate(formatPost(rootPost))));
+      parent.prepend(rootDiv);
+      const rootPostId = rootPost.uri.split("/").slice(-1)[0];
+      if (this.state.seen[rootPostId]) {
+        rootDiv.addClass("item-read");
+      }
+      let div = parent.find("div.unrolled-replies");
+      if (!div.length) {
+        div = $('<div class="unrolled-replies"/>');
+        parent.append(div);
+      }
+      const unrolledIds = [];
+      unrolledPosts.slice(1).forEach((p, i) => {
+        const postNum = i + 2;
+        const postId = p.uri.split("/").slice(-1)[0];
+        unrolledIds.push(postId);
+        this.unrolledPostIds.add(postId);
+        const reply = $('<div class="unrolled-reply"/>');
+        reply.attr("data-unrolled-post-id", postId);
+        reply.append($('<hr class="unrolled-divider"/>'));
+        const isLastPost = postNum === totalPosts;
+        const postNumberClass = isLastPost ? "unrolled-post-number unrolled-post-last" : "unrolled-post-number";
+        reply.append(
+          $(`<a href="${urlForPost(p)}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`)
+        );
+        reply.append($(this.bodyTemplate(formatPost(p))));
+        reply.append($(this.footerTemplate(formatPost(p))));
+        if (this.state.seen[postId]) {
+          reply.addClass("item-read");
+        }
+        div.append(reply);
+      });
+      this.items.each((i, feedItem) => {
+        const feedItemPostId = this.postIdForItem(feedItem);
+        if (feedItemPostId && unrolledIds.includes(feedItemPostId)) {
+          $(feedItem).addClass("filtered unrolled-duplicate");
+          $(feedItem).closest(".thread").addClass("has-unrolled-duplicate");
+        }
+      });
+      const currentPostId = this.postIdForItem(item);
+      if (currentPostId) {
+        this.selfThreadCache[currentPostId] = true;
+      }
+      this.selfThreadCache[rootPostId] = true;
     }
     applyThreadIndicatorStyles() {
       $("div.r-1mhb1uw").each((i, el) => {

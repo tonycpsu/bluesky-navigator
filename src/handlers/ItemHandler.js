@@ -7105,31 +7105,83 @@ export class ItemHandler extends Handler {
 
         // If all posts are by the same author, it's a self-thread
         if (uniqueHandles.size === 1 && handles.length === items.length) {
+          // Detect thread position using DOM thread indicators (classes may not be applied yet)
+          // This mirrors the logic in applyThreadStyling()
+          const getThreadPosition = (item) => {
+            const threadIndicator = $(item).find('div.r-lchren, div.r-1mhb1uw > svg');
+            const avatarDiv = $(item).find('div[data-testid="userAvatarImage"]');
+            if (threadIndicator.length === 0) {
+              return 'standalone'; // No thread indicators - single post
+            }
+            if (threadIndicator.length === 1) {
+              const parent = threadIndicator.parents().has(avatarDiv).first();
+              const children = parent.find('*');
+              if (children.index(threadIndicator) < children.index(avatarDiv)) {
+                return 'last'; // Line going up (reply) - thread-last
+              } else {
+                return 'first'; // Line going down - thread-first (root)
+              }
+            }
+            return 'middle'; // Two indicators - thread-middle
+          };
+
           if (unrollingEnabled) {
-            // Proactively filter self-thread continuation posts when unrolling is enabled
-            // This hides post 2, 3, etc. since they'll be shown when the root post is unrolled
-            items.forEach(item => {
-              const offset = parseInt($(item).data('bsky-navigator-thread-offset'));
-              if (offset > 0) {
+            // Check if we have a root post in this group
+            const positions = items.map(item => ({ item, position: getThreadPosition(item), handle: this.getAuthorHandle(item) }));
+            const hasRoot = positions.some(p => p.position === 'first');
+
+            console.log('[bsky-navigator] Self-thread detection:', {
+              threadIdx,
+              itemCount: items.length,
+              positions: positions.map(p => p.position),
+              hasRoot,
+              handles: positions.map(p => p.handle)
+            });
+
+            if (hasRoot) {
+              // Normal case: root post is visible, filter continuation posts
+              // They'll be shown when the root post is unrolled
+              items.forEach(item => {
+                const position = getThreadPosition(item);
+                if (position === 'last' || position === 'middle') {
+                  $(item).addClass('filtered self-thread-continuation');
+                  $(item).closest('.thread').addClass('has-self-thread-continuation');
+                }
+              });
+            } else {
+              // Missing root case: we only have continuation posts (post 2, 3, etc.)
+              // Keep the first continuation post visible and queue it for proactive unrolling
+              // Sort by thread position to find the earliest continuation post
+              const sortedByPosition = [...items].sort((a, b) => {
+                const posA = getThreadPosition(a);
+                const posB = getThreadPosition(b);
+                // middle posts come before last posts
+                const priority = { 'middle': 1, 'last': 2, 'standalone': 0 };
+                return (priority[posA] || 0) - (priority[posB] || 0);
+              });
+
+              // Keep the first post visible for unrolling, filter the rest
+              const firstPost = sortedByPosition[0];
+              sortedByPosition.slice(1).forEach(item => {
                 $(item).addClass('filtered self-thread-continuation');
                 $(item).closest('.thread').addClass('has-self-thread-continuation');
+              });
+
+              // Queue this post for proactive unrolling (async, after loadItems completes)
+              if (!this._pendingProactiveUnrolls) {
+                this._pendingProactiveUnrolls = [];
               }
-            });
+              this._pendingProactiveUnrolls.push(firstPost);
+            }
           } else {
             // When unrolling is disabled, reorder self-thread posts to be in correct order
-            // thread-first (root) -> thread-middle -> thread-last (final reply)
+            // first (root) -> middle -> last (final reply)
             const sortedItems = [...items].sort((a, b) => {
-              const $threadA = $(a).closest('.thread');
-              const $threadB = $(b).closest('.thread');
-
-              // Priority: thread-first (0) < thread-middle (1) < thread-last (2)
-              const getPriority = ($thread) => {
-                if ($thread.hasClass('thread-first') && !$thread.hasClass('thread-middle') && !$thread.hasClass('thread-last')) return 0;
-                if ($thread.hasClass('thread-last') && !$thread.hasClass('thread-first')) return 2;
-                return 1; // thread-middle or has multiple classes
-              };
-
-              return getPriority($threadA) - getPriority($threadB);
+              const posA = getThreadPosition(a);
+              const posB = getThreadPosition(b);
+              // Priority: first (0) < middle (1) < last (2)
+              const priority = { 'first': 0, 'standalone': 0, 'middle': 1, 'last': 2 };
+              return (priority[posA] ?? 1) - (priority[posB] ?? 1);
             });
 
             // Check if reordering is needed
@@ -7307,8 +7359,164 @@ export class ItemHandler extends Handler {
     // Hide loading indicator now that items are fully processed and sorted
     this.hideFeedLoading();
 
+    // Process any pending proactive unrolls (async, doesn't block loadItems)
+    // These are self-thread continuation posts where the root post is missing/filtered
+    if (this._pendingProactiveUnrolls?.length > 0) {
+      console.log('[bsky-navigator] Processing proactive unrolls:', this._pendingProactiveUnrolls.length);
+      const pendingItems = this._pendingProactiveUnrolls;
+      this._pendingProactiveUnrolls = [];
+      this._processProactiveUnrolls(pendingItems);
+    }
+
     // Note: scrolling is handled by jumpToPost/setIndex -> updateItems()
     // No additional scroll needed here
+  }
+
+  /**
+   * Process proactive unrolls for self-thread continuation posts where the root is missing.
+   * This fetches the full thread via API and renders an unrolled view starting from the root.
+   * @param {Array} items - Array of DOM elements (continuation posts) to proactively unroll
+   * @private
+   */
+  async _processProactiveUnrolls(items) {
+    for (const item of items) {
+      try {
+        // Skip if item is no longer in DOM
+        if (!document.contains(item)) {
+          console.log('[bsky-navigator] Proactive unroll: item no longer in DOM');
+          continue;
+        }
+
+        console.log('[bsky-navigator] Proactive unroll: fetching thread for item');
+        // Get thread data for this continuation post
+        const thread = await this.getThreadForItem(item);
+        if (!thread) {
+          console.log('[bsky-navigator] Proactive unroll: no thread data');
+          continue;
+        }
+        console.log('[bsky-navigator] Proactive unroll: got thread, author:', thread.post?.author?.handle);
+
+        // Find the root of the self-thread by traversing parent chain
+        let rootThread = thread;
+        const authorDid = thread.post?.author?.did;
+        while (rootThread.parent?.post?.author?.did === authorDid) {
+          // Parent is by same author - continue up the chain
+          const parentThread = await this.api.getThread(rootThread.parent.post.uri);
+          if (parentThread) {
+            rootThread = parentThread;
+          } else {
+            break;
+          }
+        }
+
+        // Now unroll from the root
+        if (rootThread.post?.author?.did === authorDid) {
+          // Get all posts in the self-thread
+          const unrolledPosts = await this.api.unrollThread(rootThread);
+          if (unrolledPosts.length > 1) {
+            // Render the unrolled thread in place of the continuation post
+            await this._renderProactiveUnroll(item, rootThread, unrolledPosts);
+          }
+        }
+      } catch (e) {
+        console.warn('[bsky-navigator] Error in proactive unroll:', e);
+      }
+    }
+  }
+
+  /**
+   * Render an unrolled thread view for a continuation post where the root was missing.
+   * Shows all posts starting from the root (which may have been read/filtered).
+   * @param {Element} item - The continuation post DOM element
+   * @param {Object} rootThread - The thread data starting from the root post
+   * @param {Array} unrolledPosts - Array of all posts in the self-thread
+   * @private
+   */
+  async _renderProactiveUnroll(item, rootThread, unrolledPosts) {
+    const parent = $(item).find('div[data-testid="contentHider-post"]').first().parent();
+    if (!parent.length) return;
+
+    // Style the container for scrolling
+    parent.css({
+      'overflow-y': 'scroll',
+      'max-height': '80vH',
+      'padding-top': '1em',
+      'overscroll-behavior': 'contain',
+      'padding-left': '44px',
+      'position': 'relative'
+    });
+
+    // Remove existing unrolled content if any
+    parent.find('.unrolled-replies').remove();
+    parent.find('.unrolled-post-first').remove();
+    parent.find('.proactive-unroll-root').remove();
+
+    const totalPosts = unrolledPosts.length;
+    const rootPost = unrolledPosts[0];
+
+    // Add the root post (post 1) at the top - this is the missing/filtered post
+    const rootPostUrl = urlForPost(rootPost);
+    const rootDiv = $('<div class="proactive-unroll-root"/>');
+    rootDiv.append($(`<a href="${rootPostUrl}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`));
+    rootDiv.append($(this.bodyTemplate(formatPost(rootPost))));
+    rootDiv.append($(this.footerTemplate(formatPost(rootPost))));
+    parent.prepend(rootDiv);
+
+    // Mark root post as read (since it was likely already read/filtered)
+    const rootPostId = rootPost.uri.split('/').slice(-1)[0];
+    if (this.state.seen[rootPostId]) {
+      rootDiv.addClass('item-read');
+    }
+
+    // Create container for continuation posts
+    let div = parent.find('div.unrolled-replies');
+    if (!div.length) {
+      div = $('<div class="unrolled-replies"/>');
+      parent.append(div);
+    }
+
+    // Track post IDs and add continuation posts
+    const unrolledIds = [];
+    unrolledPosts.slice(1).forEach((p, i) => {
+      const postNum = i + 2;
+      const postId = p.uri.split('/').slice(-1)[0];
+      unrolledIds.push(postId);
+      this.unrolledPostIds.add(postId);
+
+      const reply = $('<div class="unrolled-reply"/>');
+      reply.attr('data-unrolled-post-id', postId);
+      reply.append($('<hr class="unrolled-divider"/>'));
+      const isLastPost = postNum === totalPosts;
+      const postNumberClass = isLastPost ? 'unrolled-post-number unrolled-post-last' : 'unrolled-post-number';
+      reply.append(
+        $(`<a href="${urlForPost(p)}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`)
+      );
+      reply.append($(this.bodyTemplate(formatPost(p))));
+      reply.append($(this.footerTemplate(formatPost(p))));
+
+      // Apply read status
+      if (this.state.seen[postId]) {
+        reply.addClass('item-read');
+      }
+
+      div.append(reply);
+    });
+
+    // Filter out any other feed items that match unrolled posts
+    this.items.each((i, feedItem) => {
+      const feedItemPostId = this.postIdForItem(feedItem);
+      if (feedItemPostId && unrolledIds.includes(feedItemPostId)) {
+        $(feedItem).addClass('filtered unrolled-duplicate');
+        $(feedItem).closest('.thread').addClass('has-unrolled-duplicate');
+      }
+    });
+
+    // Cache this as a self-thread
+    const currentPostId = this.postIdForItem(item);
+    if (currentPostId) {
+      this.selfThreadCache[currentPostId] = true;
+    }
+    this.selfThreadCache[rootPostId] = true;
   }
 
   applyThreadIndicatorStyles() {

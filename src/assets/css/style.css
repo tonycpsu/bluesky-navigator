@@ -32,6 +32,16 @@ body.bsky-nav-feed-ready div[data-testid^="postThreadItem-by-"] {
   pointer-events: auto;
 }
 
+/* Ensure sidecar container uses row direction for post detail pages */
+/* The sidecar is appended to the parent of the post item */
+div[data-testid="postThreadScreen"] div:has(> div[data-testid^="postThreadItem-by-"].has-sidecar) {
+  display: flex !important;
+  flex-direction: row !important;
+}
+div[data-testid="postThreadScreen"] .sidecar-replies {
+  order: 1; /* Ensure sidecar is on the right */
+}
+
 /* ==========================================================================
    CSS Custom Properties (Accessibility & Theming)
    ========================================================================== */

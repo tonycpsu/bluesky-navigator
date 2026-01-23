@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+623.e71e3952
+// @version     1.0.31+624.2aa0e51f
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -48495,6 +48495,16 @@ body.bsky-nav-feed-ready div[data-testid^="postThreadItem-by-"] {
   pointer-events: auto;
 }
 
+/* Ensure sidecar container uses row direction for post detail pages */
+/* The sidecar is appended to the parent of the post item */
+div[data-testid="postThreadScreen"] div:has(> div[data-testid^="postThreadItem-by-"].has-sidecar) {
+  display: flex !important;
+  flex-direction: row !important;
+}
+div[data-testid="postThreadScreen"] .sidecar-replies {
+  order: 1; /* Ensure sidecar is on the right */
+}
+
 /* ==========================================================================
    CSS Custom Properties (Accessibility & Theming)
    ========================================================================== */
@@ -65280,7 +65290,7 @@ div#statusBar.has-feed-map {
     positionFixedSidecarPanel() {
       const panel = $("#fixed-sidecar-panel");
       if (!panel.length) return;
-      let feedContainer = document.querySelector('[data-testid="homeScreen"]') || document.querySelector('main[role="main"] [style*="max-width"]');
+      let feedContainer = document.querySelector('[data-testid="postThreadScreen"]') || document.querySelector('[data-testid="homeScreen"]') || document.querySelector('main[role="main"] [style*="max-width"]');
       const toolbarHeight = this.getToolbarHeight() || 60;
       const top = toolbarHeight + 8;
       if (feedContainer) {

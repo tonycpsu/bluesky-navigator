@@ -999,8 +999,10 @@ export class ItemHandler extends Handler {
     const panel = $('#fixed-sidecar-panel');
     if (!panel.length) return;
 
-    // Find the feed container to position next to
-    let feedContainer = document.querySelector('[data-testid="homeScreen"]') ||
+    // Find the feed/post container to position next to
+    // Try various selectors for different page types
+    let feedContainer = document.querySelector('[data-testid="postThreadScreen"]') ||
+                        document.querySelector('[data-testid="homeScreen"]') ||
                         document.querySelector('main[role="main"] [style*="max-width"]');
 
     // Use consistent top position (below toolbar)

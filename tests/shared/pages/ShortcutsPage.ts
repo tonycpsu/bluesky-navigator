@@ -34,23 +34,11 @@ export class ShortcutsPage {
   }
 
   /**
-   * Open the shortcuts overlay with ? key
+   * Open/toggle the shortcuts overlay with ? key
    */
   async open(): Promise<void> {
-    // Press Shift+/ to get ?
-    await this.page.evaluate(() => {
-      const eventInit = {
-        key: "?",
-        code: "Slash",
-        keyCode: 191,
-        which: 191,
-        shiftKey: true,
-        bubbles: true,
-        cancelable: true,
-      };
-      document.dispatchEvent(new KeyboardEvent("keydown", eventInit));
-      document.dispatchEvent(new KeyboardEvent("keyup", eventInit));
-    });
+    // Use Playwright's native keyboard for more reliable event handling
+    await this.page.keyboard.press("Shift+Slash");
   }
 
   /**

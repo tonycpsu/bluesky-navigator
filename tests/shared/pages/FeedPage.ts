@@ -28,30 +28,30 @@ export class FeedPage {
       timeout: 10000,
     });
 
-    // Allow time for feed to stabilize
-    await this.page.waitForTimeout(1500);
+    // Wait for feed to have the data attributes applied (userscript processed items)
+    await this.page.waitForSelector('[data-bsky-navigator-item-index]', {
+      timeout: 10000,
+    });
 
     // Initialize selection if not already set
     let hasSelection = await this.page.locator(".item-selection-active").count();
     if (hasSelection === 0) {
       // Try Home key first (more reliable)
       await this.pressKey("Home");
-      await this.page.waitForTimeout(500);
+      await this.page.waitForSelector(".item-selection-active", { timeout: 2000 }).catch(() => {});
 
       hasSelection = await this.page.locator(".item-selection-active").count();
       if (hasSelection === 0) {
         // Fall back to gg (vim-style)
         await this.pressKey("g");
-        await this.page.waitForTimeout(100);
         await this.pressKey("g");
-        await this.page.waitForTimeout(500);
+        await this.page.waitForSelector(".item-selection-active", { timeout: 2000 }).catch(() => {});
       }
 
       hasSelection = await this.page.locator(".item-selection-active").count();
       if (hasSelection === 0) {
         // Last resort: try j to select first item
         await this.pressKey("j");
-        await this.page.waitForTimeout(500);
       }
     }
 
@@ -70,7 +70,8 @@ export class FeedPage {
    * Get the current selection index from the data attribute
    */
   async getCurrentIndex(): Promise<number | null> {
-    await this.page.waitForTimeout(300);
+    // Wait for selection element to exist
+    await this.page.waitForSelector(".item-selection-active", { timeout: 2000 }).catch(() => {});
 
     const index = await this.page.evaluate(() => {
       const elements = document.querySelectorAll(".item-selection-active");
@@ -114,7 +115,6 @@ export class FeedPage {
     const nativeKeys = ["Home", "End", "PageUp", "PageDown", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape", "Enter"];
     if (nativeKeys.includes(key)) {
       await this.page.keyboard.press(key);
-      await this.page.waitForTimeout(300);
       return;
     }
 
@@ -125,7 +125,6 @@ export class FeedPage {
         .replace("Alt+.", "Alt+Period")
         .replace("Alt+,", "Alt+Comma");
       await this.page.keyboard.press(playwrightKey);
-      await this.page.waitForTimeout(300);
       return;
     }
 
@@ -200,26 +199,24 @@ export class FeedPage {
       document.dispatchEvent(new KeyboardEvent("keydown", eventInit));
       document.dispatchEvent(new KeyboardEvent("keyup", eventInit));
     }, key);
-
-    await this.page.waitForTimeout(300);
   }
 
   /**
    * Navigate to the first post (Home key)
    */
   async goToFirstPost(): Promise<void> {
+    const initialIndex = await this.getCurrentIndex();
     await this.pressKey("Home");
-    await this.page.waitForTimeout(500);
-    // Wait for selection to settle
-    await this.page.waitForSelector(".item-selection-active", { timeout: 5000 }).catch(() => {});
+    await this.waitForIndexChange(initialIndex);
   }
 
   /**
    * Navigate to the last loaded post
    */
   async goToLastPost(): Promise<void> {
+    const initialIndex = await this.getCurrentIndex();
     await this.pressKey("End");
-    await this.page.waitForTimeout(500);
+    await this.waitForIndexChange(initialIndex);
   }
 
   /**
@@ -243,5 +240,26 @@ export class FeedPage {
     return await this.page.evaluate(() => {
       return document.querySelectorAll(".item-read").length > 0;
     });
+  }
+
+  /**
+   * Wait for the selection index to change from the given value
+   */
+  async waitForIndexChange(previousIndex: number | null, timeout = 5000): Promise<number | null> {
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeout) {
+      const currentIndex = await this.page.evaluate(() => {
+        const el = document.querySelector(".item-selection-active");
+        if (!el) return null;
+        const idx = el.getAttribute("data-bsky-navigator-item-index");
+        return idx !== null ? parseInt(idx, 10) : null;
+      });
+      if (currentIndex !== null && currentIndex !== previousIndex) {
+        return currentIndex;
+      }
+      await this.page.waitForTimeout(50);
+    }
+    // Return current index even if unchanged (timeout)
+    return this.getCurrentIndex();
   }
 }

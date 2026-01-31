@@ -72,7 +72,8 @@ export class FeedMapPage {
       const x = box.x + box.width * position;
       const y = box.y + box.height / 2;
       await this.page.mouse.click(x, y);
-      await this.page.waitForTimeout(500);
+      // Wait for selection to update
+      await expect(this.page.locator(".item-selection-active")).toBeVisible();
     }
   }
 }

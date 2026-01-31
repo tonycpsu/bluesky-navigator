@@ -51,7 +51,6 @@ export class ShortcutsPage {
       document.dispatchEvent(new KeyboardEvent("keydown", eventInit));
       document.dispatchEvent(new KeyboardEvent("keyup", eventInit));
     });
-    await this.page.waitForTimeout(300);
   }
 
   /**
@@ -59,6 +58,5 @@ export class ShortcutsPage {
    */
   async close(): Promise<void> {
     await this.page.keyboard.press("Escape");
-    await this.page.waitForTimeout(300);
   }
 }

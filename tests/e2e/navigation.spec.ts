@@ -66,15 +66,16 @@ test.describe("Post Navigation", () => {
   test("Home and End move to opposite extremes", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
 
-    // Press Home
-    await feedPage.pressKey("Home");
-    await page.waitForTimeout(500);
-    const homeIndex = await feedPage.getCurrentIndex();
+    // Get initial index
+    const initialIndex = await feedPage.getCurrentIndex();
 
-    // Press End
+    // Press Home and wait for index to potentially change
+    await feedPage.pressKey("Home");
+    const homeIndex = await feedPage.waitForIndexChange(initialIndex);
+
+    // Press End and wait for index to change from Home position
     await feedPage.pressKey("End");
-    await page.waitForTimeout(500);
-    const endIndex = await feedPage.getCurrentIndex();
+    const endIndex = await feedPage.waitForIndexChange(homeIndex);
 
     // Home and End should result in different positions
     expect(homeIndex).not.toBeNull();
@@ -92,14 +93,13 @@ test.describe("Post Navigation", () => {
     const feedPage = new FeedPage(page);
 
     // Start at Home position
+    const initialIndex = await feedPage.getCurrentIndex();
     await feedPage.pressKey("Home");
-    await page.waitForTimeout(500);
-    const startIndex = await feedPage.getCurrentIndex();
+    const startIndex = await feedPage.waitForIndexChange(initialIndex);
 
-    // Press PageDown
+    // Press PageDown and wait for change
     await feedPage.pressKey("PageDown");
-    await page.waitForTimeout(500);
-    const afterIndex = await feedPage.getCurrentIndex();
+    const afterIndex = await feedPage.waitForIndexChange(startIndex);
 
     expect(afterIndex).not.toBeNull();
     expect(afterIndex).not.toBe(startIndex);
@@ -113,14 +113,13 @@ test.describe("Post Navigation", () => {
     const feedPage = new FeedPage(page);
 
     // Start at End position (opposite of Home)
+    const initialIndex = await feedPage.getCurrentIndex();
     await feedPage.pressKey("End");
-    await page.waitForTimeout(500);
-    const startIndex = await feedPage.getCurrentIndex();
+    const startIndex = await feedPage.waitForIndexChange(initialIndex);
 
-    // Press PageUp
+    // Press PageUp and wait for change
     await feedPage.pressKey("PageUp");
-    await page.waitForTimeout(500);
-    const afterIndex = await feedPage.getCurrentIndex();
+    const afterIndex = await feedPage.waitForIndexChange(startIndex);
 
     expect(afterIndex).not.toBeNull();
     expect(afterIndex).not.toBe(startIndex);

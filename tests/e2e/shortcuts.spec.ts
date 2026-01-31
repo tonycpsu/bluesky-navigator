@@ -39,22 +39,20 @@ test.describe("Shortcuts Overlay", () => {
 
     // Open
     await shortcutsPage.open();
-    await page.waitForTimeout(500);
-    expect(await shortcutsPage.isVisible()).toBe(true);
+    await shortcutsPage.waitForVisible();
 
     // Close with same key
     await shortcutsPage.open();
-    await page.waitForTimeout(500);
-    expect(await shortcutsPage.isVisible()).toBe(false);
+    await shortcutsPage.waitForHidden();
   });
 
   test("shortcuts overlay contains expected sections", async ({ authenticatedPage: page }) => {
     const shortcutsPage = new ShortcutsPage(page);
 
     await shortcutsPage.open();
-    await page.waitForTimeout(200);
+    await shortcutsPage.waitForVisible();
 
-    // Check for expected category titles
+    // Check for expected category titles (expect auto-retries)
     const overlay = page.locator(".shortcut-overlay");
     await expect(overlay.getByRole("heading", { name: "Navigation", exact: true })).toBeVisible();
     await expect(overlay.getByRole("heading", { name: "Post Actions" })).toBeVisible();
@@ -71,8 +69,8 @@ test.describe("Config Modal", () => {
   test("Alt+. opens config modal", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
     await feedPage.pressKey("Alt+.");
-    await page.waitForTimeout(300);
 
+    // expect auto-retries until visible
     await expect(page.locator(".config-modal")).toBeVisible();
   });
 
@@ -81,24 +79,22 @@ test.describe("Config Modal", () => {
 
     // Open modal
     await feedPage.pressKey("Alt+.");
-    await page.waitForTimeout(300);
     await expect(page.locator(".config-modal")).toBeVisible();
 
     // Close with Escape
     await page.keyboard.press("Escape");
-    await page.waitForTimeout(300);
 
+    // expect auto-retries until not visible
     await expect(page.locator(".config-modal")).not.toBeVisible();
   });
 
   test("config modal has tabs", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
     await feedPage.pressKey("Alt+.");
-    await page.waitForTimeout(300);
 
     const modal = page.locator(".config-modal");
 
-    // Check for tab buttons
+    // Check for tab buttons (expect auto-retries)
     await expect(modal.getByRole("tab", { name: /Display/ })).toBeVisible();
     await expect(modal.getByRole("tab", { name: /Rules/ })).toBeVisible();
   });
@@ -121,26 +117,23 @@ test.describe("Post Actions", () => {
 
     // Toggle with .
     await feedPage.pressKey(".");
-    await page.waitForTimeout(200);
 
-    // Check new state
-    const newReadState = await currentPost.evaluate((el) =>
-      el.classList.contains("item-read")
-    );
-
-    expect(newReadState).not.toBe(initialReadState);
+    // Wait for class to change using expect auto-retry
+    if (initialReadState) {
+      await expect(currentPost).not.toHaveClass(/item-read/);
+    } else {
+      await expect(currentPost).toHaveClass(/item-read/);
+    }
   });
 
   test("+ key opens add to rules dropdown", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
     await feedPage.pressKey("Shift+=");
 
-    // Wait for dropdown
-    await page.waitForTimeout(500);
-
     // Check for dropdown (may not appear if there are no rules to add)
+    // Use a short timeout since this element may or may not appear
     const dropdown = page.locator(".bsky-nav-rules-dropdown");
-    const isVisible = await dropdown.isVisible().catch(() => false);
+    const isVisible = await dropdown.isVisible({ timeout: 1000 }).catch(() => false);
     // Just verify no error occurred - dropdown may not appear
     expect(typeof isVisible).toBe("boolean");
   });
@@ -149,12 +142,10 @@ test.describe("Post Actions", () => {
     const feedPage = new FeedPage(page);
     await feedPage.pressKey("a");
 
-    // Wait for hover card
-    await page.waitForTimeout(500);
-
     // Check for hover card (may or may not appear depending on post type)
+    // Use a short timeout since this element may or may not appear
     const hoverCard = page.locator('[data-testid="profileHoverCard"]');
-    const isVisible = await hoverCard.isVisible().catch(() => false);
+    const isVisible = await hoverCard.isVisible({ timeout: 1000 }).catch(() => false);
 
     // Just verify no error occurred
     expect(typeof isVisible).toBe("boolean");
@@ -179,9 +170,8 @@ test.describe("Feed Controls", () => {
   test(": key toggles sort order indicator", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
     await feedPage.pressKey("Shift+:");
-    await page.waitForTimeout(200);
 
-    // The statusbar should still be visible
+    // The statusbar should still be visible (expect auto-retries)
     const statusbar = page.locator("#bsky-navigator-global-statusbar");
     await expect(statusbar).toBeAttached();
   });

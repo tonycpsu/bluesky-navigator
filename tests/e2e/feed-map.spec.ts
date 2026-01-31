@@ -46,20 +46,18 @@ test.describe("Feed Map", () => {
 
     // Navigate to first post
     await feedPage.goToFirstPost();
-    await page.waitForTimeout(500);
 
-    // Check for current segment highlight
-    const hasCurrentSegment = await feedMapPage.hasCurrentSegment();
-    expect(hasCurrentSegment).toBe(true);
+    // Wait for current segment to appear (expect auto-retries)
+    await expect(page.locator(".feed-map-segment-current")).toBeVisible();
   });
 
   test("feed map updates when navigating posts", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
     const feedMapPage = new FeedMapPage(page);
 
-    // Go to first post
+    // Go to first post and wait for current segment
     await feedPage.goToFirstPost();
-    await page.waitForTimeout(300);
+    await expect(page.locator(".feed-map-segment-current")).toBeVisible();
 
     // Get initial current segment position
     const initialSegment = await feedMapPage.getCurrentSegment();
@@ -69,7 +67,9 @@ test.describe("Feed Map", () => {
     for (let i = 0; i < 5; i++) {
       await feedPage.nextPost();
     }
-    await page.waitForTimeout(300);
+
+    // Wait for feed map to update by checking segment is still visible
+    await expect(page.locator(".feed-map-segment-current")).toBeVisible();
 
     // Get new current segment position
     const newSegment = await feedMapPage.getCurrentSegment();

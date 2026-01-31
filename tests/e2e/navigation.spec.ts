@@ -138,11 +138,7 @@ test.describe("Post Navigation", () => {
       await feedPage.nextPost();
     }
 
-    // Wait for read status to be applied
-    await page.waitForTimeout(1000);
-
-    // Check if any posts are marked as read
-    const hasReadPosts = await feedPage.hasReadPosts();
-    expect(hasReadPosts).toBe(true);
+    // Wait for read status to be applied (expect auto-retries)
+    await expect(page.locator(".item-read").first()).toBeVisible();
   });
 });

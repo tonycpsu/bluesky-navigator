@@ -38,7 +38,7 @@ export function isModalOpen() {
   if (document.querySelector('.config-modal')) return true;
 
   // Check for shortcut overlay
-  if (document.querySelector('.shortcuts-overlay')) return true;
+  if (document.querySelector('.shortcut-overlay')) return true;
 
   // Check for sync dialog
   if (document.querySelector('.sync-dialog-overlay')) return true;

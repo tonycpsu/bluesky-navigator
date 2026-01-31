@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+624.2aa0e51f
+// @version     1.0.31+625.15b32ef1
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -49332,11 +49332,10 @@ div.item-banner {
     text-align: center;
 }
 
-/* Fixed sidecar toggle button - attached to selected item */
+/* Fixed sidecar toggle button - positioned next to selected item */
 .fixed-sidecar-toggle {
-    position: absolute;
-    top: 8px;
-    left: calc(100% + 8px);
+    position: fixed;
+    /* top and left are set by JS based on selected item position */
     width: 40px;
     height: 40px;
     border-radius: 50%;
@@ -49351,6 +49350,7 @@ div.item-banner {
     opacity: 0;
     visibility: hidden;
     transition: opacity var(--animation-duration, 200ms) ease, visibility var(--animation-duration, 200ms) ease, transform 150ms ease;
+    pointer-events: auto;
 }
 
 .fixed-sidecar-toggle.visible {
@@ -49460,6 +49460,43 @@ div.item-banner {
 
     .fixed-sidecar-toggle:hover svg {
         color: #f9fafb;
+    }
+}
+
+/* Fixed sidecar connector arrow */
+.fixed-sidecar-connector {
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: calc(var(--z-panel, 5000) - 1);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--animation-duration, 200ms) ease;
+}
+
+.fixed-sidecar-connector.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.fixed-sidecar-connector-path {
+    stroke: var(--accent-color, #3b82f6);
+    stroke-width: 2;
+    fill: none;
+    stroke-dasharray: 6, 4;
+}
+
+.fixed-sidecar-connector marker path {
+    fill: var(--accent-color, #3b82f6);
+}
+
+@media (prefers-color-scheme: dark) {
+    .fixed-sidecar-connector-path {
+        stroke: #60a5fa;
+    }
+    .fixed-sidecar-connector marker path {
+        fill: #60a5fa;
     }
 }
 
@@ -65039,6 +65076,9 @@ div#statusBar.has-feed-map {
         }
         this._threadIndex = null;
         this.updateInfoIndicator();
+        if (this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible")) {
+          this.updateSidecarConnector();
+        }
         return;
       }
       const navList = this.getThreadNavList();
@@ -65057,6 +65097,9 @@ div#statusBar.has-feed-map {
       }
       this._threadIndex = navList.getSelectedIndex();
       this.updateInfoIndicator();
+      if (this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible")) {
+        this.updateSidecarConnector();
+      }
     }
     get unrolledReplies() {
       return $(this.selectedItem).find(".unrolled-reply");
@@ -65269,13 +65312,26 @@ div#statusBar.has-feed-map {
         <span class="fixed-sidecar-toggle-count"></span>
       </button>
     `);
+      this.fixedSidecarConnector = $(`
+      <svg id="fixed-sidecar-connector" class="fixed-sidecar-connector">
+        <defs>
+          <marker id="sidecar-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 L2,4 Z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <path class="fixed-sidecar-connector-path" fill="none" marker-end="url(#sidecar-arrow)"/>
+      </svg>
+    `);
       $("body").append(this.fixedSidecarPanel);
+      $("body").append(this.fixedSidecarConnector);
       this.fixedSidecarPanel.find(".fixed-sidecar-panel-close").on("click", () => {
         this.config.set("fixedSidecarVisible", false);
         this.config.save();
         this.hideFixedSidecarPanel();
       });
-      $(document).on("click", "#fixed-sidecar-toggle", async () => {
+      $(document).on("click", "#fixed-sidecar-toggle", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         await this.openFixedSidecarPanel();
       });
       $(window).on("resize.fixedSidecar", () => {
@@ -65321,40 +65377,105 @@ div#statusBar.has-feed-map {
       }
     }
     /**
+     * Update the SVG connector line between the selected post and the sidecar panel
+     */
+    updateSidecarConnector() {
+      const connector = $("#fixed-sidecar-connector");
+      const panel = $("#fixed-sidecar-panel");
+      const $item = this.selectedItem;
+      if (!connector.length || !panel.length || !$item || !$item.length) {
+        connector.removeClass("visible");
+        return;
+      }
+      if (!panel.hasClass("visible")) {
+        connector.removeClass("visible");
+        return;
+      }
+      const $thread = $item.closest(".thread");
+      const threadRect = $thread.length ? $thread[0].getBoundingClientRect() : null;
+      let $targetPost = $item;
+      if (this._threadIndex != null && this.unrolledReplies.length > 0) {
+        const threadPost = this.getPostForThreadIndex(this._threadIndex);
+        if (threadPost && threadPost.length) {
+          $targetPost = threadPost;
+        }
+      }
+      const itemRect = $item[0].getBoundingClientRect();
+      const targetRect = $targetPost[0].getBoundingClientRect();
+      const panelRect = panel[0].getBoundingClientRect();
+      let startX;
+      if (threadRect && this._threadIndex != null) {
+        startX = threadRect.right;
+      } else {
+        startX = itemRect.right;
+      }
+      const startY = targetRect.top + 20;
+      const endX = panelRect.left;
+      const endY = panelRect.top + 30;
+      const midX = (startX + endX) / 2;
+      let path;
+      if (this._threadIndex != null) {
+        const controlX1 = startX + (endX - startX) * 0.3;
+        const controlX2 = startX + (endX - startX) * 0.7;
+        path = `M ${startX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
+      } else {
+        path = `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
+      }
+      connector.attr("width", window.innerWidth);
+      connector.attr("height", window.innerHeight);
+      connector.css({
+        position: "fixed",
+        top: 0,
+        left: 0,
+        pointerEvents: "none"
+      });
+      connector.find(".fixed-sidecar-connector-path").attr("d", path);
+      connector.addClass("visible");
+    }
+    /**
      * Show the fixed sidecar panel
      */
     showFixedSidecarPanel() {
       this.positionFixedSidecarPanel();
       $("#fixed-sidecar-panel").addClass("visible");
+      $("#fixed-sidecar-connector").addClass("visible");
       $("#fixed-sidecar-toggle").removeClass("visible");
+      this.updateSidecarConnector();
     }
     /**
      * Hide the fixed sidecar panel
      */
     hideFixedSidecarPanel() {
       $("#fixed-sidecar-panel").removeClass("visible");
+      $("#fixed-sidecar-connector").removeClass("visible");
+      this._currentSidecarPostId = null;
       this.positionFixedSidecarToggle();
       $("#fixed-sidecar-toggle").addClass("visible");
     }
     /**
-     * Attach the toggle button to the selected item so it scrolls with it
+     * Position the toggle button next to the selected item using fixed positioning.
+     * The toggle is appended to body to avoid click events propagating through the post.
      */
     positionFixedSidecarToggle() {
       const toggle = this.fixedSidecarToggle;
       if (!toggle || !toggle.length) return;
       const $item = this.selectedItem;
       if (!$item || !$item.length) {
-        toggle.detach();
+        toggle.removeClass("visible");
         return;
       }
-      let container = $item;
-      if (container.css("position") === "static") {
-        container.css("position", "relative");
-      }
-      if (!container.find("#fixed-sidecar-toggle").length) {
+      if (!toggle.parent().is("body")) {
         toggle.detach();
-        container.append(toggle);
+        $("body").append(toggle);
       }
+      const rect = $item[0].getBoundingClientRect();
+      window.scrollY || document.documentElement.scrollTop;
+      toggle.css({
+        position: "fixed",
+        top: `${rect.top + 8}px`,
+        left: `${rect.right + 8}px`,
+        right: "auto"
+      });
     }
     /**
      * Open the fixed sidecar panel with current item's thread
@@ -65423,6 +65544,11 @@ div#statusBar.has-feed-map {
       if (!this.fixedSidecarPanel || !document.contains(this.fixedSidecarPanel[0])) {
         this.initFixedSidecarPanel();
       }
+      const itemPostId = this.postIdForItem(item);
+      if (this._currentSidecarPostId === itemPostId && $("#fixed-sidecar-panel").hasClass("visible")) {
+        return;
+      }
+      this._currentSidecarPostId = itemPostId;
       const contentContainer = $("#fixed-sidecar-panel .fixed-sidecar-panel-content");
       contentContainer.html(this.getSkeletonContent());
       await this.waitForElementStable(item);
@@ -66970,6 +67096,12 @@ div#statusBar.has-feed-map {
           }
           this.scrollTop = currentScroll;
           this.scrollTick = false;
+          if (this.isFixedSidecar() && this.config.get("fixedSidecarVisible") === false && $("#fixed-sidecar-toggle").hasClass("visible")) {
+            this.positionFixedSidecarToggle();
+          }
+          if (this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible")) {
+            this.updateSidecarConnector();
+          }
         });
         this.scrollTick = true;
       }

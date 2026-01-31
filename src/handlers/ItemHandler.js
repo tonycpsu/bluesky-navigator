@@ -670,6 +670,10 @@ export class ItemHandler extends Handler {
       }
       this._threadIndex = null;
       this.updateInfoIndicator();
+      // Update sidecar connector to point back at main post
+      if (this.isFixedSidecar() && $('#fixed-sidecar-panel').hasClass('visible')) {
+        this.updateSidecarConnector();
+      }
       return;
     }
 
@@ -695,6 +699,11 @@ export class ItemHandler extends Handler {
 
     this._threadIndex = navList.getSelectedIndex();
     this.updateInfoIndicator();
+
+    // Update sidecar connector to point at the new thread post
+    if (this.isFixedSidecar() && $('#fixed-sidecar-panel').hasClass('visible')) {
+      this.updateSidecarConnector();
+    }
   }
 
   get unrolledReplies() {
@@ -969,7 +978,20 @@ export class ItemHandler extends Handler {
       </button>
     `);
 
+    // Create the connector SVG that draws a line from the post to the sidecar
+    this.fixedSidecarConnector = $(`
+      <svg id="fixed-sidecar-connector" class="fixed-sidecar-connector">
+        <defs>
+          <marker id="sidecar-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 L2,4 Z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <path class="fixed-sidecar-connector-path" fill="none" marker-end="url(#sidecar-arrow)"/>
+      </svg>
+    `);
+
     $('body').append(this.fixedSidecarPanel);
+    $('body').append(this.fixedSidecarConnector);
     // Toggle is not appended to body - it will be attached to selected item
 
     // Close button handler
@@ -980,7 +1002,9 @@ export class ItemHandler extends Handler {
     });
 
     // Toggle button handler (use event delegation since toggle moves around)
-    $(document).on('click', '#fixed-sidecar-toggle', async () => {
+    $(document).on('click', '#fixed-sidecar-toggle', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       await this.openFixedSidecarPanel();
     });
 
@@ -1044,12 +1068,95 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Update the SVG connector line between the selected post and the sidecar panel
+   */
+  updateSidecarConnector() {
+    const connector = $('#fixed-sidecar-connector');
+    const panel = $('#fixed-sidecar-panel');
+    const $item = this.selectedItem;
+
+    if (!connector.length || !panel.length || !$item || !$item.length) {
+      connector.removeClass('visible');
+      return;
+    }
+
+    if (!panel.hasClass('visible')) {
+      connector.removeClass('visible');
+      return;
+    }
+
+    // Get the thread container bounds (constrains where connector can go)
+    const $thread = $item.closest('.thread');
+    const threadRect = $thread.length ? $thread[0].getBoundingClientRect() : null;
+
+    // Determine target post - either the specific thread post or the main item
+    let $targetPost = $item;
+    if (this._threadIndex != null && this.unrolledReplies.length > 0) {
+      const threadPost = this.getPostForThreadIndex(this._threadIndex);
+      if (threadPost && threadPost.length) {
+        $targetPost = threadPost;
+      }
+    }
+
+    // Get positions
+    const itemRect = $item[0].getBoundingClientRect();
+    const targetRect = $targetPost[0].getBoundingClientRect();
+    const panelRect = panel[0].getBoundingClientRect();
+
+    // Calculate connection points
+    // Start X is constrained to the thread container edge if within an unrolled thread
+    let startX;
+    if (threadRect && this._threadIndex != null) {
+      // Use thread container's right edge so line doesn't extend past thread bounds
+      startX = threadRect.right;
+    } else {
+      startX = itemRect.right;
+    }
+
+    // Start Y points at the top of the target post (with small offset)
+    const startY = targetRect.top + 20;
+
+    // End at the left edge of the panel, near the top
+    const endX = panelRect.left;
+    const endY = panelRect.top + 30; // Near the header
+
+    // Create a curved path - use gentler curve when pointing at thread post
+    const midX = (startX + endX) / 2;
+    let path;
+    if (this._threadIndex != null) {
+      // More vertical path for thread posts - curve bends toward target
+      const controlX1 = startX + (endX - startX) * 0.3;
+      const controlX2 = startX + (endX - startX) * 0.7;
+      path = `M ${startX} ${startY} C ${controlX1} ${startY}, ${controlX2} ${endY}, ${endX} ${endY}`;
+    } else {
+      // Standard curved path for main items
+      path = `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
+    }
+
+    // Update SVG size to cover the viewport
+    connector.attr('width', window.innerWidth);
+    connector.attr('height', window.innerHeight);
+    connector.css({
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      pointerEvents: 'none'
+    });
+
+    // Update the path
+    connector.find('.fixed-sidecar-connector-path').attr('d', path);
+    connector.addClass('visible');
+  }
+
+  /**
    * Show the fixed sidecar panel
    */
   showFixedSidecarPanel() {
     this.positionFixedSidecarPanel();
     $('#fixed-sidecar-panel').addClass('visible');
+    $('#fixed-sidecar-connector').addClass('visible');
     $('#fixed-sidecar-toggle').removeClass('visible');
+    this.updateSidecarConnector();
   }
 
   /**
@@ -1057,12 +1164,15 @@ export class ItemHandler extends Handler {
    */
   hideFixedSidecarPanel() {
     $('#fixed-sidecar-panel').removeClass('visible');
+    $('#fixed-sidecar-connector').removeClass('visible');
+    this._currentSidecarPostId = null; // Clear so next show will reload content
     this.positionFixedSidecarToggle();
     $('#fixed-sidecar-toggle').addClass('visible');
   }
 
   /**
-   * Attach the toggle button to the selected item so it scrolls with it
+   * Position the toggle button next to the selected item using fixed positioning.
+   * The toggle is appended to body to avoid click events propagating through the post.
    */
   positionFixedSidecarToggle() {
     const toggle = this.fixedSidecarToggle;
@@ -1071,25 +1181,27 @@ export class ItemHandler extends Handler {
     // Get the selected item
     const $item = this.selectedItem;
     if (!$item || !$item.length) {
-      // No item selected - detach toggle
-      toggle.detach();
+      // No item selected - hide toggle
+      toggle.removeClass('visible');
       return;
     }
 
-    // Find the item's container (the post wrapper that has position: relative)
-    // Look for the closest element that can serve as positioning context
-    let container = $item;
-
-    // Ensure the container has relative positioning for absolute child
-    if (container.css('position') === 'static') {
-      container.css('position', 'relative');
-    }
-
-    // Attach toggle to this item if not already there
-    if (!container.find('#fixed-sidecar-toggle').length) {
+    // Ensure toggle is attached to body (not inside the post)
+    if (!toggle.parent().is('body')) {
       toggle.detach();
-      container.append(toggle);
+      $('body').append(toggle);
     }
+
+    // Position the toggle next to the item using fixed positioning
+    const rect = $item[0].getBoundingClientRect();
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+
+    toggle.css({
+      position: 'fixed',
+      top: `${rect.top + 8}px`,
+      left: `${rect.right + 8}px`,
+      right: 'auto'
+    });
   }
 
   /**
@@ -1173,6 +1285,13 @@ export class ItemHandler extends Handler {
     if (!this.fixedSidecarPanel || !document.contains(this.fixedSidecarPanel[0])) {
       this.initFixedSidecarPanel();
     }
+
+    // Check if panel is already showing content for this item (avoid unnecessary reload/flicker)
+    const itemPostId = this.postIdForItem(item);
+    if (this._currentSidecarPostId === itemPostId && $('#fixed-sidecar-panel').hasClass('visible')) {
+      return; // Already showing content for this item
+    }
+    this._currentSidecarPostId = itemPostId;
 
     // Use direct DOM selection to avoid stale jQuery reference
     const contentContainer = $('#fixed-sidecar-panel .fixed-sidecar-panel-content');
@@ -3174,6 +3293,19 @@ export class ItemHandler extends Handler {
         }
         this.scrollTop = currentScroll;
         this.scrollTick = false;
+
+        // Update fixed sidecar toggle position during scroll
+        if (this.isFixedSidecar() &&
+            this.config.get('fixedSidecarVisible') === false &&
+            $('#fixed-sidecar-toggle').hasClass('visible')) {
+          this.positionFixedSidecarToggle();
+        }
+
+        // Update sidecar connector during scroll
+        if (this.isFixedSidecar() &&
+            $('#fixed-sidecar-panel').hasClass('visible')) {
+          this.updateSidecarConnector();
+        }
       });
       this.scrollTick = true;
     }

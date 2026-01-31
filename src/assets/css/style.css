@@ -869,11 +869,10 @@ div.item-banner {
     text-align: center;
 }
 
-/* Fixed sidecar toggle button - attached to selected item */
+/* Fixed sidecar toggle button - positioned next to selected item */
 .fixed-sidecar-toggle {
-    position: absolute;
-    top: 8px;
-    left: calc(100% + 8px);
+    position: fixed;
+    /* top and left are set by JS based on selected item position */
     width: 40px;
     height: 40px;
     border-radius: 50%;
@@ -888,6 +887,7 @@ div.item-banner {
     opacity: 0;
     visibility: hidden;
     transition: opacity var(--animation-duration, 200ms) ease, visibility var(--animation-duration, 200ms) ease, transform 150ms ease;
+    pointer-events: auto;
 }
 
 .fixed-sidecar-toggle.visible {
@@ -997,6 +997,43 @@ div.item-banner {
 
     .fixed-sidecar-toggle:hover svg {
         color: #f9fafb;
+    }
+}
+
+/* Fixed sidecar connector arrow */
+.fixed-sidecar-connector {
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: calc(var(--z-panel, 5000) - 1);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--animation-duration, 200ms) ease;
+}
+
+.fixed-sidecar-connector.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.fixed-sidecar-connector-path {
+    stroke: var(--accent-color, #3b82f6);
+    stroke-width: 2;
+    fill: none;
+    stroke-dasharray: 6, 4;
+}
+
+.fixed-sidecar-connector marker path {
+    fill: var(--accent-color, #3b82f6);
+}
+
+@media (prefers-color-scheme: dark) {
+    .fixed-sidecar-connector-path {
+        stroke: #60a5fa;
+    }
+    .fixed-sidecar-connector marker path {
+        fill: #60a5fa;
     }
 }
 

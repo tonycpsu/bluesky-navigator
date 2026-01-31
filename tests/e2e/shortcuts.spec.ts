@@ -41,6 +41,11 @@ test.describe("Shortcuts Overlay", () => {
     await shortcutsPage.open();
     await shortcutsPage.waitForVisible();
 
+    // The overlay has ignoreNextQuestionMark logic to prevent the same
+    // keypress that opened it from immediately closing it. We need to
+    // wait for that flag to be consumed before pressing ? again.
+    await page.waitForTimeout(100);
+
     // Close with same key
     await shortcutsPage.open();
     await shortcutsPage.waitForHidden();

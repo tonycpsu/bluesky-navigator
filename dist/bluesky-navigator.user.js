@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+625.15b32ef1
+// @version     1.0.31+626.5f977274
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -64732,6 +64732,7 @@ div#statusBar.has-feed-map {
       if (this.hoverDebounceTimeout) clearTimeout(this.hoverDebounceTimeout);
       if (this.intersectionDebounceTimeout) clearTimeout(this.intersectionDebounceTimeout);
       $("#fixed-sidecar-toggle").removeClass("visible");
+      $("#fixed-sidecar-connector").removeClass("visible");
       $(this.selector).off("mouseover mouseleave");
       $(document).off("scroll", this.onScroll);
       $(document).off("wheel", this.onWheel);
@@ -64748,6 +64749,8 @@ div#statusBar.has-feed-map {
       this.sidecarNavList = null;
       this.threadNavList = null;
       $("#fixed-sidecar-toggle").removeClass("visible");
+      $("#fixed-sidecar-connector").removeClass("visible");
+      this._currentSidecarPostId = null;
     }
     /**
      * Create or get the sidecar NavigableList for reply navigation
@@ -65403,6 +65406,10 @@ div#statusBar.has-feed-map {
       const itemRect = $item[0].getBoundingClientRect();
       const targetRect = $targetPost[0].getBoundingClientRect();
       const panelRect = panel[0].getBoundingClientRect();
+      if (itemRect.width === 0 || itemRect.height === 0 || itemRect.right <= 0 || itemRect.left >= window.innerWidth || !document.contains($item[0])) {
+        connector.removeClass("visible");
+        return;
+      }
       let startX;
       if (threadRect && this._threadIndex != null) {
         startX = threadRect.right;

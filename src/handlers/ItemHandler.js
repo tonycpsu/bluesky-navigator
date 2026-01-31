@@ -226,8 +226,9 @@ export class ItemHandler extends Handler {
     if (this.hoverDebounceTimeout) clearTimeout(this.hoverDebounceTimeout);
     if (this.intersectionDebounceTimeout) clearTimeout(this.intersectionDebounceTimeout);
 
-    // Hide sidecar toggle when leaving feed
+    // Hide sidecar toggle and connector when leaving feed
     $('#fixed-sidecar-toggle').removeClass('visible');
+    $('#fixed-sidecar-connector').removeClass('visible');
 
     $(this.selector).off('mouseover mouseleave');
     $(document).off('scroll', this.onScroll);
@@ -246,8 +247,10 @@ export class ItemHandler extends Handler {
     this.postId = null;
     this.sidecarNavList = null;
     this.threadNavList = null;
-    // Hide the sidecar toggle when selection is cleared
+    // Hide the sidecar toggle and connector when selection is cleared
     $('#fixed-sidecar-toggle').removeClass('visible');
+    $('#fixed-sidecar-connector').removeClass('visible');
+    this._currentSidecarPostId = null;
   }
 
   /**
@@ -1102,6 +1105,15 @@ export class ItemHandler extends Handler {
     const itemRect = $item[0].getBoundingClientRect();
     const targetRect = $targetPost[0].getBoundingClientRect();
     const panelRect = panel[0].getBoundingClientRect();
+
+    // Hide connector if item is not visible or positions are invalid
+    // (happens during feed/tab changes when old item is removed)
+    if (itemRect.width === 0 || itemRect.height === 0 ||
+        itemRect.right <= 0 || itemRect.left >= window.innerWidth ||
+        !document.contains($item[0])) {
+      connector.removeClass('visible');
+      return;
+    }
 
     // Calculate connection points
     // Start X is constrained to the thread container edge if within an unrolled thread

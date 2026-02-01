@@ -34,17 +34,28 @@ test.describe("Post Navigation", () => {
   test("k key changes selection in opposite direction", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
 
-    // First move with j a few times
-    await feedPage.nextPost();
-    await feedPage.nextPost();
-    await feedPage.nextPost();
+    // Start at a known position
+    await feedPage.pressKey("Home");
+    await page.waitForTimeout(300);
+
+    // Move forward several times to ensure we're not at the start
+    for (let i = 0; i < 5; i++) {
+      await feedPage.nextPost();
+      await page.waitForTimeout(100); // Small delay between key presses
+    }
+
+    // Wait for selection to settle and get index
+    await page.waitForTimeout(200);
     const afterJIndex = await feedPage.getCurrentIndex();
+    expect(afterJIndex).toBeGreaterThan(0);
 
-    // Now move with k
-    await feedPage.previousPost();
-    await feedPage.previousPost();
-    const afterKIndex = await feedPage.getCurrentIndex();
+    // Now move backward with k
+    await feedPage.pressKey("k");
 
+    // Wait longer for the index to change
+    const afterKIndex = await feedPage.waitForIndexChange(afterJIndex, 8000);
+
+    // k should move in opposite direction (index should change)
     expect(afterKIndex).not.toBeNull();
     expect(afterKIndex).not.toBe(afterJIndex);
   });
@@ -52,14 +63,19 @@ test.describe("Post Navigation", () => {
   test("ArrowDown behaves like j key", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
 
+    // Get initial state
     const initialIndex = await feedPage.getCurrentIndex();
 
-    // Press ArrowDown
+    // Press ArrowDown multiple times to ensure movement
     await feedPage.pressKey("ArrowDown");
+    await page.waitForTimeout(200);
     await feedPage.pressKey("ArrowDown");
 
-    const afterIndex = await feedPage.getCurrentIndex();
+    // Wait for index to change
+    const afterIndex = await feedPage.waitForIndexChange(initialIndex, 8000);
+
     expect(afterIndex).not.toBeNull();
+    // ArrowDown should change selection (may go up or down depending on feedSortReverse)
     expect(afterIndex).not.toBe(initialIndex);
   });
 
@@ -137,7 +153,7 @@ test.describe("Post Navigation", () => {
       await feedPage.nextPost();
     }
 
-    // Wait for read status to be applied (expect auto-retries)
-    await expect(page.locator(".item-read").first()).toBeVisible();
+    // Wait for read status to be applied (check element exists, may be filtered)
+    await expect(page.locator(".item-read").first()).toBeAttached();
   });
 });

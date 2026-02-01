@@ -1,0 +1,6 @@
+node_modules
+test-results
+playwright-report
+tests/user-data-firefox
+.git
+*.log

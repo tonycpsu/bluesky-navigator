@@ -118,15 +118,9 @@ export class FeedPage {
       return;
     }
 
-    // For modifier combinations, use Playwright's native keyboard API
-    if (key.includes("Alt+") || key.includes("Ctrl+") || key.includes("Meta+")) {
-      // Convert our format (Alt+.) to Playwright format (Alt+Period)
-      const playwrightKey = key
-        .replace("Alt+.", "Alt+Period")
-        .replace("Alt+,", "Alt+Comma");
-      await this.page.keyboard.press(playwrightKey);
-      return;
-    }
+    // For Alt+ modifier combinations, always use page.evaluate() dispatch
+    // This is required for Firefox compatibility with userscript event listeners
+    // (Playwright's native keyboard.press() doesn't reach capture-phase listeners on document)
 
     // Dispatch keyboard event via page.evaluate for userscript compatibility
     await this.page.evaluate((keySpec: string) => {
@@ -150,6 +144,7 @@ export class FeedPage {
         ArrowUp: { key: "ArrowUp", code: "ArrowUp" },
         ArrowDown: { key: "ArrowDown", code: "ArrowDown" },
         ".": { key: ".", code: "Period" },
+        ",": { key: ",", code: "Comma" },
         "/": { key: "/", code: "Slash" },
         "+": { key: "+", code: "Equal" },
         "-": { key: "-", code: "Minus" },

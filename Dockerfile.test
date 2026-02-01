@@ -1,0 +1,25 @@
+FROM mcr.microsoft.com/playwright:v1.57.0-jammy
+
+WORKDIR /app
+
+# Install xvfb for virtual display and build tools for native modules
+RUN apt-get update && apt-get install -y xvfb build-essential && rm -rf /var/lib/apt/lists/*
+
+# Copy package files first for caching
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy test files and source
+COPY . .
+
+# Run test setup (downloads Tampermonkey)
+RUN npm run test:setup
+
+# Copy and make entrypoint executable
+COPY scripts/docker-test.sh /docker-test.sh
+RUN chmod +x /docker-test.sh
+
+# Default command runs tests with Xvfb
+CMD ["/docker-test.sh"]

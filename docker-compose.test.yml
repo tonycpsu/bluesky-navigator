@@ -1,0 +1,13 @@
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    environment:
+      - CI=true
+    env_file:
+      - tests/.env
+    volumes:
+      # Mount test results for viewing
+      - ./test-results:/app/test-results
+      - ./playwright-report:/app/playwright-report

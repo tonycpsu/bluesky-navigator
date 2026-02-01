@@ -397,16 +397,20 @@ async function login(page: Page): Promise<void> {
 
   await page.waitForLoadState("networkidle");
 
-  // Dismiss welcome modal
+  // Dismiss welcome modal if present (various formats)
   try {
-    const closeBtn = page.locator('button[aria-label="Close welcome modal"]');
-    if (await closeBtn.isVisible({ timeout: 3000 })) {
-      await closeBtn.click();
+    // Try close button first
+    const closeBtn = page.locator('button[aria-label="Close welcome modal"], button[aria-label="Close"]');
+    if (await closeBtn.first().isVisible({ timeout: 2000 })) {
+      await closeBtn.first().click();
       await page.waitForTimeout(500);
     }
   } catch {}
 
-  await page.locator("text=Sign in").first().click();
+  // Look for sign in link/button in multiple locations
+  const signInLocator = page.locator('a:has-text("Sign in"), button:has-text("Sign in")').first();
+  await signInLocator.waitFor({ state: "visible", timeout: 10000 });
+  await signInLocator.click();
   await page.fill('input[autocomplete="username"]', identifier);
   await page.click('button:has-text("Next")');
   await page.fill('input[type="password"]', password);
@@ -498,14 +502,26 @@ export const test = base.extend<Fixtures>({
     // Transfer focus from URL bar to page content
     await page.evaluate(() => document.body.focus());
 
-    // Check if logged in
+    // Check if logged in - look for various login prompts
+    // Wait a moment for page to settle
+    await page.waitForTimeout(1000);
+
+    // Check for welcome modal or sign in prompt
     const hasSignInButton = await page
-      .locator('button:has-text("Sign in"), a:has-text("Sign in")')
+      .locator('button:has-text("Sign in"), a:has-text("Sign in"), button:has-text("Create account")')
       .first()
       .isVisible({ timeout: 5000 })
       .catch(() => false);
 
-    if (hasSignInButton) {
+    // Also check if there's a modal blocking the page
+    const hasWelcomeModal = await page
+      .locator('div[role="dialog"]:has-text("Sign in"), div[role="dialog"]:has-text("Create account")')
+      .first()
+      .isVisible({ timeout: 1000 })
+      .catch(() => false);
+
+    if (hasSignInButton || hasWelcomeModal) {
+      console.log("Sign in required (found:", hasSignInButton ? "sign-in button" : "", hasWelcomeModal ? "welcome modal" : "", ")");
       await login(page);
       try {
         await context.storageState({ path: AUTH_STATE_PATH });

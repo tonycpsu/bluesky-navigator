@@ -58,24 +58,42 @@ test.describe("Post Navigation", () => {
     expect(afterKIndex).not.toBe(afterJIndex);
   });
 
-  test("ArrowDown behaves like j key", async ({ authenticatedPage: page }) => {
+  test("ArrowDown moves to next post when current post fits in viewport", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
 
-    // Get initial state
-    const initialIndex = await feedPage.getCurrentIndex();
+    // Navigate to find a short post that fits in viewport
+    // ArrowDown scrolls within tall posts, so we need a short one to test navigation
+    await feedPage.goToFirstPost();
 
-    // Press ArrowDown and wait for selection to change
-    await feedPage.pressKey("ArrowDown");
-    let afterIndex = await feedPage.waitForIndexChange(initialIndex, 5000);
+    let foundShortPost = false;
+    for (let i = 0; i < 10; i++) {
+      const postFitsInViewport = await page.evaluate(() => {
+        const post = document.querySelector(".item-selection-active");
+        if (!post) return false;
+        const rect = post.getBoundingClientRect();
+        return rect.height < window.innerHeight * 0.8; // Post is less than 80% of viewport
+      });
 
-    // If first ArrowDown didn't change, try again
-    if (afterIndex === initialIndex) {
-      await feedPage.pressKey("ArrowDown");
-      afterIndex = await feedPage.waitForIndexChange(initialIndex, 5000);
+      if (postFitsInViewport) {
+        foundShortPost = true;
+        break;
+      }
+      // Use j to move to next post (j always moves, unlike ArrowDown)
+      await feedPage.nextPost();
     }
 
+    if (!foundShortPost) {
+      test.skip(); // Skip if no short posts found in first 10
+      return;
+    }
+
+    const initialIndex = await feedPage.getCurrentIndex();
+
+    // Press ArrowDown - should move to next post since current post fits in viewport
+    await feedPage.pressKey("ArrowDown");
+    const afterIndex = await feedPage.waitForIndexChange(initialIndex, 5000);
+
     expect(afterIndex).not.toBeNull();
-    // ArrowDown should change selection (may go up or down depending on feedSortReverse)
     expect(afterIndex).not.toBe(initialIndex);
   });
 

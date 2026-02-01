@@ -2,7 +2,7 @@
 set -e
 
 # Start Xvfb in the background
-Xvfb :99 -screen 0 1280x720x24 -nolisten tcp &
+Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
 XVFB_PID=$!
 
 # Wait for Xvfb to start

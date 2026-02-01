@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  *   BSKY_IDENTIFIER - Bluesky handle or email
  *   BSKY_APP_PASSWORD - Bluesky app password
  *   DEBUG_PAUSE - Set to 'true' to pause after each test
- *   HEADLESS - Set to 'false' to show browser (note: extensions require headed mode)
+ *   SKIP_SETUP - Set to 'true' to skip setup project (for re-runs)
  */
 export default defineConfig({
   testDir: "./e2e",
@@ -27,7 +27,7 @@ export default defineConfig({
   ],
 
   // Test execution settings
-  timeout: 120000, // 2 minutes - setup with extension takes time
+  timeout: 60000, // 1 minute per test (reduced from 2)
   expect: {
     timeout: 10000,
   },
@@ -44,22 +44,29 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
     actionTimeout: 10000,
 
-    // Artifact capture
-    screenshot: "on",
+    // Only capture artifacts on failure (faster)
+    screenshot: "only-on-failure",
     video: "retain-on-failure",
     trace: "retain-on-failure",
   },
 
   projects: [
+    // Setup project - runs once before tests
+    {
+      name: "setup",
+      testMatch: "**/auth.setup.ts",
+    },
+    // Main test project - depends on setup
     {
       name: "firefox",
+      testIgnore: "**/auth.setup.ts",
+      dependencies: process.env.SKIP_SETUP ? [] : ["setup"],
       use: {
-        // Extensions require headed mode
         headless: false,
       },
     },
   ],
 
-  // Global setup for extension loading
+  // Global setup for any pre-flight checks
   globalSetup: path.join(__dirname, "global-setup.js"),
 });

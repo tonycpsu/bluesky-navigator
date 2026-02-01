@@ -19,24 +19,18 @@ test.describe("Tab Switching", () => {
     // Press 1 to switch to first tab - should not throw
     await feedPage.pressKey("1");
 
-    // Wait for page to settle
-    await page.waitForTimeout(500);
+    // Wait for feed to have posts after tab switch
+    await expect(page.locator('[data-testid^="feedItem-by-"]').first()).toBeAttached({ timeout: 10000 });
 
     // Press 2 to switch to second tab (if exists) - should not throw
     await feedPage.pressKey("2");
 
-    // Wait for page to settle and verify we're still on a feed page
-    await page.waitForTimeout(500);
-
-    // Verify the page still has feed structure (element exists, even if not visible due to scroll)
+    // Verify the page still has feed structure
     await expect(page.locator('[data-testid^="feedItem-by-"]').first()).toBeAttached({ timeout: 10000 });
   });
 
   test("tab switching preserves feed functionality", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
-
-    // Get initial feed item count
-    const initialCount = await page.locator('[data-testid^="feedItem-by-"]').count();
 
     // Switch to first tab
     await feedPage.pressKey("1");
@@ -46,16 +40,15 @@ test.describe("Tab Switching", () => {
 
     // Switch to second tab if it exists
     await feedPage.pressKey("2");
-    await page.waitForTimeout(500);
 
-    // Wait for feed to still have posts
+    // Wait for feed to still have posts after tab switch
     await expect(page.locator('[data-testid^="feedItem-by-"]').first()).toBeAttached({ timeout: 10000 });
 
     // Switch back to first tab
     await feedPage.pressKey("1");
-    await page.waitForTimeout(500);
 
-    // Verify feed still works
+    // Verify feed still has posts
+    await expect(page.locator('[data-testid^="feedItem-by-"]').first()).toBeAttached({ timeout: 10000 });
     const finalCount = await page.locator('[data-testid^="feedItem-by-"]').count();
     expect(finalCount).toBeGreaterThan(0);
   });
@@ -109,15 +102,16 @@ test.describe("Hide Read Toggle", () => {
       await feedPage.nextPost();
     }
 
+    // Wait for read status to be applied
+    await expect(page.locator(".item-read").first()).toBeAttached({ timeout: 5000 });
+
     // Press " to toggle hide read ON
     await feedPage.pressKey('Shift+"');
-    await page.waitForTimeout(300);
 
     // Press " again to toggle hide read OFF (restore all posts)
     await feedPage.pressKey('Shift+"');
-    await page.waitForTimeout(300);
 
     // Verify feed still has posts attached
-    await expect(page.locator('[data-testid^="feedItem-by-"]').first()).toBeAttached();
+    await expect(page.locator('[data-testid^="feedItem-by-"]').first()).toBeAttached({ timeout: 5000 });
   });
 });

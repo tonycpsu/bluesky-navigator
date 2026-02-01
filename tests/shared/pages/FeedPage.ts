@@ -1,4 +1,4 @@
-import { Page } from "@playwright/test";
+import { Page, Locator } from "@playwright/test";
 
 /**
  * FeedPage - Page object for Bluesky feed interactions
@@ -9,8 +9,22 @@ import { Page } from "@playwright/test";
 export class FeedPage {
   readonly page: Page;
 
+  // Common selectors as locators
+  readonly feedItems: Locator;
+  readonly selectedPost: Locator;
+  readonly readPosts: Locator;
+  readonly statusbar: Locator;
+  readonly toolbar: Locator;
+
   constructor(page: Page) {
     this.page = page;
+
+    // Initialize locators
+    this.feedItems = page.locator('[data-testid^="feedItem-by-"]');
+    this.selectedPost = page.locator(".item-selection-active");
+    this.readPosts = page.locator(".item-read");
+    this.statusbar = page.locator("#bsky-navigator-global-statusbar");
+    this.toolbar = page.locator("#bsky-navigator-toolbar");
   }
 
   /**

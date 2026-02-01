@@ -34,25 +34,23 @@ test.describe("Post Navigation", () => {
   test("k key changes selection in opposite direction", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
 
-    // Start at a known position
-    await feedPage.pressKey("Home");
-    await page.waitForTimeout(300);
+    // Start at a known position using goToFirstPost (includes proper waiting)
+    await feedPage.goToFirstPost();
 
     // Move forward several times to ensure we're not at the start
     for (let i = 0; i < 5; i++) {
       await feedPage.nextPost();
-      await page.waitForTimeout(100); // Small delay between key presses
     }
 
-    // Wait for selection to settle and get index
-    await page.waitForTimeout(200);
+    // Wait for selection to be visible after navigation
+    await expect(page.locator(".item-selection-active")).toBeVisible();
     const afterJIndex = await feedPage.getCurrentIndex();
     expect(afterJIndex).toBeGreaterThan(0);
 
     // Now move backward with k
     await feedPage.pressKey("k");
 
-    // Wait longer for the index to change
+    // Wait for the index to change
     const afterKIndex = await feedPage.waitForIndexChange(afterJIndex, 8000);
 
     // k should move in opposite direction (index should change)
@@ -66,13 +64,15 @@ test.describe("Post Navigation", () => {
     // Get initial state
     const initialIndex = await feedPage.getCurrentIndex();
 
-    // Press ArrowDown multiple times to ensure movement
+    // Press ArrowDown and wait for selection to change
     await feedPage.pressKey("ArrowDown");
-    await page.waitForTimeout(200);
-    await feedPage.pressKey("ArrowDown");
+    let afterIndex = await feedPage.waitForIndexChange(initialIndex, 5000);
 
-    // Wait for index to change
-    const afterIndex = await feedPage.waitForIndexChange(initialIndex, 8000);
+    // If first ArrowDown didn't change, try again
+    if (afterIndex === initialIndex) {
+      await feedPage.pressKey("ArrowDown");
+      afterIndex = await feedPage.waitForIndexChange(initialIndex, 5000);
+    }
 
     expect(afterIndex).not.toBeNull();
     // ArrowDown should change selection (may go up or down depending on feedSortReverse)

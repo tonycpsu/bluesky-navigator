@@ -22,10 +22,8 @@ test.describe("Post Opening", () => {
     // Press o to open post
     await feedPage.pressKey("o");
 
-    // Wait for navigation to post page (auto-retries)
-    await page.waitForURL(/\/post\//, { timeout: 10000 });
-
-    expect(page.url()).toContain("/post/");
+    // Wait for navigation to post page (auto-retries with toHaveURL)
+    await expect(page).toHaveURL(/\/post\//, { timeout: 10000 });
     expect(page.url()).not.toBe(initialUrl);
   });
 
@@ -36,13 +34,11 @@ test.describe("Post Opening", () => {
     await page.goto("https://bsky.app");
     await feedPage.waitForReady();
 
-    // Press Enter to open post
-    await page.keyboard.press("Enter");
+    // Press Enter to open post (use Page Object for Firefox compatibility)
+    await feedPage.pressKey("Enter");
 
-    // Wait for navigation to post page (auto-retries)
-    await page.waitForURL(/\/post\//, { timeout: 10000 });
-
-    expect(page.url()).toContain("/post/");
+    // Wait for navigation to post page (auto-retries with toHaveURL)
+    await expect(page).toHaveURL(/\/post\//, { timeout: 10000 });
   });
 });
 
@@ -71,8 +67,8 @@ test.describe("Post View Modal", () => {
     const modal = page.locator(".post-view-modal, [role='dialog']");
     await expect(modal).toBeVisible({ timeout: 5000 });
 
-    // Close with Escape
-    await page.keyboard.press("Escape");
+    // Close with Escape (use Page Object for Firefox compatibility)
+    await feedPage.pressKey("Escape");
 
     // Modal should close (auto-retries)
     await expect(modal).not.toBeVisible({ timeout: 5000 });

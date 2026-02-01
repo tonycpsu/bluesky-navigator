@@ -49,12 +49,10 @@ test.describe("Status Bar", () => {
     await expect(statusbar).toBeAttached();
   });
 
-  test("statusbar info text element exists", async ({ authenticatedPage: page }) => {
-    // Info text element should be in DOM
-    const infoText = page.locator("#bsky-navigator-global-statusbar-info-text");
-    const count = await infoText.count();
-    // May or may not exist depending on config
-    expect(count).toBeGreaterThanOrEqual(0);
+  test("statusbar container is attached", async ({ authenticatedPage: page }) => {
+    // The statusbar container should exist (presence verified in DOM)
+    const statusbar = page.locator("#bsky-navigator-global-statusbar");
+    await expect(statusbar).toBeAttached();
   });
 });
 
@@ -88,18 +86,13 @@ test.describe("Indicators", () => {
     await feedPage.waitForReady();
   });
 
-  test("time indicator shows last load time", async ({ authenticatedPage: page }) => {
-    // The time indicator may be in the toolbar
-    const timeIndicator = page.locator("#timeIndicator, .time-indicator");
-    // May or may not be visible depending on config
-    const exists = await timeIndicator.count();
-    expect(exists).toBeGreaterThanOrEqual(0);
-  });
+  test("toolbar is visible and functional", async ({ authenticatedPage: page }) => {
+    // Toolbar should be visible
+    const toolbar = page.locator("#bsky-navigator-toolbar");
+    await expect(toolbar).toBeVisible();
 
-  test("sort indicator exists", async ({ authenticatedPage: page }) => {
-    const sortIndicator = page.locator("#sortIndicator, .sort-indicator");
-    // May or may not be visible depending on config
-    const exists = await sortIndicator.count();
-    expect(exists).toBeGreaterThanOrEqual(0);
+    // Toolbar should contain the search input (required element)
+    const searchInput = toolbar.locator("#bsky-navigator-search");
+    await expect(searchInput).toBeVisible();
   });
 });

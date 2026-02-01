@@ -40,7 +40,7 @@ jobs:
           echo "BSKY_APP_PASSWORD=${{ secrets.BSKY_APP_PASSWORD }}" >> tests/.env
 
       - name: Run Playwright tests
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" npm test
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm test
         env:
           CI: true
 

@@ -2747,7 +2747,7 @@ export class FeedItemHandler extends ItemHandler {
         accumulatedDelta += delta;
 
         if (Math.abs(accumulatedDelta) >= zoomThreshold) {
-          const zoomChange = accumulatedDelta > 0 ? -1 : 1; // Scroll down = zoom out (smaller window), scroll up = zoom in (larger window)
+          const zoomChange = accumulatedDelta > 0 ? 1 : -1; // Pinch in/scroll down = zoom out (more items), pinch out/scroll up = zoom in (fewer items)
           accumulatedDelta = 0;
 
           const newZoomSize = Math.max(3, Math.min(20, zoomWindowSize + zoomChange));

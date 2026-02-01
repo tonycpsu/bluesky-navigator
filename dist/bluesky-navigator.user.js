@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+638.d87a130b
+// @version     1.0.31+639.3cae4690
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -72536,7 +72536,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const zoomThreshold = 50;
           accumulatedDelta += delta2;
           if (Math.abs(accumulatedDelta) >= zoomThreshold) {
-            const zoomChange = accumulatedDelta > 0 ? -1 : 1;
+            const zoomChange = accumulatedDelta > 0 ? 1 : -1;
             accumulatedDelta = 0;
             const newZoomSize = Math.max(3, Math.min(20, zoomWindowSize + zoomChange));
             if (newZoomSize !== zoomWindowSize) {

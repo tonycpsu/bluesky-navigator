@@ -199,6 +199,9 @@ export class FeedPage {
       document.dispatchEvent(new KeyboardEvent("keydown", eventInit));
       document.dispatchEvent(new KeyboardEvent("keyup", eventInit));
     }, key);
+
+    // Small settling time for event to be processed
+    await this.page.waitForTimeout(100);
   }
 
   /**

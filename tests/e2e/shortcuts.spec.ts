@@ -165,10 +165,14 @@ test.describe("Feed Controls", () => {
 
   test("/ key focuses filter search", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
+
+    // Ensure search input exists first
+    const searchInput = page.locator("#bsky-navigator-search");
+    await expect(searchInput).toBeVisible();
+
     await feedPage.pressKey("/");
 
-    // Check if search input is focused
-    const searchInput = page.locator("#bsky-navigator-search");
+    // Check if search input is focused (auto-retries)
     await expect(searchInput).toBeFocused();
   });
 

@@ -1906,6 +1906,10 @@ export class ItemHandler extends Handler {
         this.captureScreenshot(item[0]);
         break;
 
+      case 'C':
+        this.captureScreenshot(item[0], { clean: true });
+        break;
+
       case 'v':
         this.showPostViewModal(item);
         break;
@@ -2739,7 +2743,8 @@ export class ItemHandler extends Handler {
     announceToScreenReader(`Post ${action}. ${newCount} ${newCount === 1 ? 'like' : 'likes'}.`);
   }
 
-  async captureScreenshot(item) {
+  async captureScreenshot(item, options = {}) {
+    const { clean = false } = options;
     try {
       // Helper to fetch image as data URL using GM_xmlhttpRequest (bypasses CORS)
       const fetchImageAsDataUrl = (url) => {
@@ -2870,6 +2875,76 @@ export class ItemHandler extends Handler {
       // Wait for browser to process DOM changes
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      // For clean mode, temporarily remove userscript styling and elements
+      const userscriptClasses = [
+        'item-selection-active', 'item-selection-inactive', 'item-selection-child-focused',
+        'reply-selection-active', 'reply-selection-child-focused',
+        'thread-selection-active', 'thread-selection-inactive',
+        'item-read', 'item-unread', 'item'
+      ];
+      const removedClasses = []; // Array of { el, cls } pairs
+      const hiddenElements = [];
+      const unwrappedHighlights = [];
+      if (clean) {
+        // Remove userscript classes from the item and all descendants
+        const allElements = [item, ...item.querySelectorAll('*')];
+        allElements.forEach(el => {
+          userscriptClasses.forEach(cls => {
+            if (el.classList.contains(cls)) {
+              removedClasses.push({ el, cls });
+              el.classList.remove(cls);
+            }
+          });
+        });
+
+        // Temporarily unwrap highlight elements (rule-content-highlight, filter-highlight)
+        const highlights = item.querySelectorAll('.rule-content-highlight, .filter-highlight');
+        highlights.forEach(highlight => {
+          const parent = highlight.parentNode;
+          const textContent = highlight.textContent;
+          const textNode = document.createTextNode(textContent);
+          unwrappedHighlights.push({ parent, highlight, nextSibling: highlight.nextSibling });
+          parent.replaceChild(textNode, highlight);
+        });
+
+        // Hide the post count banner
+        const banner = item.querySelector('.item-banner');
+        if (banner) {
+          hiddenElements.push({ el: banner, display: banner.style.display });
+          banner.style.display = 'none';
+        }
+
+        // Hide unrolled thread UI elements
+        const unrollElements = item.querySelectorAll('.unrolled-post-number, .unrolled-divider, .feed-map-segment-progress');
+        unrollElements.forEach(el => {
+          hiddenElements.push({ el, display: el.style.display });
+          el.style.display = 'none';
+        });
+
+        // Hide the fade gradient on truncated posts by removing the ::after
+        // We do this by adding a temporary class that hides it
+        const contentHider = item.querySelector('[data-testid="contentHider-post"]');
+        if (contentHider) {
+          contentHider.classList.add('bsky-nav-clean-capture');
+        }
+
+        // Force style recalculation and wait for images to settle
+        void item.offsetHeight;
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      // Wait for all images in the item to be fully loaded
+      const allImages = item.querySelectorAll('img');
+      await Promise.all(Array.from(allImages).map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(resolve => {
+          img.onload = resolve;
+          img.onerror = resolve;
+          // Timeout fallback
+          setTimeout(resolve, 1000);
+        });
+      }));
+
       // Hide action buttons during capture
       const actionButtons = item.querySelectorAll('[data-testid="repostBtn"], [data-testid="likeBtn"], [data-testid="replyBtn"], [data-testid="postDropdownBtn"]');
       const hiddenButtons = [];
@@ -2899,6 +2974,31 @@ export class ItemHandler extends Handler {
         el.style.display = display;
       });
 
+      // Restore userscript classes and elements if they were modified for clean mode
+      if (clean) {
+        // Restore classes to their respective elements
+        removedClasses.forEach(({ el, cls }) => el.classList.add(cls));
+
+        // Restore hidden elements
+        hiddenElements.forEach(({ el, display }) => {
+          el.style.display = display;
+        });
+
+        // Restore highlight elements (in reverse order to maintain positions)
+        unwrappedHighlights.reverse().forEach(({ parent, highlight, nextSibling }) => {
+          if (nextSibling && nextSibling.parentNode === parent) {
+            parent.insertBefore(highlight, nextSibling);
+          } else {
+            parent.appendChild(highlight);
+          }
+        });
+
+        const contentHider = item.querySelector('[data-testid="contentHider-post"]');
+        if (contentHider) {
+          contentHider.classList.remove('bsky-nav-clean-capture');
+        }
+      }
+
       // Restore original values (for CDN URL workaround)
       originalValues.forEach(({ el, attr, value }) => {
         if (attr === 'src') {
@@ -2908,11 +3008,27 @@ export class ItemHandler extends Handler {
         }
       });
 
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'image/png': blob,
-        }),
-      ]);
+      let clipboardSuccess = false;
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'image/png': blob,
+          }),
+        ]);
+        clipboardSuccess = true;
+      } catch (clipboardErr) {
+        console.warn('Clipboard write failed:', clipboardErr);
+      }
+
+      let notificationText;
+      let backgroundColor;
+      if (clipboardSuccess) {
+        notificationText = clean ? 'Clean screenshot copied to clipboard!' : 'Screenshot copied to clipboard!';
+        backgroundColor = '#4CAF50';
+      } else {
+        notificationText = clean ? 'Clean screenshot captured (clipboard unavailable)' : 'Screenshot captured (clipboard unavailable)';
+        backgroundColor = '#FF9800';
+      }
 
       const notification = $('<div>')
         .css({
@@ -2920,18 +3036,36 @@ export class ItemHandler extends Handler {
           top: '20px',
           right: '20px',
           padding: '10px 20px',
-          backgroundColor: '#4CAF50',
+          backgroundColor: backgroundColor,
           color: 'white',
           borderRadius: '4px',
           zIndex: 10000,
           fontSize: '14px',
         })
-        .text('Screenshot copied to clipboard!');
+        .text(notificationText);
 
       $('body').append(notification);
       setTimeout(() => notification.fadeOut(500, () => notification.remove()), 2000);
     } catch (err) {
       console.error('Failed to capture screenshot:', err);
+
+      // Show error notification so user knows something went wrong
+      const errorNotification = $('<div>')
+        .css({
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          padding: '10px 20px',
+          backgroundColor: '#f44336',
+          color: 'white',
+          borderRadius: '4px',
+          zIndex: 10000,
+          fontSize: '14px',
+        })
+        .text('Screenshot failed: ' + (err.message || 'Unknown error'));
+
+      $('body').append(errorNotification);
+      setTimeout(() => errorNotification.fadeOut(500, () => errorNotification.remove()), 3000);
     }
   }
 

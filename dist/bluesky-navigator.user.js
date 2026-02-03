@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+641.409c913a
+// @version     1.0.31+642.bd448f99
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -48568,6 +48568,11 @@ div[data-testid="postThreadScreen"] .sidecar-replies {
   display: none !important;
 }
 
+/* Used during clean screenshot capture to hide the fade gradient */
+.bsky-nav-clean-capture::after {
+  display: none !important;
+}
+
 /* Desktop post width - applied via JS to specific feed containers */
 
 
@@ -65984,6 +65989,9 @@ div#statusBar.has-feed-map {
         case "c":
           this.captureScreenshot(item[0]);
           break;
+        case "C":
+          this.captureScreenshot(item[0], { clean: true });
+          break;
         case "v":
           this.showPostViewModal(item);
           break;
@@ -66656,7 +66664,8 @@ div#statusBar.has-feed-map {
       const action = wasLiked ? "unliked" : "liked";
       announceToScreenReader$1(`Post ${action}. ${newCount} ${newCount === 1 ? "like" : "likes"}.`);
     }
-    async captureScreenshot(item) {
+    async captureScreenshot(item, options = {}) {
+      const { clean = false } = options;
       try {
         const fetchImageAsDataUrl = (url) => {
           return new Promise((resolve) => {
@@ -66762,6 +66771,65 @@ div#statusBar.has-feed-map {
           }
         });
         await new Promise((resolve) => setTimeout(resolve, 100));
+        const userscriptClasses = [
+          "item-selection-active",
+          "item-selection-inactive",
+          "item-selection-child-focused",
+          "reply-selection-active",
+          "reply-selection-child-focused",
+          "thread-selection-active",
+          "thread-selection-inactive",
+          "item-read",
+          "item-unread",
+          "item"
+        ];
+        const removedClasses = [];
+        const hiddenElements = [];
+        const unwrappedHighlights = [];
+        if (clean) {
+          const allElements2 = [item, ...item.querySelectorAll("*")];
+          allElements2.forEach((el) => {
+            userscriptClasses.forEach((cls) => {
+              if (el.classList.contains(cls)) {
+                removedClasses.push({ el, cls });
+                el.classList.remove(cls);
+              }
+            });
+          });
+          const highlights = item.querySelectorAll(".rule-content-highlight, .filter-highlight");
+          highlights.forEach((highlight) => {
+            const parent = highlight.parentNode;
+            const textContent = highlight.textContent;
+            const textNode = document.createTextNode(textContent);
+            unwrappedHighlights.push({ parent, highlight, nextSibling: highlight.nextSibling });
+            parent.replaceChild(textNode, highlight);
+          });
+          const banner = item.querySelector(".item-banner");
+          if (banner) {
+            hiddenElements.push({ el: banner, display: banner.style.display });
+            banner.style.display = "none";
+          }
+          const unrollElements = item.querySelectorAll(".unrolled-post-number, .unrolled-divider, .feed-map-segment-progress");
+          unrollElements.forEach((el) => {
+            hiddenElements.push({ el, display: el.style.display });
+            el.style.display = "none";
+          });
+          const contentHider = item.querySelector('[data-testid="contentHider-post"]');
+          if (contentHider) {
+            contentHider.classList.add("bsky-nav-clean-capture");
+          }
+          void item.offsetHeight;
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        const allImages = item.querySelectorAll("img");
+        await Promise.all(Array.from(allImages).map((img) => {
+          if (img.complete) return Promise.resolve();
+          return new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve;
+            setTimeout(resolve, 1e3);
+          });
+        }));
         const actionButtons = item.querySelectorAll('[data-testid="repostBtn"], [data-testid="likeBtn"], [data-testid="replyBtn"], [data-testid="postDropdownBtn"]');
         const hiddenButtons = [];
         actionButtons.forEach((btn) => {
@@ -66785,6 +66853,23 @@ div#statusBar.has-feed-map {
         hiddenButtons.forEach(({ el, display }) => {
           el.style.display = display;
         });
+        if (clean) {
+          removedClasses.forEach(({ el, cls }) => el.classList.add(cls));
+          hiddenElements.forEach(({ el, display }) => {
+            el.style.display = display;
+          });
+          unwrappedHighlights.reverse().forEach(({ parent, highlight, nextSibling }) => {
+            if (nextSibling && nextSibling.parentNode === parent) {
+              parent.insertBefore(highlight, nextSibling);
+            } else {
+              parent.appendChild(highlight);
+            }
+          });
+          const contentHider = item.querySelector('[data-testid="contentHider-post"]');
+          if (contentHider) {
+            contentHider.classList.remove("bsky-nav-clean-capture");
+          }
+        }
         originalValues.forEach(({ el, attr, value }) => {
           if (attr === "src") {
             el.src = value;
@@ -66792,26 +66877,54 @@ div#statusBar.has-feed-map {
             el.style.backgroundImage = value;
           }
         });
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            "image/png": blob2
-          })
-        ]);
+        let clipboardSuccess = false;
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "image/png": blob2
+            })
+          ]);
+          clipboardSuccess = true;
+        } catch (clipboardErr) {
+          console.warn("Clipboard write failed:", clipboardErr);
+        }
+        let notificationText;
+        let backgroundColor;
+        if (clipboardSuccess) {
+          notificationText = clean ? "Clean screenshot copied to clipboard!" : "Screenshot copied to clipboard!";
+          backgroundColor = "#4CAF50";
+        } else {
+          notificationText = clean ? "Clean screenshot captured (clipboard unavailable)" : "Screenshot captured (clipboard unavailable)";
+          backgroundColor = "#FF9800";
+        }
         const notification2 = $("<div>").css({
           position: "fixed",
           top: "20px",
           right: "20px",
           padding: "10px 20px",
-          backgroundColor: "#4CAF50",
+          backgroundColor,
           color: "white",
           borderRadius: "4px",
           zIndex: 1e4,
           fontSize: "14px"
-        }).text("Screenshot copied to clipboard!");
+        }).text(notificationText);
         $("body").append(notification2);
         setTimeout(() => notification2.fadeOut(500, () => notification2.remove()), 2e3);
       } catch (err) {
         console.error("Failed to capture screenshot:", err);
+        const errorNotification = $("<div>").css({
+          position: "fixed",
+          top: "20px",
+          right: "20px",
+          padding: "10px 20px",
+          backgroundColor: "#f44336",
+          color: "white",
+          borderRadius: "4px",
+          zIndex: 1e4,
+          fontSize: "14px"
+        }).text("Screenshot failed: " + (err.message || "Unknown error"));
+        $("body").append(errorNotification);
+        setTimeout(() => errorNotification.fadeOut(500, () => errorNotification.remove()), 3e3);
       }
     }
     async showPostViewModal(item) {

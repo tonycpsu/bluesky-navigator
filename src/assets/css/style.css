@@ -105,6 +105,11 @@ div[data-testid="postThreadScreen"] .sidecar-replies {
   display: none !important;
 }
 
+/* Used during clean screenshot capture to hide the fade gradient */
+.bsky-nav-clean-capture::after {
+  display: none !important;
+}
+
 /* Desktop post width - applied via JS to specific feed containers */
 
 

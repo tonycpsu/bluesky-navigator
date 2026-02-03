@@ -4,12 +4,19 @@
  * Tests the screenshot capture features:
  * - c key: Regular screenshot with userscript styling
  * - C key: Clean screenshot without userscript styling
+ *
+ * Note: These tests are skipped in CI because html-to-image doesn't work
+ * reliably in headless Firefox/Xvfb environments.
  */
 
 import { test, expect } from "../fixtures/index.js";
 import { FeedPage } from "../shared/pages/FeedPage.js";
 
+// Skip screenshot tests in CI - html-to-image doesn't work in headless Firefox
+const isCI = !!process.env.CI;
+
 test.describe("Screenshot Capture", () => {
+  test.skip(() => isCI, "Screenshot tests skipped in CI - html-to-image incompatible with headless Firefox");
   test.beforeEach(async ({ authenticatedPage }) => {
     const feedPage = new FeedPage(authenticatedPage);
     await feedPage.waitForReady();

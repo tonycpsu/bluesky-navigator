@@ -505,12 +505,23 @@ function getScreenFromElement(element) {
   }
 
   /**
+   * Dismiss all visible toast notifications and mark them as read
+   */
+  function dismissAllToasts() {
+    if (!toastContainer) return;
+    const $toasts = toastContainer.find('.bsky-nav-toast');
+    $toasts.each(function() {
+      removeToast($(this), true);
+    });
+  }
+
+  /**
    * Setup keyboard listener for toast dismissal
    */
   function setupToastKeyboardHandler() {
     $(document).on('keydown.toastDismiss', (e) => {
-      // Only handle 'x' key
-      if (e.key !== 'x') return;
+      // Only handle 'x' or 'X' key
+      if (e.key !== 'x' && e.key !== 'X') return;
 
       // Skip if user is typing in an input field
       if (utils.isUserTyping()) return;
@@ -518,8 +529,12 @@ function getScreenFromElement(element) {
       // Skip if a modal is open
       if (utils.isModalOpen()) return;
 
-      // Dismiss oldest toast
-      dismissOldestToast();
+      // X (shift) dismisses all toasts, x dismisses oldest
+      if (e.key === 'X') {
+        dismissAllToasts();
+      } else {
+        dismissOldestToast();
+      }
     });
   }
 

@@ -47,15 +47,20 @@ test.describe("Post Navigation", () => {
     const afterJIndex = await feedPage.getCurrentIndex();
     expect(afterJIndex).toBeGreaterThan(0);
 
-    // Now move backward with k
-    await feedPage.pressKey("k");
+    // Now move backward with k - press multiple times since k scrolls within tall posts first
+    // We need to press enough times to ensure we navigate to a previous post
+    for (let i = 0; i < 5; i++) {
+      await feedPage.pressKey("k");
+      await page.waitForTimeout(200);
+    }
 
-    // Wait for the index to change
-    const afterKIndex = await feedPage.waitForIndexChange(afterJIndex, 8000);
+    // Wait a bit for the navigation to complete
+    await page.waitForTimeout(500);
+    const afterKIndex = await feedPage.getCurrentIndex();
 
-    // k should move in opposite direction (index should change)
+    // k should have moved to a previous post (lower index)
     expect(afterKIndex).not.toBeNull();
-    expect(afterKIndex).not.toBe(afterJIndex);
+    expect(afterKIndex).toBeLessThan(afterJIndex!);
   });
 
   test("ArrowDown moves to next post when current post fits in viewport", async ({ authenticatedPage: page }) => {

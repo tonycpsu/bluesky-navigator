@@ -505,14 +505,28 @@ function getScreenFromElement(element) {
   }
 
   /**
-   * Dismiss all visible toast notifications and mark them as read
+   * Dismiss all visible toast notifications and mark ALL notifications as read at API level
    */
-  function dismissAllToasts() {
+  async function dismissAllToasts() {
     if (!toastContainer) return;
-    const $toasts = toastContainer.find('.bsky-nav-toast');
-    $toasts.each(function() {
-      removeToast($(this), true);
+
+    // Convert to array first since removeToast modifies the DOM
+    const toasts = toastContainer.find('.bsky-nav-toast').toArray();
+    toasts.forEach(toast => {
+      // Don't mark individually - we'll mark all at once below
+      removeToast($(toast), false);
     });
+
+    // Mark ALL notifications as read at API level (uses current timestamp)
+    if (toastApi) {
+      try {
+        await toastApi.markNotificationsSeen();
+        // Update local lastSeenAt to current time
+        lastSeenAt = new Date();
+      } catch (err) {
+        console.error('Failed to mark all notifications as seen:', err);
+      }
+    }
   }
 
   /**

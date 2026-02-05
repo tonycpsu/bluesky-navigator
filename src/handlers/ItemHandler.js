@@ -1035,11 +1035,24 @@ export class ItemHandler extends Handler {
     // Use consistent top position (below toolbar)
     const toolbarHeight = this.getToolbarHeight() || 60;
     const top = toolbarHeight + 8;
+    const panelWidth = 350;
+    const gap = 16; // Gap between feed and sidecar
 
     if (feedContainer) {
       const rect = feedContainer.getBoundingClientRect();
-      const gap = 16; // Gap between feed and sidecar
-      const panelWidth = 350;
+
+      // Guard against race condition: if rect.right is too small (page not fully laid out),
+      // fall back to right-aligned positioning to avoid placing panel on the left
+      const minExpectedRight = window.innerWidth * 0.3; // Feed should be at least 30% into viewport
+      if (rect.right < minExpectedRight || rect.width < 100) {
+        // Page layout not ready, use fallback
+        panel.css({
+          left: 'auto',
+          right: '16px',
+          top: `${top}px`
+        });
+        return;
+      }
 
       // Position to the right of the feed container
       const left = rect.right + gap;
@@ -2907,6 +2920,26 @@ export class ItemHandler extends Handler {
           parent.replaceChild(textNode, highlight);
         });
 
+        // Remove author/reposter highlight inline styles
+        // These are applied via inline styles, not classes
+        const highlightStyleProps = ['background-color', 'border', 'border-radius', 'padding', 'box-shadow'];
+        const styledElements = item.querySelectorAll('[style*="background-color"], [style*="box-shadow"], [style*="border"]');
+        styledElements.forEach(el => {
+          const savedStyles = {};
+          let hasHighlightStyle = false;
+          highlightStyleProps.forEach(prop => {
+            const value = el.style.getPropertyValue(prop);
+            if (value) {
+              savedStyles[prop] = { value, priority: el.style.getPropertyPriority(prop) };
+              hasHighlightStyle = true;
+            }
+          });
+          if (hasHighlightStyle) {
+            hiddenElements.push({ el, type: 'inline-styles', styles: savedStyles });
+            highlightStyleProps.forEach(prop => el.style.removeProperty(prop));
+          }
+        });
+
         // Hide the post count banner
         const banner = item.querySelector('.item-banner');
         if (banner) {
@@ -2979,9 +3012,17 @@ export class ItemHandler extends Handler {
         // Restore classes to their respective elements
         removedClasses.forEach(({ el, cls }) => el.classList.add(cls));
 
-        // Restore hidden elements
-        hiddenElements.forEach(({ el, display }) => {
-          el.style.display = display;
+        // Restore hidden elements and inline styles
+        hiddenElements.forEach(item => {
+          if (item.type === 'inline-styles') {
+            // Restore saved inline styles
+            Object.entries(item.styles).forEach(([prop, { value, priority }]) => {
+              item.el.style.setProperty(prop, value, priority);
+            });
+          } else {
+            // Restore display property
+            item.el.style.display = item.display;
+          }
         });
 
         // Restore highlight elements (in reverse order to maintain positions)

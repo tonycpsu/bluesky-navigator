@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+644.02b1b86f
+// @version     1.0.31+645.51f7121b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -65357,10 +65357,19 @@ div#statusBar.has-feed-map {
       let feedContainer = document.querySelector('[data-testid="postThreadScreen"]') || document.querySelector('[data-testid="homeScreen"]') || document.querySelector('main[role="main"] [style*="max-width"]');
       const toolbarHeight = this.getToolbarHeight() || 60;
       const top = toolbarHeight + 8;
+      const panelWidth = 350;
+      const gap = 16;
       if (feedContainer) {
         const rect = feedContainer.getBoundingClientRect();
-        const gap = 16;
-        const panelWidth = 350;
+        const minExpectedRight = window.innerWidth * 0.3;
+        if (rect.right < minExpectedRight || rect.width < 100) {
+          panel.css({
+            left: "auto",
+            right: "16px",
+            top: `${top}px`
+          });
+          return;
+        }
         const left = rect.right + gap;
         const availableWidth = window.innerWidth - left;
         if (availableWidth >= panelWidth) {
@@ -66804,6 +66813,23 @@ div#statusBar.has-feed-map {
             unwrappedHighlights.push({ parent, highlight, nextSibling: highlight.nextSibling });
             parent.replaceChild(textNode, highlight);
           });
+          const highlightStyleProps = ["background-color", "border", "border-radius", "padding", "box-shadow"];
+          const styledElements = item.querySelectorAll('[style*="background-color"], [style*="box-shadow"], [style*="border"]');
+          styledElements.forEach((el) => {
+            const savedStyles = {};
+            let hasHighlightStyle = false;
+            highlightStyleProps.forEach((prop) => {
+              const value = el.style.getPropertyValue(prop);
+              if (value) {
+                savedStyles[prop] = { value, priority: el.style.getPropertyPriority(prop) };
+                hasHighlightStyle = true;
+              }
+            });
+            if (hasHighlightStyle) {
+              hiddenElements.push({ el, type: "inline-styles", styles: savedStyles });
+              highlightStyleProps.forEach((prop) => el.style.removeProperty(prop));
+            }
+          });
           const banner = item.querySelector(".item-banner");
           if (banner) {
             hiddenElements.push({ el: banner, display: banner.style.display });
@@ -66855,8 +66881,14 @@ div#statusBar.has-feed-map {
         });
         if (clean) {
           removedClasses.forEach(({ el, cls }) => el.classList.add(cls));
-          hiddenElements.forEach(({ el, display }) => {
-            el.style.display = display;
+          hiddenElements.forEach((item2) => {
+            if (item2.type === "inline-styles") {
+              Object.entries(item2.styles).forEach(([prop, { value, priority }]) => {
+                item2.el.style.setProperty(prop, value, priority);
+              });
+            } else {
+              item2.el.style.display = item2.display;
+            }
           });
           unwrappedHighlights.reverse().forEach(({ parent, highlight, nextSibling }) => {
             if (nextSibling && nextSibling.parentNode === parent) {

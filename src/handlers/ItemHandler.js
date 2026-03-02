@@ -1499,7 +1499,7 @@ export class ItemHandler extends Handler {
         reply.append($(this.footerTemplate(formatPost(p))));
         div.append(reply);
       });
-      const threadIndex = $(item).closest('.thread').data('bsky-navigator-thread-index');
+      const threadIndex = $(item).closest('.thread').attr('data-bsky-navigator-thread-index');
 
       // Filter out feed items that are now shown as unrolled replies
       this.items.each((i, feedItem) => {
@@ -1513,7 +1513,7 @@ export class ItemHandler extends Handler {
       function isRedundant(item, threadIndex) {
         return (
           $(item).data('bsky-navigator-thread-offset') != 0 &&
-          $(item).closest('.thread').data('bsky-navigator-thread-index') == threadIndex
+          $(item).closest('.thread').attr('data-bsky-navigator-thread-index') == threadIndex
         );
       }
       this.items.each((i, item) => {
@@ -7381,9 +7381,10 @@ export class ItemHandler extends Handler {
       .filter(':visible')
       .each((i, item) => {
         $(item).attr('data-bsky-navigator-item-index', itemIndex++);
-        $(item).parent().parent().attr('data-bsky-navigator-thread-index', threadIndex);
-
         const threadDiv = $(item).parent().parent();
+        threadDiv.attr('data-bsky-navigator-thread-index', threadIndex);
+        // Add .thread class early so sortItems() can find it
+        threadDiv.addClass('thread');
         if (classes.some((cls) => $(threadDiv).hasClass(cls))) {
           set.push(threadDiv[0]);
           $(item).attr('data-bsky-navigator-thread-offset', threadOffset);
@@ -7406,7 +7407,7 @@ export class ItemHandler extends Handler {
     // Group items by thread-index for self-thread handling
     const threadGroups = {};
     $(this.selector).filter(':visible').each((i, item) => {
-      const threadIdx = $(item).closest('.thread').data('bsky-navigator-thread-index');
+      const threadIdx = $(item).closest('.thread').attr('data-bsky-navigator-thread-index');
       if (threadIdx !== undefined) {
         if (!threadGroups[threadIdx]) {
           threadGroups[threadIdx] = [];

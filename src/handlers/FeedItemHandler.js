@@ -1897,7 +1897,7 @@ export class FeedItemHandler extends ItemHandler {
               $(item).hasClass('item-unread') &&
               this.config.get('showReplyContext')
             ) {
-              const index = parseInt($(thread).data('bsky-navigator-thread-index'));
+              const index = parseInt($(thread).attr('data-bsky-navigator-thread-index'));
               const prev = $(
                 `div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset - 1}"]`
               );
@@ -1952,10 +1952,11 @@ export class FeedItemHandler extends ItemHandler {
     const newItems = parent
       .children()
       .filter((i, item) => $(item).hasClass('thread'))
-      .get()
-      .sort((a, b) => {
-        const threadIndexA = parseInt($(a).data('bsky-navigator-thread-index'));
-        const threadIndexB = parseInt($(b).data('bsky-navigator-thread-index'));
+      .get();
+
+    newItems.sort((a, b) => {
+        const threadIndexA = parseInt($(a).attr('data-bsky-navigator-thread-index'));
+        const threadIndexB = parseInt($(b).attr('data-bsky-navigator-thread-index'));
         const itemIndexA = parseInt($(a).find('.item').data('bsky-navigator-item-index'));
         const itemIndexB = parseInt($(b).find('.item').data('bsky-navigator-item-index'));
         if (threadIndexA !== threadIndexB) {
@@ -1963,9 +1964,14 @@ export class FeedItemHandler extends ItemHandler {
         }
         return itemIndexA - itemIndexB;
       });
-    reversed ^ this.loadingNew
-      ? parent.prepend(newItems)
-      : parent.children('.thread').last().next().after(newItems);
+
+    const shouldPrepend = reversed ^ this.loadingNew;
+    if (shouldPrepend) {
+      parent.prepend(newItems);
+    } else {
+      const afterTarget = parent.children('.thread').last().next();
+      afterTarget.after(newItems);
+    }
     perfEnd();
   }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+645.51f7121b
+// @version     1.0.31+646.5a45c110
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -65661,7 +65661,7 @@ div#statusBar.has-feed-map {
       }
       if (thread.replies.map((r) => r.post && r.post.author.did).includes(thread.post.author.did)) {
         let isRedundant = function(item2, threadIndex2) {
-          return $(item2).data("bsky-navigator-thread-offset") != 0 && $(item2).closest(".thread").data("bsky-navigator-thread-index") == threadIndex2;
+          return $(item2).data("bsky-navigator-thread-offset") != 0 && $(item2).closest(".thread").attr("data-bsky-navigator-thread-index") == threadIndex2;
         };
         const postId = this.postIdForItem(item);
         if (postId) {
@@ -65712,7 +65712,7 @@ div#statusBar.has-feed-map {
           reply.append($(this.footerTemplate(formatPost(p))));
           div.append(reply);
         });
-        const threadIndex = $(item).closest(".thread").data("bsky-navigator-thread-index");
+        const threadIndex = $(item).closest(".thread").attr("data-bsky-navigator-thread-index");
         this.items.each((i, feedItem) => {
           const feedItemPostId = this.postIdForItem(feedItem);
           if (feedItemPostId && unrolledIds.includes(feedItemPostId)) {
@@ -70203,8 +70203,9 @@ ${rule}`;
       let threadOffset = 0;
       $(this.selector).filter(":visible").each((i, item) => {
         $(item).attr("data-bsky-navigator-item-index", itemIndex++);
-        $(item).parent().parent().attr("data-bsky-navigator-thread-index", threadIndex);
         const threadDiv = $(item).parent().parent();
+        threadDiv.attr("data-bsky-navigator-thread-index", threadIndex);
+        threadDiv.addClass("thread");
         if (classes.some((cls) => $(threadDiv).hasClass(cls))) {
           set.push(threadDiv[0]);
           $(item).attr("data-bsky-navigator-thread-offset", threadOffset);
@@ -70222,7 +70223,7 @@ ${rule}`;
       }
       const threadGroups = {};
       $(this.selector).filter(":visible").each((i, item) => {
-        const threadIdx = $(item).closest(".thread").data("bsky-navigator-thread-index");
+        const threadIdx = $(item).closest(".thread").attr("data-bsky-navigator-thread-index");
         if (threadIdx !== void 0) {
           if (!threadGroups[threadIdx]) {
             threadGroups[threadIdx] = [];
@@ -72073,7 +72074,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           $(thread).find(".item").each((i2, item) => {
             const offset = parseInt($(item).data("bsky-navigator-thread-offset"));
             if (offset > 0 && $(item).hasClass("item-unread") && this.config.get("showReplyContext")) {
-              const index = parseInt($(thread).data("bsky-navigator-thread-index"));
+              const index = parseInt($(thread).attr("data-bsky-navigator-thread-index"));
               const prev = $(
                 `div[data-bsky-navigator-thread-index="${index}"] div[data-bsky-navigator-thread-offset="${offset - 1}"]`
               );
@@ -72110,9 +72111,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         `change sort order (currently ${reversed ? "forward" : "reverse"} chronological)`
       );
       const parent = $(this.selector).closest(".thread").first().parent();
-      const newItems = parent.children().filter((i, item) => $(item).hasClass("thread")).get().sort((a, b) => {
-        const threadIndexA = parseInt($(a).data("bsky-navigator-thread-index"));
-        const threadIndexB = parseInt($(b).data("bsky-navigator-thread-index"));
+      const newItems = parent.children().filter((i, item) => $(item).hasClass("thread")).get();
+      newItems.sort((a, b) => {
+        const threadIndexA = parseInt($(a).attr("data-bsky-navigator-thread-index"));
+        const threadIndexB = parseInt($(b).attr("data-bsky-navigator-thread-index"));
         const itemIndexA = parseInt($(a).find(".item").data("bsky-navigator-item-index"));
         const itemIndexB = parseInt($(b).find(".item").data("bsky-navigator-item-index"));
         if (threadIndexA !== threadIndexB) {
@@ -72120,7 +72122,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         return itemIndexA - itemIndexB;
       });
-      reversed ^ this.loadingNew ? parent.prepend(newItems) : parent.children(".thread").last().next().after(newItems);
+      const shouldPrepend = reversed ^ this.loadingNew;
+      if (shouldPrepend) {
+        parent.prepend(newItems);
+      } else {
+        const afterTarget = parent.children(".thread").last().next();
+        afterTarget.after(newItems);
+      }
       perfEnd();
     }
     updateInfoIndicator() {

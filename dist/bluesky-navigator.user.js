@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+646.5a45c110
+// @version     1.0.31+647.492ad590
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -44922,6 +44922,9 @@ if (cid) {
       this.agent = new distExports.BskyAgent({ service: this.service });
       this.rateLimitedAt = null;
       this.rateLimitCooldownMs = 60 * 1e3;
+      this.pendingLogin = null;
+      this.loginFailedAt = null;
+      this.loginFailureCooldownMs = 60 * 1e3;
     }
     /**
      * Check if we're currently rate limited
@@ -44973,10 +44976,37 @@ if (cid) {
       }
     }
     async login() {
-      return this.agent.login({
-        identifier: this.identifier,
-        password: this.password
-      });
+      if (this.pendingLogin) {
+        return this.pendingLogin;
+      }
+      if (this.loginFailedAt && Date.now() - this.loginFailedAt < this.loginFailureCooldownMs) {
+        const remaining = Math.ceil((this.loginFailureCooldownMs - (Date.now() - this.loginFailedAt)) / 1e3);
+        const error = new Error(`Login failed recently. Please wait ${remaining} seconds.`);
+        error.isLoginCooldown = true;
+        throw error;
+      }
+      if (this.agent?.session) {
+        return this.agent.session;
+      }
+      this.pendingLogin = (async () => {
+        try {
+          const result = await this.agent.login({
+            identifier: this.identifier,
+            password: this.password
+          });
+          this.loginFailedAt = null;
+          return result;
+        } catch (error) {
+          this.loginFailedAt = Date.now();
+          if (error.status === 429) {
+            this.rateLimitedAt = Date.now();
+          }
+          throw error;
+        } finally {
+          this.pendingLogin = null;
+        }
+      })();
+      return this.pendingLogin;
     }
     async getPost(_uri) {
       await this.agent.getPostThread({ uri: "at://..." });
@@ -48229,6 +48259,9 @@ if (cid) {
      */
     async ensureListsMetadata(forceRefresh = false) {
       if (!this.api) return;
+      if (this.authFailedAt && Date.now() - this.authFailedAt < this.authFailureCooldownMs) {
+        return;
+      }
       if (!this.api.agent?.session) {
         try {
           await this.api.login();
@@ -48237,9 +48270,6 @@ if (cid) {
           console.warn("List cache: Login failed, will retry in 1 minute");
           return;
         }
-      }
-      if (this.authFailedAt && Date.now() - this.authFailedAt < this.authFailureCooldownMs) {
-        return;
       }
       if (forceRefresh && this.pendingMetadataFetch) {
         await this.pendingMetadataFetch;
@@ -70205,6 +70235,9 @@ ${rule}`;
         $(item).attr("data-bsky-navigator-item-index", itemIndex++);
         const threadDiv = $(item).parent().parent();
         threadDiv.attr("data-bsky-navigator-thread-index", threadIndex);
+        if (!threadDiv.attr("data-bsky-navigator-sort-index")) {
+          threadDiv.attr("data-bsky-navigator-sort-index", threadIndex);
+        }
         threadDiv.addClass("thread");
         if (classes.some((cls) => $(threadDiv).hasClass(cls))) {
           set.push(threadDiv[0]);
@@ -72112,16 +72145,20 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       );
       const parent = $(this.selector).closest(".thread").first().parent();
       const newItems = parent.children().filter((i, item) => $(item).hasClass("thread")).get();
+      const indicesBefore = newItems.slice(0, 10).map((a) => $(a).attr("data-bsky-navigator-sort-index"));
+      console.log("[sortItems] reversed=" + reversed + " loadingNew=" + this.loadingNew + " count=" + newItems.length + " BEFORE: " + indicesBefore.join(","));
       newItems.sort((a, b) => {
-        const threadIndexA = parseInt($(a).attr("data-bsky-navigator-thread-index"));
-        const threadIndexB = parseInt($(b).attr("data-bsky-navigator-thread-index"));
-        const itemIndexA = parseInt($(a).find(".item").data("bsky-navigator-item-index"));
-        const itemIndexB = parseInt($(b).find(".item").data("bsky-navigator-item-index"));
-        if (threadIndexA !== threadIndexB) {
-          return reversed ? threadIndexB - threadIndexA : threadIndexA - threadIndexB;
+        const sortIndexA = parseInt($(a).attr("data-bsky-navigator-sort-index"));
+        const sortIndexB = parseInt($(b).attr("data-bsky-navigator-sort-index"));
+        const itemIndexA = parseInt($(a).find(".item").attr("data-bsky-navigator-item-index"));
+        const itemIndexB = parseInt($(b).find(".item").attr("data-bsky-navigator-item-index"));
+        if (sortIndexA !== sortIndexB) {
+          return reversed ? sortIndexB - sortIndexA : sortIndexA - sortIndexB;
         }
         return itemIndexA - itemIndexB;
       });
+      const indicesAfter = newItems.slice(0, 10).map((a) => $(a).attr("data-bsky-navigator-sort-index"));
+      console.log("[sortItems] AFTER: " + indicesAfter.join(",") + " shouldPrepend=" + (reversed ^ this.loadingNew));
       const shouldPrepend = reversed ^ this.loadingNew;
       if (shouldPrepend) {
         parent.prepend(newItems);

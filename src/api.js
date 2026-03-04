@@ -10,6 +10,11 @@ export class BlueskyAPI {
     // Rate limit tracking
     this.rateLimitedAt = null;
     this.rateLimitCooldownMs = 60 * 1000; // 1 minute cooldown after 429
+
+    // Login deduplication
+    this.pendingLogin = null;
+    this.loginFailedAt = null;
+    this.loginFailureCooldownMs = 60 * 1000; // 1 minute cooldown after login failure
   }
 
   /**
@@ -72,10 +77,48 @@ export class BlueskyAPI {
   }
 
   async login() {
-    return this.agent.login({
-      identifier: this.identifier,
-      password: this.password,
-    });
+    // Return existing pending login to avoid concurrent attempts
+    if (this.pendingLogin) {
+      return this.pendingLogin;
+    }
+
+    // Check if we're in login failure cooldown
+    if (this.loginFailedAt && (Date.now() - this.loginFailedAt) < this.loginFailureCooldownMs) {
+      const remaining = Math.ceil((this.loginFailureCooldownMs - (Date.now() - this.loginFailedAt)) / 1000);
+      const error = new Error(`Login failed recently. Please wait ${remaining} seconds.`);
+      error.isLoginCooldown = true;
+      throw error;
+    }
+
+    // Already logged in
+    if (this.agent?.session) {
+      return this.agent.session;
+    }
+
+    this.pendingLogin = (async () => {
+      try {
+        const result = await this.agent.login({
+          identifier: this.identifier,
+          password: this.password,
+        });
+        this.loginFailedAt = null; // Clear failure on success
+        return result;
+      } catch (error) {
+        // Mark login as failed and set cooldown
+        this.loginFailedAt = Date.now();
+
+        // Check for rate limit
+        if (error.status === 429) {
+          this.rateLimitedAt = Date.now();
+        }
+
+        throw error;
+      } finally {
+        this.pendingLogin = null;
+      }
+    })();
+
+    return this.pendingLogin;
   }
 
   async getPost(_uri) {

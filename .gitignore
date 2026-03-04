@@ -32,3 +32,4 @@ tests/extensions/
 tests/user-data/
 test-results/
 playwright-report/
+.envrc

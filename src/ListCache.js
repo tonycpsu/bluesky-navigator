@@ -43,6 +43,11 @@ export class ListCache {
   async ensureListsMetadata(forceRefresh = false) {
     if (!this.api) return;
 
+    // Check if we're in auth failure cooldown BEFORE attempting login
+    if (this.authFailedAt && (Date.now() - this.authFailedAt) < this.authFailureCooldownMs) {
+      return; // Don't retry during cooldown
+    }
+
     // Ensure API is logged in before making requests
     if (!this.api.agent?.session) {
       try {
@@ -52,11 +57,6 @@ export class ListCache {
         console.warn('List cache: Login failed, will retry in 1 minute');
         return;
       }
-    }
-
-    // Check if we're in auth failure cooldown
-    if (this.authFailedAt && (Date.now() - this.authFailedAt) < this.authFailureCooldownMs) {
-      return; // Don't retry during cooldown
     }
 
     // If force refresh and there's a pending fetch, wait for it first

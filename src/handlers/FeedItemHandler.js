@@ -1954,16 +1954,25 @@ export class FeedItemHandler extends ItemHandler {
       .filter((i, item) => $(item).hasClass('thread'))
       .get();
 
+    // Debug: log indices before sort (use stable sort-index)
+    const indicesBefore = newItems.slice(0, 10).map(a => $(a).attr('data-bsky-navigator-sort-index'));
+    console.log('[sortItems] reversed=' + reversed + ' loadingNew=' + this.loadingNew + ' count=' + newItems.length + ' BEFORE: ' + indicesBefore.join(','));
+
+    // Sort by stable sort-index (set once when item first appears, never changes)
     newItems.sort((a, b) => {
-        const threadIndexA = parseInt($(a).attr('data-bsky-navigator-thread-index'));
-        const threadIndexB = parseInt($(b).attr('data-bsky-navigator-thread-index'));
-        const itemIndexA = parseInt($(a).find('.item').data('bsky-navigator-item-index'));
-        const itemIndexB = parseInt($(b).find('.item').data('bsky-navigator-item-index'));
-        if (threadIndexA !== threadIndexB) {
-          return reversed ? threadIndexB - threadIndexA : threadIndexA - threadIndexB;
+        const sortIndexA = parseInt($(a).attr('data-bsky-navigator-sort-index'));
+        const sortIndexB = parseInt($(b).attr('data-bsky-navigator-sort-index'));
+        const itemIndexA = parseInt($(a).find('.item').attr('data-bsky-navigator-item-index'));
+        const itemIndexB = parseInt($(b).find('.item').attr('data-bsky-navigator-item-index'));
+        if (sortIndexA !== sortIndexB) {
+          return reversed ? sortIndexB - sortIndexA : sortIndexA - sortIndexB;
         }
         return itemIndexA - itemIndexB;
       });
+
+    // Debug: log indices after sort
+    const indicesAfter = newItems.slice(0, 10).map(a => $(a).attr('data-bsky-navigator-sort-index'));
+    console.log('[sortItems] AFTER: ' + indicesAfter.join(',') + ' shouldPrepend=' + (reversed ^ this.loadingNew));
 
     const shouldPrepend = reversed ^ this.loadingNew;
     if (shouldPrepend) {

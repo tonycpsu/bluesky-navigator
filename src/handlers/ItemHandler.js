@@ -7383,6 +7383,11 @@ export class ItemHandler extends Handler {
         $(item).attr('data-bsky-navigator-item-index', itemIndex++);
         const threadDiv = $(item).parent().parent();
         threadDiv.attr('data-bsky-navigator-thread-index', threadIndex);
+        // Set stable sort index only once - this preserves original feed order for sorting
+        // even after DOM reordering
+        if (!threadDiv.attr('data-bsky-navigator-sort-index')) {
+          threadDiv.attr('data-bsky-navigator-sort-index', threadIndex);
+        }
         // Add .thread class early so sortItems() can find it
         threadDiv.addClass('thread');
         if (classes.some((cls) => $(threadDiv).hasClass(cls))) {

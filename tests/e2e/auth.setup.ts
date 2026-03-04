@@ -308,10 +308,27 @@ async function login(page: Awaited<ReturnType<typeof firefox.launchPersistentCon
   const signInLocator = page.locator('a:has-text("Sign in"), button:has-text("Sign in")').first();
   await signInLocator.waitFor({ state: "visible", timeout: 10000 });
   await signInLocator.click();
+
+  // Fill username
   await page.fill('input[autocomplete="username"]', identifier);
-  await page.click('button:has-text("Next")');
-  await page.fill('input[type="password"]', password);
-  await page.click('button:has-text("Next")');
+
+  // Check if this is a multi-step login (with Next button) or single-page login
+  const nextButton = page.locator('button:has-text("Next")');
+  const hasNextButton = await nextButton.isVisible({ timeout: 2000 }).catch(() => false);
+
+  if (hasNextButton) {
+    // Multi-step login flow (old UI)
+    await nextButton.click();
+    await page.fill('input[type="password"]', password);
+    await page.click('button:has-text("Next")');
+  } else {
+    // Single-page login flow (new UI) - password field is already visible
+    await page.fill('input[type="password"]', password);
+    // Look for various submit button texts
+    const submitButton = page.locator('button:has-text("Sign in"), button:has-text("Log in"), button[type="submit"]').first();
+    await submitButton.click();
+  }
+
   await page.waitForSelector('[data-testid="homeScreenFeedTabs"]', { timeout: 30000 });
 }
 

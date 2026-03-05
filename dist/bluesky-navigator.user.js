@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+648.4f1dd322
+// @version     1.0.31+649.8b57294b
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -68593,7 +68593,6 @@ div#statusBar.has-feed-map {
       this.state.stateManager.saveStateImmediately(true, true);
       this.filterItems();
       this.updateFilterEnforcement();
-      console.log(`Timed out @${handle2} until ${new Date(expiresAt).toLocaleString()}`);
     }
     /**
      * Remove a timeout for an author
@@ -68606,7 +68605,6 @@ div#statusBar.has-feed-map {
       this.state.stateManager.saveStateImmediately(true, true);
       this.filterItems();
       this.updateFilterEnforcement();
-      console.log(`Removed timeout for @${handle2}`);
     }
     /**
      * Check if an author is currently timed out
@@ -68638,7 +68636,6 @@ div#statusBar.has-feed-map {
           activeTimeouts[handle2] = expiresAt;
         } else {
           removed++;
-          console.log(`Timeout expired for @${handle2}`);
         }
       }
       if (removed > 0) {
@@ -70290,13 +70287,6 @@ ${rule}`;
             if (unrollingEnabled) {
               const positions = items.map((item) => ({ item, position: getThreadPosition(item), handle: this.getAuthorHandle(item) }));
               const hasRoot = positions.some((p) => p.position === "first");
-              console.log("[bsky-navigator] Self-thread detection:", {
-                threadIdx,
-                itemCount: items.length,
-                positions: positions.map((p) => p.position),
-                hasRoot,
-                handles: positions.map((p) => p.handle)
-              });
               if (hasRoot) {
                 items.forEach((item) => {
                   const position = getThreadPosition(item);
@@ -70433,7 +70423,6 @@ ${rule}`;
       this.ignoreMouseMovement = false;
       this.hideFeedLoading();
       if (this._pendingProactiveUnrolls?.length > 0) {
-        console.log("[bsky-navigator] Processing proactive unrolls:", this._pendingProactiveUnrolls.length);
         const pendingItems = this._pendingProactiveUnrolls;
         this._pendingProactiveUnrolls = [];
         this._processProactiveUnrolls(pendingItems);
@@ -70449,16 +70438,12 @@ ${rule}`;
       for (const item of items) {
         try {
           if (!document.contains(item)) {
-            console.log("[bsky-navigator] Proactive unroll: item no longer in DOM");
             continue;
           }
-          console.log("[bsky-navigator] Proactive unroll: fetching thread for item");
           const thread = await this.getThreadForItem(item);
           if (!thread) {
-            console.log("[bsky-navigator] Proactive unroll: no thread data");
             continue;
           }
-          console.log("[bsky-navigator] Proactive unroll: got thread, author:", thread.post?.author?.handle);
           let rootThread = thread;
           const authorDid = thread.post?.author?.did;
           while (rootThread.parent?.post?.author?.did === authorDid) {
@@ -72145,8 +72130,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       );
       const parent = $(this.selector).closest(".thread").first().parent();
       const newItems = parent.children().filter((i, item) => $(item).hasClass("thread")).get();
-      const indicesBefore = newItems.slice(0, 10).map((a) => $(a).attr("data-bsky-navigator-sort-index"));
-      console.log("[sortItems] reversed=" + reversed + " loadingNew=" + this.loadingNew + " count=" + newItems.length + " BEFORE: " + indicesBefore.join(","));
       newItems.sort((a, b) => {
         const sortIndexA = parseInt($(a).attr("data-bsky-navigator-sort-index"));
         const sortIndexB = parseInt($(b).attr("data-bsky-navigator-sort-index"));
@@ -72157,8 +72140,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         return itemIndexA - itemIndexB;
       });
-      const indicesAfter = newItems.slice(0, 10).map((a) => $(a).attr("data-bsky-navigator-sort-index"));
-      console.log("[sortItems] AFTER: " + indicesAfter.join(",") + " shouldPrepend=" + (reversed ^ this.loadingNew));
       const shouldPrepend = reversed ^ this.loadingNew;
       if (shouldPrepend) {
         parent.prepend(newItems);
@@ -75137,7 +75118,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (markAsRead && toastApi) {
         const toastEl = $toast[0];
         const indexedAt = toastEl?.getAttribute("data-indexed-at");
-        console.log("removeToast indexedAt:", indexedAt, "type:", typeof indexedAt);
         if (indexedAt && indexedAt.length > 0) {
           markNotificationsSeenUpTo(indexedAt);
         }
@@ -75147,7 +75127,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     async function markNotificationsSeenUpTo(indexedAt) {
       if (!toastApi) return;
-      console.log("markNotificationsSeenUpTo called with:", indexedAt, "type:", typeof indexedAt);
       if (!indexedAt || typeof indexedAt !== "string") {
         console.warn("markNotificationsSeenUpTo: invalid indexedAt:", indexedAt);
         return;
@@ -75156,7 +75135,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const notifDate = new Date(indexedAt);
         notifDate.setMilliseconds(notifDate.getMilliseconds() + 1);
         const seenAt = notifDate.toISOString();
-        console.log("Calling markNotificationsSeen with:", seenAt, "(original:", indexedAt, ")");
         await toastApi.markNotificationsSeen(seenAt);
         const notificationDate = new Date(indexedAt);
         if (!lastSeenAt || notificationDate > lastSeenAt) {

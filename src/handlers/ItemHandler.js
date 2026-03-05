@@ -5226,8 +5226,6 @@ export class ItemHandler extends Handler {
     // Trigger filter refresh and start enforcement interval
     this.filterItems();
     this.updateFilterEnforcement();
-
-    console.log(`Timed out @${handle} until ${new Date(expiresAt).toLocaleString()}`);
   }
 
   /**
@@ -5247,8 +5245,6 @@ export class ItemHandler extends Handler {
     // Trigger filter refresh and update enforcement (may stop interval if no more timeouts)
     this.filterItems();
     this.updateFilterEnforcement();
-
-    console.log(`Removed timeout for @${handle}`);
   }
 
   /**
@@ -5286,7 +5282,6 @@ export class ItemHandler extends Handler {
         activeTimeouts[handle] = expiresAt;
       } else {
         removed++;
-        console.log(`Timeout expired for @${handle}`);
       }
     }
 
@@ -7457,14 +7452,6 @@ export class ItemHandler extends Handler {
             const positions = items.map(item => ({ item, position: getThreadPosition(item), handle: this.getAuthorHandle(item) }));
             const hasRoot = positions.some(p => p.position === 'first');
 
-            console.log('[bsky-navigator] Self-thread detection:', {
-              threadIdx,
-              itemCount: items.length,
-              positions: positions.map(p => p.position),
-              hasRoot,
-              handles: positions.map(p => p.handle)
-            });
-
             if (hasRoot) {
               // Normal case: root post is visible, filter continuation posts
               // They'll be shown when the root post is unrolled
@@ -7689,7 +7676,6 @@ export class ItemHandler extends Handler {
     // Process any pending proactive unrolls (async, doesn't block loadItems)
     // These are self-thread continuation posts where the root post is missing/filtered
     if (this._pendingProactiveUnrolls?.length > 0) {
-      console.log('[bsky-navigator] Processing proactive unrolls:', this._pendingProactiveUnrolls.length);
       const pendingItems = this._pendingProactiveUnrolls;
       this._pendingProactiveUnrolls = [];
       this._processProactiveUnrolls(pendingItems);
@@ -7710,18 +7696,14 @@ export class ItemHandler extends Handler {
       try {
         // Skip if item is no longer in DOM
         if (!document.contains(item)) {
-          console.log('[bsky-navigator] Proactive unroll: item no longer in DOM');
           continue;
         }
 
-        console.log('[bsky-navigator] Proactive unroll: fetching thread for item');
         // Get thread data for this continuation post
         const thread = await this.getThreadForItem(item);
         if (!thread) {
-          console.log('[bsky-navigator] Proactive unroll: no thread data');
           continue;
         }
-        console.log('[bsky-navigator] Proactive unroll: got thread, author:', thread.post?.author?.handle);
 
         // Find the root of the self-thread by traversing parent chain
         let rootThread = thread;

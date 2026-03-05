@@ -739,7 +739,6 @@ function getScreenFromElement(element) {
       // Use native DOM to get the raw attribute value
       const toastEl = $toast[0];
       const indexedAt = toastEl?.getAttribute('data-indexed-at');
-      console.log('removeToast indexedAt:', indexedAt, 'type:', typeof indexedAt);
       if (indexedAt && indexedAt.length > 0) {
         // Mark notifications as seen up to this notification's time
         markNotificationsSeenUpTo(indexedAt);
@@ -756,7 +755,6 @@ function getScreenFromElement(element) {
    */
   async function markNotificationsSeenUpTo(indexedAt) {
     if (!toastApi) return;
-    console.log('markNotificationsSeenUpTo called with:', indexedAt, 'type:', typeof indexedAt);
     if (!indexedAt || typeof indexedAt !== 'string') {
       console.warn('markNotificationsSeenUpTo: invalid indexedAt:', indexedAt);
       return;
@@ -768,7 +766,6 @@ function getScreenFromElement(element) {
       const notifDate = new Date(indexedAt);
       notifDate.setMilliseconds(notifDate.getMilliseconds() + 1);
       const seenAt = notifDate.toISOString();
-      console.log('Calling markNotificationsSeen with:', seenAt, '(original:', indexedAt, ')');
       await toastApi.markNotificationsSeen(seenAt);
 
       // Update local lastSeenAt so we don't re-show this notification

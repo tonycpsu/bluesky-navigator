@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+649.8b57294b
+// @version     1.0.31+650.2cead51c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45320,13 +45320,6 @@ if (cid) {
       return allPosts;
     }
   }
-  let debounceTimeout;
-  function debounce(func, delay) {
-    return function(...args) {
-      clearTimeout(debounceTimeout);
-      debounceTimeout = setTimeout(() => func.apply(this, args), delay);
-    };
-  }
   function isUserTyping() {
     const activeElement = document.activeElement;
     if (!activeElement) return false;
@@ -45384,14 +45377,6 @@ if (cid) {
             }
           }
         }
-        if (onChange && mutation.type === "attributes") {
-          const attributeName = mutation.attributeName;
-          const oldValue = mutation.oldValue;
-          const newValue = mutation.target.getAttribute(attributeName);
-          if (oldValue !== newValue) {
-            onChange(attributeName, oldValue, newValue, mutation.target, observer);
-          }
-        }
       }
     };
     const observer = new MutationObserver((mutations) => {
@@ -45405,10 +45390,10 @@ if (cid) {
       const elements = document.querySelectorAll(selector);
       elements.forEach((el) => onAdd(el, observer));
     };
-    if (onAdd && !ignoreExisting) {
+    if (onAdd && true) {
       processExistingElements();
     }
-    observer.observe(document.body, { childList: true, subtree: true, attributes: !!onChange });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: false });
     return observer;
   }
   function observeChanges(target2, callback, subtree) {
@@ -45427,7 +45412,7 @@ if (cid) {
     observer.observe(target2, {
       attributes: true,
       attributeOldValue: true,
-      subtree: !!subtree
+      subtree: false
     });
     return observer;
   }
@@ -45460,10 +45445,6 @@ if (cid) {
     }
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
-  function prefersHighContrast(config2 = null) {
-    if (config2 && config2.get("highContrastMode")) return true;
-    return window.matchMedia("(prefers-contrast: more)").matches;
-  }
   function getAnimationDuration$1(defaultMs, config2 = null) {
     return prefersReducedMotion(config2) ? 0 : defaultMs;
   }
@@ -45479,14 +45460,12 @@ if (cid) {
   const utils$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
     __proto__: null,
     announceToScreenReader: announceToScreenReader$2,
-    debounce,
     extractLastTerm,
     getAnimationDuration: getAnimationDuration$1,
     isModalOpen,
     isUserTyping,
     observeChanges,
     observeVisibilityChange: observeVisibilityChange$1,
-    prefersHighContrast,
     prefersReducedMotion,
     splitTerms,
     waitForElement: waitForElement$3
@@ -70698,8 +70677,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             if (attributeName == "class" && newValue.includes("r-13awgt0")) {
               this.onFeedChange();
             }
-          },
-          false
+          }
         );
       });
       waitForElement$1('div[data-testid="homeScreenFeedTabs"]', (feedTabs) => {

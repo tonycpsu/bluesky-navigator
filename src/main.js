@@ -898,7 +898,12 @@ function getScreenFromElement(element) {
         }
       }
     } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+      // Network errors are transient - don't spam the console
+      if (error.message?.includes('NetworkError')) {
+        console.warn('Notification fetch failed (network error), will retry');
+      } else {
+        console.error('Failed to fetch notifications:', error);
+      }
     }
   }
 

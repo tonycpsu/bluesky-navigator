@@ -394,6 +394,9 @@ div#statusBarRight {
     top: 30%;
     right: -10px;
     opacity: 20%;
+    /* Override inherited Bluesky padding classes so the hit area stays in the
+       gutter and doesn't cover the sidebar nav links (e.g. Settings, Chat). */
+    padding: 0;
 }
 
 #prevButton.mobile {
@@ -408,6 +411,9 @@ div#statusBarRight {
     bottom: 30%;
     right: -10px;
     opacity: 20%;
+    /* Override inherited Bluesky padding classes so the hit area stays in the
+       gutter and doesn't cover the sidebar nav links (e.g. Settings, Chat). */
+    padding: 0;
 }
 
 #nextButton.mobile {

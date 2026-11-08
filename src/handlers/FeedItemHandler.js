@@ -3899,6 +3899,9 @@ export class FeedItemHandler extends ItemHandler {
       this.toggleHideRead();
     } else if (event.key == '/') {
       event.preventDefault();
+      // Bluesky binds "/" on document to focus its own search box and ignores
+      // defaultPrevented, so stop the event here or it steals focus back.
+      event.stopImmediatePropagation();
       $('input#bsky-navigator-search').focus();
     } else if (event.key == ',') {
       this.loadItems();

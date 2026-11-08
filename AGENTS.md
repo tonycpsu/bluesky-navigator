@@ -68,14 +68,19 @@ element.style.setProperty('scroll-margin-top', '50px', 'important');
 ```
 
 ### Remote State Sync
-Local-only fields (`filter`, `timeouts`) must be preserved when remote state is newer:
+Remote sync (SurrealDB, `src/StateManager.js`) stores two things:
+- `state:current` - the whole state minus `filter`, `seen`/`seenRemoved` and non-serializable
+  objects. Last-writer-wins by `lastUpdated`: on load the newer copy is used, keeping only the
+  local `filter` (device/session-only). `timeouts`, `rulesConfig`, `focusedPostId` etc. sync.
+  Writes are conditional (`WHERE lastUpdated <= ours`) so they never clobber a newer copy.
+- `seen:<postId>` records - merged per post. Marking a post unread records a tombstone
+  (`state.seenRemoved` locally; `timestamp` unset + `removed` set remotely) so the newest
+  read/unread mark wins across devices. `state.seen` only ever holds read posts.
+
 ```javascript
-const { filter: remoteFilter, timeouts: remoteTimeouts, ...remoteWithoutLocalFields } = remoteState;
-return {
-  ...remoteWithoutLocalFields,
-  filter: savedState.filter || defaultState.filter,
-  timeouts: savedState.timeouts || defaultState.timeouts,
-};
+// Filter is the only field preserved locally when remote state:current is newer
+const { filter, seen, seenRemoved, ...remoteRest } = remoteState;
+return { ...defaultState, ...remoteRest, filter: savedState.filter || '', seen: merged.seen, ... };
 ```
 
 ## Handler Architecture

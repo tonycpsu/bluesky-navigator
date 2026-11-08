@@ -265,6 +265,7 @@ function getScreenFromElement(element) {
       stateSyncEnabled: config.get('stateSyncEnabled'),
       stateSyncConfig: config.get('stateSyncConfig'),
       stateSaveTimeout: config.get('stateSaveTimeout'),
+      stateSyncTimeout: config.get('stateSyncTimeout'),
       maxEntries: config.get('historyMax'),
     };
 

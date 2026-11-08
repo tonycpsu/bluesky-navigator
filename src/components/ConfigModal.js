@@ -561,7 +561,7 @@ const CONFIG_SCHEMA = {
         default: 5000,
         min: 1000,
         max: 60000,
-        help: 'How long to wait for sync operations',
+        help: 'Delay before syncing changes to the cloud',
       },
     },
   },

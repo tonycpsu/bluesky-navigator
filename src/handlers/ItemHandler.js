@@ -26,6 +26,14 @@ function extractPostIdFromUrl(url) {
 }
 
 /**
+ * 'ended' listener for the "disable video loop" option. A single shared function so
+ * addEventListener dedupes it when an item is re-selected.
+ */
+function reloadVideoOnEnded(event) {
+  event.currentTarget.load();
+}
+
+/**
  * Handler for navigating and interacting with scrollable item lists.
  * Provides keyboard navigation, mouse hover selection, intersection observers,
  * sidecar rendering, and various item actions (like, repost, reply, etc.).
@@ -86,6 +94,9 @@ export class ItemHandler extends Handler {
     this.onFooterIntersection = this.onFooterIntersection.bind(this);
     this.onItemAdded = this.onItemAdded.bind(this);
     this.onScroll = this.onScroll.bind(this);
+    this.onScrollEnd = this.onScrollEnd.bind(this);
+    // Namespaced per handler so loadItems() can rebind without stacking handlers
+    this.itemMouseOverEvent = `mouseover.bskyNavItem-${name}`;
     this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
     this.onItemMouseOver = this.onItemMouseOver.bind(this);
     this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
@@ -209,25 +220,32 @@ export class ItemHandler extends Handler {
     this.enableIntersectionObserver = true;
     $(document).on('scroll', this.onScroll);
     $(document).on('wheel', this.onWheel);
-    $(document).on('scrollend', () => {
-      setTimeout(() => {
-        this.ignoreMouseMovement = false;
-        this.userInitiatedScroll = false;
-        // Show sidecar toggle after scrolling stops (if sidecar is hidden and post is selected)
-        if (this.isFixedSidecar() &&
-            this.config.get('fixedSidecarVisible') === false &&
-            this.selectedItem && this.selectedItem.length) {
-          this.positionFixedSidecarToggle();
-          $('#fixed-sidecar-toggle').addClass('visible');
-        }
-      }, 500);
-    });
+    $(document).on('scrollend', this.onScrollEnd);
 
     super.activate();
   }
 
+  onScrollEnd() {
+    clearTimeout(this._scrollEndTimeout);
+    this._scrollEndTimeout = setTimeout(() => {
+      this.ignoreMouseMovement = false;
+      this.userInitiatedScroll = false;
+      // Show sidecar toggle after scrolling stops (if sidecar is hidden and post is selected)
+      if (this.isFixedSidecar() &&
+          this.config.get('fixedSidecarVisible') === false &&
+          this.selectedItem && this.selectedItem.length) {
+        this.positionFixedSidecarToggle();
+        $('#fixed-sidecar-toggle').addClass('visible');
+      }
+    }, 500);
+  }
+
   deactivate() {
     if (this.floatingButtonsObserver) this.floatingButtonsObserver.disconnect();
+    if (this.loadNewerObserver) {
+      this.loadNewerObserver.disconnect();
+      this.loadNewerObserver = null;
+    }
     if (this.observer) this.observer.disconnect();
     if (this.popupObserver) this.popupObserver.disconnect();
     if (this.hoverCardObserver) this.hoverCardObserver.disconnect();
@@ -236,14 +254,48 @@ export class ItemHandler extends Handler {
 
     if (this.hoverDebounceTimeout) clearTimeout(this.hoverDebounceTimeout);
     if (this.intersectionDebounceTimeout) clearTimeout(this.intersectionDebounceTimeout);
+    clearTimeout(this._scrollEndTimeout);
+    this._scrollEndTimeout = null;
+    // The scrollend timer normally resets these; don't carry them into the next
+    // activation (selectBestVisibleItem would move selection off a restored post)
+    this.userInitiatedScroll = false;
+    this.ignoreMouseMovement = false;
+
+    // Cancel pending item loads so this handler can't run loadItems() against another
+    // page's DOM after deactivation. Reset the flags/indicator those loads would have.
+    clearTimeout(this.loadItemsDebounceTimeout);
+    this.loadItemsDebounceTimeout = null;
+    let cancelledLoad = false;
+    if (this._loadItemsTimeout) {
+      clearTimeout(this._loadItemsTimeout);
+      this._loadItemsTimeout = null;
+      cancelledLoad = true;
+    }
+    if (this._loadNewerTimeout) {
+      clearTimeout(this._loadNewerTimeout);
+      this._loadNewerTimeout = null;
+      this.loadingNew = false;
+      this.loadNewerButton = null;
+      cancelledLoad = true;
+    }
+    if (this._loadOlderTimeout) {
+      clearTimeout(this._loadOlderTimeout);
+      this._loadOlderTimeout = null;
+      this.loading = false;
+      cancelledLoad = true;
+    }
+    if (cancelledLoad) {
+      this.hideFeedLoading();
+    }
 
     // Hide sidecar toggle and connector when leaving feed
     $('#fixed-sidecar-toggle').removeClass('visible');
     $('#fixed-sidecar-connector').removeClass('visible');
 
-    $(this.selector).off('mouseover mouseleave');
+    $(this.selector).off(this.itemMouseOverEvent);
     $(document).off('scroll', this.onScroll);
     $(document).off('wheel', this.onWheel);
+    $(document).off('scrollend', this.onScrollEnd);
     super.deactivate();
   }
 
@@ -383,9 +435,7 @@ export class ItemHandler extends Handler {
 
         if (this.config.get('videoDisableLoop')) {
           video.removeAttribute('autoplay');
-          video.addEventListener('ended', function () {
-            video.load();
-          });
+          video.addEventListener('ended', reloadVideoOnEnded);
         }
       });
   }
@@ -559,6 +609,84 @@ export class ItemHandler extends Handler {
 
   get index() {
     return this._index;
+  }
+
+  /**
+   * Replace this.items while keeping the selection on the same element. _index is a
+   * position in this.items, so when the list is rebuilt (read items hidden above the
+   * selection, threads unrolled, filters changed) it's re-resolved to the selected
+   * element's new position, or the nearest surviving neighbor if it's gone. Silent:
+   * no scrolling, sidecar or persisted-state changes.
+   * @param {jQuery|Array} newItems
+   */
+  setItems(newItems) {
+    const oldItems = this.items || [];
+    const oldIndex = this._index;
+    this.items = newItems;
+
+    // Non-preserving loads pick the selection themselves (jumpToPost / setIndex(0))
+    if (this._suspendSelectionTracking || oldIndex == null) return;
+
+    // Match by element first, then by post ID (React may re-create the node for the
+    // same post), then fall back to the nearest surviving neighbor
+    const newIndex = utils.resolveIndexAfterRebuild(oldItems, oldIndex, newItems, (el) =>
+      this.postIdForItem(el)
+    );
+    if (newIndex == null) return;
+    const oldItem = oldItems[oldIndex];
+    const newItem = newItems[newIndex];
+    const oldPostId = oldItem ? this.postIdForItem(oldItem) : null;
+    const samePost =
+      newItem === oldItem || (oldPostId != null && this.postIdForItem(newItem) === oldPostId);
+    if (newIndex === oldIndex && samePost) return;
+
+    this._index = newIndex;
+    if (this.mainNavList) {
+      this.mainNavList.setIndexSilent(newIndex);
+    }
+    if (newItem !== oldItem) {
+      // Move the selection highlight to the (re-created or neighbor) element
+      this.applySelectionStyling(oldItem, false);
+      this.applySelectionStyling(newItem, true);
+    }
+    if (!samePost) {
+      this._onSelectionMovedToNeighbor(newItem, newIndex);
+    }
+  }
+
+  /**
+   * The selected post dropped out of this.items and setItems() moved the selection to
+   * a neighbor. Keep the state setIndex() would normally keep consistent (thread/reply
+   * state, postId, info indicator, persisted focus, fixed sidecar), without scrolling.
+   * @private
+   */
+  _onSelectionMovedToNeighbor(item, index) {
+    this._threadIndex = null;
+    this._replyIndex = null;
+    this.sidecarNavList = null;
+    this.threadNavList = null;
+    // Read from the element directly - PostItemHandler's index getter ignores _index
+    this.postId = this.postIdForItem(item);
+    this.updateInfoIndicator();
+
+    // Same persistence as the index setter / _onMainItemSelected
+    if (this.state?.stateManager && this.postId) {
+      this.state.stateManager.updateState({
+        focusedPostId: this.postId,
+        focusedIndex: index,
+      });
+    }
+
+    if (this.api && this.isFixedSidecar() && $('#fixed-sidecar-panel').hasClass('visible')) {
+      this.getThreadForItem(item)
+        .then((thread) => {
+          // Skip if the selection changed again while fetching
+          if (thread && this.items[this._index] === item) {
+            this.updateFixedSidecarPanel(item, thread);
+          }
+        })
+        .catch(() => {});
+    }
   }
 
   get selectedItem() {
@@ -910,41 +1038,52 @@ export class ItemHandler extends Handler {
   // Sidecar & Thread Unrolling
   // ===========================================================================
 
+  /**
+   * Compile any sidecar Handlebars templates present in the DOM that haven't been
+   * compiled yet. Returns true once all of them are compiled.
+   */
+  compileSidecarTemplates() {
+    const templates = [
+      ['repliesTemplate', '#sidecar-replies-template'],
+      ['postTemplate', '#sidecar-post-template', 'postTemplate'],
+      ['bodyTemplate', '#sidecar-body-template', 'bodyTemplate'],
+      ['footerTemplate', '#sidecar-footer-template', 'footerTemplate'],
+      ['postCountsTemplate', '#sidecar-post-counts-template', 'postCountsTemplate'],
+      ['imageTemplate', '#sidecar-embed-image-template', 'imageTemplate'],
+      ['quoteTemplate', '#sidecar-embed-quote-template', 'quoteTemplate'],
+      ['externalTemplate', '#sidecar-embed-external-template', 'externalTemplate'],
+      ['skeletonTemplate', '#sidecar-skeleton-template'],
+    ];
+    let allCompiled = true;
+    for (const [prop, selector, partial] of templates) {
+      if (this[prop]) continue;
+      const el = $(selector);
+      if (!el.length) {
+        allCompiled = false;
+        continue;
+      }
+      this[prop] = Handlebars.compile(el.html());
+      if (partial) Handlebars.registerPartial(partial, this[prop]);
+    }
+    return allCompiled;
+  }
+
   initSidecarTemplates() {
-    waitForElement('#sidecar-replies-template', () => {
-      this.repliesTemplate = Handlebars.compile($('#sidecar-replies-template').html());
-    });
-    waitForElement('#sidecar-post-template', () => {
-      this.postTemplate = Handlebars.compile($('#sidecar-post-template').html());
-      Handlebars.registerPartial('postTemplate', this.postTemplate);
-    });
-    waitForElement('#sidecar-body-template', () => {
-      this.bodyTemplate = Handlebars.compile($('#sidecar-body-template').html());
-      Handlebars.registerPartial('bodyTemplate', this.bodyTemplate);
-    });
-    waitForElement('#sidecar-footer-template', () => {
-      this.footerTemplate = Handlebars.compile($('#sidecar-footer-template').html());
-      Handlebars.registerPartial('footerTemplate', this.footerTemplate);
-    });
-    waitForElement('#sidecar-post-counts-template', () => {
-      this.postCountsTemplate = Handlebars.compile($('#sidecar-post-counts-template').html());
-      Handlebars.registerPartial('postCountsTemplate', this.postCountsTemplate);
-    });
-    waitForElement('#sidecar-embed-image-template', () => {
-      this.imageTemplate = Handlebars.compile($('#sidecar-embed-image-template').html());
-      Handlebars.registerPartial('imageTemplate', this.imageTemplate);
-    });
-    waitForElement('#sidecar-embed-quote-template', () => {
-      this.quoteTemplate = Handlebars.compile($('#sidecar-embed-quote-template').html());
-      Handlebars.registerPartial('quoteTemplate', this.quoteTemplate);
-    });
-    waitForElement('#sidecar-embed-external-template', () => {
-      this.externalTemplate = Handlebars.compile($('#sidecar-embed-external-template').html());
-      Handlebars.registerPartial('externalTemplate', this.externalTemplate);
-    });
-    waitForElement('#sidecar-skeleton-template', () => {
-      this.skeletonTemplate = Handlebars.compile($('#sidecar-skeleton-template').html());
-    });
+    // Compile now if the templates are already in the page (the normal case: main.js
+    // inserts them before constructing handlers). Otherwise watch for them with one
+    // observer that disconnects once everything is compiled, instead of nine
+    // never-disconnected body observers per handler.
+    if (!this.compileSidecarTemplates()) {
+      const observer = waitForElement(
+        'script[id^="sidecar-"][id$="-template"]',
+        () => {
+          if (this.compileSidecarTemplates()) observer.disconnect();
+        },
+        null,
+        null,
+        true
+      );
+    }
 
     // Initialize fixed sidecar panel if enabled
     if (this.isFixedSidecar() && this.config.get('showReplySidecar')) {
@@ -1542,11 +1681,13 @@ export class ItemHandler extends Handler {
         }
       });
       // Filter out both redundant items and unrolled duplicates
-      this.items = this.items.filter((i, item) => {
-        if (isRedundant(item, threadIndex)) return false;
-        if ($(item).hasClass('unrolled-duplicate')) return false;
-        return true;
-      });
+      this.setItems(
+        this.items.filter((i, item) => {
+          if (isRedundant(item, threadIndex)) return false;
+          if ($(item).hasClass('unrolled-duplicate')) return false;
+          return true;
+        })
+      );
       // Show focus on first post without scrolling
       // Use requestAnimationFrame to ensure DOM is fully rendered before applying styles
       // Also verify item is still selected (could have changed during async operations)
@@ -3269,24 +3410,27 @@ export class ItemHandler extends Handler {
       return;
     }
     const mainItem = $(this.items)[index];
+    // Thread position and unrolled replies belong to the *selected* item only. For any
+    // other index (e.g. mark-read-on-scroll, 'A'), operate on the item at that index.
+    const isSelected = index == this.index;
     const item =
-      this.threadIndex != null ? this.getPostForThreadIndex(this.threadIndex) : mainItem;
+      isSelected && this.threadIndex != null
+        ? this.getPostForThreadIndex(this.threadIndex)
+        : mainItem;
+    const unrolledReplies = isSelected ? this.unrolledReplies : $();
     const postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
     if (!postId) {
       console.warn('markItemRead: no postId found');
       return;
     }
     const markedRead = this.markPostRead(postId, isRead);
-    if (this.unrolledReplies.length) {
+    if (unrolledReplies.length) {
       $(item).addClass(markedRead ? 'item-read' : 'item-unread');
       $(item).removeClass(markedRead ? 'item-unread' : 'item-read');
     } else {
-      this.applyItemStyle(mainItem, index == this.index);
+      this.applyItemStyle(mainItem, isSelected);
     }
-    if (
-      this.unrolledReplies.length &&
-      this.unrolledReplies.get().every((r) => $(r).hasClass('item-read'))
-    ) {
+    if (unrolledReplies.length && unrolledReplies.get().every((r) => $(r).hasClass('item-read'))) {
       this.markPostRead(this.postIdForItem(mainItem), isRead);
       this.applyItemStyle(this.items[index], index == this.index);
     }
@@ -3301,8 +3445,12 @@ export class ItemHandler extends Handler {
 
   markPostRead(postId, isRead) {
     const currentTime = new Date().toISOString();
-    const seen = { ...this.state.seen };
+    // Inside batchSeenUpdates() the batch's copy is mutated in place and persisted
+    // once at the end, instead of copying the whole seen map on every call.
+    const batching = !!this._seenBatch;
+    const seen = batching ? this._seenBatch : { ...this.state.seen };
 
+    const before = seen[postId];
     if (isRead || (isRead == null && !seen[postId])) {
       seen[postId] = currentTime;
     } else {
@@ -3310,13 +3458,40 @@ export class ItemHandler extends Handler {
       // This ensures proper persistence and remote sync
       delete seen[postId];
     }
-    this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
+    if (batching) {
+      if (seen[postId] !== before) this._seenBatchChanged = true;
+    } else {
+      this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
+    }
     return !!seen[postId];
   }
 
+  /**
+   * Run fn with markPostRead() calls batched: the seen map is copied once, mutated in
+   * place (and exposed as state.seen so read styling sees each change immediately),
+   * then persisted with a single updateState().
+   */
+  batchSeenUpdates(fn) {
+    if (this._seenBatch) return fn(); // already batching
+    const seen = { ...this.state.seen };
+    this._seenBatch = seen;
+    this._seenBatchChanged = false;
+    this.state.seen = seen;
+    try {
+      return fn();
+    } finally {
+      this._seenBatch = null;
+      if (this._seenBatchChanged) {
+        this.state.stateManager.updateState({ seen, lastUpdated: new Date().toISOString() });
+      }
+    }
+  }
+
   markVisibleRead() {
-    $(this.items).each((i, _item) => {
-      this.markItemRead(i, true);
+    this.batchSeenUpdates(() => {
+      $(this.items).each((i, _item) => {
+        this.markItemRead(i, true);
+      });
     });
   }
 
@@ -3364,6 +3539,8 @@ export class ItemHandler extends Handler {
   }
 
   setupLoadNewerObserver() {
+    // Replace (not stack) any observer from a previous activation / loadNewerItems()
+    if (this.loadNewerObserver) this.loadNewerObserver.disconnect();
     // Use the simpler button selector instead of the complex indicator selector
     this.loadNewerObserver = waitForElement(constants.LOAD_NEW_BUTTON_SELECTOR, (button, observer) => {
       // Disconnect observer to prevent repeated firing
@@ -7344,16 +7521,23 @@ export class ItemHandler extends Handler {
     this.showFeedLoading();
 
     // Minimal delay to allow browser to paint the loading indicator
-    setTimeout(() => {
+    clearTimeout(this._loadItemsTimeout);
+    this._loadItemsTimeout = setTimeout(() => {
+      this._loadItemsTimeout = null;
       this._doLoadItems(restoreTarget);
     }, 0);
   }
 
   _doLoadItems(restoreTarget) {
     const perfEnd = this.perfStart('_doLoadItems');
+    // Only preserveSelection loads keep the current selection while items are rebuilt;
+    // other loads choose a new one (target post / top) after the rebuild.
+    const preserveSelection = !!(restoreTarget && restoreTarget.preserveSelection);
+    this._suspendSelectionTracking = !preserveSelection;
     try {
       this._doLoadItemsInner(restoreTarget);
     } finally {
+      this._suspendSelectionTracking = false;
       perfEnd();
     }
   }
@@ -7575,7 +7759,7 @@ export class ItemHandler extends Handler {
     // Also filter out "View full thread" placeholders (they match selector but have no data-testid)
     // And filter out stale React elements that are disconnected or hidden
     // Explicitly exclude .filtered items (CSS display:none may not be applied yet for :visible check)
-    this.items = $(this.selector).filter(':visible').not('.filtered').filter((i, item) => {
+    const newItems = $(this.selector).filter(':visible').not('.filtered').filter((i, item) => {
       // Exclude stale React elements - check both isConnected and offsetParent
       // (offsetParent is null for hidden/detached elements)
       if (!item.isConnected || item.offsetParent === null) return false;
@@ -7593,6 +7777,7 @@ export class ItemHandler extends Handler {
           !hasPostUI) return false;
       return true;
     });
+    this.setItems(newItems);
 
     // Update mainNavList selection to stay in sync with items
     if (this.mainNavList) {
@@ -7625,7 +7810,7 @@ export class ItemHandler extends Handler {
 
     this.applyThreadIndicatorStyles();
 
-    $(this.selector).on('mouseover', this.onItemMouseOver);
+    $(this.selector).off(this.itemMouseOverEvent).on(this.itemMouseOverEvent, this.onItemMouseOver);
     $(this.selector).closest('div.thread').addClass('bsky-navigator-seen');
     $(this.selector)
       .closest('div.thread')
@@ -7634,6 +7819,9 @@ export class ItemHandler extends Handler {
     this.refreshItems();
 
     this.loading = false;
+    // Load finished normally - the loadOlderItems() fallback timer has nothing to do
+    clearTimeout(this._loadOlderTimeout);
+    this._loadOlderTimeout = null;
     $('img#loadOlderIndicatorImage').addClass('image-highlight');
     $('img#loadOlderIndicatorImage').removeClass('toolbar-icon-pending');
 
@@ -7985,7 +8173,8 @@ ${
     // Click the native button to load new posts
     $(this.loadNewerButton).click();
 
-    setTimeout(() => {
+    this._loadNewerTimeout = setTimeout(() => {
+      this._loadNewerTimeout = null;
       try {
         this.loadItems({ postId: oldPostId, index: oldIndex });
       } catch (e) {
@@ -8048,7 +8237,9 @@ ${
 
     // Fallback timeout to reset loading state if items don't trigger loadItems()
     // This handles edge cases where new items aren't detected by the MutationObserver
-    setTimeout(() => {
+    clearTimeout(this._loadOlderTimeout);
+    this._loadOlderTimeout = setTimeout(() => {
+      this._loadOlderTimeout = null;
       if (this.loading) {
         this.loading = false;
         $('img#loadOlderIndicatorImage').addClass('image-highlight');

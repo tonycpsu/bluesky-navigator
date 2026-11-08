@@ -257,3 +257,49 @@ export function escapeHtml(str) {
   if (str === null || str === undefined) return '';
   return String(str).replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
 }
+
+/**
+ * Find where a selected item ended up after its list was rebuilt.
+ *
+ * Returns the new index of oldItems[oldIndex] in newItems. If that element isn't there
+ * but getId is given, returns the first new item with the same id (e.g. React re-created
+ * the node for the same post). Otherwise (filtered, hidden as read, merged into an
+ * unrolled thread) returns the index of the nearest surviving item, preferring the ones
+ * that followed it, then the ones before it. Returns null if nothing can be resolved
+ * (e.g. newItems is empty).
+ *
+ * @param {ArrayLike<Element>} oldItems - The list before the rebuild
+ * @param {number} oldIndex - Selected index into oldItems
+ * @param {ArrayLike<Element>} newItems - The rebuilt list
+ * @param {Function} [getId] - Optional element -> stable id (e.g. post ID)
+ * @returns {number|null}
+ */
+export function resolveIndexAfterRebuild(oldItems, oldIndex, newItems, getId) {
+  if (oldIndex == null || oldIndex < 0 || oldIndex >= oldItems.length) return null;
+  if (!newItems.length) return null;
+
+  const newPositions = new Map();
+  for (let i = 0; i < newItems.length; i++) {
+    if (!newPositions.has(newItems[i])) newPositions.set(newItems[i], i);
+  }
+
+  const selected = oldItems[oldIndex];
+  if (newPositions.has(selected)) return newPositions.get(selected);
+
+  if (getId) {
+    const id = getId(selected);
+    if (id != null) {
+      for (let i = 0; i < newItems.length; i++) {
+        if (getId(newItems[i]) === id) return i;
+      }
+    }
+  }
+
+  for (let i = oldIndex + 1; i < oldItems.length; i++) {
+    if (newPositions.has(oldItems[i])) return newPositions.get(oldItems[i]);
+  }
+  for (let i = oldIndex - 1; i >= 0; i--) {
+    if (newPositions.has(oldItems[i])) return newPositions.get(oldItems[i]);
+  }
+  return null;
+}

@@ -47,15 +47,34 @@ class UIManager {
    * Initialize the UIManager - creates DOM elements and inserts into page
    * Should be called after main[role="main"] is available
    */
-  async initialize() {
-    if (this.initialized) return;
+  initialize() {
+    // waitForElement() returns an observer, not a promise - resolve once main appears.
+    // Repeat calls share the same promise and observer.
+    if (this._initPromise) return this._initPromise;
 
-    await waitForElement(constants.MAIN_SELECTOR, async (main) => {
-      this.createToolbar();
-      this.createStatusBar();
-      await this.insertIntoDOM();
-      this.initialized = true;
+    this._initPromise = new Promise((resolve) => {
+      this._mainObserver = waitForElement(constants.MAIN_SELECTOR, () => {
+        if (!this.initialized) {
+          this.createToolbar();
+          this.createStatusBar();
+          this.insertIntoDOM();
+          this.initialized = true;
+          resolve();
+        } else if (!this.isInDOM()) {
+          // A new main element (SPA navigation) - re-insert the existing toolbar and
+          // status bar instead of building new ones
+          this.insertIntoDOM();
+        }
+      });
     });
+    return this._initPromise;
+  }
+
+  /**
+   * Whether both the toolbar and status bar are currently attached to the document
+   */
+  isInDOM() {
+    return $.contains(document, this.toolbarDiv[0]) && $.contains(document, this.statusBar[0]);
   }
 
   /**
@@ -149,12 +168,8 @@ class UIManager {
   setContext(contextName, handler = null) {
     // Check if our elements are still in the DOM (SPA navigation may remove them)
     // Need to check both toolbar and status bar as they may be removed independently
-    if (this.initialized) {
-      const toolbarInDOM = $.contains(document, this.toolbarDiv[0]);
-      const statusBarInDOM = $.contains(document, this.statusBar[0]);
-      if (!toolbarInDOM || !statusBarInDOM) {
-        this.insertIntoDOM();
-      }
+    if (this.initialized && !this.isInDOM()) {
+      this.insertIntoDOM();
     }
 
     // Deactivate current adapter
@@ -285,6 +300,11 @@ class UIManager {
     if (this.statusBar) {
       this.statusBar.remove();
     }
+    if (this._mainObserver) {
+      this._mainObserver.disconnect();
+      this._mainObserver = null;
+    }
+    this._initPromise = null;
     this.initialized = false;
   }
 }

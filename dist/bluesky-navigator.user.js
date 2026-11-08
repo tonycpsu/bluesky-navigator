@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+658.18cb6dab
+// @version     1.0.31+659.a7aa4aa4
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45377,6 +45377,14 @@ if (cid) {
             }
           }
         }
+        if (onChange && mutation.type === "attributes") {
+          const attributeName = mutation.attributeName;
+          const oldValue = mutation.oldValue;
+          const newValue = mutation.target.getAttribute(attributeName);
+          if (oldValue !== newValue) {
+            onChange(attributeName, oldValue, newValue, mutation.target, observer);
+          }
+        }
       }
     };
     const observer = new MutationObserver((mutations) => {
@@ -45390,10 +45398,10 @@ if (cid) {
       const elements = document.querySelectorAll(selector);
       elements.forEach((el) => onAdd(el, observer));
     };
-    if (onAdd && true) {
+    if (onAdd && !ignoreExisting) {
       processExistingElements();
     }
-    observer.observe(document.body, { childList: true, subtree: true, attributes: false });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: !!onChange });
     return observer;
   }
   function observeChanges(target2, callback, subtree) {
@@ -45468,6 +45476,31 @@ if (cid) {
     if (str === null || str === void 0) return "";
     return String(str).replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
   }
+  function resolveIndexAfterRebuild(oldItems, oldIndex, newItems, getId) {
+    if (oldIndex == null || oldIndex < 0 || oldIndex >= oldItems.length) return null;
+    if (!newItems.length) return null;
+    const newPositions = /* @__PURE__ */ new Map();
+    for (let i = 0; i < newItems.length; i++) {
+      if (!newPositions.has(newItems[i])) newPositions.set(newItems[i], i);
+    }
+    const selected = oldItems[oldIndex];
+    if (newPositions.has(selected)) return newPositions.get(selected);
+    if (getId) {
+      const id = getId(selected);
+      if (id != null) {
+        for (let i = 0; i < newItems.length; i++) {
+          if (getId(newItems[i]) === id) return i;
+        }
+      }
+    }
+    for (let i = oldIndex + 1; i < oldItems.length; i++) {
+      if (newPositions.has(oldItems[i])) return newPositions.get(oldItems[i]);
+    }
+    for (let i = oldIndex - 1; i >= 0; i--) {
+      if (newPositions.has(oldItems[i])) return newPositions.get(oldItems[i]);
+    }
+    return null;
+  }
   const utils$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
     __proto__: null,
     announceToScreenReader: announceToScreenReader$2,
@@ -45479,6 +45512,7 @@ if (cid) {
     observeChanges,
     observeVisibilityChange: observeVisibilityChange$1,
     prefersReducedMotion,
+    resolveIndexAfterRebuild,
     splitTerms,
     waitForElement: waitForElement$3
   }, Symbol.toStringTag, { value: "Module" }));
@@ -64622,6 +64656,9 @@ div#statusBar.has-feed-map {
     const match2 = url.match(/post\/([^/]+)/);
     return match2 ? match2[1] : null;
   }
+  function reloadVideoOnEnded(event) {
+    event.currentTarget.load();
+  }
   class ItemHandler extends Handler {
     POPUP_MENU_SELECTOR = "div[aria-label^='Context menu backdrop']";
     THREAD_PAGE_SELECTOR = "main > div > div > div";
@@ -64666,6 +64703,8 @@ div#statusBar.has-feed-map {
       this.onFooterIntersection = this.onFooterIntersection.bind(this);
       this.onItemAdded = this.onItemAdded.bind(this);
       this.onScroll = this.onScroll.bind(this);
+      this.onScrollEnd = this.onScrollEnd.bind(this);
+      this.itemMouseOverEvent = `mouseover.bskyNavItem-${name}`;
       this.handleNewThreadPage = this.handleNewThreadPage.bind(this);
       this.onItemMouseOver = this.onItemMouseOver.bind(this);
       this.onSidecarItemMouseOver = this.onSidecarItemMouseOver.bind(this);
@@ -64762,20 +64801,26 @@ div#statusBar.has-feed-map {
       this.enableIntersectionObserver = true;
       $(document).on("scroll", this.onScroll);
       $(document).on("wheel", this.onWheel);
-      $(document).on("scrollend", () => {
-        setTimeout(() => {
-          this.ignoreMouseMovement = false;
-          this.userInitiatedScroll = false;
-          if (this.isFixedSidecar() && this.config.get("fixedSidecarVisible") === false && this.selectedItem && this.selectedItem.length) {
-            this.positionFixedSidecarToggle();
-            $("#fixed-sidecar-toggle").addClass("visible");
-          }
-        }, 500);
-      });
+      $(document).on("scrollend", this.onScrollEnd);
       super.activate();
+    }
+    onScrollEnd() {
+      clearTimeout(this._scrollEndTimeout);
+      this._scrollEndTimeout = setTimeout(() => {
+        this.ignoreMouseMovement = false;
+        this.userInitiatedScroll = false;
+        if (this.isFixedSidecar() && this.config.get("fixedSidecarVisible") === false && this.selectedItem && this.selectedItem.length) {
+          this.positionFixedSidecarToggle();
+          $("#fixed-sidecar-toggle").addClass("visible");
+        }
+      }, 500);
     }
     deactivate() {
       if (this.floatingButtonsObserver) this.floatingButtonsObserver.disconnect();
+      if (this.loadNewerObserver) {
+        this.loadNewerObserver.disconnect();
+        this.loadNewerObserver = null;
+      }
       if (this.observer) this.observer.disconnect();
       if (this.popupObserver) this.popupObserver.disconnect();
       if (this.hoverCardObserver) this.hoverCardObserver.disconnect();
@@ -64783,11 +64828,40 @@ div#statusBar.has-feed-map {
       this.disableFooterObserver();
       if (this.hoverDebounceTimeout) clearTimeout(this.hoverDebounceTimeout);
       if (this.intersectionDebounceTimeout) clearTimeout(this.intersectionDebounceTimeout);
+      clearTimeout(this._scrollEndTimeout);
+      this._scrollEndTimeout = null;
+      this.userInitiatedScroll = false;
+      this.ignoreMouseMovement = false;
+      clearTimeout(this.loadItemsDebounceTimeout);
+      this.loadItemsDebounceTimeout = null;
+      let cancelledLoad = false;
+      if (this._loadItemsTimeout) {
+        clearTimeout(this._loadItemsTimeout);
+        this._loadItemsTimeout = null;
+        cancelledLoad = true;
+      }
+      if (this._loadNewerTimeout) {
+        clearTimeout(this._loadNewerTimeout);
+        this._loadNewerTimeout = null;
+        this.loadingNew = false;
+        this.loadNewerButton = null;
+        cancelledLoad = true;
+      }
+      if (this._loadOlderTimeout) {
+        clearTimeout(this._loadOlderTimeout);
+        this._loadOlderTimeout = null;
+        this.loading = false;
+        cancelledLoad = true;
+      }
+      if (cancelledLoad) {
+        this.hideFeedLoading();
+      }
       $("#fixed-sidecar-toggle").removeClass("visible");
       $("#fixed-sidecar-connector").removeClass("visible");
-      $(this.selector).off("mouseover mouseleave");
+      $(this.selector).off(this.itemMouseOverEvent);
       $(document).off("scroll", this.onScroll);
       $(document).off("wheel", this.onWheel);
+      $(document).off("scrollend", this.onScrollEnd);
       super.deactivate();
     }
     // ===========================================================================
@@ -64904,9 +64978,7 @@ div#statusBar.has-feed-map {
         }
         if (this.config.get("videoDisableLoop")) {
           video2.removeAttribute("autoplay");
-          video2.addEventListener("ended", function() {
-            video2.load();
-          });
+          video2.addEventListener("ended", reloadVideoOnEnded);
         }
       });
     }
@@ -65034,6 +65106,71 @@ div#statusBar.has-feed-map {
     }
     get index() {
       return this._index;
+    }
+    /**
+     * Replace this.items while keeping the selection on the same element. _index is a
+     * position in this.items, so when the list is rebuilt (read items hidden above the
+     * selection, threads unrolled, filters changed) it's re-resolved to the selected
+     * element's new position, or the nearest surviving neighbor if it's gone. Silent:
+     * no scrolling, sidecar or persisted-state changes.
+     * @param {jQuery|Array} newItems
+     */
+    setItems(newItems) {
+      const oldItems = this.items || [];
+      const oldIndex = this._index;
+      this.items = newItems;
+      if (this._suspendSelectionTracking || oldIndex == null) return;
+      const newIndex = resolveIndexAfterRebuild(
+        oldItems,
+        oldIndex,
+        newItems,
+        (el) => this.postIdForItem(el)
+      );
+      if (newIndex == null) return;
+      const oldItem = oldItems[oldIndex];
+      const newItem = newItems[newIndex];
+      const oldPostId = oldItem ? this.postIdForItem(oldItem) : null;
+      const samePost = newItem === oldItem || oldPostId != null && this.postIdForItem(newItem) === oldPostId;
+      if (newIndex === oldIndex && samePost) return;
+      this._index = newIndex;
+      if (this.mainNavList) {
+        this.mainNavList.setIndexSilent(newIndex);
+      }
+      if (newItem !== oldItem) {
+        this.applySelectionStyling(oldItem, false);
+        this.applySelectionStyling(newItem, true);
+      }
+      if (!samePost) {
+        this._onSelectionMovedToNeighbor(newItem, newIndex);
+      }
+    }
+    /**
+     * The selected post dropped out of this.items and setItems() moved the selection to
+     * a neighbor. Keep the state setIndex() would normally keep consistent (thread/reply
+     * state, postId, info indicator, persisted focus, fixed sidecar), without scrolling.
+     * @private
+     */
+    _onSelectionMovedToNeighbor(item, index) {
+      this._threadIndex = null;
+      this._replyIndex = null;
+      this.sidecarNavList = null;
+      this.threadNavList = null;
+      this.postId = this.postIdForItem(item);
+      this.updateInfoIndicator();
+      if (this.state?.stateManager && this.postId) {
+        this.state.stateManager.updateState({
+          focusedPostId: this.postId,
+          focusedIndex: index
+        });
+      }
+      if (this.api && this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible")) {
+        this.getThreadForItem(item).then((thread) => {
+          if (thread && this.items[this._index] === item) {
+            this.updateFixedSidecarPanel(item, thread);
+          }
+        }).catch(() => {
+        });
+      }
     }
     get selectedItem() {
       return $(this.items[this.index]);
@@ -65295,41 +65432,47 @@ div#statusBar.has-feed-map {
     // ===========================================================================
     // Sidecar & Thread Unrolling
     // ===========================================================================
+    /**
+     * Compile any sidecar Handlebars templates present in the DOM that haven't been
+     * compiled yet. Returns true once all of them are compiled.
+     */
+    compileSidecarTemplates() {
+      const templates = [
+        ["repliesTemplate", "#sidecar-replies-template"],
+        ["postTemplate", "#sidecar-post-template", "postTemplate"],
+        ["bodyTemplate", "#sidecar-body-template", "bodyTemplate"],
+        ["footerTemplate", "#sidecar-footer-template", "footerTemplate"],
+        ["postCountsTemplate", "#sidecar-post-counts-template", "postCountsTemplate"],
+        ["imageTemplate", "#sidecar-embed-image-template", "imageTemplate"],
+        ["quoteTemplate", "#sidecar-embed-quote-template", "quoteTemplate"],
+        ["externalTemplate", "#sidecar-embed-external-template", "externalTemplate"],
+        ["skeletonTemplate", "#sidecar-skeleton-template"]
+      ];
+      let allCompiled = true;
+      for (const [prop, selector, partial] of templates) {
+        if (this[prop]) continue;
+        const el = $(selector);
+        if (!el.length) {
+          allCompiled = false;
+          continue;
+        }
+        this[prop] = Handlebars.compile(el.html());
+        if (partial) Handlebars.registerPartial(partial, this[prop]);
+      }
+      return allCompiled;
+    }
     initSidecarTemplates() {
-      waitForElement$2("#sidecar-replies-template", () => {
-        this.repliesTemplate = Handlebars.compile($("#sidecar-replies-template").html());
-      });
-      waitForElement$2("#sidecar-post-template", () => {
-        this.postTemplate = Handlebars.compile($("#sidecar-post-template").html());
-        Handlebars.registerPartial("postTemplate", this.postTemplate);
-      });
-      waitForElement$2("#sidecar-body-template", () => {
-        this.bodyTemplate = Handlebars.compile($("#sidecar-body-template").html());
-        Handlebars.registerPartial("bodyTemplate", this.bodyTemplate);
-      });
-      waitForElement$2("#sidecar-footer-template", () => {
-        this.footerTemplate = Handlebars.compile($("#sidecar-footer-template").html());
-        Handlebars.registerPartial("footerTemplate", this.footerTemplate);
-      });
-      waitForElement$2("#sidecar-post-counts-template", () => {
-        this.postCountsTemplate = Handlebars.compile($("#sidecar-post-counts-template").html());
-        Handlebars.registerPartial("postCountsTemplate", this.postCountsTemplate);
-      });
-      waitForElement$2("#sidecar-embed-image-template", () => {
-        this.imageTemplate = Handlebars.compile($("#sidecar-embed-image-template").html());
-        Handlebars.registerPartial("imageTemplate", this.imageTemplate);
-      });
-      waitForElement$2("#sidecar-embed-quote-template", () => {
-        this.quoteTemplate = Handlebars.compile($("#sidecar-embed-quote-template").html());
-        Handlebars.registerPartial("quoteTemplate", this.quoteTemplate);
-      });
-      waitForElement$2("#sidecar-embed-external-template", () => {
-        this.externalTemplate = Handlebars.compile($("#sidecar-embed-external-template").html());
-        Handlebars.registerPartial("externalTemplate", this.externalTemplate);
-      });
-      waitForElement$2("#sidecar-skeleton-template", () => {
-        this.skeletonTemplate = Handlebars.compile($("#sidecar-skeleton-template").html());
-      });
+      if (!this.compileSidecarTemplates()) {
+        const observer = waitForElement$2(
+          'script[id^="sidecar-"][id$="-template"]',
+          () => {
+            if (this.compileSidecarTemplates()) observer.disconnect();
+          },
+          null,
+          null,
+          true
+        );
+      }
       if (this.isFixedSidecar() && this.config.get("showReplySidecar")) {
         this.initFixedSidecarPanel();
       }
@@ -65777,11 +65920,13 @@ div#statusBar.has-feed-map {
             $(item2).addClass("filtered");
           }
         });
-        this.items = this.items.filter((i, item2) => {
-          if (isRedundant(item2, threadIndex)) return false;
-          if ($(item2).hasClass("unrolled-duplicate")) return false;
-          return true;
-        });
+        this.setItems(
+          this.items.filter((i, item2) => {
+            if (isRedundant(item2, threadIndex)) return false;
+            if ($(item2).hasClass("unrolled-duplicate")) return false;
+            return true;
+          })
+        );
         const currentItem = item;
         requestAnimationFrame(() => {
           if (this.selectedItem?.[0] !== currentItem[0]) return;
@@ -67113,20 +67258,22 @@ div#statusBar.has-feed-map {
         return;
       }
       const mainItem = $(this.items)[index];
-      const item = this.threadIndex != null ? this.getPostForThreadIndex(this.threadIndex) : mainItem;
+      const isSelected = index == this.index;
+      const item = isSelected && this.threadIndex != null ? this.getPostForThreadIndex(this.threadIndex) : mainItem;
+      const unrolledReplies = isSelected ? this.unrolledReplies : $();
       const postId = this.postIdForItem(item) || this.postIdForItem(mainItem);
       if (!postId) {
         console.warn("markItemRead: no postId found");
         return;
       }
       const markedRead = this.markPostRead(postId, isRead);
-      if (this.unrolledReplies.length) {
+      if (unrolledReplies.length) {
         $(item).addClass(markedRead ? "item-read" : "item-unread");
         $(item).removeClass(markedRead ? "item-unread" : "item-read");
       } else {
-        this.applyItemStyle(mainItem, index == this.index);
+        this.applyItemStyle(mainItem, isSelected);
       }
-      if (this.unrolledReplies.length && this.unrolledReplies.get().every((r) => $(r).hasClass("item-read"))) {
+      if (unrolledReplies.length && unrolledReplies.get().every((r) => $(r).hasClass("item-read"))) {
         this.markPostRead(this.postIdForItem(mainItem), isRead);
         this.applyItemStyle(this.items[index], index == this.index);
       }
@@ -67138,18 +67285,46 @@ div#statusBar.has-feed-map {
     }
     markPostRead(postId, isRead) {
       const currentTime = (/* @__PURE__ */ new Date()).toISOString();
-      const seen = { ...this.state.seen };
+      const batching = !!this._seenBatch;
+      const seen = batching ? this._seenBatch : { ...this.state.seen };
+      const before = seen[postId];
       if (isRead || isRead == null && !seen[postId]) {
         seen[postId] = currentTime;
       } else {
         delete seen[postId];
       }
-      this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
+      if (batching) {
+        if (seen[postId] !== before) this._seenBatchChanged = true;
+      } else {
+        this.state.stateManager.updateState({ seen, lastUpdated: currentTime });
+      }
       return !!seen[postId];
     }
+    /**
+     * Run fn with markPostRead() calls batched: the seen map is copied once, mutated in
+     * place (and exposed as state.seen so read styling sees each change immediately),
+     * then persisted with a single updateState().
+     */
+    batchSeenUpdates(fn) {
+      if (this._seenBatch) return fn();
+      const seen = { ...this.state.seen };
+      this._seenBatch = seen;
+      this._seenBatchChanged = false;
+      this.state.seen = seen;
+      try {
+        return fn();
+      } finally {
+        this._seenBatch = null;
+        if (this._seenBatchChanged) {
+          this.state.stateManager.updateState({ seen, lastUpdated: (/* @__PURE__ */ new Date()).toISOString() });
+        }
+      }
+    }
     markVisibleRead() {
-      $(this.items).each((i, _item) => {
-        this.markItemRead(i, true);
+      this.batchSeenUpdates(() => {
+        $(this.items).each((i, _item) => {
+          this.markItemRead(i, true);
+        });
       });
     }
     playVideo(video2) {
@@ -67189,6 +67364,7 @@ div#statusBar.has-feed-map {
       });
     }
     setupLoadNewerObserver() {
+      if (this.loadNewerObserver) this.loadNewerObserver.disconnect();
       this.loadNewerObserver = waitForElement$2(constants.LOAD_NEW_BUTTON_SELECTOR, (button, observer) => {
         if (observer) observer.disconnect();
         const btn = $(button)[0];
@@ -70221,15 +70397,20 @@ ${rule}`;
     loadItems(restoreTarget) {
       this.perfLog("loadItems called");
       this.showFeedLoading();
-      setTimeout(() => {
+      clearTimeout(this._loadItemsTimeout);
+      this._loadItemsTimeout = setTimeout(() => {
+        this._loadItemsTimeout = null;
         this._doLoadItems(restoreTarget);
       }, 0);
     }
     _doLoadItems(restoreTarget) {
       const perfEnd = this.perfStart("_doLoadItems");
+      const preserveSelection = !!(restoreTarget && restoreTarget.preserveSelection);
+      this._suspendSelectionTracking = !preserveSelection;
       try {
         this._doLoadItemsInner(restoreTarget);
       } finally {
+        this._suspendSelectionTracking = false;
         perfEnd();
       }
     }
@@ -70377,7 +70558,7 @@ ${rule}`;
       }
       this.sortItems();
       this.filterItems();
-      this.items = $(this.selector).filter(":visible").not(".filtered").filter((i, item) => {
+      const newItems = $(this.selector).filter(":visible").not(".filtered").filter((i, item) => {
         if (!item.isConnected || item.offsetParent === null) return false;
         if ($(item).parents(this.selector).length > 0) return false;
         const testId = $(item).attr("data-testid") || "";
@@ -70386,6 +70567,7 @@ ${rule}`;
         if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-") && !ariaLabel.startsWith("Post by ") && !hasPostUI) return false;
         return true;
       });
+      this.setItems(newItems);
       if (this.mainNavList) {
         this.mainNavList.setIndexSilent(this._index ?? 0);
       }
@@ -70406,11 +70588,13 @@ ${rule}`;
         this.applyItemStyle(this.selectedItem, true);
       }
       this.applyThreadIndicatorStyles();
-      $(this.selector).on("mouseover", this.onItemMouseOver);
+      $(this.selector).off(this.itemMouseOverEvent).on(this.itemMouseOverEvent, this.onItemMouseOver);
       $(this.selector).closest("div.thread").addClass("bsky-navigator-seen");
       $(this.selector).closest("div.thread").removeClass(["loading-indicator-reverse", "loading-indicator-forward"]);
       this.refreshItems();
       this.loading = false;
+      clearTimeout(this._loadOlderTimeout);
+      this._loadOlderTimeout = null;
       $("img#loadOlderIndicatorImage").addClass("image-highlight");
       $("img#loadOlderIndicatorImage").removeClass("toolbar-icon-pending");
       let targetPostId, preserveSelection;
@@ -70650,7 +70834,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         console.warn("[bsky-navigator] Error clearing selection:", e);
       }
       $(this.loadNewerButton).click();
-      setTimeout(() => {
+      this._loadNewerTimeout = setTimeout(() => {
+        this._loadNewerTimeout = null;
         try {
           this.loadItems({ postId: oldPostId, index: oldIndex });
         } catch (e) {
@@ -70697,7 +70882,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           rootBounds: document.documentElement.getBoundingClientRect()
         }
       ]);
-      setTimeout(() => {
+      clearTimeout(this._loadOlderTimeout);
+      this._loadOlderTimeout = setTimeout(() => {
+        this._loadOlderTimeout = null;
         if (this.loading) {
           this.loading = false;
           $("img#loadOlderIndicatorImage").addClass("image-highlight");
@@ -70824,7 +71011,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (postId && this.repostTimestampCache[postId]) {
         return { time: this.repostTimestampCache[postId], isEstimated: false };
       }
-      const itemIndex = typeof this.items.index === "function" ? this.items.index($item[0]) : Array.prototype.indexOf.call(this.items, $item[0]);
+      let itemIndex;
+      if (this._itemIndexMap) {
+        itemIndex = this._itemIndexMap.has($item[0]) ? this._itemIndexMap.get($item[0]) : -1;
+      } else {
+        itemIndex = typeof this.items.index === "function" ? this.items.index($item[0]) : Array.prototype.indexOf.call(this.items, $item[0]);
+      }
       if (itemIndex < 0) return null;
       const prevItem = itemIndex > 0 ? this.items[itemIndex - 1] : null;
       const nextItem = itemIndex < this.items.length - 1 ? this.items[itemIndex + 1] : null;
@@ -71400,15 +71592,19 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     activate() {
       super.activate();
       this.refreshToolbars();
-      waitForElement$1("#bsky-navigator-search", (el) => {
+      if (this._searchObserver) this._searchObserver.disconnect();
+      this._searchObserver = waitForElement$1("#bsky-navigator-search", (el) => {
         $(el).val(this.state.filter);
       });
       if (this.state.filter) {
         this.updateFilterPill();
+        this._suspendSelectionTracking = true;
         try {
           this.filterItems();
         } catch (e) {
           console.error("[BskyNav] Failed to apply saved filter:", e);
+        } finally {
+          this._suspendSelectionTracking = false;
         }
       }
       this.fetchRepostTimestamps();
@@ -71429,6 +71625,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     deactivate() {
       super.deactivate();
+      if (this._searchObserver) {
+        this._searchObserver.disconnect();
+        this._searchObserver = null;
+      }
       this._savedPostId = this.postId;
       this._savedIndex = this.index;
       if (this._scrollHandler) {
@@ -71525,8 +71725,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             let engagementData = [];
             let maxScore = 0;
             if (isAdvancedStyle && (heatmapMode !== "None" || showIcons || showAvatars || showHandles)) {
-              engagementData = allItems.map((item) => {
-                const engagement = this.getPostEngagement(item);
+              engagementData = this.getPostEngagementBatch(allItems).map((engagement) => {
                 const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
                 return { engagement, score };
               });
@@ -72184,7 +72383,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.refreshItems();
       this.updateInfoIndicator();
-      this.items = $(this.selector).filter(":visible").not(".filtered").filter((i, item) => {
+      const oldSelected = this.selectedItem[0];
+      const wasSelectedRead = $(oldSelected).hasClass("item-read");
+      const newItems = $(this.selector).filter(":visible").not(".filtered").filter((i, item) => {
         if (!item.isConnected || item.offsetParent === null) return false;
         const $item = $(item);
         if ($item.parents(this.selector).length > 0) return false;
@@ -72194,9 +72395,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (!testId.startsWith("feedItem-by-") && !testId.startsWith("postThreadItem-by-") && !ariaLabel.startsWith("Post by ") && !hasPostUI) return false;
         return true;
       });
+      this.setItems(newItems);
+      this.updateInfoIndicator();
       this.updateScrollPosition(true);
-      if (hideRead && $(this.selectedItem).hasClass("item-read")) {
-        this.jumpToNextUnseenItem();
+      if (hideRead && wasSelectedRead) {
+        const selected = this.selectedItem;
+        if (selected[0] !== oldSelected && selected.length && !selected.hasClass("item-read")) {
+          this._expandPromise = this.expandItem(selected);
+          this.updateItems();
+        } else {
+          this.jumpToNextUnseenItem();
+        }
       }
       perfEnd();
     }
@@ -72375,8 +72584,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       let engagementData = [];
       let maxScore = 0;
       if (isAdvancedStyle && (heatmapMode !== "None" || showIcons || showAvatars || showHandles)) {
-        engagementData = allItems.map((item) => {
-          const engagement = this.getPostEngagement(item);
+        engagementData = this.getPostEngagementBatch(allItems).map((engagement) => {
           const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
           return { engagement, score };
         });
@@ -72491,7 +72699,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     /**
      * Extract engagement metrics from a post element
      */
-    getPostEngagement(item) {
+    getPostEngagement(item, ctx = null) {
       if (!item) return null;
       const $item = $(item);
       const getCount = (selector) => {
@@ -72558,14 +72766,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const unrolledReplies = (unrolledInItem.length > 0 ? unrolledInItem : unrolledInThread).find(".unrolled-reply");
           unrolledCount = unrolledReplies.length;
         } else {
-          const unrolledGlobal = $(".unrolled-replies");
-          if (unrolledGlobal.length > 0) {
-            const unrolledParent = unrolledGlobal.closest('[data-testid^="feedItem-by-"]');
-            const unrolledPostId = unrolledParent.length ? this.postIdForItem(unrolledParent) : null;
-            if (unrolledPostId === postId) {
-              isSelfThread = true;
-              unrolledCount = unrolledGlobal.find(".unrolled-reply").length;
-            }
+          const unrolledGlobal = this.getUnrolledGlobalInfo(ctx);
+          if (unrolledGlobal.length > 0 && unrolledGlobal.postId === postId) {
+            isSelfThread = true;
+            unrolledCount = unrolledGlobal.replyCount;
           }
         }
       } else {
@@ -72636,6 +72840,44 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         unrolledCount
         // Number of unrolled replies (0 if not unrolled)
       };
+    }
+    /**
+     * Document-wide .unrolled-replies lookup used by getPostEngagement(). It doesn't
+     * depend on the item, so a feed map pass computes it once (cached on ctx).
+     */
+    getUnrolledGlobalInfo(ctx = null) {
+      if (ctx && ctx.unrolledGlobal) return ctx.unrolledGlobal;
+      const unrolledGlobal = $(".unrolled-replies");
+      const info = { length: unrolledGlobal.length, postId: null, replyCount: 0 };
+      if (unrolledGlobal.length > 0) {
+        const unrolledParent = unrolledGlobal.closest('[data-testid^="feedItem-by-"]');
+        info.postId = unrolledParent.length ? this.postIdForItem(unrolledParent) : null;
+        info.replyCount = unrolledGlobal.find(".unrolled-reply").length;
+      }
+      if (ctx) ctx.unrolledGlobal = info;
+      return info;
+    }
+    /**
+     * getPostEngagement() for every item, as needed by the feed map on each scroll
+     * frame. Results are equal to calling getPostEngagement(item) per item, but the
+     * per-pass work (document-wide .unrolled-replies query, item -> index map for repost
+     * time estimates) is done once instead of per item.
+     * @param {Element[]} items
+     * @returns {Array<object|null>} engagement per item
+     */
+    getPostEngagementBatch(items) {
+      const ctx = {};
+      const itemIndexMap = /* @__PURE__ */ new Map();
+      const allItems = this.items || [];
+      for (let i = 0; i < allItems.length; i++) {
+        if (!itemIndexMap.has(allItems[i])) itemIndexMap.set(allItems[i], i);
+      }
+      this._itemIndexMap = itemIndexMap;
+      try {
+        return items.map((item) => this.getPostEngagement(item, ctx));
+      } finally {
+        this._itemIndexMap = null;
+      }
     }
     /**
      * Parse count strings like "1.2K", "5M", etc.
@@ -74288,14 +74530,28 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * Initialize the UIManager - creates DOM elements and inserts into page
      * Should be called after main[role="main"] is available
      */
-    async initialize() {
-      if (this.initialized) return;
-      await waitForElement$3(constants.MAIN_SELECTOR, async (main) => {
-        this.createToolbar();
-        this.createStatusBar();
-        await this.insertIntoDOM();
-        this.initialized = true;
+    initialize() {
+      if (this._initPromise) return this._initPromise;
+      this._initPromise = new Promise((resolve) => {
+        this._mainObserver = waitForElement$3(constants.MAIN_SELECTOR, () => {
+          if (!this.initialized) {
+            this.createToolbar();
+            this.createStatusBar();
+            this.insertIntoDOM();
+            this.initialized = true;
+            resolve();
+          } else if (!this.isInDOM()) {
+            this.insertIntoDOM();
+          }
+        });
       });
+      return this._initPromise;
+    }
+    /**
+     * Whether both the toolbar and status bar are currently attached to the document
+     */
+    isInDOM() {
+      return $.contains(document, this.toolbarDiv[0]) && $.contains(document, this.statusBar[0]);
     }
     /**
      * Create the toolbar DOM structure
@@ -74355,12 +74611,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * @param {object} handler - The handler for this context (optional)
      */
     setContext(contextName, handler = null) {
-      if (this.initialized) {
-        const toolbarInDOM = $.contains(document, this.toolbarDiv[0]);
-        const statusBarInDOM = $.contains(document, this.statusBar[0]);
-        if (!toolbarInDOM || !statusBarInDOM) {
-          this.insertIntoDOM();
-        }
+      if (this.initialized && !this.isInDOM()) {
+        this.insertIntoDOM();
       }
       if (this.currentAdapter) {
         this.currentAdapter.deactivate();
@@ -74466,6 +74718,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.statusBar) {
         this.statusBar.remove();
       }
+      if (this._mainObserver) {
+        this._mainObserver.disconnect();
+        this._mainObserver = null;
+      }
+      this._initPromise = null;
       this.initialized = false;
     }
   }
@@ -74796,6 +75053,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     return "unknown";
   }
   (function() {
+    let monitor_interval = null;
     let current_url = null;
     let context = null;
     function parseRulesConfig(configText) {
@@ -75674,6 +75932,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           document.body.classList.add("bsky-nav-feed-ready");
         }
       }
+      let tiptapRemovalObserver = null;
       function onFocus(e) {
         const target2 = e.target;
         if (typeof target2.tagName === "undefined") {
@@ -75691,11 +75950,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           case "div": {
             const maybeTiptap = $(target2).closest(".tiptap");
             if (maybeTiptap.length) {
-              waitForElement(
-                ".tiptap",
-                () => null,
-                () => onBlur({ target: maybeTiptap[0] })
-              );
+              if (tiptapRemovalObserver) tiptapRemovalObserver.disconnect();
+              tiptapRemovalObserver = waitForElement(".tiptap", null, (_el, observer) => {
+                observer.disconnect();
+                if (tiptapRemovalObserver === observer) tiptapRemovalObserver = null;
+                onBlur({ target: maybeTiptap[0] });
+              });
               setContext("input");
             } else {
               setContextFromUrl();
@@ -75729,8 +75989,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       document.addEventListener("focus", onFocus, true);
       document.addEventListener("blur", onBlur, true);
+      let suggestedFollowsObserver = null;
       function startMonitor() {
-        setInterval(function() {
+        if (monitor_interval) clearInterval(monitor_interval);
+        monitor_interval = setInterval(function() {
           if (window.location.href !== current_url) {
             setContextFromUrl();
           }
@@ -75760,6 +76022,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
       function hideSuggestedFollows() {
+        if (suggestedFollowsObserver) return;
         const observer = new MutationObserver(() => {
           document.querySelectorAll('div[dir="auto"]').forEach((el) => {
             if (el.textContent === "Suggested for you") {
@@ -75771,6 +76034,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           });
         });
         observer.observe(document.body, { childList: true, subtree: true });
+        suggestedFollowsObserver = observer;
         document.querySelectorAll('div[dir="auto"]').forEach((el) => {
           if (el.textContent === "Suggested for you") {
             let container = el.closest('div[style*="background-color: rgb(249, 250, 251)"]');

@@ -166,10 +166,16 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     // Estimate from adjacent posts
-    // this.items may be an array (during init) or jQuery object (after loadItems)
-    const itemIndex = typeof this.items.index === 'function'
-      ? this.items.index($item[0])
-      : Array.prototype.indexOf.call(this.items, $item[0]);
+    // this.items may be an array (during init) or jQuery object (after loadItems).
+    // During a feed map pass, use its element -> index map instead of an O(n) lookup.
+    let itemIndex;
+    if (this._itemIndexMap) {
+      itemIndex = this._itemIndexMap.has($item[0]) ? this._itemIndexMap.get($item[0]) : -1;
+    } else {
+      itemIndex = typeof this.items.index === 'function'
+        ? this.items.index($item[0])
+        : Array.prototype.indexOf.call(this.items, $item[0]);
+    }
     if (itemIndex < 0) return null;
 
     const prevItem = itemIndex > 0 ? this.items[itemIndex - 1] : null;
@@ -945,7 +951,8 @@ export class FeedItemHandler extends ItemHandler {
   activate() {
     super.activate();
     this.refreshToolbars();
-    waitForElement('#bsky-navigator-search', (el) => {
+    if (this._searchObserver) this._searchObserver.disconnect();
+    this._searchObserver = waitForElement('#bsky-navigator-search', (el) => {
       $(el).val(this.state.filter);
     });
 
@@ -953,10 +960,15 @@ export class FeedItemHandler extends ItemHandler {
     if (this.state.filter) {
       this.updateFilterPill();
       // A persisted filter must never abort activation (listeners/intervals below)
+      // loadItems({ postId, index }) below picks the selection; don't let this rebuild
+      // re-resolve a stale pre-deactivation selection first
+      this._suspendSelectionTracking = true;
       try {
         this.filterItems();
       } catch (e) {
         console.error('[BskyNav] Failed to apply saved filter:', e);
+      } finally {
+        this._suspendSelectionTracking = false;
       }
     }
 
@@ -992,6 +1004,11 @@ export class FeedItemHandler extends ItemHandler {
 
   deactivate() {
     super.deactivate();
+
+    if (this._searchObserver) {
+      this._searchObserver.disconnect();
+      this._searchObserver = null;
+    }
 
     // Save current post ID and index so we can restore selection when reactivating
     // Post ID is preferred; index is fallback if post is no longer in feed
@@ -1128,8 +1145,7 @@ export class FeedItemHandler extends ItemHandler {
           let engagementData = [];
           let maxScore = 0;
           if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons || showAvatars || showHandles)) {
-            engagementData = allItems.map((item) => {
-              const engagement = this.getPostEngagement(item);
+            engagementData = this.getPostEngagementBatch(allItems).map((engagement) => {
               const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
               return { engagement, score };
             });
@@ -1964,7 +1980,10 @@ export class FeedItemHandler extends ItemHandler {
     // Rebuild this.items to include newly visible items (after filter cleared)
     // Filter out stale React elements that are disconnected or hidden
     // Explicitly exclude .filtered items (CSS display:none may not be applied yet for :visible check)
-    this.items = $(this.selector).filter(':visible').not('.filtered').filter((i, item) => {
+    // setItems() keeps _index on the selected post as items drop in/out above it
+    const oldSelected = this.selectedItem[0];
+    const wasSelectedRead = $(oldSelected).hasClass('item-read');
+    const newItems = $(this.selector).filter(':visible').not('.filtered').filter((i, item) => {
       // Exclude stale React elements - check both isConnected and offsetParent
       if (!item.isConnected || item.offsetParent === null) return false;
       const $item = $(item);
@@ -1979,11 +1998,22 @@ export class FeedItemHandler extends ItemHandler {
           !hasPostUI) return false;
       return true;
     });
+    this.setItems(newItems);
+    this.updateInfoIndicator();
 
     // Force rebuild feed map to reflect filter changes
     this.updateScrollPosition(true);
-    if (hideRead && $(this.selectedItem).hasClass('item-read')) {
-      this.jumpToNextUnseenItem();
+    if (hideRead && wasSelectedRead) {
+      const selected = this.selectedItem;
+      if (selected[0] !== oldSelected && selected.length && !selected.hasClass('item-read')) {
+        // The read post was filtered out and setItems() already moved the selection to
+        // the next surviving (unread) post - bring it into view like a jump would.
+        // (jumpToNextUnseenItem() searches from index + 1, so it would skip it.)
+        this._expandPromise = this.expandItem(selected);
+        this.updateItems();
+      } else {
+        this.jumpToNextUnseenItem();
+      }
     }
     perfEnd();
   }
@@ -2233,8 +2263,7 @@ export class FeedItemHandler extends ItemHandler {
     let maxScore = 0;
 
     if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons || showAvatars || showHandles)) {
-      engagementData = allItems.map((item) => {
-        const engagement = this.getPostEngagement(item);
+      engagementData = this.getPostEngagementBatch(allItems).map((engagement) => {
         const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
         return { engagement, score };
       });
@@ -2402,7 +2431,7 @@ export class FeedItemHandler extends ItemHandler {
   /**
    * Extract engagement metrics from a post element
    */
-  getPostEngagement(item) {
+  getPostEngagement(item, ctx = null) {
     if (!item) return null;
 
     const $item = $(item);
@@ -2508,14 +2537,11 @@ export class FeedItemHandler extends ItemHandler {
         unrolledCount = unrolledReplies.length;
       } else {
         // Check globally - the unrolled-replies might be in a different DOM location
-        const unrolledGlobal = $('.unrolled-replies');
-        if (unrolledGlobal.length > 0) {
-          const unrolledParent = unrolledGlobal.closest('[data-testid^="feedItem-by-"]');
-          const unrolledPostId = unrolledParent.length ? this.postIdForItem(unrolledParent) : null;
-          if (unrolledPostId === postId) {
-            isSelfThread = true;
-            unrolledCount = unrolledGlobal.find('.unrolled-reply').length;
-          }
+        // (document-wide query; computed once per feed map pass via ctx)
+        const unrolledGlobal = this.getUnrolledGlobalInfo(ctx);
+        if (unrolledGlobal.length > 0 && unrolledGlobal.postId === postId) {
+          isSelfThread = true;
+          unrolledCount = unrolledGlobal.replyCount;
         }
       }
     } else {
@@ -2599,6 +2625,46 @@ export class FeedItemHandler extends ItemHandler {
       reposterHandle,
       unrolledCount, // Number of unrolled replies (0 if not unrolled)
     };
+  }
+
+  /**
+   * Document-wide .unrolled-replies lookup used by getPostEngagement(). It doesn't
+   * depend on the item, so a feed map pass computes it once (cached on ctx).
+   */
+  getUnrolledGlobalInfo(ctx = null) {
+    if (ctx && ctx.unrolledGlobal) return ctx.unrolledGlobal;
+    const unrolledGlobal = $('.unrolled-replies');
+    const info = { length: unrolledGlobal.length, postId: null, replyCount: 0 };
+    if (unrolledGlobal.length > 0) {
+      const unrolledParent = unrolledGlobal.closest('[data-testid^="feedItem-by-"]');
+      info.postId = unrolledParent.length ? this.postIdForItem(unrolledParent) : null;
+      info.replyCount = unrolledGlobal.find('.unrolled-reply').length;
+    }
+    if (ctx) ctx.unrolledGlobal = info;
+    return info;
+  }
+
+  /**
+   * getPostEngagement() for every item, as needed by the feed map on each scroll
+   * frame. Results are equal to calling getPostEngagement(item) per item, but the
+   * per-pass work (document-wide .unrolled-replies query, item -> index map for repost
+   * time estimates) is done once instead of per item.
+   * @param {Element[]} items
+   * @returns {Array<object|null>} engagement per item
+   */
+  getPostEngagementBatch(items) {
+    const ctx = {};
+    const itemIndexMap = new Map();
+    const allItems = this.items || [];
+    for (let i = 0; i < allItems.length; i++) {
+      if (!itemIndexMap.has(allItems[i])) itemIndexMap.set(allItems[i], i);
+    }
+    this._itemIndexMap = itemIndexMap;
+    try {
+      return items.map((item) => this.getPostEngagement(item, ctx));
+    } finally {
+      this._itemIndexMap = null;
+    }
   }
 
   /**

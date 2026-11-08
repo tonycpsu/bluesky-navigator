@@ -146,58 +146,88 @@ async function login(page: Page): Promise<void> {
   console.log("Login successful");
 }
 
-// Define fixture types
-type Fixtures = {
-  sharedContext: BrowserContext;
+// Define fixture types. The browser context is worker-scoped (launched once per
+// worker); the page is test-scoped (fresh tab + navigation for every test).
+type TestFixtures = {
   authenticatedPage: Page;
+};
+
+type WorkerFixtures = {
+  sharedContext: BrowserContext;
 };
 
 /**
  * Custom test fixture with extension-loaded browser context
  */
-export const test = base.extend<Fixtures>({
-  sharedContext: async ({}, use) => {
-    // Verify extension exists
-    if (!fs.existsSync(path.join(TAMPERMONKEY_PATH, "manifest.json"))) {
-      throw new Error("Tampermonkey extension not found. Run: npm run test:setup");
-    }
+export const test = base.extend<TestFixtures, WorkerFixtures>({
+  sharedContext: [
+    async ({}, use) => {
+      // Verify extension exists
+      if (!fs.existsSync(path.join(TAMPERMONKEY_PATH, "manifest.json"))) {
+        throw new Error("Tampermonkey extension not found. Run: npm run test:setup");
+      }
 
-    // Launch with persistent context (preserves userscript & auth from setup)
-    const context = await firefox.launchPersistentContext(USER_DATA_DIR, {
-      headless: false,
-      args: ["-start-debugger-server", String(DEBUGGER_PORT)],
-      viewport: { width: 1280, height: 720 },
-      firefoxUserPrefs: {
-        "devtools.debugger.remote-enabled": true,
-        "devtools.debugger.prompt-connection": false,
-        "xpinstall.signatures.required": false,
-        "xpinstall.whitelist.required": false,
-        "extensions.autoDisableScopes": 0,
-        "extensions.enabledScopes": 15,
-        "browser.shell.checkDefaultBrowser": false,
-        "browser.startup.homepage_override.mstone": "ignore",
-      },
-    });
+      // Launch with persistent context (preserves userscript & auth from setup)
+      const context = await firefox.launchPersistentContext(USER_DATA_DIR, {
+        headless: false,
+        args: ["-start-debugger-server", String(DEBUGGER_PORT)],
+        viewport: { width: 1280, height: 720 },
+        firefoxUserPrefs: {
+          "devtools.debugger.remote-enabled": true,
+          "devtools.debugger.prompt-connection": false,
+          "xpinstall.signatures.required": false,
+          "xpinstall.whitelist.required": false,
+          "extensions.autoDisableScopes": 0,
+          "extensions.enabledScopes": 15,
+          "browser.shell.checkDefaultBrowser": false,
+          "browser.startup.homepage_override.mstone": "ignore",
+        },
+      });
 
-    // Install extension via RDP (required each launch for temp addon)
-    try {
-      await installExtensionViaRDP(TAMPERMONKEY_PATH);
-    } catch (e) {
-      // May already be installed or error is benign
-      console.log("Extension install note:", (e as Error).message);
-    }
+      // Install extension via RDP (required each launch for temp addon)
+      try {
+        await installExtensionViaRDP(TAMPERMONKEY_PATH);
+      } catch (e) {
+        // May already be installed or error is benign
+        console.log("Extension install note:", (e as Error).message);
+      }
 
-    // Brief wait for extension to initialize
-    await new Promise((r) => setTimeout(r, 1000));
+      // Brief wait for extension to initialize
+      await new Promise((r) => setTimeout(r, 1000));
 
-    await use(context);
-    await context.close();
-  },
+      await use(context);
+      await context.close().catch(() => {});
+    },
+    { scope: "worker" },
+  ],
 
   authenticatedPage: async ({ sharedContext: context }, use) => {
-    // Reuse existing page if available
-    const existingPages = context.pages();
-    const page = existingPages.length > 0 ? existingPages[0] : await context.newPage();
+    // The context is shared by every test in this worker. If Firefox crashed or
+    // a previous test closed it, fail fast with a clear message instead of
+    // hanging; Playwright then restarts the worker (and relaunches Firefox).
+    let page: Page;
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      page = await Promise.race([
+        context.newPage(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("newPage() timed out after 20s")), 20000);
+        }),
+      ]);
+    } catch (e) {
+      throw new Error(
+        `Shared Firefox context is no longer usable (crashed, closed or wedged): ${(e as Error).message}`
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+
+    // Isolation: start every test in a brand-new tab (fresh sessionStorage,
+    // history, focus, mouse position, no leftover modals/overlays) and close
+    // any tabs or popups left over from the previous test or browser launch.
+    for (const other of context.pages()) {
+      if (other !== page) await other.close().catch(() => {});
+    }
 
     await page.goto("https://bsky.app", { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.evaluate(() => document.body.focus());
@@ -249,6 +279,15 @@ export const test = base.extend<Fixtures>({
       console.log("Pausing 30s for observation...");
       await page.waitForTimeout(30000).catch(() => {});
     }
+
+    // Close this test's tab so its timers/observers stop. page.close() does NOT
+    // run beforeunload, so the userscript's pending debounced state save is
+    // discarded, matching the old per-test context.close() semantics (a
+    // goto/reload would fire beforeunload -> saveStateImmediately() and persist
+    // in-memory toggles like sort order or hide-read into the next test).
+    // A blank placeholder tab keeps the window alive; the next test closes it.
+    await context.newPage().catch(() => {});
+    await page.close().catch(() => {});
   },
 });
 

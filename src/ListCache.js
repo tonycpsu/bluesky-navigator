@@ -33,6 +33,24 @@ export class ListCache {
     // Track auth failures to avoid repeated retries
     this.authFailedAt = null;
     this.authFailureCooldownMs = 60 * 1000; // Wait 1 minute before retrying after auth failure
+
+    // Track failed member fetches (list name -> timestamp) so callers that poll on every
+    // filter pass / scroll don't hammer the API while a list is unavailable
+    this.memberFetchFailedAt = new Map();
+    this.memberFetchFailureCooldownMs = 3 * 60 * 1000;
+
+    // Per-list generation counter, bumped on every invalidation / local mutation so an
+    // in-flight fetch that started before the change can't overwrite fresher cache state
+    this.generations = new Map(); // list name -> number
+  }
+
+  /**
+   * Bumps the generation for a list, marking any in-flight fetch for it as stale
+   * @param {string} normalizedName - Lowercased list name
+   * @private
+   */
+  bumpGeneration(normalizedName) {
+    this.generations.set(normalizedName, (this.generations.get(normalizedName) || 0) + 1);
   }
 
   /**
@@ -133,6 +151,14 @@ export class ListCache {
       return this.pendingMemberFetches.get(normalizedName);
     }
 
+    // Back off after a recent failure instead of retrying on every call
+    const failedAt = this.memberFetchFailedAt.get(normalizedName);
+    if (failedAt && Date.now() - failedAt < this.memberFetchFailureCooldownMs) {
+      return null;
+    }
+
+    const generation = this.generations.get(normalizedName) || 0;
+
     // Create and track the fetch promise
     const fetchPromise = (async () => {
       try {
@@ -146,6 +172,7 @@ export class ListCache {
           if (!this.authFailedAt) {
             console.warn(`List not found: ${listName}`);
           }
+          this.memberFetchFailedAt.set(normalizedName, Date.now());
           return null;
         }
 
@@ -156,18 +183,29 @@ export class ListCache {
           memberMap.set(m.handle.toLowerCase(), { uri: m.uri });
         }
 
+        // The list was invalidated or mutated while this fetch was in flight - don't
+        // overwrite the newer state with this (possibly stale) response
+        if ((this.generations.get(normalizedName) || 0) !== generation) {
+          return this.cache.get(normalizedName)?.members ?? memberMap;
+        }
+
         this.cache.set(normalizedName, {
           members: memberMap,
           fetchedAt: Date.now(),
           uri: listUri,
         });
+        this.memberFetchFailedAt.delete(normalizedName);
 
         return memberMap;
       } catch (error) {
         console.warn(`Failed to fetch list members for ${listName}:`, error);
+        this.memberFetchFailedAt.set(normalizedName, Date.now());
         return null;
       } finally {
-        this.pendingMemberFetches.delete(normalizedName);
+        // Only clear our own entry - invalidate() may have started a newer fetch
+        if (this.pendingMemberFetches.get(normalizedName) === fetchPromise) {
+          this.pendingMemberFetches.delete(normalizedName);
+        }
       }
     })();
 
@@ -240,6 +278,8 @@ export class ListCache {
   /**
    * Optimistically adds a handle to the cached members for a list.
    * Use after successfully adding via API to avoid waiting for eventual consistency.
+   * If the list isn't cached yet, nothing is added (a single-member entry would make the
+   * list look complete); the next getMembers() call fetches the full list instead.
    * @param {string} handle - Handle to add
    * @param {string} listName - List name
    * @param {string} [listitemUri] - Optional listitem URI (for future deletion)
@@ -248,16 +288,13 @@ export class ListCache {
     const normalizedName = listName.toLowerCase();
     const normalizedHandle = this.normalizeHandle(handle);
 
-    let cached = this.cache.get(normalizedName);
-    if (!cached) {
-      // Create a new cache entry if none exists
-      cached = {
-        members: new Map(),
-        fetchedAt: Date.now(),
-        uri: null,
-      };
-      this.cache.set(normalizedName, cached);
-    }
+    // Any in-flight fetch may predate this add - discard its response
+    this.bumpGeneration(normalizedName);
+    this.pendingMemberFetches.delete(normalizedName);
+    this.memberFetchFailedAt.delete(normalizedName);
+
+    const cached = this.cache.get(normalizedName);
+    if (!cached) return;
 
     cached.members.set(normalizedHandle, { uri: listitemUri });
   }
@@ -272,6 +309,10 @@ export class ListCache {
     const normalizedName = listName.toLowerCase();
     const normalizedHandle = this.normalizeHandle(handle);
 
+    // Any in-flight fetch may predate this removal - discard its response
+    this.bumpGeneration(normalizedName);
+    this.pendingMemberFetches.delete(normalizedName);
+
     const cached = this.cache.get(normalizedName);
     if (cached?.members) {
       cached.members.delete(normalizedHandle);
@@ -285,9 +326,14 @@ export class ListCache {
   invalidate(listName = null) {
     if (listName) {
       const normalizedName = listName.toLowerCase();
+      this.bumpGeneration(normalizedName);
       this.cache.delete(normalizedName);
       this.pendingMemberFetches.delete(normalizedName);
+      this.memberFetchFailedAt.delete(normalizedName);
     } else {
+      for (const name of new Set([...this.generations.keys(), ...this.pendingMemberFetches.keys()])) {
+        this.bumpGeneration(name);
+      }
       this.cache.clear();
       this.listNameToUri.clear();
       this.listDisplayNames.clear();
@@ -295,6 +341,7 @@ export class ListCache {
       this.listsMetadataFetchedAt = null;
       this.pendingMetadataFetch = null;
       this.pendingMemberFetches.clear();
+      this.memberFetchFailedAt.clear();
     }
   }
 

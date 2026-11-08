@@ -1,13 +1,12 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+660.c1e08aa7
+// @version     1.0.31+661.23c55779
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
 // @require     https://code.jquery.com/jquery-3.7.1.min.js
-// @require     https://raw.githubusercontent.com/sizzlemctwizzle/GM_config/refs/heads/master/gm_config.js
-// @require     https://code.jquery.com/ui/1.12.1/jquery-ui.min.js
+// @require     https://code.jquery.com/ui/1.14.2/jquery-ui.min.js
 // @downloadURL https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/dist/bluesky-navigator.user.js
 // @updateURL   https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/dist/bluesky-navigator.user.js
 // @connect     clearsky.services
@@ -46407,6 +46406,12 @@ if (cid) {
         }
       };
       document.addEventListener("keydown", this.escapeHandler, true);
+      this.colorDropdownCloseHandler = (e) => {
+        if (!e.target.closest(".rules-color-picker")) {
+          this.modalEl?.querySelectorAll(".rules-color-dropdown.open").forEach((d) => d.classList.remove("open"));
+        }
+      };
+      document.addEventListener("click", this.colorDropdownCloseHandler);
       this.refreshVisualEditor();
     }
     /**
@@ -46467,6 +46472,7 @@ if (cid) {
         }
       }, animDuration);
       document.removeEventListener("keydown", this.escapeHandler, true);
+      document.removeEventListener("click", this.colorDropdownCloseHandler);
       announceToScreenReader$2("Configuration dialog closed.");
     }
     createModal() {
@@ -46510,21 +46516,68 @@ if (cid) {
           this.switchTab(tabButton.dataset.tab);
         });
       });
-      modal.querySelectorAll("input, select, textarea").forEach((input) => {
+      this.attachPanelListeners(modal);
+      return modal;
+    }
+    /**
+     * Attach listeners to everything rendered by renderPanels(). Called once per
+     * render of the panels (modal creation and reset-to-defaults), so handlers
+     * are never bound twice to the same element.
+     * @param {HTMLElement} container - The modal element
+     */
+    attachPanelListeners(container) {
+      const panels = container.querySelector(".config-modal-panels");
+      panels.querySelectorAll("input[name], select[name], textarea[name]").forEach((input) => {
+        if (input.closest(".timeouts-panel")) return;
         input.addEventListener("change", (e) => this.handleInputChange(e));
         input.addEventListener("input", (e) => {
           if (e.target.type === "range") this.handleInputChange(e);
         });
       });
-      modal.querySelectorAll(".config-field-reset").forEach((btn) => {
+      container.querySelectorAll(".config-color-text").forEach((input) => {
+        input.addEventListener("change", (e) => this.handleColorTextChange(e));
+      });
+      container.querySelectorAll(".config-field-reset").forEach((btn) => {
         btn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
           this.resetField(btn.dataset.key);
         });
       });
-      this.attachRulesEventListeners(modal);
-      return modal;
+      this.attachRulesPanelListeners(container);
+      this.attachRulesEventListeners(container);
+      this.attachTimeoutsEventListeners(container);
+    }
+    /**
+     * Get a setting's current value in the form: the staged (pending) value if
+     * there is one, otherwise the saved config value.
+     */
+    getValue(key) {
+      return key in this.pendingChanges ? this.pendingChanges[key] : this.config.get(key);
+    }
+    /**
+     * Whether auto-organize is on, honoring an unsaved toggle in the form
+     */
+    isAutoOrganizeEnabled() {
+      return Boolean(this.getValue("autoOrganizeRules"));
+    }
+    /**
+     * Handle a typed value in a color field's text input
+     */
+    handleColorTextChange(e) {
+      const textInput = e.target;
+      const colorInput = this.modalEl?.querySelector(`#${textInput.id.replace(/-text$/, "")}`);
+      if (!colorInput) return;
+      let value = textInput.value.trim();
+      if (value && !value.startsWith("#")) value = `#${value}`;
+      const short = value.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
+      if (short) value = `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`;
+      if (!/^#[0-9a-f]{6}$/i.test(value)) {
+        textInput.value = colorInput.value;
+        return;
+      }
+      colorInput.value = value.toLowerCase();
+      colorInput.dispatchEvent(new window.Event("change", { bubbles: true }));
     }
     getFieldSchema(key) {
       for (const [, schema2] of Object.entries(CONFIG_SCHEMA)) {
@@ -46593,7 +46646,7 @@ if (cid) {
       return Object.entries(fields).map(([key, field]) => this.renderField(key, field)).join("");
     }
     renderField(key, field) {
-      const value = this.config.get(key) ?? field.default ?? "";
+      const value = this.getValue(key) ?? field.default ?? "";
       const id = `config-${key}`;
       const isModified = this.isFieldModified(key, field, value);
       const resetBtn = `<button type="button" class="config-field-reset ${isModified ? "" : "hidden"}"
@@ -46603,7 +46656,7 @@ if (cid) {
       let isHidden = false;
       if (field.showWhen) {
         const [depKey, depValue] = Object.entries(field.showWhen)[0];
-        const currentDepValue = this.config.get(depKey) ?? CONFIG_SCHEMA[this.activeTab]?.fields[depKey]?.default;
+        const currentDepValue = this.getValue(depKey) ?? CONFIG_SCHEMA[this.activeTab]?.fields[depKey]?.default;
         isHidden = currentDepValue !== depValue;
         showWhenAttrs = `data-show-when-key="${depKey}" data-show-when-value="${depValue}"`;
       }
@@ -46826,10 +46879,10 @@ if (cid) {
      * Render the Rules panel with sub-tabs
      */
     renderRulesPanel() {
-      const rulesConfig = this.config.get("rulesConfig") ?? "";
+      const rulesConfig = this.getValue("rulesConfig") ?? "";
       this.parsedRules = this.parseRules(rulesConfig);
-      const ruleColorCoding = this.config.get("ruleColorCoding") ?? false;
-      const autoOrganizeRules = this.config.get("autoOrganizeRules") ?? false;
+      const ruleColorCoding = this.getValue("ruleColorCoding") ?? false;
+      const autoOrganizeRules = this.getValue("autoOrganizeRules") ?? false;
       return `
       <div class="rules-panel">
         <div class="rules-options rules-options-top">
@@ -46866,7 +46919,7 @@ if (cid) {
      * Render the Timeouts panel
      */
     renderTimeoutsPanel() {
-      const defaultDuration = this.config.get("timeoutDefaultDuration") || "1d";
+      const defaultDuration = this.getValue("timeoutDefaultDuration") || "1d";
       const timeouts = state.timeouts || {};
       const activeTimeouts = Object.entries(timeouts).filter(([, expiresAt]) => Date.now() < expiresAt).sort((a, b) => a[1] - b[1]);
       return `
@@ -46944,14 +46997,16 @@ if (cid) {
       const panel = this.modalEl.querySelector('[data-panel="Timeouts"]');
       if (panel) {
         panel.innerHTML = this.renderTimeoutsPanel();
-        this.attachTimeoutsEventListeners();
+        this.attachTimeoutsEventListeners(panel);
       }
     }
     /**
-     * Attach event listeners for the Timeouts panel
+     * Attach event listeners for the Timeouts panel. Called once per render of
+     * the panel (it is re-rendered wholesale), so handlers never stack.
+     * @param {HTMLElement} container - Element containing the timeouts panel
      */
-    attachTimeoutsEventListeners() {
-      const panel = this.modalEl.querySelector(".timeouts-panel");
+    attachTimeoutsEventListeners(container = this.modalEl) {
+      const panel = container?.querySelector(".timeouts-panel");
       if (!panel) return;
       const durationSelect = panel.querySelector("#config-timeoutDefaultDuration");
       if (durationSelect) {
@@ -47141,7 +47196,7 @@ if (cid) {
      * @param {boolean} skipAutoOrganize - Skip auto-organize (used when manually organizing)
      */
     syncVisualToRaw(skipAutoOrganize = false) {
-      if (!skipAutoOrganize && this.config.get("autoOrganizeRules")) {
+      if (!skipAutoOrganize && this.isAutoOrganizeEnabled()) {
         this.organizeAllRules();
       }
       const rawText = this.serializeRules(this.parsedRules);
@@ -47165,7 +47220,7 @@ if (cid) {
           this._listNamesFetched = true;
           await this.updateCachedListNames(true);
         }
-        const visualContainer = this.modalEl.querySelector(".rules-visual");
+        const visualContainer = this.modalEl?.querySelector(".rules-visual");
         if (visualContainer) {
           visualContainer.innerHTML = this.renderVisualEditor();
           this.attachRulesEventListeners();
@@ -47289,12 +47344,13 @@ if (cid) {
       this.clearUnsavedFlags(null);
     }
     /**
-     * Attach event listeners for the rules panel
+     * Attach listeners for the static parts of the rules panel (sub-tabs, raw
+     * textarea). These elements are not re-rendered by refreshVisualEditor(), so
+     * this must only run once per render of the panels.
+     * @param {HTMLElement} container - The modal element
      */
-    attachRulesEventListeners(modal = null) {
-      const container = modal || this.modalEl;
-      if (!container) return;
-      const panel = container.querySelector(".rules-panel");
+    attachRulesPanelListeners(container) {
+      const panel = container?.querySelector(".rules-panel");
       if (!panel) return;
       panel.querySelectorAll(".rules-subtab").forEach((tab) => {
         tab.addEventListener("click", (e) => {
@@ -47313,6 +47369,25 @@ if (cid) {
           }
         });
       });
+      const textarea = panel.querySelector("#config-rulesConfig");
+      if (textarea) {
+        textarea.addEventListener("change", (e) => {
+          this.pendingChanges["rulesConfig"] = e.target.value;
+          this.parsedRules = this.parseRules(e.target.value);
+        });
+      }
+    }
+    /**
+     * Attach event listeners for the visual rule editor. Called after every
+     * re-render of the visual editor, so it only binds elements inside
+     * .rules-visual (which are freshly created each time).
+     * @param {HTMLElement} modal - The modal element (defaults to this.modalEl)
+     */
+    attachRulesEventListeners(modal = null) {
+      const container = modal || this.modalEl;
+      if (!container) return;
+      const panel = container.querySelector(".rules-panel .rules-visual");
+      if (!panel) return;
       panel.querySelectorAll(".rules-category-toggle").forEach((btn) => {
         btn.addEventListener("click", (e) => {
           const catIndex = parseInt(e.currentTarget.dataset.category);
@@ -47340,11 +47415,6 @@ if (cid) {
           this.refreshVisualEditor();
         });
       });
-      document.addEventListener("click", (e) => {
-        if (!e.target.closest(".rules-color-picker")) {
-          panel.querySelectorAll(".rules-color-dropdown.open").forEach((d) => d.classList.remove("open"));
-        }
-      }, { once: true });
       panel.querySelectorAll(".rules-category-name").forEach((input) => {
         input.addEventListener("change", (e) => {
           const catIndex = parseInt(e.target.dataset.category);
@@ -47490,7 +47560,7 @@ if (cid) {
           const catIndex = parseInt(e.target.dataset.category);
           const ruleIndex = parseInt(e.target.dataset.rule);
           delete this.parsedRules[catIndex].rules[ruleIndex]._unsaved;
-          if (this.config.get("autoOrganizeRules")) {
+          if (this.isAutoOrganizeEnabled()) {
             this.organizeRulesInCategory(catIndex);
           }
           this.syncVisualToRaw(true);
@@ -47552,12 +47622,6 @@ if (cid) {
           this.refreshVisualEditor();
         });
       });
-      const textarea = panel.querySelector("#config-rulesConfig");
-      if (textarea) {
-        textarea.addEventListener("change", (e) => {
-          this.pendingChanges["rulesConfig"] = e.target.value;
-        });
-      }
     }
     switchTab(tabName) {
       this.activeTab = tabName;
@@ -47569,9 +47633,6 @@ if (cid) {
       this.modalEl.querySelectorAll(".config-panel").forEach((panel) => {
         panel.classList.toggle("active", panel.dataset.panel === tabName);
       });
-      if (tabName === "Timeouts") {
-        this.attachTimeoutsEventListeners();
-      }
     }
     handleInputChange(e) {
       const { name, type, value, checked } = e.target;
@@ -47614,7 +47675,7 @@ if (cid) {
     }
     save() {
       this.clearAllUnsavedFlags();
-      if (this.config.get("autoOrganizeRules")) {
+      if (this.isAutoOrganizeEnabled()) {
         this.organizeAllRules();
         this.syncVisualToRaw(true);
       }
@@ -47628,21 +47689,19 @@ if (cid) {
       announceToScreenReader$2("Settings saved.");
     }
     resetToDefaults() {
-      if (!confirm("Reset all settings to defaults? This cannot be undone.")) {
+      if (!confirm("Reset all settings to defaults? Changes are not applied until you click Save.")) {
         return;
       }
       Object.entries(CONFIG_SCHEMA).forEach(([, schema2]) => {
         Object.entries(schema2.fields).forEach(([key, field]) => {
-          this.config.set(key, field.default);
           this.pendingChanges[key] = field.default;
         });
       });
       const panelsContainer = this.modalEl.querySelector(".config-modal-panels");
       panelsContainer.innerHTML = this.renderPanels();
-      this.modalEl.querySelectorAll("input, select, textarea").forEach((input) => {
-        input.addEventListener("change", (e) => this.handleInputChange(e));
-      });
-      announceToScreenReader$2("Settings reset to defaults.");
+      this.attachPanelListeners(this.modalEl);
+      this.refreshVisualEditor();
+      announceToScreenReader$2("Settings reset to defaults. Click Save to apply.");
     }
     escapeHtml(text) {
       return escapeHtml(text);
@@ -48435,6 +48494,17 @@ if (cid) {
       this.pendingMemberFetches = /* @__PURE__ */ new Map();
       this.authFailedAt = null;
       this.authFailureCooldownMs = 60 * 1e3;
+      this.memberFetchFailedAt = /* @__PURE__ */ new Map();
+      this.memberFetchFailureCooldownMs = 3 * 60 * 1e3;
+      this.generations = /* @__PURE__ */ new Map();
+    }
+    /**
+     * Bumps the generation for a list, marking any in-flight fetch for it as stale
+     * @param {string} normalizedName - Lowercased list name
+     * @private
+     */
+    bumpGeneration(normalizedName) {
+      this.generations.set(normalizedName, (this.generations.get(normalizedName) || 0) + 1);
     }
     /**
      * Ensures list metadata (name -> URI mapping) is loaded
@@ -48509,6 +48579,11 @@ if (cid) {
       if (this.pendingMemberFetches.has(normalizedName)) {
         return this.pendingMemberFetches.get(normalizedName);
       }
+      const failedAt = this.memberFetchFailedAt.get(normalizedName);
+      if (failedAt && Date.now() - failedAt < this.memberFetchFailureCooldownMs) {
+        return null;
+      }
+      const generation = this.generations.get(normalizedName) || 0;
       const fetchPromise = (async () => {
         try {
           await this.ensureListsMetadata();
@@ -48517,6 +48592,7 @@ if (cid) {
             if (!this.authFailedAt) {
               console.warn(`List not found: ${listName}`);
             }
+            this.memberFetchFailedAt.set(normalizedName, Date.now());
             return null;
           }
           const members = await this.api.getListMembers(listUri);
@@ -48524,17 +48600,24 @@ if (cid) {
           for (const m of members) {
             memberMap.set(m.handle.toLowerCase(), { uri: m.uri });
           }
+          if ((this.generations.get(normalizedName) || 0) !== generation) {
+            return this.cache.get(normalizedName)?.members ?? memberMap;
+          }
           this.cache.set(normalizedName, {
             members: memberMap,
             fetchedAt: Date.now(),
             uri: listUri
           });
+          this.memberFetchFailedAt.delete(normalizedName);
           return memberMap;
         } catch (error) {
           console.warn(`Failed to fetch list members for ${listName}:`, error);
+          this.memberFetchFailedAt.set(normalizedName, Date.now());
           return null;
         } finally {
-          this.pendingMemberFetches.delete(normalizedName);
+          if (this.pendingMemberFetches.get(normalizedName) === fetchPromise) {
+            this.pendingMemberFetches.delete(normalizedName);
+          }
         }
       })();
       this.pendingMemberFetches.set(normalizedName, fetchPromise);
@@ -48596,6 +48679,8 @@ if (cid) {
     /**
      * Optimistically adds a handle to the cached members for a list.
      * Use after successfully adding via API to avoid waiting for eventual consistency.
+     * If the list isn't cached yet, nothing is added (a single-member entry would make the
+     * list look complete); the next getMembers() call fetches the full list instead.
      * @param {string} handle - Handle to add
      * @param {string} listName - List name
      * @param {string} [listitemUri] - Optional listitem URI (for future deletion)
@@ -48603,15 +48688,11 @@ if (cid) {
     addMemberToCache(handle2, listName, listitemUri = null) {
       const normalizedName = listName.toLowerCase();
       const normalizedHandle = this.normalizeHandle(handle2);
-      let cached = this.cache.get(normalizedName);
-      if (!cached) {
-        cached = {
-          members: /* @__PURE__ */ new Map(),
-          fetchedAt: Date.now(),
-          uri: null
-        };
-        this.cache.set(normalizedName, cached);
-      }
+      this.bumpGeneration(normalizedName);
+      this.pendingMemberFetches.delete(normalizedName);
+      this.memberFetchFailedAt.delete(normalizedName);
+      const cached = this.cache.get(normalizedName);
+      if (!cached) return;
       cached.members.set(normalizedHandle, { uri: listitemUri });
     }
     /**
@@ -48623,6 +48704,8 @@ if (cid) {
     removeMemberFromCache(handle2, listName) {
       const normalizedName = listName.toLowerCase();
       const normalizedHandle = this.normalizeHandle(handle2);
+      this.bumpGeneration(normalizedName);
+      this.pendingMemberFetches.delete(normalizedName);
       const cached = this.cache.get(normalizedName);
       if (cached?.members) {
         cached.members.delete(normalizedHandle);
@@ -48635,9 +48718,14 @@ if (cid) {
     invalidate(listName = null) {
       if (listName) {
         const normalizedName = listName.toLowerCase();
+        this.bumpGeneration(normalizedName);
         this.cache.delete(normalizedName);
         this.pendingMemberFetches.delete(normalizedName);
+        this.memberFetchFailedAt.delete(normalizedName);
       } else {
+        for (const name of /* @__PURE__ */ new Set([...this.generations.keys(), ...this.pendingMemberFetches.keys()])) {
+          this.bumpGeneration(name);
+        }
         this.cache.clear();
         this.listNameToUri.clear();
         this.listDisplayNames.clear();
@@ -48645,6 +48733,7 @@ if (cid) {
         this.listsMetadataFetchedAt = null;
         this.pendingMetadataFetch = null;
         this.pendingMemberFetches.clear();
+        this.memberFetchFailedAt.clear();
       }
     }
     /**
@@ -69431,8 +69520,8 @@ ${rule}`;
           return true;
         }
         if (result === void 0) {
-          this.state.listCache.getMembers(backingList).then(() => {
-            this.scheduleHighlightRefresh();
+          this.state.listCache.getMembers(backingList).then((members) => {
+            if (members) this.scheduleHighlightRefresh();
           });
         }
       }
@@ -69455,8 +69544,8 @@ ${rule}`;
             return true;
           }
           if (result === void 0 && this.state.listCache) {
-            this.state.listCache.getMembers(rule.value).then(() => {
-              this.scheduleHighlightRefresh();
+            this.state.listCache.getMembers(rule.value).then((members) => {
+              if (members) this.scheduleHighlightRefresh();
             });
           }
         }
@@ -71801,6 +71890,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         window.removeEventListener("scroll", this._scrollHandler);
         this._scrollHandler = null;
       }
+      clearTimeout(this._listRefilterTimeout);
+      this._listRefilterTimeout = null;
       if (this._filterEnforcementInterval) {
         clearInterval(this._filterEnforcementInterval);
         this._filterEnforcementInterval = null;
@@ -72338,7 +72429,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             }
             const isInList = listCache.isInListSync?.(authorHandle, listName);
             if (isInList === void 0) {
-              listCache.getMembers(listName);
+              this.fetchListAndRefilter(listName);
               allowed = false;
             } else {
               allowed = isInList;
@@ -72349,6 +72440,25 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           allowed = this.filterAuthor(item, rule.query) || this.filterContent(item, rule.query);
       }
       return rule.invert ? !allowed : allowed;
+    }
+    /**
+     * Fetches a list's members (deduplicated by ListCache) and re-applies filtering once
+     * they arrive, so list-based rules take effect without waiting for the next filter pass.
+     * Failed fetches resolve to null and don't trigger a re-filter (ListCache backs off).
+     * @param {string} listName - List name
+     * @private
+     */
+    fetchListAndRefilter(listName) {
+      const listCache = this.state.listCache;
+      if (!listCache) return;
+      Promise.resolve(listCache.getMembers(listName)).then((members) => {
+        if (!members) return;
+        clearTimeout(this._listRefilterTimeout);
+        this._listRefilterTimeout = setTimeout(() => {
+          this._listRefilterTimeout = null;
+          if (this.isCurrentHandler()) this.filterItems();
+        }, 100);
+      });
     }
     /**
      * Evaluates a named rule set against an item.
@@ -72377,7 +72487,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             return true;
           }
           if (isInList === void 0) {
-            this.state.listCache.getMembers(backingList);
+            this.fetchListAndRefilter(backingList);
           }
         }
       }
@@ -72402,7 +72512,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               if (isInList !== void 0) {
                 allowed = rule.action === "allow" ? isInList : !isInList;
               } else {
-                listCache.getMembers(rule.value);
+                this.fetchListAndRefilter(rule.value);
               }
             }
           }

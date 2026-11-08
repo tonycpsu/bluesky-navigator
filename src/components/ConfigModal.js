@@ -747,6 +747,16 @@ export class ConfigModal {
     };
     document.addEventListener('keydown', this.escapeHandler, true);
 
+    // Close rule color dropdowns when clicking outside them
+    this.colorDropdownCloseHandler = (e) => {
+      if (!e.target.closest('.rules-color-picker')) {
+        this.modalEl
+          ?.querySelectorAll('.rules-color-dropdown.open')
+          .forEach((d) => d.classList.remove('open'));
+      }
+    };
+    document.addEventListener('click', this.colorDropdownCloseHandler);
+
     // Fetch list names and refresh visual editor (async)
     this.refreshVisualEditor();
   }
@@ -840,6 +850,7 @@ export class ConfigModal {
     }, animDuration);
 
     document.removeEventListener('keydown', this.escapeHandler, true);
+    document.removeEventListener('click', this.colorDropdownCloseHandler);
     announceToScreenReader('Configuration dialog closed.');
   }
 
@@ -890,16 +901,37 @@ export class ConfigModal {
       });
     });
 
-    // Input change handlers
-    modal.querySelectorAll('input, select, textarea').forEach((input) => {
+    // Panel listeners (pass modal since this.modalEl not yet assigned)
+    this.attachPanelListeners(modal);
+
+    return modal;
+  }
+
+  /**
+   * Attach listeners to everything rendered by renderPanels(). Called once per
+   * render of the panels (modal creation and reset-to-defaults), so handlers
+   * are never bound twice to the same element.
+   * @param {HTMLElement} container - The modal element
+   */
+  attachPanelListeners(container) {
+    // Input change handlers (only named settings inputs; the rule editor and
+    // timeouts panel bind their own controls)
+    const panels = container.querySelector('.config-modal-panels');
+    panels.querySelectorAll('input[name], select[name], textarea[name]').forEach((input) => {
+      if (input.closest('.timeouts-panel')) return;
       input.addEventListener('change', (e) => this.handleInputChange(e));
       input.addEventListener('input', (e) => {
         if (e.target.type === 'range') this.handleInputChange(e);
       });
     });
 
+    // Color text inputs (paired with a color picker)
+    container.querySelectorAll('.config-color-text').forEach((input) => {
+      input.addEventListener('change', (e) => this.handleColorTextChange(e));
+    });
+
     // Reset button handlers
-    modal.querySelectorAll('.config-field-reset').forEach((btn) => {
+    container.querySelectorAll('.config-field-reset').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -907,10 +939,52 @@ export class ConfigModal {
       });
     });
 
-    // Rules panel event listeners (pass modal since this.modalEl not yet assigned)
-    this.attachRulesEventListeners(modal);
+    // Rules panel: static controls once, visual editor contents
+    this.attachRulesPanelListeners(container);
+    this.attachRulesEventListeners(container);
 
-    return modal;
+    // Timeouts panel
+    this.attachTimeoutsEventListeners(container);
+  }
+
+  /**
+   * Get a setting's current value in the form: the staged (pending) value if
+   * there is one, otherwise the saved config value.
+   */
+  getValue(key) {
+    return key in this.pendingChanges ? this.pendingChanges[key] : this.config.get(key);
+  }
+
+  /**
+   * Whether auto-organize is on, honoring an unsaved toggle in the form
+   */
+  isAutoOrganizeEnabled() {
+    return Boolean(this.getValue('autoOrganizeRules'));
+  }
+
+  /**
+   * Handle a typed value in a color field's text input
+   */
+  handleColorTextChange(e) {
+    const textInput = e.target;
+    const colorInput = this.modalEl?.querySelector(`#${textInput.id.replace(/-text$/, '')}`);
+    if (!colorInput) return;
+
+    let value = textInput.value.trim();
+    if (value && !value.startsWith('#')) value = `#${value}`;
+    // Expand #rgb shorthand; <input type="color"> only accepts #rrggbb
+    const short = value.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
+    if (short) value = `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`;
+
+    if (!/^#[0-9a-f]{6}$/i.test(value)) {
+      // Invalid: revert to the picker's current value
+      textInput.value = colorInput.value;
+      return;
+    }
+
+    colorInput.value = value.toLowerCase();
+    // Route through the normal handler so pending changes/reset button update
+    colorInput.dispatchEvent(new window.Event('change', { bubbles: true }));
   }
 
   getFieldSchema(key) {
@@ -1000,7 +1074,7 @@ export class ConfigModal {
   }
 
   renderField(key, field) {
-    const value = this.config.get(key) ?? field.default ?? '';
+    const value = this.getValue(key) ?? field.default ?? '';
     const id = `config-${key}`;
     const isModified = this.isFieldModified(key, field, value);
     const resetBtn = `<button type="button" class="config-field-reset ${isModified ? '' : 'hidden'}"
@@ -1012,7 +1086,7 @@ export class ConfigModal {
     let isHidden = false;
     if (field.showWhen) {
       const [depKey, depValue] = Object.entries(field.showWhen)[0];
-      const currentDepValue = this.config.get(depKey) ?? CONFIG_SCHEMA[this.activeTab]?.fields[depKey]?.default;
+      const currentDepValue = this.getValue(depKey) ?? CONFIG_SCHEMA[this.activeTab]?.fields[depKey]?.default;
       isHidden = currentDepValue !== depValue;
       showWhenAttrs = `data-show-when-key="${depKey}" data-show-when-value="${depValue}"`;
     }
@@ -1281,11 +1355,11 @@ export class ConfigModal {
    * Render the Rules panel with sub-tabs
    */
   renderRulesPanel() {
-    const rulesConfig = this.config.get('rulesConfig') ?? '';
+    const rulesConfig = this.getValue('rulesConfig') ?? '';
     this.parsedRules = this.parseRules(rulesConfig);
 
-    const ruleColorCoding = this.config.get('ruleColorCoding') ?? false;
-    const autoOrganizeRules = this.config.get('autoOrganizeRules') ?? false;
+    const ruleColorCoding = this.getValue('ruleColorCoding') ?? false;
+    const autoOrganizeRules = this.getValue('autoOrganizeRules') ?? false;
 
     return `
       <div class="rules-panel">
@@ -1324,7 +1398,7 @@ export class ConfigModal {
    * Render the Timeouts panel
    */
   renderTimeoutsPanel() {
-    const defaultDuration = this.config.get('timeoutDefaultDuration') || '1d';
+    const defaultDuration = this.getValue('timeoutDefaultDuration') || '1d';
     const timeouts = state.timeouts || {};
     const activeTimeouts = Object.entries(timeouts)
       .filter(([, expiresAt]) => Date.now() < expiresAt)
@@ -1409,15 +1483,17 @@ export class ConfigModal {
     const panel = this.modalEl.querySelector('[data-panel="Timeouts"]');
     if (panel) {
       panel.innerHTML = this.renderTimeoutsPanel();
-      this.attachTimeoutsEventListeners();
+      this.attachTimeoutsEventListeners(panel);
     }
   }
 
   /**
-   * Attach event listeners for the Timeouts panel
+   * Attach event listeners for the Timeouts panel. Called once per render of
+   * the panel (it is re-rendered wholesale), so handlers never stack.
+   * @param {HTMLElement} container - Element containing the timeouts panel
    */
-  attachTimeoutsEventListeners() {
-    const panel = this.modalEl.querySelector('.timeouts-panel');
+  attachTimeoutsEventListeners(container = this.modalEl) {
+    const panel = container?.querySelector('.timeouts-panel');
     if (!panel) return;
 
     // Duration select change
@@ -1641,7 +1717,7 @@ export class ConfigModal {
    */
   syncVisualToRaw(skipAutoOrganize = false) {
     // Auto-organize if enabled
-    if (!skipAutoOrganize && this.config.get('autoOrganizeRules')) {
+    if (!skipAutoOrganize && this.isAutoOrganizeEnabled()) {
       this.organizeAllRules();
     }
 
@@ -1671,7 +1747,8 @@ export class ConfigModal {
         await this.updateCachedListNames(true); // Force refresh to get latest
       }
 
-      const visualContainer = this.modalEl.querySelector('.rules-visual');
+      // Modal may have closed while list names were loading
+      const visualContainer = this.modalEl?.querySelector('.rules-visual');
       if (visualContainer) {
         visualContainer.innerHTML = this.renderVisualEditor();
         this.attachRulesEventListeners();
@@ -1824,13 +1901,13 @@ export class ConfigModal {
   }
 
   /**
-   * Attach event listeners for the rules panel
+   * Attach listeners for the static parts of the rules panel (sub-tabs, raw
+   * textarea). These elements are not re-rendered by refreshVisualEditor(), so
+   * this must only run once per render of the panels.
+   * @param {HTMLElement} container - The modal element
    */
-  attachRulesEventListeners(modal = null) {
-    const container = modal || this.modalEl;
-    if (!container) return;
-
-    const panel = container.querySelector('.rules-panel');
+  attachRulesPanelListeners(container) {
+    const panel = container?.querySelector('.rules-panel');
     if (!panel) return;
 
     // Sub-tab switching
@@ -1857,6 +1934,30 @@ export class ConfigModal {
         }
       });
     });
+
+    // Raw textarea change: keep the structured rules in step with raw edits so
+    // later passes (auto-organize on save, visual edits) don't overwrite them
+    const textarea = panel.querySelector('#config-rulesConfig');
+    if (textarea) {
+      textarea.addEventListener('change', (e) => {
+        this.pendingChanges['rulesConfig'] = e.target.value;
+        this.parsedRules = this.parseRules(e.target.value);
+      });
+    }
+  }
+
+  /**
+   * Attach event listeners for the visual rule editor. Called after every
+   * re-render of the visual editor, so it only binds elements inside
+   * .rules-visual (which are freshly created each time).
+   * @param {HTMLElement} modal - The modal element (defaults to this.modalEl)
+   */
+  attachRulesEventListeners(modal = null) {
+    const container = modal || this.modalEl;
+    if (!container) return;
+
+    const panel = container.querySelector('.rules-panel .rules-visual');
+    if (!panel) return;
 
     // Category toggle (collapse/expand)
     panel.querySelectorAll('.rules-category-toggle').forEach(btn => {
@@ -1892,12 +1993,6 @@ export class ConfigModal {
       });
     });
 
-    // Close color dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('.rules-color-picker')) {
-        panel.querySelectorAll('.rules-color-dropdown.open').forEach(d => d.classList.remove('open'));
-      }
-    }, { once: true });
 
     // Category name change
     panel.querySelectorAll('.rules-category-name').forEach(input => {
@@ -2087,7 +2182,7 @@ export class ConfigModal {
         // Remove unsaved flag from this rule
         delete this.parsedRules[catIndex].rules[ruleIndex]._unsaved;
         // Re-organize if enabled
-        if (this.config.get('autoOrganizeRules')) {
+        if (this.isAutoOrganizeEnabled()) {
           this.organizeRulesInCategory(catIndex);
         }
         this.syncVisualToRaw(true); // Skip auto-organize since we just did it
@@ -2165,14 +2260,6 @@ export class ConfigModal {
         this.refreshVisualEditor();
       });
     });
-
-    // Raw textarea change
-    const textarea = panel.querySelector('#config-rulesConfig');
-    if (textarea) {
-      textarea.addEventListener('change', (e) => {
-        this.pendingChanges['rulesConfig'] = e.target.value;
-      });
-    }
   }
 
   switchTab(tabName) {
@@ -2188,10 +2275,6 @@ export class ConfigModal {
       panel.classList.toggle('active', panel.dataset.panel === tabName);
     });
 
-    // Attach event listeners for special panels
-    if (tabName === 'Timeouts') {
-      this.attachTimeoutsEventListeners();
-    }
   }
 
   handleInputChange(e) {
@@ -2251,7 +2334,7 @@ export class ConfigModal {
   save() {
     // Clear unsaved flags from rules and re-organize if enabled
     this.clearAllUnsavedFlags();
-    if (this.config.get('autoOrganizeRules')) {
+    if (this.isAutoOrganizeEnabled()) {
       this.organizeAllRules();
       this.syncVisualToRaw(true); // Skip auto-organize since we just did it
     }
@@ -2271,28 +2354,27 @@ export class ConfigModal {
   }
 
   resetToDefaults() {
-    if (!confirm('Reset all settings to defaults? This cannot be undone.')) {
+    if (!confirm('Reset all settings to defaults? Changes are not applied until you click Save.')) {
       return;
     }
 
-    // Reset all fields to defaults
+    // Stage defaults in the form only; they are persisted by save() and
+    // discarded if the modal is cancelled/closed
     Object.entries(CONFIG_SCHEMA).forEach(([, schema]) => {
       Object.entries(schema.fields).forEach(([key, field]) => {
-        this.config.set(key, field.default);
         this.pendingChanges[key] = field.default;
       });
     });
 
-    // Re-render panels to show reset values
+    // Re-render panels to show reset values (renderers read pending values)
     const panelsContainer = this.modalEl.querySelector('.config-modal-panels');
     panelsContainer.innerHTML = this.renderPanels();
 
-    // Re-attach input handlers
-    this.modalEl.querySelectorAll('input, select, textarea').forEach((input) => {
-      input.addEventListener('change', (e) => this.handleInputChange(e));
-    });
+    // Re-attach all panel handlers to the freshly rendered controls
+    this.attachPanelListeners(this.modalEl);
+    this.refreshVisualEditor();
 
-    announceToScreenReader('Settings reset to defaults.');
+    announceToScreenReader('Settings reset to defaults. Click Save to apply.');
   }
 
   escapeHtml(text) {

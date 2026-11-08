@@ -22,8 +22,7 @@ export default defineConfig((config) => {
             match: "https://bsky.app/*",
             require: [
                 "https://code.jquery.com/jquery-3.7.1.min.js",
-                "https://raw.githubusercontent.com/sizzlemctwizzle/GM_config/refs/heads/master/gm_config.js",
-                "https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"
+                "https://code.jquery.com/ui/1.14.2/jquery-ui.min.js"
             ],
             downloadURL: "https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/dist/bluesky-navigator.user.js",
             updateURL: "https://github.com/tonycpsu/bluesky-navigator/raw/refs/heads/main/dist/bluesky-navigator.user.js",

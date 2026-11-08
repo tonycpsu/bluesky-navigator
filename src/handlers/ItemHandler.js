@@ -6072,8 +6072,9 @@ export class ItemHandler extends Handler {
       }
       // Trigger async fetch if not cached
       if (result === undefined) {
-        this.state.listCache.getMembers(backingList).then(() => {
-          this.scheduleHighlightRefresh();
+        this.state.listCache.getMembers(backingList).then((members) => {
+          // Skip on failure - ListCache backs off, and refreshing would just re-trigger this
+          if (members) this.scheduleHighlightRefresh();
         });
       }
     }
@@ -6099,8 +6100,8 @@ export class ItemHandler extends Handler {
         }
         // If result is undefined (not cached), trigger a fetch and refresh when done
         if (result === undefined && this.state.listCache) {
-          this.state.listCache.getMembers(rule.value).then(() => {
-            this.scheduleHighlightRefresh();
+          this.state.listCache.getMembers(rule.value).then((members) => {
+            if (members) this.scheduleHighlightRefresh();
           });
         }
       }

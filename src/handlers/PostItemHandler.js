@@ -51,7 +51,7 @@ export class PostItemHandler extends ItemHandler {
 
     const item = this.selectedItem;
 
-    if (['o', 'Enter'].includes(event.key) && !(event.altKey || event.metaKey)) {
+    if (['o', 'Enter'].includes(event.key) && !(event.altKey || event.metaKey || event.ctrlKey)) {
       const inner = $(item).find("div[aria-label^='Post by']");
       inner.click();
     }
@@ -60,7 +60,7 @@ export class PostItemHandler extends ItemHandler {
       return;
     }
 
-    if (this.isPopupVisible || event.altKey || event.metaKey) {
+    if (this.isPopupVisible || event.altKey || event.metaKey || event.ctrlKey) {
       return;
     }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+657.64dff243
+// @version     1.0.31+658.18cb6dab
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -47788,7 +47788,7 @@ if (cid) {
       this.syncVisualToRaw();
       const newRulesConfig = this.pendingChanges["rulesConfig"];
       this.config.set("rulesConfig", newRulesConfig);
-      state.rulesConfig = newRulesConfig;
+      state.stateManager.updateState({ rulesConfig: newRulesConfig });
       this.refreshVisualEditor();
     }
     /**
@@ -47942,7 +47942,7 @@ if (cid) {
       this.syncVisualToRaw();
       const newRulesConfig = this.pendingChanges["rulesConfig"];
       this.config.set("rulesConfig", newRulesConfig);
-      state.rulesConfig = newRulesConfig;
+      state.stateManager.updateState({ rulesConfig: newRulesConfig });
       this.refreshVisualEditor();
     }
     /**
@@ -55387,6 +55387,9 @@ div#statusBar.has-feed-map {
       }
       announceToScreenReader$2("Keyboard shortcuts dialog opened. Press Escape to close.");
       this.ignoreNextQuestionMark = true;
+      if (this.escapeHandler) {
+        document.removeEventListener("keydown", this.escapeHandler, true);
+      }
       this.escapeHandler = (e) => {
         if (this.ignoreNextQuestionMark && e.key === "?") {
           this.ignoreNextQuestionMark = false;
@@ -55419,7 +55422,10 @@ div#statusBar.has-feed-map {
           this.previousActiveElement.focus();
         }
       }, animDuration);
-      document.removeEventListener("keydown", this.escapeHandler);
+      if (this.escapeHandler) {
+        document.removeEventListener("keydown", this.escapeHandler, true);
+        this.escapeHandler = null;
+      }
       announceToScreenReader$2("Keyboard shortcuts dialog closed.");
     }
     /**
@@ -64711,7 +64717,17 @@ div#statusBar.has-feed-map {
     isActive() {
       return false;
     }
+    /**
+     * Whether this is the item handler main.js most recently activated. All handler
+     * instances exist at once, so shared listeners (sidecar toggle, feed tabs) use
+     * this to make sure only one instance acts. Unlike isActive(), it isn't fooled by
+     * overlapping URLs (/profile/x/post/y) and survives the transient 'input' context.
+     */
+    isCurrentHandler() {
+      return ItemHandler.currentHandler === this;
+    }
     activate() {
+      ItemHandler.currentHandler = this;
       this.keyState = [];
       this.popupObserver = waitForElement$2(
         this.POPUP_MENU_SELECTOR,
@@ -65081,6 +65097,19 @@ div#statusBar.has-feed-map {
     }
     set threadIndex(value) {
       const posts = this.getUnrolledThreadPosts();
+      if (value == null) {
+        if (this._threadIndex != null) {
+          this.getThreadNavList().clearSelection();
+          $(this.selectedItem).addClass("item-selection-active");
+          $(this.selectedItem).removeClass("item-selection-child-focused");
+        }
+        this._threadIndex = null;
+        this.updateInfoIndicator();
+        if (this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible")) {
+          this.updateSidecarConnector();
+        }
+        return;
+      }
       if (value < 0) {
         if (this._threadIndex != null) {
           this.getThreadNavList().clearSelection();
@@ -65104,19 +65133,6 @@ div#statusBar.has-feed-map {
         this.setIndex(this.index + 1, false, false);
         if (!this.isElementFullyVisible(this.selectedItem)) {
           this.scrollElementIntoView(this.selectedItem[0], 1);
-        }
-        return;
-      }
-      if (value == null) {
-        if (this._threadIndex != null) {
-          this.getThreadNavList().clearSelection();
-          $(this.selectedItem).addClass("item-selection-active");
-          $(this.selectedItem).removeClass("item-selection-child-focused");
-        }
-        this._threadIndex = null;
-        this.updateInfoIndicator();
-        if (this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible")) {
-          this.updateSidecarConnector();
         }
         return;
       }
@@ -65368,12 +65384,17 @@ div#statusBar.has-feed-map {
         this.config.save();
         this.hideFixedSidecarPanel();
       });
-      $(document).on("click", "#fixed-sidecar-toggle", async (e) => {
+      const ns = `fixedSidecar-${this.name}`;
+      $(document).off(`click.${ns}`);
+      $(document).on(`click.${ns}`, "#fixed-sidecar-toggle", async (e) => {
+        if (!this.isCurrentHandler()) return;
         e.preventDefault();
         e.stopPropagation();
         await this.openFixedSidecarPanel();
       });
-      $(window).on("resize.fixedSidecar", () => {
+      $(window).off(`resize.${ns}`);
+      $(window).on(`resize.${ns}`, () => {
+        if (!this.isCurrentHandler()) return;
         if ($("#fixed-sidecar-panel").hasClass("visible")) {
           this.positionFixedSidecarPanel();
         }
@@ -65949,7 +65970,7 @@ div#statusBar.has-feed-map {
         return event.key;
       } else if (this.handleItemKey(event)) {
         return event.key;
-      } else if (event.key == "U") {
+      } else if (event.key == "U" && !event.ctrlKey && !event.metaKey) {
         this.loadOlderItems();
       } else {
         return super.handleInput(event);
@@ -65959,13 +65980,13 @@ div#statusBar.has-feed-map {
       if (this.isPopupVisible) {
         return false;
       }
-      if (event.altKey && !event.metaKey) {
+      if (event.ctrlKey || event.metaKey) {
+        return false;
+      }
+      if (event.altKey) {
         return this.handleRuleShortcut(event);
       }
-      if (!event.metaKey) {
-        return this.handleItemAction(event);
-      }
-      return false;
+      return this.handleItemAction(event);
     }
     handleRuleShortcut(event) {
       if (!event.code.startsWith("Digit")) {
@@ -66080,12 +66101,26 @@ div#statusBar.has-feed-map {
       if (this.isPopupVisible) {
         return;
       }
+      if (event.ctrlKey || event.metaKey) {
+        return;
+      }
       this.ignoreMouseMovement = true;
       this.userInitiatedScroll = false;
       const pageKeysEnabled = this.config.get("enablePageKeys");
       ["PageDown", "PageUp", "Home", "End"].includes(event.key);
       if (this.keyState.length == 0) {
-        const movementKeys = ["j", "k", "h", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "J", "G"];
+        const movementKeys = [
+          "j",
+          "k",
+          "h",
+          "ArrowDown",
+          "ArrowUp",
+          "ArrowLeft",
+          "ArrowRight",
+          "J",
+          "K",
+          "G"
+        ];
         if (pageKeysEnabled) {
           movementKeys.push("PageDown", "PageUp", "Home", "End");
         }
@@ -66177,16 +66212,16 @@ div#statusBar.has-feed-map {
               history.back(1);
             }
           } else if (event.key == "ArrowLeft") {
-            event.preventDefault();
-            if (!this.isSidecarNavigationAvailable() || this.replyIndex == null) {
+            if (event.altKey || !this.isSidecarNavigationAvailable() || this.replyIndex == null) {
               return;
             }
+            event.preventDefault();
             this.toggleFocus();
           } else if (event.key == "ArrowRight") {
-            event.preventDefault();
-            if (!this.isSidecarNavigationAvailable() || this.replyIndex != null) {
+            if (event.altKey || !this.isSidecarNavigationAvailable() || this.replyIndex != null) {
               return;
             }
+            event.preventDefault();
             this.toggleFocus();
           } else if (event.key == "G") {
             event.preventDefault();
@@ -68857,6 +68892,7 @@ div#statusBar.has-feed-map {
       if (this.state.parseRulesConfig) {
         this.state.rules = this.state.parseRulesConfig(newConfig);
       }
+      this.state.stateManager?.updateState({ rulesConfig: newConfig });
     }
     /**
      * Add an author to a Bluesky list
@@ -69882,7 +69918,9 @@ ${rule}`;
       const rulesConfig = this.config.get("rulesConfig") || "";
       if (this.state && this.state.rules !== void 0) {
         this.state.rules = this.parseRulesForState(rulesConfig);
-        this.state.rulesConfig = rulesConfig;
+        if (this.state.rulesConfig !== rulesConfig) {
+          this.state.stateManager?.updateState({ rulesConfig });
+        }
       }
       if (this.items && this.items.length) {
         for (let i = 0; i < this.items.length; i++) {
@@ -70721,6 +70759,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
      * Resets the feed map and reloads items from DOM.
      */
     onFeedChange() {
+      if (!this.isCurrentHandler()) {
+        return;
+      }
       this.perfLog("onFeedChange");
       this.showFeedLoading();
       if (this.feedMap && this.feedMap.length) {
@@ -71364,7 +71405,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       if (this.state.filter) {
         this.updateFilterPill();
-        this.filterItems();
+        try {
+          this.filterItems();
+        } catch (e) {
+          console.error("[BskyNav] Failed to apply saved filter:", e);
+        }
       }
       this.fetchRepostTimestamps();
       this._scrollHandler = this._throttledScrollUpdate.bind(this);
@@ -71415,7 +71460,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.toolbarDiv = null;
       }
       if (this.statusBar) {
-        this.statusBar.remove();
+        if (this.uiManagerStatusBar && this.statusBar[0] === this.uiManagerStatusBar[0]) {
+          this.statusBar.find(".feed-map-wrapper").remove();
+          this.statusBar.removeClass("has-feed-map");
+        } else {
+          this.statusBar.remove();
+        }
         this.statusBar = null;
       }
       this.statusBarLeft = null;
@@ -71881,12 +71931,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     parseFilterRules(filterText) {
       return filterText.split(/[ ]+/).map((ruleStatement) => {
         const match2 = ruleStatement.match(/(!)?([$@%&])?"?([^"]+)"?/);
+        if (!match2) {
+          return null;
+        }
         return {
           invert: match2[1] === "!",
           matchType: match2[2] || null,
           query: match2[3]
         };
-      });
+      }).filter(Boolean);
     }
     /**
      * Evaluates a single filter rule against an item.
@@ -72015,16 +72068,28 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return this.getHandleForFilter(item);
     }
     /**
+     * Builds a case-insensitive pattern for a filter/rule term. Terms may be regexes
+     * (the rules editor advertises "keyword or regex"); if a term isn't a valid regex
+     * (e.g. `c++` or `(`), match it literally instead of throwing.
+     */
+    buildFilterPattern(text) {
+      try {
+        return new RegExp(text, "i");
+      } catch {
+        return new RegExp(this.escapeRegex(String(text)), "i");
+      }
+    }
+    /**
      * Checks if an item's author matches a pattern.
      */
     filterAuthor(item, author) {
-      const pattern = new RegExp(author, "i");
+      const pattern = this.buildFilterPattern(author);
       const handle2 = this.getHandleForFilter(item);
       const displayName = this.displayNameFromItem(item);
       return pattern.test(handle2) || pattern.test(displayName);
     }
     filterContent(item, query) {
-      const pattern = new RegExp(query, "i");
+      const pattern = this.buildFilterPattern(query);
       const content = $(item).find('div[data-testid="postText"]').text();
       return pattern.test(content);
     }
@@ -73519,6 +73584,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (isModalOpen()) {
         return true;
       }
+      if (event.ctrlKey || event.metaKey) {
+        return super.handleInput(event);
+      }
       const item = this.selectedItem;
       if (event.key == "A") {
         $(item).find(constants.PROFILE_SELECTOR)[0].click();
@@ -73574,14 +73642,14 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return true;
       }
       const item = this.selectedItem;
-      if (["o", "Enter"].includes(event.key) && !(event.altKey || event.metaKey)) {
+      if (["o", "Enter"].includes(event.key) && !(event.altKey || event.metaKey || event.ctrlKey)) {
         const inner = $(item).find("div[aria-label^='Post by']");
         inner.click();
       }
       if (super.handleInput(event)) {
         return;
       }
-      if (this.isPopupVisible || event.altKey || event.metaKey) {
+      if (this.isPopupVisible || event.altKey || event.metaKey || event.ctrlKey) {
         return;
       }
       if (event.key == "A") {
@@ -73929,7 +73997,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (super.handleInput(event)) {
         return;
       }
-      if (event.altKey || event.metaKey) {
+      if (event.altKey || event.metaKey || event.ctrlKey) {
         return;
       }
       if (event.key == "f") {
@@ -74747,6 +74815,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           continue;
         }
         if (!rulesName) continue;
+        const allMatch = line.match(/^(allow|deny)\s+all$/);
+        if (allMatch) {
+          rules[rulesName].push({ action: allMatch[1], type: "all", value: "" });
+          continue;
+        }
         const ruleMatch = line.match(/(allow|deny) (all|from|content|include|list) "?([^"]+)"?/);
         if (ruleMatch) {
           const [_, action, type, value] = ruleMatch;
@@ -74781,6 +74854,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       state.init(constants.STATE_KEY, stateManagerConfig, onStateInit);
     }
     function onConfigSave() {
+      const savedRulesConfig = config.get("rulesConfig");
+      if (state.rulesConfig !== savedRulesConfig) {
+        state.stateManager.updateState({ rulesConfig: savedRulesConfig });
+      }
       state.stateManager.saveStateImmediately(true, true);
       updateContentWidth();
       if (config.get("toastNotifications")) {

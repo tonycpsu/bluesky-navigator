@@ -74,6 +74,10 @@ export class FeedItemHandler extends ItemHandler {
    * Resets the feed map and reloads items from DOM.
    */
   onFeedChange() {
+    // Profile/Saved inherit the feed-tab observers; only the current handler reloads
+    if (!this.isCurrentHandler()) {
+      return;
+    }
     this.perfLog('onFeedChange');
     // Show loading indicator (CSS class hides items)
     this.showFeedLoading();
@@ -948,7 +952,12 @@ export class FeedItemHandler extends ItemHandler {
     // Restore filter pill and apply filter if one was saved
     if (this.state.filter) {
       this.updateFilterPill();
-      this.filterItems();
+      // A persisted filter must never abort activation (listeners/intervals below)
+      try {
+        this.filterItems();
+      } catch (e) {
+        console.error('[BskyNav] Failed to apply saved filter:', e);
+      }
     }
 
     // Fetch repost timestamps from AT Protocol API (if available)
@@ -1031,7 +1040,14 @@ export class FeedItemHandler extends ItemHandler {
       this.toolbarDiv = null;
     }
     if (this.statusBar) {
-      this.statusBar.remove();
+      if (this.uiManagerStatusBar && this.statusBar[0] === this.uiManagerStatusBar[0]) {
+        // Profile/Saved borrow UIManager's global status bar - don't remove it (that
+        // strips its jQuery handlers); only remove the feed map they added to it
+        this.statusBar.find('.feed-map-wrapper').remove();
+        this.statusBar.removeClass('has-feed-map');
+      } else {
+        this.statusBar.remove();
+      }
       this.statusBar = null;
     }
     // Clear status bar section references so they get re-created on activate
@@ -1611,14 +1627,21 @@ export class FeedItemHandler extends ItemHandler {
    * @private
    */
   parseFilterRules(filterText) {
-    return filterText.split(/[ ]+/).map((ruleStatement) => {
-      const match = ruleStatement.match(/(!)?([$@%&])?"?([^"]+)"?/);
-      return {
-        invert: match[1] === '!',
-        matchType: match[2] || null,
-        query: match[3],
-      };
-    });
+    return filterText
+      .split(/[ ]+/)
+      .map((ruleStatement) => {
+        const match = ruleStatement.match(/(!)?([$@%&])?"?([^"]+)"?/);
+        // No match for empty terms or bare quotes (e.g. a lone `"`) - skip the term
+        if (!match) {
+          return null;
+        }
+        return {
+          invert: match[1] === '!',
+          matchType: match[2] || null,
+          query: match[3],
+        };
+      })
+      .filter(Boolean);
   }
 
   /**
@@ -1778,17 +1801,30 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   /**
+   * Builds a case-insensitive pattern for a filter/rule term. Terms may be regexes
+   * (the rules editor advertises "keyword or regex"); if a term isn't a valid regex
+   * (e.g. `c++` or `(`), match it literally instead of throwing.
+   */
+  buildFilterPattern(text) {
+    try {
+      return new RegExp(text, 'i');
+    } catch {
+      return new RegExp(this.escapeRegex(String(text)), 'i');
+    }
+  }
+
+  /**
    * Checks if an item's author matches a pattern.
    */
   filterAuthor(item, author) {
-    const pattern = new RegExp(author, 'i');
+    const pattern = this.buildFilterPattern(author);
     const handle = this.getHandleForFilter(item);
     const displayName = this.displayNameFromItem(item);
     return pattern.test(handle) || pattern.test(displayName);
   }
 
   filterContent(item, query) {
-    const pattern = new RegExp(query, 'i');
+    const pattern = this.buildFilterPattern(query);
     const content = $(item).find('div[data-testid="postText"]').text();
     return pattern.test(content);
   }
@@ -3882,6 +3918,11 @@ export class FeedItemHandler extends ItemHandler {
     // Skip processing when a modal dialog is open
     if (utils.isModalOpen()) {
       return true;
+    }
+
+    // No feed shortcut uses Ctrl/Cmd (e.g. Ctrl+A select all, Ctrl+U); leave them to the browser
+    if (event.ctrlKey || event.metaKey) {
+      return super.handleInput(event);
     }
 
     const item = this.selectedItem;

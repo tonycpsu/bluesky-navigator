@@ -2726,8 +2726,9 @@ export class ConfigModal {
     this.syncVisualToRaw();
     const newRulesConfig = this.pendingChanges['rulesConfig'];
     this.config.set('rulesConfig', newRulesConfig);
-    // Also update state.rulesConfig so remote sync doesn't overwrite on reload
-    state.rulesConfig = newRulesConfig;
+    // Also update state.rulesConfig (via updateState so it persists/syncs) so
+    // main.js doesn't overwrite config with a stale copy on reload
+    state.stateManager.updateState({ rulesConfig: newRulesConfig });
     this.refreshVisualEditor();
   }
 
@@ -2914,8 +2915,9 @@ export class ConfigModal {
     this.syncVisualToRaw();
     const newRulesConfig = this.pendingChanges['rulesConfig'];
     this.config.set('rulesConfig', newRulesConfig);
-    // Also update state.rulesConfig so remote sync doesn't overwrite on reload
-    state.rulesConfig = newRulesConfig;
+    // Also update state.rulesConfig (via updateState so it persists/syncs) so
+    // main.js doesn't overwrite config with a stale copy on reload
+    state.stateManager.updateState({ rulesConfig: newRulesConfig });
     this.refreshVisualEditor();
   }
 

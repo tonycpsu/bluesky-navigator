@@ -182,7 +182,10 @@ export class ShortcutOverlay {
     // Ignore the '?' key that opened this overlay (but allow Escape immediately)
     this.ignoreNextQuestionMark = true;
 
-    // Add escape listener
+    // Add escape listener (drop any stale one first so handlers never stack)
+    if (this.escapeHandler) {
+      document.removeEventListener('keydown', this.escapeHandler, true);
+    }
     this.escapeHandler = (e) => {
       // Skip if this is the same '?' keydown that opened the overlay
       if (this.ignoreNextQuestionMark && e.key === '?') {
@@ -223,7 +226,11 @@ export class ShortcutOverlay {
       }
     }, animDuration);
 
-    document.removeEventListener('keydown', this.escapeHandler);
+    // Must pass capture=true to match the addEventListener call in show()
+    if (this.escapeHandler) {
+      document.removeEventListener('keydown', this.escapeHandler, true);
+      this.escapeHandler = null;
+    }
     announceToScreenReader('Keyboard shortcuts dialog closed.');
   }
 

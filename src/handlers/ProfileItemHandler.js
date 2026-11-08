@@ -350,7 +350,7 @@ export class ProfileItemHandler extends FeedItemHandler {
     if (super.handleInput(event)) {
       return;
     }
-    if (event.altKey || event.metaKey) {
+    if (event.altKey || event.metaKey || event.ctrlKey) {
       return;
     }
     if (event.key == 'f') {

@@ -1,8 +1,8 @@
 // utils.js
 
-let debounceTimeout;
-
 export function debounce(func, delay) {
+  // Per-function timer so separate debounced functions don't cancel each other
+  let debounceTimeout;
   return function (...args) {
     clearTimeout(debounceTimeout);
     debounceTimeout = setTimeout(() => func.apply(this, args), delay);

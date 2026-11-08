@@ -22,6 +22,7 @@ export class GestureHandler {
     this.handleTouchStart = this.handleTouchStart.bind(this);
     this.handleTouchMove = this.handleTouchMove.bind(this);
     this.handleTouchEnd = this.handleTouchEnd.bind(this);
+    this.handleTouchCancel = this.handleTouchCancel.bind(this);
   }
 
   /**
@@ -33,6 +34,7 @@ export class GestureHandler {
     item.addEventListener('touchstart', this.handleTouchStart, { passive: true });
     item.addEventListener('touchmove', this.handleTouchMove, { passive: false });
     item.addEventListener('touchend', this.handleTouchEnd, { passive: true });
+    item.addEventListener('touchcancel', this.handleTouchCancel, { passive: true });
   }
 
   /**
@@ -44,6 +46,7 @@ export class GestureHandler {
     item.removeEventListener('touchstart', this.handleTouchStart);
     item.removeEventListener('touchmove', this.handleTouchMove);
     item.removeEventListener('touchend', this.handleTouchEnd);
+    item.removeEventListener('touchcancel', this.handleTouchCancel);
   }
 
   handleTouchStart(e) {
@@ -116,6 +119,20 @@ export class GestureHandler {
     this.isHorizontalSwipe = null;
   }
 
+  /**
+   * Touch interrupted (e.g. by the browser taking over scrolling): undo any
+   * in-progress swipe feedback without triggering an action.
+   */
+  handleTouchCancel() {
+    if (!this.activeElement) return;
+
+    this.activeElement.style.transition = '';
+    this.activeElement.style.transform = '';
+    this.removeSwipeIndicators();
+    this.activeElement = null;
+    this.isHorizontalSwipe = null;
+  }
+
   onSwipeRight() {
     // Like the post
     if (this.itemHandler && this.itemHandler.likePost) {
@@ -127,19 +144,21 @@ export class GestureHandler {
   onSwipeLeft() {
     // Mark as read and jump to next
     if (this.itemHandler) {
-      $(this.activeElement).removeClass('item-unread').addClass('item-read');
-      this.itemHandler.markItemRead(this.activeElement);
+      // Capture now: handleTouchEnd clears activeElement before the timeout fires
+      const element = this.activeElement;
+      $(element).removeClass('item-unread').addClass('item-read');
+      this.itemHandler.markItemRead(element);
 
       // Animate out and jump to next
       const animDuration = getAnimationDuration(200, this.config);
-      $(this.activeElement).css({
+      $(element).css({
         transition: `transform ${animDuration}ms ease-out, opacity ${animDuration}ms ease-out`,
         transform: 'translateX(-100%)',
         opacity: 0
       });
 
       setTimeout(() => {
-        $(this.activeElement).css({
+        $(element).css({
           transform: '',
           opacity: ''
         });

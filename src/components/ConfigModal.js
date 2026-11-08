@@ -1793,7 +1793,8 @@ export class ConfigModal {
    */
   getColorIndexForCategory(categoryName) {
     try {
-      const rulesetColors = JSON.parse(this.config.get('rulesetColors') || '{}');
+      // Read the staged value so an unsaved colour choice shows in the editor
+      const rulesetColors = JSON.parse(this.getValue('rulesetColors') || '{}');
       if (categoryName in rulesetColors) {
         return rulesetColors[categoryName] % constants.FILTER_LIST_COLORS.length;
       }
@@ -1815,17 +1816,16 @@ export class ConfigModal {
    * @param {number} colorIndex - The color index
    */
   setColorForCategory(categoryName, colorIndex) {
+    // Stage only; save() applies pendingChanges and cancel discards them
+    let rulesetColors;
     try {
-      const rulesetColors = JSON.parse(this.config.get('rulesetColors') || '{}');
-      rulesetColors[categoryName] = colorIndex;
-      this.config.set('rulesetColors', JSON.stringify(rulesetColors));
-      this.pendingChanges['rulesetColors'] = JSON.stringify(rulesetColors);
+      rulesetColors = JSON.parse(this.getValue('rulesetColors') || '{}');
     } catch (e) {
       // Invalid JSON, create new
-      const rulesetColors = { [categoryName]: colorIndex };
-      this.config.set('rulesetColors', JSON.stringify(rulesetColors));
-      this.pendingChanges['rulesetColors'] = JSON.stringify(rulesetColors);
+      rulesetColors = {};
     }
+    rulesetColors[categoryName] = colorIndex;
+    this.pendingChanges['rulesetColors'] = JSON.stringify(rulesetColors);
   }
 
   /**

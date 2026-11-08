@@ -33,7 +33,7 @@ GM_addStyle(style);
 // Show fullscreen loading indicator immediately on first load
 // Check config from GM storage (default to true if not set)
 const storedConfig = JSON.parse(GM_getValue('bluesky_navigator_config', '{}'));
-const showLoadingIndicator = storedConfig.showLoadingIndicator === true; // default false
+const showLoadingIndicator = storedConfig.showLoadingIndicator !== false; // schema default true
 if (showLoadingIndicator) {
   // Add class to enable CSS hiding of items
   const addLoadingClass = () => document.body.classList.add('bsky-nav-loading-enabled');
@@ -267,6 +267,7 @@ function getScreenFromElement(element) {
       stateSaveTimeout: config.get('stateSaveTimeout'),
       stateSyncTimeout: config.get('stateSyncTimeout'),
       maxEntries: config.get('historyMax'),
+      clearskyEnabled: config.get('clearskyEnabled'),
     };
 
     // Update the IntersectionObserver proxy with the config value
@@ -286,6 +287,8 @@ function getScreenFromElement(element) {
       state.stateManager.updateState({ rulesConfig: savedRulesConfig });
     }
     state.stateManager.saveStateImmediately(true, true);
+    // Fetch Clearsky block lists if just enabled (no-op if disabled or cache is fresh)
+    state.stateManager.updateBlockList(config.get('clearskyEnabled'));
     // Update content width dynamically
     updateContentWidth();
     // Recreate toast container with new position
@@ -968,7 +971,9 @@ function getScreenFromElement(element) {
         config.get('atprotoPassword')
       );
       // FIXME: async race condition
-      api.login();
+      api.login().catch((error) => {
+        console.warn('Bluesky API login failed:', error);
+      });
 
       async function loadSidecarTemplate(selector, html) {
         try {

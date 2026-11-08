@@ -76,6 +76,21 @@ export class BlueskyAPI {
     }
   }
 
+  /**
+   * Return the logged-in user's DID, or throw a clear error if not logged in.
+   * @returns {string} DID of the logged-in user
+   * @throws {Error} If there is no active session
+   */
+  requireSession() {
+    const did = this.agent?.session?.did;
+    if (!did) {
+      const error = new Error('Not logged in to Bluesky API');
+      error.isNotLoggedIn = true;
+      throw error;
+    }
+    return did;
+  }
+
   async login() {
     // Return existing pending login to avoid concurrent attempts
     if (this.pendingLogin) {
@@ -119,11 +134,6 @@ export class BlueskyAPI {
     })();
 
     return this.pendingLogin;
-  }
-
-  async getPost(_uri) {
-    // TODO: implement this method
-    const _res = await this.agent.getPostThread({ uri: 'at://...' });
   }
 
   async getTimeline(cursor = null, limit = 100) {
@@ -301,6 +311,9 @@ export class BlueskyAPI {
    * @returns {Promise<string>} URI of the created list
    */
   async createList(name, purpose = 'app.bsky.graph.defs#curatelist', description = '') {
+    this.checkRateLimit();
+    const repo = this.requireSession();
+
     const record = {
       $type: 'app.bsky.graph.list',
       name,
@@ -308,12 +321,16 @@ export class BlueskyAPI {
       description,
       createdAt: new Date().toISOString(),
     };
-    const { data } = await this.agent.com.atproto.repo.createRecord({
-      repo: this.agent.session.did,
-      collection: 'app.bsky.graph.list',
-      record,
-    });
-    return data.uri;
+    try {
+      const { data } = await this.agent.com.atproto.repo.createRecord({
+        repo,
+        collection: 'app.bsky.graph.list',
+        record,
+      });
+      return data.uri;
+    } catch (error) {
+      this.handleApiError(error);
+    }
   }
 
   /**
@@ -323,18 +340,25 @@ export class BlueskyAPI {
    * @returns {Promise<string>} URI of the list item record
    */
   async addToList(listUri, subjectDid) {
+    this.checkRateLimit();
+    const repo = this.requireSession();
+
     const record = {
       $type: 'app.bsky.graph.listitem',
       list: listUri,
       subject: subjectDid,
       createdAt: new Date().toISOString(),
     };
-    const { data } = await this.agent.com.atproto.repo.createRecord({
-      repo: this.agent.session.did,
-      collection: 'app.bsky.graph.listitem',
-      record,
-    });
-    return data.uri;
+    try {
+      const { data } = await this.agent.com.atproto.repo.createRecord({
+        repo,
+        collection: 'app.bsky.graph.listitem',
+        record,
+      });
+      return data.uri;
+    } catch (error) {
+      this.handleApiError(error);
+    }
   }
 
   /**
@@ -351,11 +375,18 @@ export class BlueskyAPI {
     }
     const [, repo, collection, rkey] = match;
 
-    await this.agent.com.atproto.repo.deleteRecord({
-      repo,
-      collection,
-      rkey,
-    });
+    this.checkRateLimit();
+    this.requireSession();
+
+    try {
+      await this.agent.com.atproto.repo.deleteRecord({
+        repo,
+        collection,
+        rkey,
+      });
+    } catch (error) {
+      this.handleApiError(error);
+    }
   }
 
   /**
@@ -382,13 +413,6 @@ export class BlueskyAPI {
       console.warn(`Failed to resolve handle ${cleanHandle}:`, error);
       return null;
     }
-  }
-
-  async getReplies(uri) {
-    const thread = this.getThread(uri);
-    return thread.replies.map((i, reply) => {
-      return reply.post.record.text;
-    });
   }
 
   /**
@@ -421,9 +445,16 @@ export class BlueskyAPI {
    * @param {string} seenAt - ISO timestamp to mark as seen up to (defaults to current time)
    */
   async markNotificationsSeen(seenAt = null) {
+    this.checkRateLimit();
+    this.requireSession();
+
     const timestamp = seenAt || new Date().toISOString();
-    // Use direct XRPC call instead of agent wrapper
-    await this.agent.api.app.bsky.notification.updateSeen({ seenAt: timestamp });
+    try {
+      // Use direct XRPC call instead of agent wrapper
+      await this.agent.api.app.bsky.notification.updateSeen({ seenAt: timestamp });
+    } catch (error) {
+      this.handleApiError(error);
+    }
   }
 
   /**
@@ -432,8 +463,15 @@ export class BlueskyAPI {
    * @returns {Promise<{uri: string, cid: string}>} The follow record info
    */
   async follow(did) {
-    const { uri, cid } = await this.agent.follow(did);
-    return { uri, cid };
+    this.checkRateLimit();
+    this.requireSession();
+
+    try {
+      const { uri, cid } = await this.agent.follow(did);
+      return { uri, cid };
+    } catch (error) {
+      this.handleApiError(error);
+    }
   }
 
   /**
@@ -442,7 +480,14 @@ export class BlueskyAPI {
    * @returns {Promise<void>}
    */
   async unfollow(followUri) {
-    await this.agent.deleteFollow(followUri);
+    this.checkRateLimit();
+    this.requireSession();
+
+    try {
+      await this.agent.deleteFollow(followUri);
+    } catch (error) {
+      this.handleApiError(error);
+    }
   }
 
   /**

@@ -1,7 +1,7 @@
 // StateManager.js
 import constants from './constants.js';
 
-const DEFAULT_HISTORY_MAX = 5000;
+const DEFAULT_HISTORY_MAX = constants.DEFAULT_HISTORY_MAX;
 // Debounce before pushing state to the remote server (config: stateSyncTimeout)
 const DEFAULT_SYNC_DELAY = 5000;
 // Continuous activity (e.g. j/k navigation) keeps resetting the debounce; never defer
@@ -243,10 +243,14 @@ export class StateManager {
 
   ensureBlockState() {
     if (!this.state.blocks) {
-      this.state.blocks = {
-        all: { updated: null, dids: [] },
-        recent: { updated: null, dids: [] },
-      };
+      this.state.blocks = {};
+    }
+    // Older saves stored these as arrays, whose `updated`/`dids` props JSON dropped
+    for (const key of ['all', 'recent']) {
+      const entry = this.state.blocks[key];
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        this.state.blocks[key] = { updated: null, dids: [] };
+      }
     }
     // Migrate old handles format to dids
     if (this.state.blocks.all && 'handles' in this.state.blocks.all) {
@@ -862,9 +866,13 @@ export class StateManager {
     }
   }
 
-  updateBlockList() {
+  /**
+   * Fetches the Clearsky block lists if stale (cached for CLEARSKY_LIST_REFRESH_INTERVAL).
+   * @param {boolean} enabled - Whether Clearsky is enabled (defaults to the init config)
+   */
+  updateBlockList(enabled = this.config.clearskyEnabled) {
     // Skip if Clearsky is disabled
-    if (this.config.get && !this.config.get('clearskyEnabled')) return;
+    if (!enabled) return;
 
     const blockConfig = {
       all: {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+661.23c55779
+// @version     1.0.31+662.30f5a14c
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -154,6 +154,7 @@
     CLEARSKY_BLOCKED_ALL_CSS: { "background-color": "#ff8080" },
     CLEARSKY_BLOCKED_RECENT_CSS: { "background-color": "#cc4040" },
     ITEM_SCROLL_MARGIN: 100,
+    DEFAULT_HISTORY_MAX: 5e3,
     SIDECAR_SVG_REPLY: `<svg fill="none" width="18" viewBox="0 0 24 24" height="18" style="color: rgb(111, 134, 159); pointer-events: none; flex-shrink: 0; display: block;"><path fill="hsl(211, 20%, 53%)" fill-rule="evenodd" clip-rule="evenodd" d="M2.002 6a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H12.28l-4.762 2.858A1 1 0 0 1 6.002 21v-2h-1a3 3 0 0 1-3-3V6Zm3-1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2a1 1 0 0 1 1 1v1.234l3.486-2.092a1 1 0 0 1 .514-.142h7a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-14Z"></path></svg>`,
     SIDECAR_SVG_REPOST: [
       `<svg fill="none" width="18" viewBox="0 0 24 24" height="18" style="color: rgb(111, 134, 159); flex-shrink: 0; display: block;"><path fill="hsl(211, 20%, 53%)" fill-rule="evenodd" clip-rule="evenodd" d="M17.957 2.293a1 1 0 1 0-1.414 1.414L17.836 5H6a3 3 0 0 0-3 3v3a1 1 0 1 0 2 0V8a1 1 0 0 1 1-1h11.836l-1.293 1.293a1 1 0 0 0 1.414 1.414l2.47-2.47a1.75 1.75 0 0 0 0-2.474l-2.47-2.47ZM20 12a1 1 0 0 1 1 1v3a3 3 0 0 1-3 3H6.164l1.293 1.293a1 1 0 1 1-1.414 1.414l-2.47-2.47a1.75 1.75 0 0 1 0-2.474l2.47-2.47a1 1 0 0 1 1.414 1.414L6.164 17H18a1 1 0 0 0 1-1v-3a1 1 0 0 1 1-1Z"></path></svg>`,
@@ -165,7 +166,7 @@
     ],
     WIDTH_OFFSET: 32
   };
-  const DEFAULT_HISTORY_MAX = 5e3;
+  const DEFAULT_HISTORY_MAX = constants.DEFAULT_HISTORY_MAX;
   const DEFAULT_SYNC_DELAY = 5e3;
   const MAX_SYNC_WAIT = 3e4;
   const REMOTE_REQUEST_TIMEOUT = 1e4;
@@ -339,10 +340,13 @@
     }
     ensureBlockState() {
       if (!this.state.blocks) {
-        this.state.blocks = {
-          all: { updated: null, dids: [] },
-          recent: { updated: null, dids: [] }
-        };
+        this.state.blocks = {};
+      }
+      for (const key of ["all", "recent"]) {
+        const entry = this.state.blocks[key];
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+          this.state.blocks[key] = { updated: null, dids: [] };
+        }
       }
       if (this.state.blocks.all && "handles" in this.state.blocks.all) {
         this.state.blocks.all.dids = [];
@@ -864,8 +868,12 @@
         console.warn("[Clearsky] couldn't fetch block list");
       }
     }
-    updateBlockList() {
-      if (this.config.get && !this.config.get("clearskyEnabled")) return;
+    /**
+     * Fetches the Clearsky block lists if stale (cached for CLEARSKY_LIST_REFRESH_INTERVAL).
+     * @param {boolean} enabled - Whether Clearsky is enabled (defaults to the init config)
+     */
+    updateBlockList(enabled = this.config.clearskyEnabled) {
+      if (!enabled) return;
       const blockConfig = {
         all: {
           url: "https://api.clearsky.services/api/v1/anon/lists/fun-facts",
@@ -894,7 +902,11 @@
     seen: {},
     lastUpdated: null,
     page: "home",
-    blocks: { all: [], recent: [] },
+    // Plain objects (not arrays) so `updated`/`dids` survive JSON persistence
+    blocks: {
+      all: { updated: null, dids: [] },
+      recent: { updated: null, dids: [] }
+    },
     feedSortReverse: false,
     feedHideRead: false,
     timeouts: {}
@@ -45140,6 +45152,20 @@ if (cid) {
         throw error;
       }
     }
+    /**
+     * Return the logged-in user's DID, or throw a clear error if not logged in.
+     * @returns {string} DID of the logged-in user
+     * @throws {Error} If there is no active session
+     */
+    requireSession() {
+      const did2 = this.agent?.session?.did;
+      if (!did2) {
+        const error = new Error("Not logged in to Bluesky API");
+        error.isNotLoggedIn = true;
+        throw error;
+      }
+      return did2;
+    }
     async login() {
       if (this.pendingLogin) {
         return this.pendingLogin;
@@ -45172,9 +45198,6 @@ if (cid) {
         }
       })();
       return this.pendingLogin;
-    }
-    async getPost(_uri) {
-      await this.agent.getPostThread({ uri: "at://..." });
     }
     async getTimeline(cursor = null, limit = 100) {
       this.checkRateLimit();
@@ -45323,6 +45346,8 @@ if (cid) {
      * @returns {Promise<string>} URI of the created list
      */
     async createList(name, purpose = "app.bsky.graph.defs#curatelist", description = "") {
+      this.checkRateLimit();
+      const repo = this.requireSession();
       const record2 = {
         $type: "app.bsky.graph.list",
         name,
@@ -45330,12 +45355,16 @@ if (cid) {
         description,
         createdAt: (/* @__PURE__ */ new Date()).toISOString()
       };
-      const { data } = await this.agent.com.atproto.repo.createRecord({
-        repo: this.agent.session.did,
-        collection: "app.bsky.graph.list",
-        record: record2
-      });
-      return data.uri;
+      try {
+        const { data } = await this.agent.com.atproto.repo.createRecord({
+          repo,
+          collection: "app.bsky.graph.list",
+          record: record2
+        });
+        return data.uri;
+      } catch (error) {
+        this.handleApiError(error);
+      }
     }
     /**
      * Adds a user to a list
@@ -45344,18 +45373,24 @@ if (cid) {
      * @returns {Promise<string>} URI of the list item record
      */
     async addToList(listUri, subjectDid) {
+      this.checkRateLimit();
+      const repo = this.requireSession();
       const record2 = {
         $type: "app.bsky.graph.listitem",
         list: listUri,
         subject: subjectDid,
         createdAt: (/* @__PURE__ */ new Date()).toISOString()
       };
-      const { data } = await this.agent.com.atproto.repo.createRecord({
-        repo: this.agent.session.did,
-        collection: "app.bsky.graph.listitem",
-        record: record2
-      });
-      return data.uri;
+      try {
+        const { data } = await this.agent.com.atproto.repo.createRecord({
+          repo,
+          collection: "app.bsky.graph.listitem",
+          record: record2
+        });
+        return data.uri;
+      } catch (error) {
+        this.handleApiError(error);
+      }
     }
     /**
      * Removes a user from a list
@@ -45368,11 +45403,17 @@ if (cid) {
         throw new Error(`Invalid listitem URI: ${listitemUri}`);
       }
       const [, repo, collection, rkey] = match2;
-      await this.agent.com.atproto.repo.deleteRecord({
-        repo,
-        collection,
-        rkey
-      });
+      this.checkRateLimit();
+      this.requireSession();
+      try {
+        await this.agent.com.atproto.repo.deleteRecord({
+          repo,
+          collection,
+          rkey
+        });
+      } catch (error) {
+        this.handleApiError(error);
+      }
     }
     /**
      * Resolves a handle to a DID
@@ -45395,12 +45436,6 @@ if (cid) {
         console.warn(`Failed to resolve handle ${cleanHandle}:`, error);
         return null;
       }
-    }
-    async getReplies(uri) {
-      const thread = this.getThread(uri);
-      return thread.replies.map((i, reply) => {
-        return reply.post.record.text;
-      });
     }
     /**
      * Fetches notifications from the API
@@ -45430,8 +45465,14 @@ if (cid) {
      * @param {string} seenAt - ISO timestamp to mark as seen up to (defaults to current time)
      */
     async markNotificationsSeen(seenAt = null) {
+      this.checkRateLimit();
+      this.requireSession();
       const timestamp = seenAt || (/* @__PURE__ */ new Date()).toISOString();
-      await this.agent.api.app.bsky.notification.updateSeen({ seenAt: timestamp });
+      try {
+        await this.agent.api.app.bsky.notification.updateSeen({ seenAt: timestamp });
+      } catch (error) {
+        this.handleApiError(error);
+      }
     }
     /**
      * Follow a user by DID
@@ -45439,8 +45480,14 @@ if (cid) {
      * @returns {Promise<{uri: string, cid: string}>} The follow record info
      */
     async follow(did2) {
-      const { uri, cid: cid2 } = await this.agent.follow(did2);
-      return { uri, cid: cid2 };
+      this.checkRateLimit();
+      this.requireSession();
+      try {
+        const { uri, cid: cid2 } = await this.agent.follow(did2);
+        return { uri, cid: cid2 };
+      } catch (error) {
+        this.handleApiError(error);
+      }
     }
     /**
      * Unfollow a user by deleting the follow record
@@ -45448,7 +45495,13 @@ if (cid) {
      * @returns {Promise<void>}
      */
     async unfollow(followUri) {
-      await this.agent.deleteFollow(followUri);
+      this.checkRateLimit();
+      this.requireSession();
+      try {
+        await this.agent.deleteFollow(followUri);
+      } catch (error) {
+        this.handleApiError(error);
+      }
     }
     /**
      * Get a user's profile to check follow status
@@ -47260,7 +47313,7 @@ if (cid) {
      */
     getColorIndexForCategory(categoryName) {
       try {
-        const rulesetColors = JSON.parse(this.config.get("rulesetColors") || "{}");
+        const rulesetColors = JSON.parse(this.getValue("rulesetColors") || "{}");
         if (categoryName in rulesetColors) {
           return rulesetColors[categoryName] % constants.FILTER_LIST_COLORS.length;
         }
@@ -47279,16 +47332,14 @@ if (cid) {
      * @param {number} colorIndex - The color index
      */
     setColorForCategory(categoryName, colorIndex) {
+      let rulesetColors;
       try {
-        const rulesetColors = JSON.parse(this.config.get("rulesetColors") || "{}");
-        rulesetColors[categoryName] = colorIndex;
-        this.config.set("rulesetColors", JSON.stringify(rulesetColors));
-        this.pendingChanges["rulesetColors"] = JSON.stringify(rulesetColors);
+        rulesetColors = JSON.parse(this.getValue("rulesetColors") || "{}");
       } catch (e) {
-        const rulesetColors = { [categoryName]: colorIndex };
-        this.config.set("rulesetColors", JSON.stringify(rulesetColors));
-        this.pendingChanges["rulesetColors"] = JSON.stringify(rulesetColors);
+        rulesetColors = {};
       }
+      rulesetColors[categoryName] = colorIndex;
+      this.pendingChanges["rulesetColors"] = JSON.stringify(rulesetColors);
     }
     /**
      * Organize rules in a category by type and value.
@@ -63827,22 +63878,24 @@ div#statusBar.has-feed-map {
     const safeUrl = safeHttpUrl(url);
     if (!safeUrl) return label;
     const href = escapeHtml(safeUrl);
+    const host = new URL(safeUrl).hostname.toLowerCase();
+    const isHost = (...domains) => domains.some((d) => host === d || host.endsWith(`.${d}`));
     try {
       let embedHtml = "";
-      if (safeUrl.includes("youtube.com") || safeUrl.includes("youtu.be")) {
+      if (isHost("youtube.com", "youtu.be")) {
         const videoId = safeUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
         if (videoId) {
           embedHtml = `<iframe width="320" height="200" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
         }
-      } else if (safeUrl.includes("twitter.com") || safeUrl.includes("x.com")) {
+      } else if (isHost("twitter.com", "x.com")) {
         embedHtml = `<blockquote class="twitter-tweet"><a href="${href}"></a></blockquote>
                          <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"><\/script>`;
-      } else if (safeUrl.includes("tiktok.com")) {
+      } else if (isHost("tiktok.com")) {
         embedHtml = `<blockquote class="tiktok-embed" cite="${href}" data-video-id="${escapeHtml(safeUrl.split("/").pop())}" style="max-width: 605px; min-width: 325px;">
                             <a href="${href}">Watch on TikTok</a>
                          </blockquote>
                          <script async src="https://www.tiktok.com/embed.js"><\/script>`;
-      } else if (safeUrl.includes("instagram.com/p/")) {
+      } else if (isHost("instagram.com") && new URL(safeUrl).pathname.startsWith("/p/")) {
         embedHtml = `<blockquote class="instagram-media" data-instgrm-permalink="${href}" data-instgrm-version="13">
                             <a href="${href}">View on Instagram</a>
                          </blockquote>
@@ -63982,6 +64035,7 @@ div#statusBar.has-feed-map {
       this.handleTouchStart = this.handleTouchStart.bind(this);
       this.handleTouchMove = this.handleTouchMove.bind(this);
       this.handleTouchEnd = this.handleTouchEnd.bind(this);
+      this.handleTouchCancel = this.handleTouchCancel.bind(this);
     }
     /**
      * Initialize gesture handling on an item
@@ -63991,6 +64045,7 @@ div#statusBar.has-feed-map {
       item.addEventListener("touchstart", this.handleTouchStart, { passive: true });
       item.addEventListener("touchmove", this.handleTouchMove, { passive: false });
       item.addEventListener("touchend", this.handleTouchEnd, { passive: true });
+      item.addEventListener("touchcancel", this.handleTouchCancel, { passive: true });
     }
     /**
      * Remove gesture handling from an item
@@ -64000,6 +64055,7 @@ div#statusBar.has-feed-map {
       item.removeEventListener("touchstart", this.handleTouchStart);
       item.removeEventListener("touchmove", this.handleTouchMove);
       item.removeEventListener("touchend", this.handleTouchEnd);
+      item.removeEventListener("touchcancel", this.handleTouchCancel);
     }
     handleTouchStart(e) {
       if (e.touches.length !== 1) return;
@@ -64047,6 +64103,18 @@ div#statusBar.has-feed-map {
       this.activeElement = null;
       this.isHorizontalSwipe = null;
     }
+    /**
+     * Touch interrupted (e.g. by the browser taking over scrolling): undo any
+     * in-progress swipe feedback without triggering an action.
+     */
+    handleTouchCancel() {
+      if (!this.activeElement) return;
+      this.activeElement.style.transition = "";
+      this.activeElement.style.transform = "";
+      this.removeSwipeIndicators();
+      this.activeElement = null;
+      this.isHorizontalSwipe = null;
+    }
     onSwipeRight() {
       if (this.itemHandler && this.itemHandler.likePost) {
         this.itemHandler.likePost(this.activeElement);
@@ -64055,16 +64123,17 @@ div#statusBar.has-feed-map {
     }
     onSwipeLeft() {
       if (this.itemHandler) {
-        $(this.activeElement).removeClass("item-unread").addClass("item-read");
-        this.itemHandler.markItemRead(this.activeElement);
+        const element = this.activeElement;
+        $(element).removeClass("item-unread").addClass("item-read");
+        this.itemHandler.markItemRead(element);
         const animDuration = getAnimationDuration$1(200, this.config);
-        $(this.activeElement).css({
+        $(element).css({
           transition: `transform ${animDuration}ms ease-out, opacity ${animDuration}ms ease-out`,
           transform: "translateX(-100%)",
           opacity: 0
         });
         setTimeout(() => {
-          $(this.activeElement).css({
+          $(element).css({
             transform: "",
             opacity: ""
           });
@@ -71149,6 +71218,241 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }, 3e3);
     }
   }
+  function getFeedMapConfig(config2) {
+    const position = config2.get("feedMapPosition");
+    const style2 = config2.get("feedMapStyle") || "Advanced";
+    const isAdvanced = style2 === "Advanced";
+    const theme = config2.get("feedMapTheme") || "Default";
+    const scale = parseInt(config2.get("feedMapScale"), 10) || 100;
+    const animationSpeed = parseInt(config2.get("feedMapAnimationSpeed"), 10);
+    return {
+      position,
+      style: style2,
+      isAdvanced,
+      styleClass: isAdvanced ? "feed-map-advanced" : "feed-map-basic",
+      theme,
+      themeClass: `feed-map-theme-${theme.toLowerCase()}`,
+      scale,
+      scaleValue: scale / 100,
+      animationSpeed: isNaN(animationSpeed) ? 100 : animationSpeed,
+      animationSpeedValue: (isNaN(animationSpeed) ? 100 : animationSpeed) / 100,
+      customPropsStyle: `--indicator-scale: ${scale / 100}; --zoom-animation-speed: ${(isNaN(animationSpeed) ? 100 : animationSpeed) / 100};`
+    };
+  }
+  function createFeedMapElements(feedMapConfig, options = {}) {
+    const { styleClass, themeClass, customPropsStyle } = feedMapConfig;
+    const { isToolbar = false, withZoomInner = isToolbar, zoomFirst = false } = options;
+    const containerClass = isToolbar ? "feed-map-container feed-map-container-toolbar" : "feed-map-container";
+    const zoomContainerClass = isToolbar ? "feed-map-container feed-map-container-toolbar feed-map-zoom-container" : "feed-map-container feed-map-zoom-container";
+    const container = $(`<div class="${containerClass}"></div>`);
+    const labelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+    const labelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+    const map = $(
+      `<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`
+    );
+    container.append(labelStart);
+    container.append(map);
+    container.append(labelEnd);
+    const zoomHighlight = map.find(".feed-map-position-zoom-highlight");
+    const wrapperClass = isToolbar ? `feed-map-wrapper ${styleClass} ${themeClass}` : `feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}`;
+    const wrapper = $(`<div class="${wrapperClass}" style="${customPropsStyle}"></div>`);
+    const connector = $(`<div class="feed-map-connector">
+    <svg class="feed-map-connector-svg" preserveAspectRatio="none">
+      <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
+      <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
+    </svg>
+  </div>`);
+    const zoomContainer = $(`<div class="${zoomContainerClass}"></div>`);
+    const zoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
+    const zoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
+    const zoom = $(
+      `<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`
+    );
+    let zoomInner = null;
+    if (withZoomInner) {
+      zoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
+      zoom.append(zoomInner);
+    }
+    zoomContainer.append(zoomLabelStart);
+    zoomContainer.append(zoom);
+    zoomContainer.append(zoomLabelEnd);
+    if (zoomFirst) {
+      wrapper.append(zoomContainer, connector, container);
+    } else {
+      wrapper.append(container, connector, zoomContainer);
+    }
+    return {
+      container,
+      labelStart,
+      labelEnd,
+      map,
+      wrapper,
+      connector,
+      zoomContainer,
+      zoomLabelStart,
+      zoomLabelEnd,
+      zoom,
+      zoomInner,
+      zoomHighlight
+    };
+  }
+  function attachFeedMapToHandler(handler, elements) {
+    handler.feedMapContainer = elements.container;
+    handler.feedMapLabelStart = elements.labelStart;
+    handler.feedMapLabelEnd = elements.labelEnd;
+    handler.feedMap = elements.map;
+    handler.feedMapWrapper = elements.wrapper;
+    handler.feedMapConnector = elements.connector;
+    handler.feedMapZoomContainer = elements.zoomContainer;
+    handler.feedMapZoomLabelStart = elements.zoomLabelStart;
+    handler.feedMapZoomLabelEnd = elements.zoomLabelEnd;
+    handler.feedMapZoom = elements.zoom;
+    handler.feedMapZoomInner = elements.zoomInner;
+    handler.feedMapZoomHighlight = elements.zoomHighlight;
+    handler.zoomWindowStart = null;
+  }
+  function setupFeedMapHandlers(handler, feedMap, feedMapZoom) {
+    handler.setupScrollIndicatorZoomClick();
+    handler.setupScrollIndicatorClick();
+    handler.setupScrollIndicatorScroll();
+    handler.setupFeedMapTooltipHandlers(feedMap);
+    handler.setupFeedMapTooltipHandlers(feedMapZoom);
+  }
+  const ZOOM_SEGMENT_STATE_CLASSES = "feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8";
+  function renderZoomSegment(handler, $segment, segmentState, options) {
+    const { item, hasItem, isCurrent, engData } = segmentState;
+    const {
+      heatmapMode,
+      maxScore,
+      showIcons,
+      showAvatars,
+      avatarScale,
+      showHandles,
+      showTimestamps,
+      showRuleColors
+    } = options;
+    $segment.empty();
+    const isRead = item && $(item).hasClass("item-read");
+    $segment.data("item", hasItem ? item : null);
+    $segment.removeClass(ZOOM_SEGMENT_STATE_CLASSES);
+    $segment.find(
+      ".feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time, .feed-map-segment-progress"
+    ).remove();
+    if (!hasItem) {
+      $segment.addClass("feed-map-segment-empty");
+      return;
+    }
+    if (isRead) {
+      $segment.addClass("feed-map-segment-read");
+    }
+    if (isCurrent) {
+      $segment.addClass("feed-map-segment-current");
+    }
+    if (engData?.engagement?.isRatioed) {
+      $segment.addClass("feed-map-segment-ratioed");
+    } else if (heatmapMode !== "None" && engData) {
+      const heatLevel = handler.getHeatLevel(engData.score, maxScore);
+      if (heatLevel > 0) {
+        $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
+      }
+    }
+    if (showIcons && engData?.engagement) {
+      const icon = handler.getContentIcon(engData.engagement);
+      if (icon) {
+        $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
+      }
+    }
+    if (showAvatars && engData?.engagement?.avatarUrl) {
+      const avatarUrl = engData.engagement.avatarUrl;
+      const avatarHeight = Math.round(32 * (avatarScale / 100));
+      let avatarStyle = `height: ${avatarHeight}px`;
+      if (showRuleColors && engData?.engagement?.handle) {
+        const categoryIndex = handler.getFilterCategoryIndexForHandle(engData.engagement.handle);
+        if (categoryIndex >= 0) {
+          const color = handler.getColorForCategoryIndex(categoryIndex);
+          avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
+        }
+      }
+      const blockInfo = handler.getClearskyBlockInfo(engData?.engagement?.handle);
+      if (blockInfo.type && blockInfo.color) {
+        avatarStyle += `; box-shadow: 0 0 0 3px ${blockInfo.color}; border-radius: 50%`;
+      }
+      if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
+        const reposterHeight = Math.round(avatarHeight * 0.5);
+        let reposterStyle = `height: ${reposterHeight}px`;
+        if (showRuleColors && engData?.engagement?.reposterHandle) {
+          const reposterCategoryIndex = handler.getFilterCategoryIndexForHandle(
+            engData.engagement.reposterHandle
+          );
+          if (reposterCategoryIndex >= 0) {
+            const color = handler.getColorForCategoryIndex(reposterCategoryIndex);
+            reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
+          }
+        }
+        const reposterBlockInfo = handler.getClearskyBlockInfo(engData?.engagement?.reposterHandle);
+        if (reposterBlockInfo.type && reposterBlockInfo.color) {
+          reposterStyle += `; box-shadow: 0 0 0 2px ${reposterBlockInfo.color}`;
+        }
+        $segment.append(`
+            <span class="feed-map-segment-avatar-container">
+              <img class="feed-map-segment-avatar" src="${handler.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">
+              <img class="feed-map-segment-reposter-avatar" src="${handler.escapeHtml(engData.engagement.reposterAvatarUrl)}" alt="" style="${reposterStyle}">
+            </span>
+          `);
+      } else {
+        $segment.append(
+          `<img class="feed-map-segment-avatar" src="${handler.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">`
+        );
+      }
+    }
+    if (showHandles && engData?.engagement?.handle) {
+      const handle2 = engData.engagement.handle;
+      const dotIndex = handle2.indexOf(".");
+      const handleHtml = dotIndex > 0 ? `<span class="feed-map-segment-handle-name">${handler.escapeHtml(handle2.substring(0, dotIndex))}</span><span class="feed-map-segment-handle-domain">${handler.escapeHtml(handle2.substring(dotIndex))}</span>` : `<span class="feed-map-segment-handle-name">${handler.escapeHtml(handle2)}</span>`;
+      let handleStyle = "";
+      if (showRuleColors) {
+        const categoryIndex = handler.getFilterCategoryIndexForHandle(handle2);
+        if (categoryIndex >= 0) {
+          const color = handler.getColorForCategoryIndex(categoryIndex);
+          handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
+        }
+      }
+      const blockInfo = handler.getClearskyBlockInfo(handle2);
+      if (blockInfo.type && blockInfo.color) {
+        handleStyle = ` style="background-color: ${blockInfo.color}55; border: 2px solid ${blockInfo.color}; border-radius: 3px; padding: 0 2px;"`;
+      }
+      $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
+    }
+    if (showTimestamps) {
+      const timestamp = handler.getTimestampForItem(item);
+      if (timestamp) {
+        const relativeTime = handler.formatRelativeTime(timestamp);
+        let timeStyle = "";
+        if (showRuleColors) {
+          const categoryIndex = handler.getFilterCategoryIndexForContent(item);
+          if (categoryIndex >= 0) {
+            const color = handler.getColorForCategoryIndex(categoryIndex);
+            timeStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
+          }
+        }
+        $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
+      }
+    }
+    if (engData?.engagement?.unrolledCount > 0) {
+      const unrolledCount = engData.engagement.unrolledCount;
+      const totalPosts = unrolledCount + 1;
+      const currentThreadIndex = isCurrent && handler.threadIndex != null ? handler.threadIndex : -1;
+      let segmentsHtml = "";
+      for (let i = 0; i < totalPosts; i++) {
+        const isVisited = i <= currentThreadIndex;
+        const segmentClass = isVisited ? "feed-map-thread-segment feed-map-thread-segment-visited" : "feed-map-thread-segment";
+        segmentsHtml += `<div class="${segmentClass}"></div>`;
+      }
+      $segment.append(
+        `<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`
+      );
+    }
+  }
   const { waitForElement: waitForElement$1, announceToScreenReader } = utils$1;
   class FeedItemHandler extends ItemHandler {
     INDICATOR_IMAGES = {
@@ -71422,46 +71726,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.toolbarDiv = $(`<div id="bsky-navigator-toolbar"/>`);
       $(beforeDiv).before(this.toolbarDiv);
-      const indicatorPosition = this.config.get("feedMapPosition");
-      const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
-      const isAdvancedStyle = indicatorStyle === "Advanced";
-      const styleClass = isAdvancedStyle ? "feed-map-advanced" : "feed-map-basic";
-      const indicatorTheme = this.config.get("feedMapTheme") || "Default";
-      const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
-      const indicatorScale = parseInt(this.config.get("feedMapScale"), 10) || 100;
-      const scaleValue = indicatorScale / 100;
-      const animationInterval = parseInt(this.config.get("feedMapAnimationSpeed"), 10);
-      const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
-      const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
+      const feedMapConfig = getFeedMapConfig(this.config);
+      const indicatorPosition = feedMapConfig.position;
       if (indicatorPosition === "Top toolbar") {
-        this.feedMapContainer = $(`<div class="feed-map-container feed-map-container-toolbar"></div>`);
-        this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-        this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-        this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
-        this.feedMapContainer.append(this.feedMapLabelStart);
-        this.feedMapContainer.append(this.feedMap);
-        this.feedMapContainer.append(this.feedMapLabelEnd);
-        this.feedMapZoomHighlight = this.feedMap.find(".feed-map-position-zoom-highlight");
-        this.feedMapWrapper = $(`<div class="feed-map-wrapper ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-        this.feedMapWrapper.append(this.feedMapContainer);
-        this.feedMapConnector = $(`<div class="feed-map-connector">
-        <svg class="feed-map-connector-svg" preserveAspectRatio="none">
-          <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
-          <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
-        </svg>
-      </div>`);
-        this.feedMapWrapper.append(this.feedMapConnector);
-        this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-container-toolbar feed-map-zoom-container"></div>`);
-        this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-        this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-        this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
-        this.feedMapZoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
-        this.feedMapZoom.append(this.feedMapZoomInner);
-        this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
-        this.feedMapZoomContainer.append(this.feedMapZoom);
-        this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
-        this.feedMapWrapper.append(this.feedMapZoomContainer);
-        this.zoomWindowStart = null;
+        attachFeedMapToHandler(this, createFeedMapElements(feedMapConfig, { isToolbar: true }));
       }
       this.toolbarRow = $(`<div class="toolbar-row"/>`);
       $(this.toolbarDiv).append(this.toolbarRow);
@@ -71627,10 +71895,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           event.preventDefault();
           $(this.searchField).autocomplete("close");
           this.handleFilterEscape();
-        } else if (event.altKey && !event.key.startsWith("Arrow")) {
+        } else if (event.altKey && !event.ctrlKey && !event.metaKey && !this.isPopupVisible && this.handleRuleShortcut(event)) {
           event.preventDefault();
           event.stopPropagation();
-          this.handleInput(event);
         }
       });
       $(this.searchField).on("focus", function() {
@@ -71643,11 +71910,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
       if (indicatorPosition === "Top toolbar" && this.feedMapWrapper) {
         $(this.toolbarDiv).append(this.feedMapWrapper);
-        this.setupScrollIndicatorZoomClick();
-        this.setupScrollIndicatorClick();
-        this.setupScrollIndicatorScroll();
-        this.setupFeedMapTooltipHandlers(this.feedMap);
-        this.setupFeedMapTooltipHandlers(this.feedMapZoom);
+        setupFeedMapHandlers(this, this.feedMap, this.feedMapZoom);
       }
       this._toolbarRemovalObserver = waitForElement$1("#bsky-navigator-toolbar", null, (_div) => {
         this.addToolbar(beforeDiv);
@@ -71771,52 +72034,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.statusBarLeft = $(`<div id="statusBarLeft"></div>`);
       this.statusBarCenter = $(`<div id="statusBarCenter"></div>`);
       this.statusBarRight = $(`<div id="statusBarRight"></div>`);
-      const indicatorPosition = this.config.get("feedMapPosition");
-      const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
-      const isAdvancedStyle = indicatorStyle === "Advanced";
-      const styleClass = isAdvancedStyle ? "feed-map-advanced" : "feed-map-basic";
-      const indicatorTheme = this.config.get("feedMapTheme") || "Default";
-      const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
-      const indicatorScale = parseInt(this.config.get("feedMapScale"), 10) || 100;
-      const scaleValue = indicatorScale / 100;
-      const animationInterval = parseInt(this.config.get("feedMapAnimationSpeed"), 10);
-      const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
-      const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
-      if (indicatorPosition === "Bottom status bar") {
-        this.feedMapContainer = $(`<div class="feed-map-container"></div>`);
-        this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-        this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-        this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
-        this.feedMapContainer.append(this.feedMapLabelStart);
-        this.feedMapContainer.append(this.feedMap);
-        this.feedMapContainer.append(this.feedMapLabelEnd);
-        this.feedMapZoomHighlight = this.feedMap.find(".feed-map-position-zoom-highlight");
-        this.feedMapWrapper = $(`<div class="feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-        this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
-        this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-        this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-        this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
-        this.feedMapZoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
-        this.feedMapZoom.append(this.feedMapZoomInner);
-        this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
-        this.feedMapZoomContainer.append(this.feedMapZoom);
-        this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
-        this.feedMapWrapper.append(this.feedMapZoomContainer);
-        this.feedMapConnector = $(`<div class="feed-map-connector">
-        <svg class="feed-map-connector-svg" preserveAspectRatio="none">
-          <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
-          <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
-        </svg>
-      </div>`);
-        this.feedMapWrapper.append(this.feedMapConnector);
-        this.feedMapWrapper.append(this.feedMapContainer);
-        this.zoomWindowStart = null;
+      const feedMapConfig = getFeedMapConfig(this.config);
+      if (feedMapConfig.position === "Bottom status bar") {
+        const elements = createFeedMapElements(feedMapConfig, { withZoomInner: true, zoomFirst: true });
+        attachFeedMapToHandler(this, elements);
         $(this.statusBar).append(this.feedMapWrapper);
-        this.setupScrollIndicatorZoomClick();
-        this.setupScrollIndicatorClick();
-        this.setupScrollIndicatorScroll();
-        this.setupFeedMapTooltipHandlers(this.feedMap);
-        this.setupFeedMapTooltipHandlers(this.feedMapZoom);
+        setupFeedMapHandlers(this, this.feedMap, this.feedMapZoom);
         $(this.statusBar).addClass("has-feed-map");
       }
       $(this.statusBar).append(this.statusBarLeft);
@@ -71950,7 +72173,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       requestAnimationFrame(() => {
         const indicator = this.feedMap;
         if (indicator && indicator.length && this.items.length) {
-          this.updateViewportIndicator(indicator, this.items.length);
+          this.updateViewportIndicator(indicator, this._displayItems);
           if (this.feedMapZoom) {
             const indicatorStyle = this.config.get("feedMapStyle") || "Advanced";
             const isAdvancedStyle = indicatorStyle === "Advanced";
@@ -72932,7 +73155,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         }
       }
-      this.updateViewportIndicator(indicator, total);
+      this.updateViewportIndicator(indicator, displayItems);
       if (this.feedMapZoom && isAdvancedStyle) {
         this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, total, displayItems, displayIndices);
       }
@@ -73381,125 +73604,18 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
       const segments = zoomInner.find(".feed-map-segment");
+      const segmentOptions = { heatmapMode, maxScore, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
       segments.each((i, segment) => {
-        const $segment = $(segment);
-        $segment.empty();
         const displayIndex = windowStart + i;
         const item = displayItems[displayIndex];
-        const hasItem = displayIndex >= 0 && displayIndex < total && item;
-        const isRead = item && $(item).hasClass("item-read");
-        const isCurrent = displayIndex === currentIndex;
-        $segment.data("item", hasItem ? item : null);
-        $segment.removeClass(
-          "feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8"
-        );
-        $segment.find(".feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time, .feed-map-segment-progress").remove();
-        if (!hasItem) {
-          $segment.addClass("feed-map-segment-empty");
-          return;
-        }
-        if (isRead) $segment.addClass("feed-map-segment-read");
-        if (isCurrent) $segment.addClass("feed-map-segment-current");
-        const engData = windowEngagement[i];
-        if (engData?.engagement?.isRatioed) {
-          $segment.addClass("feed-map-segment-ratioed");
-        } else if (heatmapMode !== "None" && engData) {
-          const heatLevel = this.getHeatLevel(engData.score, maxScore);
-          if (heatLevel > 0) {
-            $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
-          }
-        }
-        if (showIcons && engData?.engagement) {
-          const icon = this.getContentIcon(engData.engagement);
-          if (icon) {
-            $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
-          }
-        }
-        if (showAvatars && engData?.engagement?.avatarUrl) {
-          const avatarHeight = Math.round(32 * (avatarScale / 100));
-          let avatarStyle = `height: ${avatarHeight}px`;
-          if (showRuleColors && engData?.engagement?.handle) {
-            const categoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.handle);
-            if (categoryIndex >= 0) {
-              const color = this.getColorForCategoryIndex(categoryIndex);
-              avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
-            }
-          }
-          const blockInfo = this.getClearskyBlockInfo(engData?.engagement?.handle);
-          if (blockInfo.type && blockInfo.color) {
-            avatarStyle += `; box-shadow: 0 0 0 3px ${blockInfo.color}; border-radius: 50%`;
-          }
-          if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
-            const reposterHeight = Math.round(avatarHeight * 0.5);
-            let reposterStyle = `height: ${reposterHeight}px`;
-            if (showRuleColors && engData?.engagement?.reposterHandle) {
-              const reposterCategoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.reposterHandle);
-              if (reposterCategoryIndex >= 0) {
-                const color = this.getColorForCategoryIndex(reposterCategoryIndex);
-                reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
-              }
-            }
-            const reposterBlockInfo = this.getClearskyBlockInfo(engData?.engagement?.reposterHandle);
-            if (reposterBlockInfo.type && reposterBlockInfo.color) {
-              reposterStyle += `; box-shadow: 0 0 0 2px ${reposterBlockInfo.color}`;
-            }
-            $segment.append(`
-            <span class="feed-map-segment-avatar-container">
-              <img class="feed-map-segment-avatar" src="${this.escapeHtml(engData.engagement.avatarUrl)}" alt="" style="${avatarStyle}">
-              <img class="feed-map-segment-reposter-avatar" src="${this.escapeHtml(engData.engagement.reposterAvatarUrl)}" alt="" style="${reposterStyle}">
-            </span>
-          `);
-          } else {
-            $segment.append(`<img class="feed-map-segment-avatar" src="${this.escapeHtml(engData.engagement.avatarUrl)}" alt="" style="${avatarStyle}">`);
-          }
-        }
-        if (showHandles && engData?.engagement?.handle) {
-          const handle2 = engData.engagement.handle;
-          const dotIndex = handle2.indexOf(".");
-          const handleHtml = dotIndex > 0 ? `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle2.substring(0, dotIndex))}</span><span class="feed-map-segment-handle-domain">${this.escapeHtml(handle2.substring(dotIndex))}</span>` : `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle2)}</span>`;
-          let handleStyle = "";
-          if (showRuleColors) {
-            const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
-            if (categoryIndex >= 0) {
-              const color = this.getColorForCategoryIndex(categoryIndex);
-              handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
-            }
-          }
-          const blockInfo = this.getClearskyBlockInfo(handle2);
-          if (blockInfo.type && blockInfo.color) {
-            handleStyle = ` style="background-color: ${blockInfo.color}55; border: 2px solid ${blockInfo.color}; border-radius: 3px; padding: 0 2px;"`;
-          }
-          $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
-        }
-        if (showTimestamps) {
-          const timestamp = this.getTimestampForItem(item);
-          if (timestamp) {
-            const relativeTime = this.formatRelativeTime(timestamp);
-            let timeStyle = "";
-            if (showRuleColors) {
-              const categoryIndex = this.getFilterCategoryIndexForContent(item);
-              if (categoryIndex >= 0) {
-                const color = this.getColorForCategoryIndex(categoryIndex);
-                timeStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
-              }
-            }
-            $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
-          }
-        }
-        if (engData?.engagement?.unrolledCount > 0) {
-          const unrolledCount = engData.engagement.unrolledCount;
-          const totalPosts = unrolledCount + 1;
-          const currentThreadIndex = isCurrent && this.threadIndex != null ? this.threadIndex : -1;
-          let segmentsHtml = "";
-          for (let i2 = 0; i2 < totalPosts; i2++) {
-            const isVisited = i2 <= currentThreadIndex;
-            const segmentClass = isVisited ? "feed-map-thread-segment feed-map-thread-segment-visited" : "feed-map-thread-segment";
-            segmentsHtml += `<div class="${segmentClass}"></div>`;
-          }
-          $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`);
-        }
+        renderZoomSegment(this, $(segment), {
+          item,
+          hasItem: displayIndex >= 0 && displayIndex < total && item,
+          isCurrent: displayIndex === currentIndex,
+          engData: windowEngagement[i]
+        }, segmentOptions);
       });
-      this.updateFeedMapZoomLabels(windowStart, windowEnd);
+      this.updateFeedMapZoomLabels(windowStart, windowEnd, displayItems);
       const atStart = windowStart === 0;
       const atEnd = windowStart + zoomWindowSize >= total;
       zoomIndicator.toggleClass("feed-map-zoom-at-start", atStart);
@@ -73586,137 +73702,20 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.zoomWindowStart = windowStart;
       const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
+      const segmentOptions = { heatmapMode, maxScore, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
       segments.each((i, segment) => {
-        const $segment = $(segment);
-        $segment.empty();
         const displayIndex = windowStart + i;
         const item = displayItems[displayIndex];
         const actualIndex = displayIndices ? displayIndices[displayIndex] : displayIndex;
-        const hasItem = displayIndex >= 0 && displayIndex < total && item;
-        const isRead = item && $(item).hasClass("item-read");
-        const isCurrent = displayIndex === currentIndex;
-        $segment.data("item", hasItem ? item : null);
-        $segment.removeClass(
-          "feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8"
-        );
-        $segment.find(".feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time, .feed-map-segment-progress").remove();
-        if (!hasItem) {
-          $segment.addClass("feed-map-segment-empty");
-          return;
-        }
-        if (isRead) {
-          $segment.addClass("feed-map-segment-read");
-        }
-        if (isCurrent) {
-          $segment.addClass("feed-map-segment-current");
-        }
-        if (engagementData[actualIndex]?.engagement?.isRatioed) {
-          $segment.addClass("feed-map-segment-ratioed");
-        } else if (heatmapMode !== "None" && engagementData[actualIndex]) {
-          const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
-          if (heatLevel > 0) {
-            $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
-          }
-        }
-        if (showIcons && engagementData[actualIndex]?.engagement) {
-          const icon = this.getContentIcon(engagementData[actualIndex].engagement);
-          if (icon) {
-            $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
-          }
-        }
-        if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
-          const engData = engagementData[actualIndex];
-          const avatarUrl = engData.engagement.avatarUrl;
-          const avatarHeight = Math.round(32 * (avatarScale / 100));
-          let avatarStyle = `height: ${avatarHeight}px`;
-          if (showRuleColors && engData?.engagement?.handle) {
-            const categoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.handle);
-            if (categoryIndex >= 0) {
-              const color = this.getColorForCategoryIndex(categoryIndex);
-              avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
-            }
-          }
-          const blockInfo = this.getClearskyBlockInfo(engData?.engagement?.handle);
-          if (blockInfo.type && blockInfo.color) {
-            avatarStyle += `; box-shadow: 0 0 0 3px ${blockInfo.color}; border-radius: 50%`;
-          }
-          if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
-            const reposterHeight = Math.round(avatarHeight * 0.5);
-            let reposterStyle = `height: ${reposterHeight}px`;
-            if (showRuleColors && engData?.engagement?.reposterHandle) {
-              const reposterCategoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.reposterHandle);
-              if (reposterCategoryIndex >= 0) {
-                const color = this.getColorForCategoryIndex(reposterCategoryIndex);
-                reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
-              }
-            }
-            const reposterBlockInfo = this.getClearskyBlockInfo(engData?.engagement?.reposterHandle);
-            if (reposterBlockInfo.type && reposterBlockInfo.color) {
-              reposterStyle += `; box-shadow: 0 0 0 2px ${reposterBlockInfo.color}`;
-            }
-            $segment.append(`
-            <span class="feed-map-segment-avatar-container">
-              <img class="feed-map-segment-avatar" src="${this.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">
-              <img class="feed-map-segment-reposter-avatar" src="${this.escapeHtml(engData.engagement.reposterAvatarUrl)}" alt="" style="${reposterStyle}">
-            </span>
-          `);
-          } else {
-            $segment.append(`<img class="feed-map-segment-avatar" src="${this.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">`);
-          }
-        }
-        if (showHandles && engagementData[actualIndex]?.engagement?.handle) {
-          const handle2 = engagementData[actualIndex].engagement.handle;
-          const dotIndex = handle2.indexOf(".");
-          let handleHtml;
-          if (dotIndex > 0) {
-            handleHtml = `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle2.substring(0, dotIndex))}</span><span class="feed-map-segment-handle-domain">${this.escapeHtml(handle2.substring(dotIndex))}</span>`;
-          } else {
-            handleHtml = `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle2)}</span>`;
-          }
-          let handleStyle = "";
-          if (showRuleColors) {
-            const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
-            if (categoryIndex >= 0) {
-              const color = this.getColorForCategoryIndex(categoryIndex);
-              handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
-            }
-          }
-          const blockInfo = this.getClearskyBlockInfo(handle2);
-          if (blockInfo.type && blockInfo.color) {
-            handleStyle = ` style="background-color: ${blockInfo.color}55; border: 2px solid ${blockInfo.color}; border-radius: 3px; padding: 0 2px;"`;
-          }
-          $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
-        }
-        if (showTimestamps) {
-          const timestamp = this.getTimestampForItem(item);
-          if (timestamp) {
-            const relativeTime = this.formatRelativeTime(timestamp);
-            let timeStyle = "";
-            if (showRuleColors) {
-              const categoryIndex = this.getFilterCategoryIndexForContent(item);
-              if (categoryIndex >= 0) {
-                const color = this.getColorForCategoryIndex(categoryIndex);
-                timeStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
-              }
-            }
-            $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
-          }
-        }
-        if (engagementData[actualIndex]?.engagement?.unrolledCount > 0) {
-          const unrolledCount = engagementData[actualIndex].engagement.unrolledCount;
-          const totalPosts = unrolledCount + 1;
-          const currentThreadIndex = isCurrent && this.threadIndex != null ? this.threadIndex : -1;
-          let segmentsHtml = "";
-          for (let i2 = 0; i2 < totalPosts; i2++) {
-            const isVisited = i2 <= currentThreadIndex;
-            const segmentClass = isVisited ? "feed-map-thread-segment feed-map-thread-segment-visited" : "feed-map-thread-segment";
-            segmentsHtml += `<div class="${segmentClass}"></div>`;
-          }
-          $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`);
-        }
+        renderZoomSegment(this, $(segment), {
+          item,
+          hasItem: displayIndex >= 0 && displayIndex < total && item,
+          isCurrent: displayIndex === currentIndex,
+          engData: engagementData[actualIndex]
+        }, segmentOptions);
       });
       zoomIndicator.css("--feed-map-icon-display", "flex");
-      this.updateFeedMapZoomLabels(windowStart, windowEnd);
+      this.updateFeedMapZoomLabels(windowStart, windowEnd, displayItems);
       const atStart = windowStart === 0;
       const atEnd = windowStart + zoomWindowSize >= total;
       zoomIndicator.toggleClass("feed-map-zoom-at-start", atStart);
@@ -73790,11 +73789,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     /**
      * Update the date/time labels for the feed map zoom
      */
-    updateFeedMapZoomLabels(windowStart, windowEnd) {
+    updateFeedMapZoomLabels(windowStart, windowEnd, displayItems) {
       if (!this.feedMapZoomLabelStart || !this.feedMapZoomLabelEnd) return;
-      if (!this.items.length) return;
-      const firstItem = this.items[windowStart];
-      const lastItem = this.items[windowEnd];
+      if (!displayItems || !displayItems.length) return;
+      const firstItem = displayItems[windowStart];
+      const lastItem = displayItems[windowEnd];
       let firstTimestamp = this.getTimestampForItem(firstItem);
       let lastTimestamp = this.getTimestampForItem(lastItem);
       const reversed = this.state.feedSortReverse;
@@ -73820,7 +73819,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.feedMapZoomLabelStart.text(formatCompact(firstTimestamp));
       this.feedMapZoomLabelEnd.text(formatCompact(lastTimestamp));
     }
-    updateViewportIndicator(indicator, total) {
+    updateViewportIndicator(indicator, displayItems) {
+      const total = displayItems ? displayItems.length : 0;
       const viewportIndicator = indicator.find(".feed-map-viewport-indicator");
       if (!viewportIndicator.length || total === 0) return;
       const indicatorWidth = indicator.width();
@@ -73839,8 +73839,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const viewportBottom = window.innerHeight;
       let firstVisible = -1;
       let lastVisible = -1;
-      for (let i = 0; i < this.items.length; i++) {
-        const item = this.items[i];
+      for (let i = 0; i < total; i++) {
+        const item = displayItems[i];
         if (!item) continue;
         const rect = item.getBoundingClientRect();
         const itemTop = rect.top;
@@ -74180,104 +74180,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
   }
-  function getFeedMapConfig(config2) {
-    const position = config2.get("feedMapPosition");
-    const style2 = config2.get("feedMapStyle") || "Advanced";
-    const isAdvanced = style2 === "Advanced";
-    const theme = config2.get("feedMapTheme") || "Default";
-    const scale = parseInt(config2.get("feedMapScale"), 10) || 100;
-    const animationSpeed = parseInt(config2.get("feedMapAnimationSpeed"), 10);
-    return {
-      position,
-      style: style2,
-      isAdvanced,
-      styleClass: isAdvanced ? "feed-map-advanced" : "feed-map-basic",
-      theme,
-      themeClass: `feed-map-theme-${theme.toLowerCase()}`,
-      scale,
-      scaleValue: scale / 100,
-      animationSpeed: isNaN(animationSpeed) ? 100 : animationSpeed,
-      animationSpeedValue: (isNaN(animationSpeed) ? 100 : animationSpeed) / 100,
-      customPropsStyle: `--indicator-scale: ${scale / 100}; --zoom-animation-speed: ${(isNaN(animationSpeed) ? 100 : animationSpeed) / 100};`
-    };
-  }
-  function createFeedMapElements(feedMapConfig, options = {}) {
-    const { styleClass, themeClass, customPropsStyle } = feedMapConfig;
-    const { isToolbar = false } = options;
-    const containerClass = isToolbar ? "feed-map-container feed-map-container-toolbar" : "feed-map-container";
-    const zoomContainerClass = isToolbar ? "feed-map-container feed-map-container-toolbar feed-map-zoom-container" : "feed-map-container feed-map-zoom-container";
-    const container = $(`<div class="${containerClass}"></div>`);
-    const labelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-    const labelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-    const map = $(
-      `<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`
-    );
-    container.append(labelStart);
-    container.append(map);
-    container.append(labelEnd);
-    const zoomHighlight = map.find(".feed-map-position-zoom-highlight");
-    const wrapperClass = isToolbar ? `feed-map-wrapper ${styleClass} ${themeClass}` : `feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}`;
-    const wrapper = $(`<div class="${wrapperClass}" style="${customPropsStyle}"></div>`);
-    wrapper.append(container);
-    const connector = $(`<div class="feed-map-connector">
-    <svg class="feed-map-connector-svg" preserveAspectRatio="none">
-      <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
-      <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
-    </svg>
-  </div>`);
-    wrapper.append(connector);
-    const zoomContainer = $(`<div class="${zoomContainerClass}"></div>`);
-    const zoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-    const zoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-    const zoom = $(
-      `<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`
-    );
-    let zoomInner = null;
-    if (isToolbar) {
-      zoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
-      zoom.append(zoomInner);
-    }
-    zoomContainer.append(zoomLabelStart);
-    zoomContainer.append(zoom);
-    zoomContainer.append(zoomLabelEnd);
-    wrapper.append(zoomContainer);
-    return {
-      container,
-      labelStart,
-      labelEnd,
-      map,
-      wrapper,
-      connector,
-      zoomContainer,
-      zoomLabelStart,
-      zoomLabelEnd,
-      zoom,
-      zoomInner,
-      zoomHighlight
-    };
-  }
-  function attachFeedMapToHandler(handler, elements) {
-    handler.feedMapContainer = elements.container;
-    handler.feedMapLabelStart = elements.labelStart;
-    handler.feedMapLabelEnd = elements.labelEnd;
-    handler.feedMap = elements.map;
-    handler.feedMapWrapper = elements.wrapper;
-    handler.feedMapConnector = elements.connector;
-    handler.feedMapZoomContainer = elements.zoomContainer;
-    handler.feedMapZoomLabelStart = elements.zoomLabelStart;
-    handler.feedMapZoomLabelEnd = elements.zoomLabelEnd;
-    handler.feedMapZoom = elements.zoom;
-    handler.feedMapZoomInner = elements.zoomInner;
-    handler.feedMapZoomHighlight = elements.zoomHighlight;
-    handler.zoomWindowStart = null;
-  }
-  function setupFeedMapHandlers(handler, feedMap, feedMapZoom) {
-    handler.setupScrollIndicatorZoomClick();
-    handler.setupScrollIndicatorClick();
-    handler.setupScrollIndicatorScroll();
-    handler.setupFeedMapTooltipHandlers(feedMap);
-    handler.setupFeedMapTooltipHandlers(feedMapZoom);
-  }
   class ProfileItemHandler extends FeedItemHandler {
     constructor(name, config2, state2, api, selector) {
       super(name, config2, state2, api, selector);
@@ -74491,7 +74393,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (feedMapConfig.position !== "Bottom status bar") {
         return;
       }
-      const elements = createFeedMapElements(feedMapConfig, { isToolbar: false });
+      const elements = createFeedMapElements(feedMapConfig, {
+        isToolbar: false,
+        withZoomInner: true,
+        zoomFirst: true
+      });
       attachFeedMapToHandler(this, elements);
       statusBar.prepend(elements.wrapper);
       statusBar.addClass("has-feed-map");
@@ -74644,7 +74550,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (feedMapConfig.position !== "Bottom status bar") {
         return;
       }
-      const elements = createFeedMapElements(feedMapConfig, { isToolbar: false });
+      const elements = createFeedMapElements(feedMapConfig, {
+        isToolbar: false,
+        withZoomInner: true,
+        zoomFirst: true
+      });
       attachFeedMapToHandler(this, elements);
       statusBar.prepend(elements.wrapper);
       statusBar.addClass("has-feed-map");
@@ -75226,7 +75136,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
   const { waitForElement, observeVisibilityChange } = utils$1;
   GM_addStyle(style);
   const storedConfig = JSON.parse(GM_getValue("bluesky_navigator_config", "{}"));
-  const showLoadingIndicator = storedConfig.showLoadingIndicator === true;
+  const showLoadingIndicator = storedConfig.showLoadingIndicator !== false;
   if (showLoadingIndicator) {
     const addLoadingClass = () => document.body.classList.add("bsky-nav-loading-enabled");
     if (document.body) {
@@ -75381,7 +75291,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         stateSyncConfig: config.get("stateSyncConfig"),
         stateSaveTimeout: config.get("stateSaveTimeout"),
         stateSyncTimeout: config.get("stateSyncTimeout"),
-        maxEntries: config.get("historyMax")
+        maxEntries: config.get("historyMax"),
+        clearskyEnabled: config.get("clearskyEnabled")
       };
       if (unsafeWindow.__bskyNavSetDisableLoadMore) {
         unsafeWindow.__bskyNavSetDisableLoadMore(config.get("disableLoadMoreOnScroll"));
@@ -75394,6 +75305,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         state.stateManager.updateState({ rulesConfig: savedRulesConfig });
       }
       state.stateManager.saveStateImmediately(true, true);
+      state.stateManager.updateBlockList(config.get("clearskyEnabled"));
       updateContentWidth();
       if (config.get("toastNotifications")) {
         createToastContainer();
@@ -75881,7 +75793,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           config.get("atprotoIdentifier"),
           config.get("atprotoPassword")
         );
-        api.login();
+        api.login().catch((error) => {
+          console.warn("Bluesky API login failed:", error);
+        });
         async function loadSidecarTemplate(selector, html) {
           try {
             const popupContainer = $(selector).append(html);

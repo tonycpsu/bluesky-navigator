@@ -4,7 +4,11 @@ const DEFAULT_STATE = {
   seen: {},
   lastUpdated: null,
   page: 'home',
-  blocks: { all: [], recent: [] },
+  // Plain objects (not arrays) so `updated`/`dids` survive JSON persistence
+  blocks: {
+    all: { updated: null, dids: [] },
+    recent: { updated: null, dids: [] },
+  },
   feedSortReverse: false,
   feedHideRead: false,
   timeouts: {}, // { handle: expiresAtTimestamp }

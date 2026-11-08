@@ -5,6 +5,13 @@ import * as utils from '../utils.js';
 import { ItemHandler } from './ItemHandler.js';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import icons from '../icons.js';
+import {
+  getFeedMapConfig,
+  createFeedMapElements,
+  attachFeedMapToHandler,
+  setupFeedMapHandlers,
+  renderZoomSegment,
+} from './feedMapUtils.js';
 
 const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
 
@@ -384,58 +391,13 @@ export class FeedItemHandler extends ItemHandler {
     $(beforeDiv).before(this.toolbarDiv);
 
     // Add scroll position indicator at top of toolbar if configured
-    const indicatorPosition = this.config.get('feedMapPosition');
-    const indicatorStyle = this.config.get('feedMapStyle') || 'Advanced';
-    const isAdvancedStyle = indicatorStyle === 'Advanced';
-    const styleClass = isAdvancedStyle ? 'feed-map-advanced' : 'feed-map-basic';
-    const indicatorTheme = this.config.get('feedMapTheme') || 'Default';
-    const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
-    const indicatorScale = parseInt(this.config.get('feedMapScale'), 10) || 100;
-    const scaleValue = indicatorScale / 100;
-    const animationInterval = parseInt(this.config.get('feedMapAnimationSpeed'), 10);
-    // 0 = instant, 100 = normal, 200 = 2x slower
-    const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
-    const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
+    const feedMapConfig = getFeedMapConfig(this.config);
+    const indicatorPosition = feedMapConfig.position;
     // Prepare feed map elements (will be appended after toolbar rows)
     if (indicatorPosition === 'Top toolbar') {
-      // Always use wrapper for dynamic style switching (styleClass goes on wrapper for CSS to hide zoom elements)
-      this.feedMapContainer = $(`<div class="feed-map-container feed-map-container-toolbar"></div>`);
-      this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-      this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-      this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
-      this.feedMapContainer.append(this.feedMapLabelStart);
-      this.feedMapContainer.append(this.feedMap);
-      this.feedMapContainer.append(this.feedMapLabelEnd);
-
-      // Always create wrapper with zoom elements (CSS controls visibility based on style)
-      // Get reference to zoom highlight element
-      this.feedMapZoomHighlight = this.feedMap.find('.feed-map-position-zoom-highlight');
-      // Create wrapper for both indicators and connector (styleClass + themeClass on wrapper so CSS can target children)
-      this.feedMapWrapper = $(`<div class="feed-map-wrapper ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-      this.feedMapWrapper.append(this.feedMapContainer);
-
-      // Add connector div between main indicator and zoom with SVG inside
-      this.feedMapConnector = $(`<div class="feed-map-connector">
-        <svg class="feed-map-connector-svg" preserveAspectRatio="none">
-          <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
-          <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
-        </svg>
-      </div>`);
-      this.feedMapWrapper.append(this.feedMapConnector);
-
-      this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-container-toolbar feed-map-zoom-container"></div>`);
-      this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-      this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-      this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
-      // Inner wrapper for smooth scroll animation
-      this.feedMapZoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
-      this.feedMapZoom.append(this.feedMapZoomInner);
-      this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
-      this.feedMapZoomContainer.append(this.feedMapZoom);
-      this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
-      this.feedMapWrapper.append(this.feedMapZoomContainer);
-      // Track previous window position for smooth scrolling
-      this.zoomWindowStart = null;
+      // Always use wrapper with zoom elements for dynamic style switching (CSS controls
+      // visibility; styleClass + themeClass go on the wrapper so CSS can target children)
+      attachFeedMapToHandler(this, createFeedMapElements(feedMapConfig, { isToolbar: true }));
     }
 
     // Single toolbar row: [load] [sort] [show all/new] [width] [filters]
@@ -658,11 +620,18 @@ export class FeedItemHandler extends ItemHandler {
         event.preventDefault();
         $(this.searchField).autocomplete('close');
         this.handleFilterEscape();
-      } else if (event.altKey && !event.key.startsWith('Arrow')) {
-        // Pass alt+key combos to main handler (but not arrows - those are for text navigation)
+      } else if (
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !this.isPopupVisible &&
+        this.handleRuleShortcut(event)
+      ) {
+        // Alt+digit applies a filter rule, same as from the feed. handleInput() can't be
+        // used here (it bails out while the user is typing), and other Alt combos are left
+        // alone so they still type characters (e.g. Option+e accents on macOS).
         event.preventDefault();
         event.stopPropagation();
-        this.handleInput(event);
       }
       // Let Cmd+Arrow (line jump) and Option+Arrow (word jump) pass through for text navigation
     });
@@ -682,11 +651,7 @@ export class FeedItemHandler extends ItemHandler {
     // Append feed maps after toolbar row (so they appear below)
     if (indicatorPosition === 'Top toolbar' && this.feedMapWrapper) {
       $(this.toolbarDiv).append(this.feedMapWrapper);
-      this.setupScrollIndicatorZoomClick();
-      this.setupScrollIndicatorClick();
-      this.setupScrollIndicatorScroll();
-      this.setupFeedMapTooltipHandlers(this.feedMap);
-      this.setupFeedMapTooltipHandlers(this.feedMapZoom);
+      setupFeedMapHandlers(this, this.feedMap, this.feedMapZoom);
     }
 
     this._toolbarRemovalObserver = waitForElement('#bsky-navigator-toolbar', null, (_div) => {
@@ -855,66 +820,15 @@ export class FeedItemHandler extends ItemHandler {
     this.statusBarRight = $(`<div id="statusBarRight"></div>`);
 
     // Add scroll position indicator inside status bar if configured
-    const indicatorPosition = this.config.get('feedMapPosition');
-    const indicatorStyle = this.config.get('feedMapStyle') || 'Advanced';
-    const isAdvancedStyle = indicatorStyle === 'Advanced';
-    const styleClass = isAdvancedStyle ? 'feed-map-advanced' : 'feed-map-basic';
-    const indicatorTheme = this.config.get('feedMapTheme') || 'Default';
-    const themeClass = `feed-map-theme-${indicatorTheme.toLowerCase()}`;
-    const indicatorScale = parseInt(this.config.get('feedMapScale'), 10) || 100;
-    const scaleValue = indicatorScale / 100;
-    const animationInterval = parseInt(this.config.get('feedMapAnimationSpeed'), 10);
-    // 0 = instant, 100 = normal, 200 = 2x slower
-    const animationIntervalValue = (isNaN(animationInterval) ? 100 : animationInterval) / 100;
-    const customPropsStyle = `--indicator-scale: ${scaleValue}; --zoom-animation-speed: ${animationIntervalValue};`;
-    if (indicatorPosition === 'Bottom status bar') {
-      // Always use wrapper for dynamic style switching (styleClass goes on wrapper for CSS to hide zoom elements)
-      this.feedMapContainer = $(`<div class="feed-map-container"></div>`);
-      this.feedMapLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-      this.feedMapLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-      this.feedMap = $(`<div id="feed-map-position-indicator" class="feed-map-position-indicator" role="progressbar" aria-label="Feed position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="feed-map-position-fill"></div><div class="feed-map-position-zoom-highlight"></div></div>`);
-      this.feedMapContainer.append(this.feedMapLabelStart);
-      this.feedMapContainer.append(this.feedMap);
-      this.feedMapContainer.append(this.feedMapLabelEnd);
-
-      // Always create wrapper with zoom elements (CSS controls visibility based on style)
-      // Get reference to zoom highlight element
-      this.feedMapZoomHighlight = this.feedMap.find('.feed-map-position-zoom-highlight');
-      // Create wrapper for both indicators and connector (styleClass + themeClass on wrapper so CSS can target children)
-      this.feedMapWrapper = $(`<div class="feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}" style="${customPropsStyle}"></div>`);
-
-      // For bottom position, order is: zoom (top), connector, main map (bottom)
-      this.feedMapZoomContainer = $(`<div class="feed-map-container feed-map-zoom-container"></div>`);
-      this.feedMapZoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
-      this.feedMapZoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
-      this.feedMapZoom = $(`<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`);
-      // Inner wrapper for smooth scroll animation
-      this.feedMapZoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
-      this.feedMapZoom.append(this.feedMapZoomInner);
-      this.feedMapZoomContainer.append(this.feedMapZoomLabelStart);
-      this.feedMapZoomContainer.append(this.feedMapZoom);
-      this.feedMapZoomContainer.append(this.feedMapZoomLabelEnd);
-      this.feedMapWrapper.append(this.feedMapZoomContainer);
-
-      // Add connector div between zoom and main indicator with SVG inside
-      this.feedMapConnector = $(`<div class="feed-map-connector">
-        <svg class="feed-map-connector-svg" preserveAspectRatio="none">
-          <path class="feed-map-connector-path feed-map-connector-left" fill="none"/>
-          <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
-        </svg>
-      </div>`);
-      this.feedMapWrapper.append(this.feedMapConnector);
-
-      this.feedMapWrapper.append(this.feedMapContainer);
-      // Track previous window position for smooth scrolling
-      this.zoomWindowStart = null;
+    const feedMapConfig = getFeedMapConfig(this.config);
+    if (feedMapConfig.position === 'Bottom status bar') {
+      // Always use wrapper with zoom elements for dynamic style switching (CSS controls
+      // visibility). For bottom position, order is: zoom (top), connector, main map (bottom)
+      const elements = createFeedMapElements(feedMapConfig, { withZoomInner: true, zoomFirst: true });
+      attachFeedMapToHandler(this, elements);
 
       $(this.statusBar).append(this.feedMapWrapper);
-      this.setupScrollIndicatorZoomClick();
-      this.setupScrollIndicatorClick();
-      this.setupScrollIndicatorScroll();
-      this.setupFeedMapTooltipHandlers(this.feedMap);
-      this.setupFeedMapTooltipHandlers(this.feedMapZoom);
+      setupFeedMapHandlers(this, this.feedMap, this.feedMapZoom);
       // Add class to status bar for CSS styling
       $(this.statusBar).addClass('has-feed-map');
     }
@@ -1101,7 +1015,8 @@ export class FeedItemHandler extends ItemHandler {
     requestAnimationFrame(() => {
       const indicator = this.feedMap;
       if (indicator && indicator.length && this.items.length) {
-        this.updateViewportIndicator(indicator, this.items.length);
+        // Main-map segments were built from _displayItems in updateScrollPosition()
+        this.updateViewportIndicator(indicator, this._displayItems);
 
         // Also update feed map zoom if present (Advanced mode only)
         if (this.feedMapZoom) {
@@ -2393,7 +2308,7 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     // Update viewport indicator position
-    this.updateViewportIndicator(indicator, total);
+    this.updateViewportIndicator(indicator, displayItems);
 
     // Update feed map zoom if present and in Advanced mode
     if (this.feedMapZoom && isAdvancedStyle) {
@@ -3004,165 +2919,20 @@ export class FeedItemHandler extends ItemHandler {
 
     // Update segment content
     const segments = zoomInner.find('.feed-map-segment');
+    const segmentOptions = { heatmapMode, maxScore, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
     segments.each((i, segment) => {
-      const $segment = $(segment);
-      $segment.empty(); // Clear previous content before updating
       const displayIndex = windowStart + i;
       const item = displayItems[displayIndex];
-      const hasItem = displayIndex >= 0 && displayIndex < total && item;
-      const isRead = item && $(item).hasClass('item-read');
-      const isCurrent = displayIndex === currentIndex;
-
-      // Store item reference on segment for tooltip handler
-      $segment.data('item', hasItem ? item : null);
-
-      // Remove all state classes
-      $segment.removeClass(
-        'feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed ' +
-        'feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 ' +
-        'feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8'
-      );
-
-      // Clear existing content
-      $segment.find('.feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time, .feed-map-segment-progress').remove();
-
-      if (!hasItem) {
-        $segment.addClass('feed-map-segment-empty');
-        return;
-      }
-
-      // Apply read state
-      if (isRead) $segment.addClass('feed-map-segment-read');
-
-      // Apply current selection
-      if (isCurrent) $segment.addClass('feed-map-segment-current');
-
-      // Apply heatmap/ratioed styling
-      const engData = windowEngagement[i];
-      if (engData?.engagement?.isRatioed) {
-        $segment.addClass('feed-map-segment-ratioed');
-      } else if (heatmapMode !== 'None' && engData) {
-        const heatLevel = this.getHeatLevel(engData.score, maxScore);
-        if (heatLevel > 0) {
-          $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
-        }
-      }
-
-      // Add icons
-      if (showIcons && engData?.engagement) {
-        const icon = this.getContentIcon(engData.engagement);
-        if (icon) {
-          $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
-        }
-      }
-
-      // Add avatar (with reposter overlay for reposts)
-      if (showAvatars && engData?.engagement?.avatarUrl) {
-        const avatarHeight = Math.round(32 * (avatarScale / 100));
-        let avatarStyle = `height: ${avatarHeight}px`;
-        // Apply author rule color border if enabled
-        if (showRuleColors && engData?.engagement?.handle) {
-          const categoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.handle);
-          if (categoryIndex >= 0) {
-            const color = this.getColorForCategoryIndex(categoryIndex);
-            avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
-          }
-        }
-        // Apply Clearsky block styling (overrides rule color if blocked)
-        const blockInfo = this.getClearskyBlockInfo(engData?.engagement?.handle);
-        if (blockInfo.type && blockInfo.color) {
-          avatarStyle += `; box-shadow: 0 0 0 3px ${blockInfo.color}; border-radius: 50%`;
-        }
-
-        // For reposts with reposter avatar, wrap in container and add reposter overlay
-        if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
-          const reposterHeight = Math.round(avatarHeight * 0.5); // Reposter avatar is half the size
-          let reposterStyle = `height: ${reposterHeight}px`;
-          // Apply reposter rule color if enabled
-          if (showRuleColors && engData?.engagement?.reposterHandle) {
-            const reposterCategoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.reposterHandle);
-            if (reposterCategoryIndex >= 0) {
-              const color = this.getColorForCategoryIndex(reposterCategoryIndex);
-              reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
-            }
-          }
-          // Apply Clearsky block styling to reposter
-          const reposterBlockInfo = this.getClearskyBlockInfo(engData?.engagement?.reposterHandle);
-          if (reposterBlockInfo.type && reposterBlockInfo.color) {
-            reposterStyle += `; box-shadow: 0 0 0 2px ${reposterBlockInfo.color}`;
-          }
-          $segment.append(`
-            <span class="feed-map-segment-avatar-container">
-              <img class="feed-map-segment-avatar" src="${this.escapeHtml(engData.engagement.avatarUrl)}" alt="" style="${avatarStyle}">
-              <img class="feed-map-segment-reposter-avatar" src="${this.escapeHtml(engData.engagement.reposterAvatarUrl)}" alt="" style="${reposterStyle}">
-            </span>
-          `);
-        } else {
-          $segment.append(`<img class="feed-map-segment-avatar" src="${this.escapeHtml(engData.engagement.avatarUrl)}" alt="" style="${avatarStyle}">`);
-        }
-      }
-
-      // Add handle
-      if (showHandles && engData?.engagement?.handle) {
-        const handle = engData.engagement.handle;
-        const dotIndex = handle.indexOf('.');
-        const handleHtml = dotIndex > 0
-          ? `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle.substring(0, dotIndex))}</span><span class="feed-map-segment-handle-domain">${this.escapeHtml(handle.substring(dotIndex))}</span>`
-          : `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle)}</span>`;
-        // Apply author rule color if enabled
-        let handleStyle = '';
-        if (showRuleColors) {
-          const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
-          if (categoryIndex >= 0) {
-            const color = this.getColorForCategoryIndex(categoryIndex);
-            handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
-          }
-        }
-        // Apply Clearsky block styling (overrides rule color if blocked)
-        const blockInfo = this.getClearskyBlockInfo(handle);
-        if (blockInfo.type && blockInfo.color) {
-          handleStyle = ` style="background-color: ${blockInfo.color}55; border: 2px solid ${blockInfo.color}; border-radius: 3px; padding: 0 2px;"`;
-        }
-        $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
-      }
-
-      // Add timestamp
-      if (showTimestamps) {
-        const timestamp = this.getTimestampForItem(item);
-        if (timestamp) {
-          const relativeTime = this.formatRelativeTime(timestamp);
-          // Apply content rule color if enabled
-          let timeStyle = '';
-          if (showRuleColors) {
-            const categoryIndex = this.getFilterCategoryIndexForContent(item);
-            if (categoryIndex >= 0) {
-              const color = this.getColorForCategoryIndex(categoryIndex);
-              timeStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
-            }
-          }
-          $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
-        }
-      }
-
-      // Add thread progress bar for unrolled threads
-      if (engData?.engagement?.unrolledCount > 0) {
-        const unrolledCount = engData.engagement.unrolledCount;
-        const totalPosts = unrolledCount + 1; // main post + replies
-        // For current item, determine which posts have been visited based on threadIndex
-        const currentThreadIndex = isCurrent && this.threadIndex != null ? this.threadIndex : -1;
-        // Build segments for each post in thread
-        let segmentsHtml = '';
-        for (let i = 0; i < totalPosts; i++) {
-          const isVisited = i <= currentThreadIndex;
-          const segmentClass = isVisited ? 'feed-map-thread-segment feed-map-thread-segment-visited' : 'feed-map-thread-segment';
-          segmentsHtml += `<div class="${segmentClass}"></div>`;
-        }
-        $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`);
-      }
+      renderZoomSegment(this, $(segment), {
+        item,
+        hasItem: displayIndex >= 0 && displayIndex < total && item,
+        isCurrent: displayIndex === currentIndex,
+        engData: windowEngagement[i],
+      }, segmentOptions);
     });
 
     // Update zoom labels
-    this.updateFeedMapZoomLabels(windowStart, windowEnd);
+    this.updateFeedMapZoomLabels(windowStart, windowEnd, displayItems);
 
     // Update start/end indicators
     const atStart = windowStart === 0;
@@ -3290,181 +3060,26 @@ export class FeedItemHandler extends ItemHandler {
     // Update segment states
     const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
 
+    const segmentOptions = { heatmapMode, maxScore, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
     segments.each((i, segment) => {
-      const $segment = $(segment);
-      $segment.empty(); // Clear previous content before updating
       const displayIndex = windowStart + i;
       // Use displayItems passed from caller (already filtered)
       const item = displayItems[displayIndex];
       // Map to actual index for engagementData (which is indexed by allItems position)
       const actualIndex = displayIndices ? displayIndices[displayIndex] : displayIndex;
-      const hasItem = displayIndex >= 0 && displayIndex < total && item;
-      const isRead = item && $(item).hasClass('item-read');
-      const isCurrent = displayIndex === currentIndex;
-
-      // Store item reference on segment for tooltip handler
-      $segment.data('item', hasItem ? item : null);
-
-      // Remove all state classes
-      $segment.removeClass(
-        'feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed ' +
-        'feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 ' +
-        'feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8'
-      );
-
-      // Clear existing icon, avatar, handle, time, and progress bar
-      $segment.find('.feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time, .feed-map-segment-progress').remove();
-
-      // Mark empty segments (no corresponding item)
-      if (!hasItem) {
-        $segment.addClass('feed-map-segment-empty');
-        return;
-      }
-
-      // Apply read state first
-      if (isRead) {
-        $segment.addClass('feed-map-segment-read');
-      }
-
-      // Apply current selection indicator (outline only, doesn't affect background)
-      if (isCurrent) {
-        $segment.addClass('feed-map-segment-current');
-      }
-
-      // Apply background color: ratioed takes precedence, then heatmap
-      if (engagementData[actualIndex]?.engagement?.isRatioed) {
-        $segment.addClass('feed-map-segment-ratioed');
-      } else if (heatmapMode !== 'None' && engagementData[actualIndex]) {
-        const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
-        if (heatLevel > 0) {
-          $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
-        }
-      }
-
-      // Add content icon if enabled (appears on top)
-      if (showIcons && engagementData[actualIndex]?.engagement) {
-        const icon = this.getContentIcon(engagementData[actualIndex].engagement);
-        if (icon) {
-          $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
-        }
-      }
-
-      // Add avatar if enabled (appears below icons, with reposter overlay for reposts)
-      if (showAvatars && engagementData[actualIndex]?.engagement?.avatarUrl) {
-        const engData = engagementData[actualIndex];
-        const avatarUrl = engData.engagement.avatarUrl;
-        // Avatar size in pixels: base 32px scaled by user preference (25-100%)
-        const avatarHeight = Math.round(32 * (avatarScale / 100));
-        let avatarStyle = `height: ${avatarHeight}px`;
-        // Apply author rule color border if enabled
-        if (showRuleColors && engData?.engagement?.handle) {
-          const categoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.handle);
-          if (categoryIndex >= 0) {
-            const color = this.getColorForCategoryIndex(categoryIndex);
-            avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
-          }
-        }
-        // Apply Clearsky block styling (overrides rule color if blocked)
-        const blockInfo = this.getClearskyBlockInfo(engData?.engagement?.handle);
-        if (blockInfo.type && blockInfo.color) {
-          avatarStyle += `; box-shadow: 0 0 0 3px ${blockInfo.color}; border-radius: 50%`;
-        }
-
-        // For reposts with reposter avatar, wrap in container and add reposter overlay
-        if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
-          const reposterHeight = Math.round(avatarHeight * 0.5); // Reposter avatar is half the size
-          let reposterStyle = `height: ${reposterHeight}px`;
-          // Apply reposter rule color if enabled
-          if (showRuleColors && engData?.engagement?.reposterHandle) {
-            const reposterCategoryIndex = this.getFilterCategoryIndexForHandle(engData.engagement.reposterHandle);
-            if (reposterCategoryIndex >= 0) {
-              const color = this.getColorForCategoryIndex(reposterCategoryIndex);
-              reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
-            }
-          }
-          // Apply Clearsky block styling to reposter
-          const reposterBlockInfo = this.getClearskyBlockInfo(engData?.engagement?.reposterHandle);
-          if (reposterBlockInfo.type && reposterBlockInfo.color) {
-            reposterStyle += `; box-shadow: 0 0 0 2px ${reposterBlockInfo.color}`;
-          }
-          $segment.append(`
-            <span class="feed-map-segment-avatar-container">
-              <img class="feed-map-segment-avatar" src="${this.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">
-              <img class="feed-map-segment-reposter-avatar" src="${this.escapeHtml(engData.engagement.reposterAvatarUrl)}" alt="" style="${reposterStyle}">
-            </span>
-          `);
-        } else {
-          $segment.append(`<img class="feed-map-segment-avatar" src="${this.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">`);
-        }
-      }
-
-      // Add handle if enabled (appears below avatar)
-      if (showHandles && engagementData[actualIndex]?.engagement?.handle) {
-        const handle = engagementData[actualIndex].engagement.handle;
-        const dotIndex = handle.indexOf('.');
-        let handleHtml;
-        if (dotIndex > 0) {
-          handleHtml = `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle.substring(0, dotIndex))}</span><span class="feed-map-segment-handle-domain">${this.escapeHtml(handle.substring(dotIndex))}</span>`;
-        } else {
-          handleHtml = `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle)}</span>`;
-        }
-        // Apply author rule color if enabled
-        let handleStyle = '';
-        if (showRuleColors) {
-          const categoryIndex = this.getFilterCategoryIndexForHandle(handle);
-          if (categoryIndex >= 0) {
-            const color = this.getColorForCategoryIndex(categoryIndex);
-            handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
-          }
-        }
-        // Apply Clearsky block styling (overrides rule color if blocked)
-        const blockInfo = this.getClearskyBlockInfo(handle);
-        if (blockInfo.type && blockInfo.color) {
-          handleStyle = ` style="background-color: ${blockInfo.color}55; border: 2px solid ${blockInfo.color}; border-radius: 3px; padding: 0 2px;"`;
-        }
-        $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
-      }
-
-      // Add relative time in bottom right if enabled
-      if (showTimestamps) {
-        const timestamp = this.getTimestampForItem(item);
-        if (timestamp) {
-          const relativeTime = this.formatRelativeTime(timestamp);
-          // Apply content rule color if enabled
-          let timeStyle = '';
-          if (showRuleColors) {
-            const categoryIndex = this.getFilterCategoryIndexForContent(item);
-            if (categoryIndex >= 0) {
-              const color = this.getColorForCategoryIndex(categoryIndex);
-              timeStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
-            }
-          }
-          $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
-        }
-      }
-
-      // Add thread progress bar for unrolled threads
-      if (engagementData[actualIndex]?.engagement?.unrolledCount > 0) {
-        const unrolledCount = engagementData[actualIndex].engagement.unrolledCount;
-        const totalPosts = unrolledCount + 1; // main post + replies
-        // For current item, determine which posts have been visited based on threadIndex
-        const currentThreadIndex = isCurrent && this.threadIndex != null ? this.threadIndex : -1;
-        // Build segments for each post in thread
-        let segmentsHtml = '';
-        for (let i = 0; i < totalPosts; i++) {
-          const isVisited = i <= currentThreadIndex;
-          const segmentClass = isVisited ? 'feed-map-thread-segment feed-map-thread-segment-visited' : 'feed-map-thread-segment';
-          segmentsHtml += `<div class="${segmentClass}"></div>`;
-        }
-        $segment.append(`<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`);
-      }
+      renderZoomSegment(this, $(segment), {
+        item,
+        hasItem: displayIndex >= 0 && displayIndex < total && item,
+        isCurrent: displayIndex === currentIndex,
+        engData: engagementData[actualIndex],
+      }, segmentOptions);
     });
 
     // Always show icons in zoom view (segments are larger)
     zoomIndicator.css('--feed-map-icon-display', 'flex');
 
     // Update feed map zoom labels (only for actual items)
-    this.updateFeedMapZoomLabels(windowStart, windowEnd);
+    this.updateFeedMapZoomLabels(windowStart, windowEnd, displayItems);
 
     // Add visual indication when zoom reaches start or end of feed
     const atStart = windowStart === 0;
@@ -3576,12 +3191,13 @@ export class FeedItemHandler extends ItemHandler {
   /**
    * Update the date/time labels for the feed map zoom
    */
-  updateFeedMapZoomLabels(windowStart, windowEnd) {
+  updateFeedMapZoomLabels(windowStart, windowEnd, displayItems) {
     if (!this.feedMapZoomLabelStart || !this.feedMapZoomLabelEnd) return;
-    if (!this.items.length) return;
+    // windowStart/windowEnd are display indices, so look them up in the displayed list
+    if (!displayItems || !displayItems.length) return;
 
-    const firstItem = this.items[windowStart];
-    const lastItem = this.items[windowEnd];
+    const firstItem = displayItems[windowStart];
+    const lastItem = displayItems[windowEnd];
 
     let firstTimestamp = this.getTimestampForItem(firstItem);
     let lastTimestamp = this.getTimestampForItem(lastItem);
@@ -3616,7 +3232,9 @@ export class FeedItemHandler extends ItemHandler {
     this.feedMapZoomLabelEnd.text(formatCompact(lastTimestamp));
   }
 
-  updateViewportIndicator(indicator, total) {
+  updateViewportIndicator(indicator, displayItems) {
+    // Segments are laid out per displayed item, so measure visibility over the same list
+    const total = displayItems ? displayItems.length : 0;
     const viewportIndicator = indicator.find('.feed-map-viewport-indicator');
     if (!viewportIndicator.length || total === 0) return;
 
@@ -3646,8 +3264,8 @@ export class FeedItemHandler extends ItemHandler {
     let firstVisible = -1;
     let lastVisible = -1;
 
-    for (let i = 0; i < this.items.length; i++) {
-      const item = this.items[i];
+    for (let i = 0; i < total; i++) {
+      const item = displayItems[i];
       if (!item) continue;
 
       const rect = item.getBoundingClientRect();

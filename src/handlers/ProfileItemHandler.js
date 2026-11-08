@@ -315,7 +315,11 @@ export class ProfileItemHandler extends FeedItemHandler {
     }
 
     // Create feed map elements using shared utility
-    const elements = createFeedMapElements(feedMapConfig, { isToolbar: false });
+    const elements = createFeedMapElements(feedMapConfig, {
+      isToolbar: false,
+      withZoomInner: true,
+      zoomFirst: true,
+    });
 
     // Attach elements to handler properties
     attachFeedMapToHandler(this, elements);

@@ -32,11 +32,16 @@ export function convertToEmbed(url) {
   if (!safeUrl) return label;
   const href = escapeHtml(safeUrl);
 
+  // Match providers on the parsed hostname (exact or subdomain), not a substring of
+  // the whole URL — otherwise e.g. netflix.com would match "x.com".
+  const host = new URL(safeUrl).hostname.toLowerCase();
+  const isHost = (...domains) => domains.some((d) => host === d || host.endsWith(`.${d}`));
+
   try {
     let embedHtml = '';
 
     // YouTube Embed
-    if (safeUrl.includes('youtube.com') || safeUrl.includes('youtu.be')) {
+    if (isHost('youtube.com', 'youtu.be')) {
       const videoId = safeUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
       if (videoId) {
         embedHtml = `<iframe width="320" height="200" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
@@ -44,13 +49,13 @@ export function convertToEmbed(url) {
     }
 
     // Twitter/X Embed
-    else if (safeUrl.includes('twitter.com') || safeUrl.includes('x.com')) {
+    else if (isHost('twitter.com', 'x.com')) {
       embedHtml = `<blockquote class="twitter-tweet"><a href="${href}"></a></blockquote>
                          <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>`;
     }
 
     // TikTok Embed
-    else if (safeUrl.includes('tiktok.com')) {
+    else if (isHost('tiktok.com')) {
       embedHtml = `<blockquote class="tiktok-embed" cite="${href}" data-video-id="${escapeHtml(safeUrl.split('/').pop())}" style="max-width: 605px; min-width: 325px;">
                             <a href="${href}">Watch on TikTok</a>
                          </blockquote>
@@ -58,7 +63,7 @@ export function convertToEmbed(url) {
     }
 
     // Instagram Embed
-    else if (safeUrl.includes('instagram.com/p/')) {
+    else if (isHost('instagram.com') && new URL(safeUrl).pathname.startsWith('/p/')) {
       embedHtml = `<blockquote class="instagram-media" data-instgrm-permalink="${href}" data-instgrm-version="13">
                             <a href="${href}">View on Instagram</a>
                          </blockquote>

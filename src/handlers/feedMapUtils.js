@@ -39,14 +39,20 @@ export function getFeedMapConfig(config) {
  * @param {object} options - Additional options
  * @param {boolean} options.isToolbar - True for toolbar position, false for status bar
  * @param {boolean} options.isStatusBar - True for status bar position
+ * @param {boolean} [options.withZoomInner=isToolbar] - Create the inner zoom wrapper used for
+ *   segment rendering and smooth scroll animation (updateFeedMapZoom() needs it)
+ * @param {boolean} [options.zoomFirst=false] - Put the zoom map before the main map in the
+ *   wrapper (zoom, connector, main) instead of (main, connector, zoom)
  * @returns {object} Object containing all created jQuery elements
  */
 export function createFeedMapElements(feedMapConfig, options = {}) {
   const { styleClass, themeClass, customPropsStyle } = feedMapConfig;
-  const { isToolbar = false } = options;
+  const { isToolbar = false, withZoomInner = isToolbar, zoomFirst = false } = options;
 
   // Container class varies by position
-  const containerClass = isToolbar ? 'feed-map-container feed-map-container-toolbar' : 'feed-map-container';
+  const containerClass = isToolbar
+    ? 'feed-map-container feed-map-container-toolbar'
+    : 'feed-map-container';
   const zoomContainerClass = isToolbar
     ? 'feed-map-container feed-map-container-toolbar feed-map-zoom-container'
     : 'feed-map-container feed-map-zoom-container';
@@ -71,7 +77,6 @@ export function createFeedMapElements(feedMapConfig, options = {}) {
     ? `feed-map-wrapper ${styleClass} ${themeClass}`
     : `feed-map-wrapper feed-map-wrapper-statusbar ${styleClass} ${themeClass}`;
   const wrapper = $(`<div class="${wrapperClass}" style="${customPropsStyle}"></div>`);
-  wrapper.append(container);
 
   // Add connector SVG between main indicator and zoom
   const connector = $(`<div class="feed-map-connector">
@@ -80,7 +85,6 @@ export function createFeedMapElements(feedMapConfig, options = {}) {
       <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
     </svg>
   </div>`);
-  wrapper.append(connector);
 
   // Create zoom container and elements
   const zoomContainer = $(`<div class="${zoomContainerClass}"></div>`);
@@ -90,9 +94,9 @@ export function createFeedMapElements(feedMapConfig, options = {}) {
     `<div id="feed-map-position-indicator-zoom" class="feed-map-position-indicator feed-map-position-indicator-zoom"></div>`
   );
 
-  // Inner wrapper for smooth scroll animation (only for toolbar)
+  // Inner wrapper for smooth scroll animation
   let zoomInner = null;
-  if (isToolbar) {
+  if (withZoomInner) {
     zoomInner = $(`<div class="feed-map-zoom-inner"></div>`);
     zoom.append(zoomInner);
   }
@@ -100,7 +104,12 @@ export function createFeedMapElements(feedMapConfig, options = {}) {
   zoomContainer.append(zoomLabelStart);
   zoomContainer.append(zoom);
   zoomContainer.append(zoomLabelEnd);
-  wrapper.append(zoomContainer);
+
+  if (zoomFirst) {
+    wrapper.append(zoomContainer, connector, container);
+  } else {
+    wrapper.append(container, connector, zoomContainer);
+  }
 
   return {
     container,
@@ -174,4 +183,198 @@ export function setupFeedMap(handler, config, options = {}) {
   attachFeedMapToHandler(handler, elements);
   setupFeedMapHandlers(handler, elements.map, elements.zoom);
   return elements;
+}
+
+const ZOOM_SEGMENT_STATE_CLASSES =
+  'feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed ' +
+  'feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 ' +
+  'feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8';
+
+/**
+ * Render one feed map zoom segment (state classes, icon, avatar, handle, time, thread progress).
+ * Shared by FeedItemHandler.updateFeedMapZoom() and updateFeedMapZoomDirect().
+ *
+ * @param {object} handler - FeedItemHandler instance (for engagement/rule/format helpers)
+ * @param {jQuery} $segment - Zoom segment element to render into
+ * @param {object} segmentState - { item, hasItem, isCurrent, engData } for this segment
+ * @param {object} options - { heatmapMode, maxScore, showIcons, showAvatars, avatarScale,
+ *   showHandles, showTimestamps, showRuleColors }
+ */
+export function renderZoomSegment(handler, $segment, segmentState, options) {
+  const { item, hasItem, isCurrent, engData } = segmentState;
+  const {
+    heatmapMode,
+    maxScore,
+    showIcons,
+    showAvatars,
+    avatarScale,
+    showHandles,
+    showTimestamps,
+    showRuleColors,
+  } = options;
+
+  $segment.empty(); // Clear previous content before updating
+  const isRead = item && $(item).hasClass('item-read');
+
+  // Store item reference on segment for tooltip handler
+  $segment.data('item', hasItem ? item : null);
+
+  // Remove all state classes
+  $segment.removeClass(ZOOM_SEGMENT_STATE_CLASSES);
+
+  // Clear existing icon, avatar, handle, time, and progress bar
+  $segment
+    .find(
+      '.feed-map-segment-icon, .feed-map-segment-avatar, .feed-map-segment-handle, .feed-map-segment-time, .feed-map-segment-progress'
+    )
+    .remove();
+
+  // Mark empty segments (no corresponding item)
+  if (!hasItem) {
+    $segment.addClass('feed-map-segment-empty');
+    return;
+  }
+
+  // Apply read state first
+  if (isRead) {
+    $segment.addClass('feed-map-segment-read');
+  }
+
+  // Apply current selection indicator (outline only, doesn't affect background)
+  if (isCurrent) {
+    $segment.addClass('feed-map-segment-current');
+  }
+
+  // Apply background color: ratioed takes precedence, then heatmap
+  if (engData?.engagement?.isRatioed) {
+    $segment.addClass('feed-map-segment-ratioed');
+  } else if (heatmapMode !== 'None' && engData) {
+    const heatLevel = handler.getHeatLevel(engData.score, maxScore);
+    if (heatLevel > 0) {
+      $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
+    }
+  }
+
+  // Add content icon if enabled (appears on top)
+  if (showIcons && engData?.engagement) {
+    const icon = handler.getContentIcon(engData.engagement);
+    if (icon) {
+      $segment.append(`<span class="feed-map-segment-icon">${icon}</span>`);
+    }
+  }
+
+  // Add avatar if enabled (appears below icons, with reposter overlay for reposts)
+  if (showAvatars && engData?.engagement?.avatarUrl) {
+    const avatarUrl = engData.engagement.avatarUrl;
+    // Avatar size in pixels: base 32px scaled by user preference (25-100%)
+    const avatarHeight = Math.round(32 * (avatarScale / 100));
+    let avatarStyle = `height: ${avatarHeight}px`;
+    // Apply author rule color border if enabled
+    if (showRuleColors && engData?.engagement?.handle) {
+      const categoryIndex = handler.getFilterCategoryIndexForHandle(engData.engagement.handle);
+      if (categoryIndex >= 0) {
+        const color = handler.getColorForCategoryIndex(categoryIndex);
+        avatarStyle += `; box-shadow: 0 0 0 2px ${color}; border-radius: 50%`;
+      }
+    }
+    // Apply Clearsky block styling (overrides rule color if blocked)
+    const blockInfo = handler.getClearskyBlockInfo(engData?.engagement?.handle);
+    if (blockInfo.type && blockInfo.color) {
+      avatarStyle += `; box-shadow: 0 0 0 3px ${blockInfo.color}; border-radius: 50%`;
+    }
+
+    // For reposts with reposter avatar, wrap in container and add reposter overlay
+    if (engData?.engagement?.isRepost && engData?.engagement?.reposterAvatarUrl) {
+      const reposterHeight = Math.round(avatarHeight * 0.5); // Reposter avatar is half the size
+      let reposterStyle = `height: ${reposterHeight}px`;
+      // Apply reposter rule color if enabled
+      if (showRuleColors && engData?.engagement?.reposterHandle) {
+        const reposterCategoryIndex = handler.getFilterCategoryIndexForHandle(
+          engData.engagement.reposterHandle
+        );
+        if (reposterCategoryIndex >= 0) {
+          const color = handler.getColorForCategoryIndex(reposterCategoryIndex);
+          reposterStyle += `; box-shadow: 0 0 0 1px ${color}`;
+        }
+      }
+      // Apply Clearsky block styling to reposter
+      const reposterBlockInfo = handler.getClearskyBlockInfo(engData?.engagement?.reposterHandle);
+      if (reposterBlockInfo.type && reposterBlockInfo.color) {
+        reposterStyle += `; box-shadow: 0 0 0 2px ${reposterBlockInfo.color}`;
+      }
+      $segment.append(`
+            <span class="feed-map-segment-avatar-container">
+              <img class="feed-map-segment-avatar" src="${handler.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">
+              <img class="feed-map-segment-reposter-avatar" src="${handler.escapeHtml(engData.engagement.reposterAvatarUrl)}" alt="" style="${reposterStyle}">
+            </span>
+          `);
+    } else {
+      $segment.append(
+        `<img class="feed-map-segment-avatar" src="${handler.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">`
+      );
+    }
+  }
+
+  // Add handle if enabled (appears below avatar)
+  if (showHandles && engData?.engagement?.handle) {
+    const handle = engData.engagement.handle;
+    const dotIndex = handle.indexOf('.');
+    const handleHtml =
+      dotIndex > 0
+        ? `<span class="feed-map-segment-handle-name">${handler.escapeHtml(handle.substring(0, dotIndex))}</span><span class="feed-map-segment-handle-domain">${handler.escapeHtml(handle.substring(dotIndex))}</span>`
+        : `<span class="feed-map-segment-handle-name">${handler.escapeHtml(handle)}</span>`;
+    // Apply author rule color if enabled
+    let handleStyle = '';
+    if (showRuleColors) {
+      const categoryIndex = handler.getFilterCategoryIndexForHandle(handle);
+      if (categoryIndex >= 0) {
+        const color = handler.getColorForCategoryIndex(categoryIndex);
+        handleStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
+      }
+    }
+    // Apply Clearsky block styling (overrides rule color if blocked)
+    const blockInfo = handler.getClearskyBlockInfo(handle);
+    if (blockInfo.type && blockInfo.color) {
+      handleStyle = ` style="background-color: ${blockInfo.color}55; border: 2px solid ${blockInfo.color}; border-radius: 3px; padding: 0 2px;"`;
+    }
+    $segment.append(`<span class="feed-map-segment-handle"${handleStyle}>${handleHtml}</span>`);
+  }
+
+  // Add relative time in bottom right if enabled
+  if (showTimestamps) {
+    const timestamp = handler.getTimestampForItem(item);
+    if (timestamp) {
+      const relativeTime = handler.formatRelativeTime(timestamp);
+      // Apply content rule color if enabled
+      let timeStyle = '';
+      if (showRuleColors) {
+        const categoryIndex = handler.getFilterCategoryIndexForContent(item);
+        if (categoryIndex >= 0) {
+          const color = handler.getColorForCategoryIndex(categoryIndex);
+          timeStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
+        }
+      }
+      $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
+    }
+  }
+
+  // Add thread progress bar for unrolled threads
+  if (engData?.engagement?.unrolledCount > 0) {
+    const unrolledCount = engData.engagement.unrolledCount;
+    const totalPosts = unrolledCount + 1; // main post + replies
+    // For current item, determine which posts have been visited based on threadIndex
+    const currentThreadIndex = isCurrent && handler.threadIndex != null ? handler.threadIndex : -1;
+    // Build segments for each post in thread
+    let segmentsHtml = '';
+    for (let i = 0; i < totalPosts; i++) {
+      const isVisited = i <= currentThreadIndex;
+      const segmentClass = isVisited
+        ? 'feed-map-thread-segment feed-map-thread-segment-visited'
+        : 'feed-map-thread-segment';
+      segmentsHtml += `<div class="${segmentClass}"></div>`;
+    }
+    $segment.append(
+      `<div class="feed-map-segment-progress" data-total="${totalPosts}">${segmentsHtml}</div>`
+    );
+  }
 }

@@ -1,5 +1,7 @@
 /* global $ */
 
+import { escapeHtml } from '../../utils.js';
+
 /**
  * PostUIAdapter - Adapter for post detail pages
  *
@@ -57,7 +59,7 @@ class PostUIAdapter {
 
     if (match) {
       const author = match[1];
-      this.uiManager.setInfoText(`Post by @${author}`);
+      this.uiManager.setInfoText(`Post by @${escapeHtml(author)}`);
     } else {
       this.uiManager.setInfoText('Post detail');
     }

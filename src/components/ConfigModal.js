@@ -1,6 +1,6 @@
 // ConfigModal.js - Custom configuration modal with tabbed interface
 
-import { announceToScreenReader, getAnimationDuration } from '../utils.js';
+import { announceToScreenReader, escapeHtml, getAnimationDuration } from '../utils.js';
 import constants from '../constants.js';
 import { state } from '../state.js';
 
@@ -1691,7 +1691,7 @@ export class ConfigModal {
    * Update cached list names from API
    */
   async updateCachedListNames(forceRefresh = false) {
-    const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+    const listCache = state.listCache;
     if (listCache) {
       try {
         this.cachedListNames = await listCache.getListNames(forceRefresh);
@@ -2296,17 +2296,14 @@ export class ConfigModal {
   }
 
   escapeHtml(text) {
-    if (text === null || text === undefined) return '';
-    const div = document.createElement('div');
-    div.textContent = String(text);
-    return div.innerHTML;
+    return escapeHtml(text);
   }
 
   /**
    * Checks if AT Protocol API is available
    */
   hasApiAccess() {
-    return !!(unsafeWindow.blueskyNavigatorState?.listCache?.api);
+    return !!(state.listCache?.api);
   }
 
   /**
@@ -2362,7 +2359,7 @@ export class ConfigModal {
    * Shows the sync dialog for a category
    */
   async showSyncDialog(category, action) {
-    const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+    const listCache = state.listCache;
     if (!listCache) {
       alert('AT Protocol agent not configured. Please set up your app password in settings.');
       return;
@@ -2730,9 +2727,7 @@ export class ConfigModal {
     const newRulesConfig = this.pendingChanges['rulesConfig'];
     this.config.set('rulesConfig', newRulesConfig);
     // Also update state.rulesConfig so remote sync doesn't overwrite on reload
-    if (unsafeWindow.blueskyNavigatorState) {
-      unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
-    }
+    state.rulesConfig = newRulesConfig;
     this.refreshVisualEditor();
   }
 
@@ -2756,7 +2751,7 @@ export class ConfigModal {
    * Show deduplication dialog for a category
    */
   async showDedupeDialog(category) {
-    const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+    const listCache = state.listCache;
     if (!listCache) {
       alert('AT Protocol agent not configured. Please set up your app password in settings.');
       return;
@@ -2920,9 +2915,7 @@ export class ConfigModal {
     const newRulesConfig = this.pendingChanges['rulesConfig'];
     this.config.set('rulesConfig', newRulesConfig);
     // Also update state.rulesConfig so remote sync doesn't overwrite on reload
-    if (unsafeWindow.blueskyNavigatorState) {
-      unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
-    }
+    state.rulesConfig = newRulesConfig;
     this.refreshVisualEditor();
   }
 

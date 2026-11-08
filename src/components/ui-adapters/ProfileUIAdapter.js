@@ -1,5 +1,7 @@
 /* global $ */
 
+import { escapeHtml } from '../../utils.js';
+
 /**
  * ProfileUIAdapter - Adapter for profile pages
  *
@@ -53,7 +55,7 @@ class ProfileUIAdapter {
     if (match) {
       const handle = match[1];
       // Handle might be a DID or a username
-      const displayName = handle.startsWith('did:') ? '' : `@${handle}`;
+      const displayName = handle.startsWith('did:') ? '' : `@${escapeHtml(handle)}`;
       this.uiManager.setInfoText(`Profile: ${displayName}`.trim());
     } else {
       this.uiManager.setInfoText('Profile');

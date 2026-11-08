@@ -1,6 +1,6 @@
 // ShortcutOverlay.js - Keyboard shortcuts help modal
 
-import { announceToScreenReader, getAnimationDuration } from '../utils.js';
+import { announceToScreenReader, escapeHtml, getAnimationDuration } from '../utils.js';
 
 /**
  * Keyboard shortcuts organized by category and context.
@@ -308,8 +308,6 @@ export class ShortcutOverlay {
    * Escape HTML special characters
    */
   escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return escapeHtml(text);
   }
 }

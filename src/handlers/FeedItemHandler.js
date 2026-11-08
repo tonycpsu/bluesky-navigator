@@ -1806,7 +1806,7 @@ export class FeedItemHandler extends ItemHandler {
     }).map((term) => {
       // Remove % prefix if present
       return term.startsWith('%') ? term.substring(1) : term;
-    });
+    }).filter(Boolean);
 
     if (terms.length === 0) return;
 
@@ -1817,12 +1817,25 @@ export class FeedItemHandler extends ItemHandler {
     // Create a regex for all terms
     const pattern = new RegExp(`(${terms.map(t => this.escapeRegex(t)).join('|')})`, 'gi');
 
+    // Build DOM nodes (text nodes + <mark>) rather than an HTML string so post
+    // text is never parsed as markup. split() with a capture group puts the
+    // matched terms at odd indices.
     postText.contents().each(function () {
       if (this.nodeType === Node.TEXT_NODE) {
-        const text = this.textContent;
-        if (pattern.test(text)) {
-          const highlighted = text.replace(pattern, '<mark class="filter-highlight">$1</mark>');
-          $(this).replaceWith(highlighted);
+        const parts = this.textContent.split(pattern);
+        if (parts.length > 1) {
+          const fragment = document.createDocumentFragment();
+          parts.forEach((part, i) => {
+            if (i % 2 === 1) {
+              const mark = document.createElement('mark');
+              mark.className = 'filter-highlight';
+              mark.textContent = part;
+              fragment.appendChild(mark);
+            } else if (part) {
+              fragment.appendChild(document.createTextNode(part));
+            }
+          });
+          this.replaceWith(fragment);
         }
       }
     });
@@ -2029,7 +2042,7 @@ export class FeedItemHandler extends ItemHandler {
       let content = '';
 
       if (part.type === 'author' && part.handle) {
-        content = `<a href="/profile/${part.handle}" class="breadcrumb-link">${this.escapeHtml(part.label)}</a>`;
+        content = `<a href="/profile/${this.escapeHtml(part.handle)}" class="breadcrumb-link">${this.escapeHtml(part.label)}</a>`;
       } else {
         content = `<span class="breadcrumb-text">${this.escapeHtml(part.label)}</span>`;
       }
@@ -2045,9 +2058,7 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return utils.escapeHtml(text);
   }
 
   updateScrollPosition(forceRebuild = false) {
@@ -2956,12 +2967,12 @@ export class FeedItemHandler extends ItemHandler {
           }
           $segment.append(`
             <span class="feed-map-segment-avatar-container">
-              <img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">
-              <img class="feed-map-segment-reposter-avatar" src="${engData.engagement.reposterAvatarUrl}" alt="" style="${reposterStyle}">
+              <img class="feed-map-segment-avatar" src="${this.escapeHtml(engData.engagement.avatarUrl)}" alt="" style="${avatarStyle}">
+              <img class="feed-map-segment-reposter-avatar" src="${this.escapeHtml(engData.engagement.reposterAvatarUrl)}" alt="" style="${reposterStyle}">
             </span>
           `);
         } else {
-          $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">`);
+          $segment.append(`<img class="feed-map-segment-avatar" src="${this.escapeHtml(engData.engagement.avatarUrl)}" alt="" style="${avatarStyle}">`);
         }
       }
 
@@ -2970,8 +2981,8 @@ export class FeedItemHandler extends ItemHandler {
         const handle = engData.engagement.handle;
         const dotIndex = handle.indexOf('.');
         const handleHtml = dotIndex > 0
-          ? `<span class="feed-map-segment-handle-name">${handle.substring(0, dotIndex)}</span><span class="feed-map-segment-handle-domain">${handle.substring(dotIndex)}</span>`
-          : `<span class="feed-map-segment-handle-name">${handle}</span>`;
+          ? `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle.substring(0, dotIndex))}</span><span class="feed-map-segment-handle-domain">${this.escapeHtml(handle.substring(dotIndex))}</span>`
+          : `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle)}</span>`;
         // Apply author rule color if enabled
         let handleStyle = '';
         if (showRuleColors) {
@@ -3252,12 +3263,12 @@ export class FeedItemHandler extends ItemHandler {
           }
           $segment.append(`
             <span class="feed-map-segment-avatar-container">
-              <img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">
-              <img class="feed-map-segment-reposter-avatar" src="${engData.engagement.reposterAvatarUrl}" alt="" style="${reposterStyle}">
+              <img class="feed-map-segment-avatar" src="${this.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">
+              <img class="feed-map-segment-reposter-avatar" src="${this.escapeHtml(engData.engagement.reposterAvatarUrl)}" alt="" style="${reposterStyle}">
             </span>
           `);
         } else {
-          $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">`);
+          $segment.append(`<img class="feed-map-segment-avatar" src="${this.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">`);
         }
       }
 
@@ -3267,9 +3278,9 @@ export class FeedItemHandler extends ItemHandler {
         const dotIndex = handle.indexOf('.');
         let handleHtml;
         if (dotIndex > 0) {
-          handleHtml = `<span class="feed-map-segment-handle-name">${handle.substring(0, dotIndex)}</span><span class="feed-map-segment-handle-domain">${handle.substring(dotIndex)}</span>`;
+          handleHtml = `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle.substring(0, dotIndex))}</span><span class="feed-map-segment-handle-domain">${this.escapeHtml(handle.substring(dotIndex))}</span>`;
         } else {
-          handleHtml = `<span class="feed-map-segment-handle-name">${handle}</span>`;
+          handleHtml = `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle)}</span>`;
         }
         // Apply author rule color if enabled
         let handleStyle = '';

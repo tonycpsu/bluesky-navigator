@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+651.3838a18d
+// @version     1.0.31+654.340f3ee7
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45457,9 +45457,21 @@ if (cid) {
     $("body").append(el);
     setTimeout(() => el.remove(), 1e3);
   }
+  const HTML_ESCAPES = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  };
+  function escapeHtml(str) {
+    if (str === null || str === void 0) return "";
+    return String(str).replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
+  }
   const utils$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
     __proto__: null,
     announceToScreenReader: announceToScreenReader$2,
+    escapeHtml,
     extractLastTerm,
     getAnimationDuration: getAnimationDuration$1,
     isModalOpen,
@@ -46970,7 +46982,7 @@ if (cid) {
      * Update cached list names from API
      */
     async updateCachedListNames(forceRefresh = false) {
-      const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+      const listCache = state.listCache;
       if (listCache) {
         try {
           this.cachedListNames = await listCache.getListNames(forceRefresh);
@@ -47433,16 +47445,13 @@ if (cid) {
       announceToScreenReader$2("Settings reset to defaults.");
     }
     escapeHtml(text) {
-      if (text === null || text === void 0) return "";
-      const div = document.createElement("div");
-      div.textContent = String(text);
-      return div.innerHTML;
+      return escapeHtml(text);
     }
     /**
      * Checks if AT Protocol API is available
      */
     hasApiAccess() {
-      return !!unsafeWindow.blueskyNavigatorState?.listCache?.api;
+      return !!state.listCache?.api;
     }
     /**
      * Shows the sync options menu
@@ -47487,7 +47496,7 @@ if (cid) {
      * Shows the sync dialog for a category
      */
     async showSyncDialog(category, action) {
-      const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+      const listCache = state.listCache;
       if (!listCache) {
         alert("AT Protocol agent not configured. Please set up your app password in settings.");
         return;
@@ -47779,9 +47788,7 @@ if (cid) {
       this.syncVisualToRaw();
       const newRulesConfig = this.pendingChanges["rulesConfig"];
       this.config.set("rulesConfig", newRulesConfig);
-      if (unsafeWindow.blueskyNavigatorState) {
-        unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
-      }
+      state.rulesConfig = newRulesConfig;
       this.refreshVisualEditor();
     }
     /**
@@ -47801,7 +47808,7 @@ if (cid) {
      * Show deduplication dialog for a category
      */
     async showDedupeDialog(category) {
-      const listCache = unsafeWindow.blueskyNavigatorState?.listCache;
+      const listCache = state.listCache;
       if (!listCache) {
         alert("AT Protocol agent not configured. Please set up your app password in settings.");
         return;
@@ -47935,9 +47942,7 @@ if (cid) {
       this.syncVisualToRaw();
       const newRulesConfig = this.pendingChanges["rulesConfig"];
       this.config.set("rulesConfig", newRulesConfig);
-      if (unsafeWindow.blueskyNavigatorState) {
-        unsafeWindow.blueskyNavigatorState.rulesConfig = newRulesConfig;
-      }
+      state.rulesConfig = newRulesConfig;
       this.refreshVisualEditor();
     }
     /**
@@ -55217,7 +55222,7 @@ div#statusBar.has-feed-map {
   }
 }
 `;
-  const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-section sidecar-parent-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Parent</span>\n    </button>\n    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">\n      <div class="sidecar-parent">\n        <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n        {{> postTemplate parent}}\n      </div>\n    </div>\n  </div>\n  {{/if}}\n  {{#if replies.length}}\n  <div class="sidecar-section sidecar-replies-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Replies ({{replies.length}})</span>\n    </button>\n    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">\n      {{#each replies}}\n      {{> postTemplate this}}\n      {{/each}}\n    </div>\n  </div>\n  {{/if}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this}}\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title="{{alt}}"></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">\n  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">\n      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>\n      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{{text}}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images" style="margin-top: 8px;">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a href="{{uri}}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">\n  <div class="sidecar-embed-external" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; margin-top: 8px; overflow: hidden;">\n    {{#if thumb}}\n    <div class="sidecar-external-thumb" style="width: 100%; max-height: 200px; overflow: hidden;">\n      <img src="{{thumb}}" alt="{{title}}" style="width: 100%; object-fit: cover;" loading="lazy">\n    </div>\n    {{/if}}\n    <div class="sidecar-external-info" style="padding: 12px;">\n      <div class="sidecar-external-domain" style="font-size: 12px; color: rgb(112, 127, 140); margin-bottom: 4px;">{{domain}}</div>\n      <div class="sidecar-external-title" style="font-weight: 600; margin-bottom: 4px;">{{title}}</div>\n      {{#if description}}\n      <div class="sidecar-external-description" style="font-size: 14px; color: rgb(66, 87, 108); line-height: 1.3;">{{description}}</div>\n      {{/if}}\n    </div>\n  </div>\n</a>\n<\/script>\n\n<script id="sidecar-skeleton-template" type="text/x-handlebars-template">\n<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <span class="sr-only">Loading replies...</span>\n</div>\n<\/script>\n';
+  const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-section sidecar-parent-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Parent</span>\n    </button>\n    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">\n      <div class="sidecar-parent">\n        <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n        {{> postTemplate parent}}\n      </div>\n    </div>\n  </div>\n  {{/if}}\n  {{#if replies.length}}\n  <div class="sidecar-section sidecar-replies-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Replies ({{replies.length}})</span>\n    </button>\n    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">\n      {{#each replies}}\n      {{> postTemplate this}}\n      {{/each}}\n    </div>\n  </div>\n  {{/if}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this}}\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title="{{alt}}"></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">\n  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">\n      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>\n      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{text}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images" style="margin-top: 8px;">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a href="{{uri}}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">\n  <div class="sidecar-embed-external" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; margin-top: 8px; overflow: hidden;">\n    {{#if thumb}}\n    <div class="sidecar-external-thumb" style="width: 100%; max-height: 200px; overflow: hidden;">\n      <img src="{{thumb}}" alt="{{title}}" style="width: 100%; object-fit: cover;" loading="lazy">\n    </div>\n    {{/if}}\n    <div class="sidecar-external-info" style="padding: 12px;">\n      <div class="sidecar-external-domain" style="font-size: 12px; color: rgb(112, 127, 140); margin-bottom: 4px;">{{domain}}</div>\n      <div class="sidecar-external-title" style="font-weight: 600; margin-bottom: 4px;">{{title}}</div>\n      {{#if description}}\n      <div class="sidecar-external-description" style="font-size: 14px; color: rgb(66, 87, 108); line-height: 1.3;">{{description}}</div>\n      {{/if}}\n    </div>\n  </div>\n</a>\n<\/script>\n\n<script id="sidecar-skeleton-template" type="text/x-handlebars-template">\n<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <span class="sr-only">Loading replies...</span>\n</div>\n<\/script>\n';
   const SHORTCUTS = {
     "Global Navigation": {
       contexts: null,
@@ -55478,9 +55483,7 @@ div#statusBar.has-feed-map {
      * Escape HTML special characters
      */
     escapeHtml(text) {
-      const div = document.createElement("div");
-      div.textContent = text;
-      return div.innerHTML;
+      return escapeHtml(text);
     }
   }
   class Handler {
@@ -63509,72 +63512,87 @@ div#statusBar.has-feed-map {
     const blob2 = await canvasToBlob(canvas);
     return blob2;
   }
+  function safeHttpUrl(url) {
+    if (typeof url !== "string" || !url) return null;
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === "http:" || parsed.protocol === "https:" ? url : null;
+    } catch {
+      return null;
+    }
+  }
   function convertToEmbed(url) {
+    const label = escapeHtml(url);
+    const safeUrl = safeHttpUrl(url);
+    if (!safeUrl) return label;
+    const href = escapeHtml(safeUrl);
     try {
       let embedHtml = "";
-      if (url.includes("youtube.com") || url.includes("youtu.be")) {
-        const videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
+      if (safeUrl.includes("youtube.com") || safeUrl.includes("youtu.be")) {
+        const videoId = safeUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
         if (videoId) {
           embedHtml = `<iframe width="320" height="200" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
         }
-      } else if (url.includes("twitter.com") || url.includes("x.com")) {
-        embedHtml = `<blockquote class="twitter-tweet"><a href="${url}"></a></blockquote>
+      } else if (safeUrl.includes("twitter.com") || safeUrl.includes("x.com")) {
+        embedHtml = `<blockquote class="twitter-tweet"><a href="${href}"></a></blockquote>
                          <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"><\/script>`;
-      } else if (url.includes("tiktok.com")) {
-        embedHtml = `<blockquote class="tiktok-embed" cite="${url}" data-video-id="${url.split("/").pop()}" style="max-width: 605px; min-width: 325px;">
-                            <a href="${url}">Watch on TikTok</a>
+      } else if (safeUrl.includes("tiktok.com")) {
+        embedHtml = `<blockquote class="tiktok-embed" cite="${href}" data-video-id="${escapeHtml(safeUrl.split("/").pop())}" style="max-width: 605px; min-width: 325px;">
+                            <a href="${href}">Watch on TikTok</a>
                          </blockquote>
                          <script async src="https://www.tiktok.com/embed.js"><\/script>`;
-      } else if (url.includes("instagram.com/p/")) {
-        embedHtml = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="13">
-                            <a href="${url}">View on Instagram</a>
+      } else if (safeUrl.includes("instagram.com/p/")) {
+        embedHtml = `<blockquote class="instagram-media" data-instgrm-permalink="${href}" data-instgrm-version="13">
+                            <a href="${href}">View on Instagram</a>
                          </blockquote>
                          <script async src="https://www.instagram.com/embed.js"><\/script>`;
       }
-      return embedHtml || `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+      return embedHtml || `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
     } catch (error) {
       console.error("Error generating embed:", error);
-      return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
     }
   }
   function formatPostText(post2) {
-    let text = post2.text;
-    if (!post2.facets) return text;
-    const charOffsets = buildByteToCharMap(text);
-    const sortedFacets = [...post2.facets].reverse();
-    for (const facet2 of sortedFacets) {
-      const { index, features } = facet2;
-      const start = charOffsets.findLast((c) => c.byteOffset <= index.byteStart)?.charIndex || 0;
-      const end = charOffsets.findLast((c) => c.byteOffset <= index.byteEnd)?.charIndex || text.length;
-      const originalText = text.slice(start, end);
-      for (const feature of features) {
-        const replacement = formatFacetFeature(feature, originalText);
-        if (replacement) {
-          text = text.slice(0, start) + replacement + text.slice(end + 1);
-        }
-      }
+    const text = typeof post2?.text === "string" ? post2.text : "";
+    if (!Array.isArray(post2?.facets) || post2.facets.length === 0) return escapeHtml(text);
+    const bytes = new TextEncoder().encode(text);
+    const decoder = new TextDecoder();
+    const decode2 = (from2, to) => decoder.decode(bytes.subarray(from2, to));
+    const facets = post2.facets.filter((facet2) => {
+      const start = facet2?.index?.byteStart;
+      const end = facet2?.index?.byteEnd;
+      return Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end > start && end <= bytes.length;
+    }).sort((a, b) => a.index.byteStart - b.index.byteStart);
+    let html = "";
+    let cursor = 0;
+    for (const facet2 of facets) {
+      const { byteStart, byteEnd } = facet2.index;
+      if (byteStart < cursor) continue;
+      html += escapeHtml(decode2(cursor, byteStart));
+      const facetText = decode2(byteStart, byteEnd);
+      html += formatFacet(facet2.features, facetText) ?? escapeHtml(facetText);
+      cursor = byteEnd;
     }
-    return text;
+    html += escapeHtml(decode2(cursor, bytes.length));
+    return html;
   }
-  function buildByteToCharMap(text) {
-    const charOffsets = [];
-    const encoder = new TextEncoder();
-    let byteOffset = 0;
-    for (let charIndex = 0; charIndex < [...text].length; charIndex++) {
-      const char = [...text][charIndex];
-      charOffsets.push({ byteOffset, charIndex });
-      byteOffset += encoder.encode(char).length;
+  function formatFacet(features, facetText) {
+    if (!Array.isArray(features)) return null;
+    for (const feature of features) {
+      const replacement = formatFacetFeature(feature, facetText);
+      if (replacement !== null) return replacement;
     }
-    return charOffsets;
+    return null;
   }
-  function formatFacetFeature(feature, originalText) {
-    switch (feature.$type) {
+  function formatFacetFeature(feature, facetText) {
+    switch (feature?.$type) {
       case "app.bsky.richtext.facet#mention":
-        return `<a href="https://bsky.app/profile/${feature.did}" class="mention">${originalText}</a>`;
+        return `<a href="https://bsky.app/profile/${escapeHtml(feature.did)}" class="mention">${escapeHtml(facetText)}</a>`;
       case "app.bsky.richtext.facet#link":
-        return convertToEmbed(feature.uri);
+        return safeHttpUrl(feature.uri) ? convertToEmbed(feature.uri) : escapeHtml(facetText);
       case "app.bsky.richtext.facet#tag":
-        return `<a href="https://bsky.app/search?q=%23${feature.tag}" class="hashtag">${originalText}</a>`;
+        return `<a href="https://bsky.app/search?q=%23${escapeHtml(encodeURIComponent(feature.tag ?? ""))}" class="hashtag">${escapeHtml(facetText)}</a>`;
       default:
         return null;
     }
@@ -63610,25 +63628,23 @@ div#statusBar.has-feed-map {
     if (!embed2) return null;
     if (embed2.external) {
       const ext = embed2.external;
-      return {
-        uri: ext.uri,
-        title: ext.title || "",
-        description: ext.description || "",
-        thumb: ext.thumb || null,
-        domain: ext.uri ? new URL(ext.uri).hostname : ""
-      };
+      return externalLinkData(ext);
     }
     if (embed2.media?.external) {
       const ext = embed2.media.external;
-      return {
-        uri: ext.uri,
-        title: ext.title || "",
-        description: ext.description || "",
-        thumb: ext.thumb || null,
-        domain: ext.uri ? new URL(ext.uri).hostname : ""
-      };
+      return externalLinkData(ext);
     }
     return null;
+  }
+  function externalLinkData(ext) {
+    const uri = safeHttpUrl(ext.uri);
+    return {
+      uri: uri || "",
+      title: ext.title || "",
+      description: ext.description || "",
+      thumb: ext.thumb || null,
+      domain: uri ? new URL(uri).hostname : ""
+    };
   }
   function formatPost(post2) {
     const formatter = Intl.NumberFormat("en", { notation: "compact" });
@@ -65695,7 +65711,7 @@ div#statusBar.has-feed-map {
         if (!firstBadge.length) {
           parent.css("padding-left", "44px");
           parent.css("position", "relative");
-          firstBadge = $(`<a href="${firstPostUrl}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`);
+          firstBadge = $(`<a href="${this.escapeHtml(firstPostUrl)}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`);
           parent.prepend(firstBadge);
         } else {
           firstBadge.attr("title", `Post 1 of ${totalPosts}`);
@@ -65714,7 +65730,7 @@ div#statusBar.has-feed-map {
           const postNumberClass = isLastPost ? "unrolled-post-number unrolled-post-last" : "unrolled-post-number";
           reply.append(
             $(
-              `<a href="${urlForPost(p)}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
+              `<a href="${this.escapeHtml(urlForPost(p))}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
             )
           );
           reply.append($(this.bodyTemplate(formatPost(p))));
@@ -67049,9 +67065,7 @@ div#statusBar.has-feed-map {
       return html;
     }
     escapeHtml(text) {
-      const div = document.createElement("div");
-      div.textContent = text;
-      return div.innerHTML;
+      return escapeHtml(text);
     }
     markItemRead(index, isRead) {
       if (this.name == "post" && !this.config.get("savePostState")) {
@@ -67704,12 +67718,12 @@ div#statusBar.has-feed-map {
           return n.toString();
         };
         card.innerHTML = `
-        <div class="bsky-nav-profile-card-banner" style="${profile2.banner ? `background-image: url(${profile2.banner})` : ""}"></div>
+        <div class="bsky-nav-profile-card-banner"></div>
         <div class="bsky-nav-profile-card-content">
-          <img class="bsky-nav-profile-card-avatar" src="${profile2.avatar || ""}" alt="${profile2.displayName || handle2}'s avatar">
+          <img class="bsky-nav-profile-card-avatar" src="${this.escapeHtml(profile2.avatar || "")}" alt="${this.escapeHtml(profile2.displayName || handle2)}'s avatar">
           <div class="bsky-nav-profile-card-names">
             <div class="bsky-nav-profile-card-displayname">${this.escapeHtml(profile2.displayName || handle2)}</div>
-            <div class="bsky-nav-profile-card-handle"><a href="https://bsky.app/profile/${handle2}" target="_blank">@${handle2}</a></div>
+            <div class="bsky-nav-profile-card-handle"><a href="https://bsky.app/profile/${this.escapeHtml(handle2)}" target="_blank">@${this.escapeHtml(handle2)}</a></div>
           </div>
           ${profile2.description ? `<div class="bsky-nav-profile-card-bio">${this.escapeHtml(profile2.description)}</div>` : ""}
           <div class="bsky-nav-profile-card-stats">
@@ -67731,6 +67745,13 @@ div#statusBar.has-feed-map {
           </div>
         </div>
       `;
+        if (profile2.banner) {
+          const bannerUrl = String(profile2.banner).replace(
+            /["\\\n\r]/g,
+            (ch) => `\\${ch.charCodeAt(0).toString(16)} `
+          );
+          card.querySelector(".bsky-nav-profile-card-banner").style.backgroundImage = `url("${bannerUrl}")`;
+        }
         card.querySelector('[data-action="view-profile"]').addEventListener("click", () => {
           window.location.href = `/profile/${handle2}`;
           card.remove();
@@ -67814,7 +67835,7 @@ div#statusBar.has-feed-map {
       const hasLists = !isContentRule && listCache && this.api;
       const dropdown = $(`
       <div class="bsky-nav-rules-dropdown">
-        <div class="bsky-nav-rules-dropdown-header">${headerText}</div>
+        <div class="bsky-nav-rules-dropdown-header">${this.escapeHtml(headerText)}</div>
         ${hasLists ? `
         <div class="bsky-nav-rules-dropdown-tabs">
           <button class="bsky-nav-rules-tab active" data-tab="rules">Rules</button>
@@ -67843,8 +67864,8 @@ div#statusBar.has-feed-map {
         const sc = isDark ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.9)";
         const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
         return `
-                  <button class="bsky-nav-rules-category-btn${activeCategory === cat ? " selected" : ""}" data-category="${cat}" style="color: ${color}; text-shadow: ${shadow}">
-                    ${cat}
+                  <button class="bsky-nav-rules-category-btn${activeCategory === cat ? " selected" : ""}" data-category="${this.escapeHtml(cat)}" style="color: ${color}; text-shadow: ${shadow}">
+                    ${this.escapeHtml(cat)}
                   </button>
                 `;
       }).join("") : '<div class="bsky-nav-rules-no-categories">No rule categories defined.<br>Create one in Settings \u2192 Rules.</div>'}
@@ -68156,10 +68177,10 @@ div#statusBar.has-feed-map {
       const popup = $(`
       <div class="bsky-nav-list-choice-popup">
         <div class="bsky-nav-list-choice-header">
-          Add @${handle2} to "${category}"
+          Add @${this.escapeHtml(handle2)} to "${this.escapeHtml(category)}"
         </div>
         <div class="bsky-nav-list-choice-info">
-          This category is backed by list "${backingList}"
+          This category is backed by list "${this.escapeHtml(backingList)}"
         </div>
         <div class="bsky-nav-list-choice-buttons">
           <button class="bsky-nav-list-choice-btn primary" data-choice="list">
@@ -68255,7 +68276,7 @@ div#statusBar.has-feed-map {
       const popup = $(`
       <div class="bsky-nav-timeout-popup">
         <div class="bsky-nav-timeout-header">
-          Timeout @${handle2}
+          Timeout @${this.escapeHtml(handle2)}
         </div>
         <div class="bsky-nav-timeout-body">
           <label class="bsky-nav-timeout-label">
@@ -68315,7 +68336,7 @@ div#statusBar.has-feed-map {
       const popup = $(`
       <div class="bsky-nav-timeout-popup">
         <div class="bsky-nav-timeout-header">
-          @${handle2} is timed out
+          @${this.escapeHtml(handle2)} is timed out
         </div>
         <div class="bsky-nav-timeout-body">
           <div class="bsky-nav-timeout-info">
@@ -68376,7 +68397,7 @@ div#statusBar.has-feed-map {
       const popup = $(`
       <div class="bsky-nav-follow-popup bsky-nav-timeout-popup">
         <div class="bsky-nav-timeout-header">
-          ${action} @${handle2}?
+          ${action} @${this.escapeHtml(handle2)}?
         </div>
         <div class="bsky-nav-timeout-buttons">
           <button class="bsky-nav-timeout-btn cancel">Cancel</button>
@@ -68639,7 +68660,7 @@ div#statusBar.has-feed-map {
       }
       const dropdown = $(`
       <div class="bsky-nav-rules-dropdown">
-        <div class="bsky-nav-rules-dropdown-header">Remove @${handle2} from:</div>
+        <div class="bsky-nav-rules-dropdown-header">Remove @${this.escapeHtml(handle2)} from:</div>
         <div class="bsky-nav-rules-dropdown-categories">
           ${categoriesWithAuthor.map(({ category, inList, inRules, listName }) => {
         const color = this.getColorForCategory(category);
@@ -68649,12 +68670,12 @@ div#statusBar.has-feed-map {
         const location = inList && inRules ? `(list & rules)` : inList ? `(list: ${listName})` : `(rules)`;
         return `
             <button class="bsky-nav-rules-category-btn bsky-nav-rules-remove-btn"
-                    data-category="${category}"
+                    data-category="${this.escapeHtml(category)}"
                     data-in-list="${inList}"
                     data-in-rules="${inRules}"
-                    data-list-name="${listName || ""}"
+                    data-list-name="${this.escapeHtml(listName || "")}"
                     style="color: ${color}; text-shadow: ${shadow}">
-              ${category} <span class="bsky-nav-rules-location">${location}</span>
+              ${this.escapeHtml(category)} <span class="bsky-nav-rules-location">${this.escapeHtml(location)}</span>
             </button>
           `;
       }).join("")}
@@ -69061,7 +69082,7 @@ ${rule}`;
     }
     /**
      * Debug helper - check why a handle matches a category
-     * Call from console: unsafeWindow.blueskyNavigatorState.handlers.feed.debugHandleMatch('@handle', 'category')
+     * Call from console: bskyDebug.handleMatch('@handle', 'category')
      */
     debugHandleMatch(handle2, categoryName) {
       const normalizedHandle = handle2.startsWith("@") ? handle2 : `@${handle2}`;
@@ -69072,7 +69093,7 @@ ${rule}`;
     }
     /**
      * Debug helper - compare state.rules with what would be parsed from config
-     * Call from console: unsafeWindow.blueskyNavigatorState.handlers.feed.debugRulesSync()
+     * Call from console: bskyDebug.rulesSync()
      */
     debugRulesSync() {
       const configText = this.config.get("rulesConfig") || "";
@@ -69328,7 +69349,7 @@ ${rule}`;
       const notification2 = $(`
       <div class="bsky-nav-rule-notification">
         <span class="bsky-nav-rule-notification-icon">${icon}</span>
-        <span>${message2}</span>
+        <span>${this.escapeHtml(message2)}</span>
       </div>
     `);
       $("body").append(notification2);
@@ -70470,7 +70491,7 @@ ${rule}`;
       const rootPost = unrolledPosts[0];
       const rootPostUrl = urlForPost(rootPost);
       const rootDiv = $('<div class="proactive-unroll-root"/>');
-      rootDiv.append($(`<a href="${rootPostUrl}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`));
+      rootDiv.append($(`<a href="${this.escapeHtml(rootPostUrl)}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`));
       rootDiv.append($(this.bodyTemplate(formatPost(rootPost))));
       rootDiv.append($(this.footerTemplate(formatPost(rootPost))));
       parent.prepend(rootDiv);
@@ -70495,7 +70516,7 @@ ${rule}`;
         const isLastPost = postNum === totalPosts;
         const postNumberClass = isLastPost ? "unrolled-post-number unrolled-post-last" : "unrolled-post-number";
         reply.append(
-          $(`<a href="${urlForPost(p)}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`)
+          $(`<a href="${this.escapeHtml(urlForPost(p))}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`)
         );
         reply.append($(this.bodyTemplate(formatPost(p))));
         reply.append($(this.footerTemplate(formatPost(p))));
@@ -72008,17 +72029,27 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         return term && !term.startsWith("@") && !term.startsWith("$") && !term.startsWith("&") && !term.startsWith("!");
       }).map((term) => {
         return term.startsWith("%") ? term.substring(1) : term;
-      });
+      }).filter(Boolean);
       if (terms.length === 0) return;
       const postText = $(item).find('div[data-testid="postText"], .sidecar-post-content, .sidecar-quote-content');
       if (!postText.length) return;
       const pattern = new RegExp(`(${terms.map((t) => this.escapeRegex(t)).join("|")})`, "gi");
       postText.contents().each(function() {
         if (this.nodeType === Node.TEXT_NODE) {
-          const text = this.textContent;
-          if (pattern.test(text)) {
-            const highlighted = text.replace(pattern, '<mark class="filter-highlight">$1</mark>');
-            $(this).replaceWith(highlighted);
+          const parts = this.textContent.split(pattern);
+          if (parts.length > 1) {
+            const fragment = document.createDocumentFragment();
+            parts.forEach((part, i) => {
+              if (i % 2 === 1) {
+                const mark = document.createElement("mark");
+                mark.className = "filter-highlight";
+                mark.textContent = part;
+                fragment.appendChild(mark);
+              } else if (part) {
+                fragment.appendChild(document.createTextNode(part));
+              }
+            });
+            this.replaceWith(fragment);
           }
         }
       });
@@ -72166,7 +72197,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const isLast = i === parts.length - 1;
         let content = "";
         if (part.type === "author" && part.handle) {
-          content = `<a href="/profile/${part.handle}" class="breadcrumb-link">${this.escapeHtml(part.label)}</a>`;
+          content = `<a href="/profile/${this.escapeHtml(part.handle)}" class="breadcrumb-link">${this.escapeHtml(part.label)}</a>`;
         } else {
           content = `<span class="breadcrumb-text">${this.escapeHtml(part.label)}</span>`;
         }
@@ -72178,9 +72209,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       breadcrumb.html(html);
     }
     escapeHtml(text) {
-      const div = document.createElement("div");
-      div.textContent = text;
-      return div.innerHTML;
+      return escapeHtml(text);
     }
     updateScrollPosition(forceRebuild = false) {
       const indicator = this.feedMap;
@@ -72827,18 +72856,18 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             }
             $segment.append(`
             <span class="feed-map-segment-avatar-container">
-              <img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">
-              <img class="feed-map-segment-reposter-avatar" src="${engData.engagement.reposterAvatarUrl}" alt="" style="${reposterStyle}">
+              <img class="feed-map-segment-avatar" src="${this.escapeHtml(engData.engagement.avatarUrl)}" alt="" style="${avatarStyle}">
+              <img class="feed-map-segment-reposter-avatar" src="${this.escapeHtml(engData.engagement.reposterAvatarUrl)}" alt="" style="${reposterStyle}">
             </span>
           `);
           } else {
-            $segment.append(`<img class="feed-map-segment-avatar" src="${engData.engagement.avatarUrl}" alt="" style="${avatarStyle}">`);
+            $segment.append(`<img class="feed-map-segment-avatar" src="${this.escapeHtml(engData.engagement.avatarUrl)}" alt="" style="${avatarStyle}">`);
           }
         }
         if (showHandles && engData?.engagement?.handle) {
           const handle2 = engData.engagement.handle;
           const dotIndex = handle2.indexOf(".");
-          const handleHtml = dotIndex > 0 ? `<span class="feed-map-segment-handle-name">${handle2.substring(0, dotIndex)}</span><span class="feed-map-segment-handle-domain">${handle2.substring(dotIndex)}</span>` : `<span class="feed-map-segment-handle-name">${handle2}</span>`;
+          const handleHtml = dotIndex > 0 ? `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle2.substring(0, dotIndex))}</span><span class="feed-map-segment-handle-domain">${this.escapeHtml(handle2.substring(dotIndex))}</span>` : `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle2)}</span>`;
           let handleStyle = "";
           if (showRuleColors) {
             const categoryIndex = this.getFilterCategoryIndexForHandle(handle2);
@@ -73038,12 +73067,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             }
             $segment.append(`
             <span class="feed-map-segment-avatar-container">
-              <img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">
-              <img class="feed-map-segment-reposter-avatar" src="${engData.engagement.reposterAvatarUrl}" alt="" style="${reposterStyle}">
+              <img class="feed-map-segment-avatar" src="${this.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">
+              <img class="feed-map-segment-reposter-avatar" src="${this.escapeHtml(engData.engagement.reposterAvatarUrl)}" alt="" style="${reposterStyle}">
             </span>
           `);
           } else {
-            $segment.append(`<img class="feed-map-segment-avatar" src="${avatarUrl}" alt="" style="${avatarStyle}">`);
+            $segment.append(`<img class="feed-map-segment-avatar" src="${this.escapeHtml(avatarUrl)}" alt="" style="${avatarStyle}">`);
           }
         }
         if (showHandles && engagementData[actualIndex]?.engagement?.handle) {
@@ -73051,9 +73080,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const dotIndex = handle2.indexOf(".");
           let handleHtml;
           if (dotIndex > 0) {
-            handleHtml = `<span class="feed-map-segment-handle-name">${handle2.substring(0, dotIndex)}</span><span class="feed-map-segment-handle-domain">${handle2.substring(dotIndex)}</span>`;
+            handleHtml = `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle2.substring(0, dotIndex))}</span><span class="feed-map-segment-handle-domain">${this.escapeHtml(handle2.substring(dotIndex))}</span>`;
           } else {
-            handleHtml = `<span class="feed-map-segment-handle-name">${handle2}</span>`;
+            handleHtml = `<span class="feed-map-segment-handle-name">${this.escapeHtml(handle2)}</span>`;
           }
           let handleStyle = "";
           if (showRuleColors) {
@@ -73729,7 +73758,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const handle2 = handleMatch[1];
         const addButton = $(`
         <div class="css-g5y9jx bsky-nav-profile-rules-wrapper">
-          <button class="bsky-nav-profile-rules-btn" aria-label="Add @${handle2} to filter rules" title="Add @${handle2} to filter rules" type="button">
+          <button class="bsky-nav-profile-rules-btn" aria-label="Add @${this.escapeHtml(handle2)} to filter rules" title="Add @${this.escapeHtml(handle2)} to filter rules" type="button">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M5 12h14"/>
             </svg>
@@ -73945,7 +73974,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const popup = $(`
       <div class="bsky-nav-follow-popup bsky-nav-timeout-popup">
         <div class="bsky-nav-timeout-header">
-          ${action} @${handle2}?
+          ${action} @${this.escapeHtml(handle2)}?
         </div>
         <div class="bsky-nav-timeout-buttons">
           <button class="bsky-nav-timeout-btn cancel">Cancel</button>
@@ -74492,7 +74521,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const match2 = path.match(/\/profile\/([^/]+)\/post\//);
       if (match2) {
         const author = match2[1];
-        this.uiManager.setInfoText(`Post by @${author}`);
+        this.uiManager.setInfoText(`Post by @${escapeHtml(author)}`);
       } else {
         this.uiManager.setInfoText("Post detail");
       }
@@ -74531,7 +74560,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const match2 = path.match(/\/profile\/([^/]+)/);
       if (match2) {
         const handle2 = match2[1];
-        const displayName = handle2.startsWith("did:") ? "" : `@${handle2}`;
+        const displayName = handle2.startsWith("did:") ? "" : `@${escapeHtml(handle2)}`;
         this.uiManager.setInfoText(`Profile: ${displayName}`.trim());
       } else {
         this.uiManager.setInfoText("Profile");
@@ -75058,20 +75087,21 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const sliderPos = config.get("toastDuration") ?? 4;
       const durationSeconds = durationValues[sliderPos] ?? 5;
       const duration = durationSeconds === Infinity ? null : durationSeconds * 1e3;
+      const esc = escapeHtml;
       const $toast = $(`
-      <div class="bsky-nav-toast" data-indexed-at="${notification2.indexedAt || ""}">
-        <div class="bsky-nav-toast-icon ${notification2.type}">
+      <div class="bsky-nav-toast" data-indexed-at="${esc(notification2.indexedAt)}">
+        <div class="bsky-nav-toast-icon ${esc(notification2.type)}">
           ${iconSvgs[notification2.type] || ""}
         </div>
         <div class="bsky-nav-toast-content">
           <div class="bsky-nav-toast-header">
-            ${notification2.avatar ? `<img class="bsky-nav-toast-avatar" src="${notification2.avatar}" alt="">` : ""}
-            <span class="bsky-nav-toast-author">${notification2.author || "Someone"}</span>
-            ${notification2.handle ? `<span class="bsky-nav-toast-handle">@${notification2.handle}</span>` : ""}
+            ${notification2.avatar ? `<img class="bsky-nav-toast-avatar" src="${esc(notification2.avatar)}" alt="">` : ""}
+            <span class="bsky-nav-toast-author">${esc(notification2.author || "Someone")}</span>
+            ${notification2.handle ? `<span class="bsky-nav-toast-handle">@${esc(notification2.handle)}</span>` : ""}
           </div>
-          <span class="bsky-nav-toast-action">${notification2.action}</span>
-          ${notification2.preview ? `<div class="bsky-nav-toast-preview">${notification2.preview}</div>` : ""}
-          ${notification2.time ? `<span class="bsky-nav-toast-time">${notification2.time}</span>` : ""}
+          <span class="bsky-nav-toast-action">${esc(notification2.action)}</span>
+          ${notification2.preview ? `<div class="bsky-nav-toast-preview">${esc(notification2.preview)}</div>` : ""}
+          ${notification2.time ? `<span class="bsky-nav-toast-time">${esc(notification2.time)}</span>` : ""}
         </div>
         <button class="bsky-nav-toast-close" aria-label="Dismiss">\xD7</button>
       </div>
@@ -75291,7 +75321,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (config.get("showDebuggingInfo")) {
         let appendLog = function(type, args) {
           const message2 = `[${type.toUpperCase()}] ${args.map((arg) => typeof arg === "object" ? JSON.stringify(arg, null, 2) : arg).join(" ")}`;
-          $("#logContent").append(`<div style="margin-bottom: 5px;">${message2}</div>`);
+          $("#logContent").append($('<div style="margin-bottom: 5px;"></div>').text(message2));
           $("#logContent").scrollTop($("#logContent")[0].scrollHeight);
         };
         const logContainer = $(`<div id="logContainer"></div>`);
@@ -75672,12 +75702,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       onInit: onConfigInit,
       onSave: onConfigSave
     });
-    unsafeWindow.config = config;
-    unsafeWindow.blueskyNavigatorState = state;
     unsafeWindow.bskyDebug = {
       rulesSync: () => handlers.feed?.debugRulesSync(),
       handleMatch: (handle2, category) => handlers.feed?.debugHandleMatch(handle2, category),
-      state: () => state,
       rules: () => state.rules,
       config: () => config.get("rulesConfig")
     };

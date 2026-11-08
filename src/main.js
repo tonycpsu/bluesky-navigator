@@ -224,6 +224,13 @@ function getScreenFromElement(element) {
 
       if (!rulesName) continue;
 
+      // "allow all" / "deny all" take no value (as written by the ConfigModal serializer)
+      const allMatch = line.match(/^(allow|deny)\s+all$/);
+      if (allMatch) {
+        rules[rulesName].push({ action: allMatch[1], type: 'all', value: '' });
+        continue;
+      }
+
       // Match explicit allow/deny rules (including include and list types)
       const ruleMatch = line.match(/(allow|deny) (all|from|content|include|list) "?([^"]+)"?/);
       if (ruleMatch) {
@@ -270,6 +277,13 @@ function getScreenFromElement(element) {
   }
 
   function onConfigSave() {
+    // config is the editing source of truth for rules; state.rulesConfig carries them
+    // through remote sync and is copied back into config on load, so keep it in step
+    // before saving (otherwise a stale state copy reverts the edit on reload)
+    const savedRulesConfig = config.get('rulesConfig');
+    if (state.rulesConfig !== savedRulesConfig) {
+      state.stateManager.updateState({ rulesConfig: savedRulesConfig });
+    }
     state.stateManager.saveStateImmediately(true, true);
     // Update content width dynamically
     updateContentWidth();

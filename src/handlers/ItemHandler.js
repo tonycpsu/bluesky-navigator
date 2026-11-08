@@ -153,7 +153,18 @@ export class ItemHandler extends Handler {
     return false;
   }
 
+  /**
+   * Whether this is the item handler main.js most recently activated. All handler
+   * instances exist at once, so shared listeners (sidecar toggle, feed tabs) use
+   * this to make sure only one instance acts. Unlike isActive(), it isn't fooled by
+   * overlapping URLs (/profile/x/post/y) and survives the transient 'input' context.
+   */
+  isCurrentHandler() {
+    return ItemHandler.currentHandler === this;
+  }
+
   activate() {
+    ItemHandler.currentHandler = this;
     this.keyState = [];
     this.popupObserver = waitForElement(
       this.POPUP_MENU_SELECTOR,
@@ -632,6 +643,23 @@ export class ItemHandler extends Handler {
   set threadIndex(value) {
     const posts = this.getUnrolledThreadPosts();
 
+    // Handle null first - deactivate thread focus (null >= 0 is true, so this
+    // must run before the bounds checks below)
+    if (value == null) {
+      if (this._threadIndex != null) {
+        this.getThreadNavList().clearSelection();
+        $(this.selectedItem).addClass('item-selection-active');
+        $(this.selectedItem).removeClass('item-selection-child-focused');
+      }
+      this._threadIndex = null;
+      this.updateInfoIndicator();
+      // Update sidecar connector to point back at main post
+      if (this.isFixedSidecar() && $('#fixed-sidecar-panel').hasClass('visible')) {
+        this.updateSidecarConnector();
+      }
+      return;
+    }
+
     // Handle exiting thread at the start - go to previous main post
     if (value < 0) {
       if (this._threadIndex != null) {
@@ -660,22 +688,6 @@ export class ItemHandler extends Handler {
       this.setIndex(this.index + 1, false, false);
       if (!this.isElementFullyVisible(this.selectedItem)) {
         this.scrollElementIntoView(this.selectedItem[0], 1);
-      }
-      return;
-    }
-
-    // Handle null - deactivate thread focus
-    if (value == null) {
-      if (this._threadIndex != null) {
-        this.getThreadNavList().clearSelection();
-        $(this.selectedItem).addClass('item-selection-active');
-        $(this.selectedItem).removeClass('item-selection-child-focused');
-      }
-      this._threadIndex = null;
-      this.updateInfoIndicator();
-      // Update sidecar connector to point back at main post
-      if (this.isFixedSidecar() && $('#fixed-sidecar-panel').hasClass('visible')) {
-        this.updateSidecarConnector();
       }
       return;
     }
@@ -1004,15 +1016,23 @@ export class ItemHandler extends Handler {
       this.hideFixedSidecarPanel();
     });
 
-    // Toggle button handler (use event delegation since toggle moves around)
-    $(document).on('click', '#fixed-sidecar-toggle', async (e) => {
+    // Toggle button handler (use event delegation since toggle moves around).
+    // Every handler instance calls this (and re-calls it when the panel is recreated),
+    // so use a per-instance namespace to avoid stacking, and only act for the
+    // current handler.
+    const ns = `fixedSidecar-${this.name}`;
+    $(document).off(`click.${ns}`);
+    $(document).on(`click.${ns}`, '#fixed-sidecar-toggle', async (e) => {
+      if (!this.isCurrentHandler()) return;
       e.preventDefault();
       e.stopPropagation();
       await this.openFixedSidecarPanel();
     });
 
     // Update panel position on resize (toggle doesn't need repositioning - it's attached to item)
-    $(window).on('resize.fixedSidecar', () => {
+    $(window).off(`resize.${ns}`);
+    $(window).on(`resize.${ns}`, () => {
+      if (!this.isCurrentHandler()) return;
       if ($('#fixed-sidecar-panel').hasClass('visible')) {
         this.positionFixedSidecarPanel();
       }
@@ -1815,7 +1835,7 @@ export class ItemHandler extends Handler {
       return event.key;
     } else if (this.handleItemKey(event)) {
       return event.key;
-    } else if (event.key == 'U') {
+    } else if (event.key == 'U' && !event.ctrlKey && !event.metaKey) {
       this.loadOlderItems();
     } else {
       return super.handleInput(event);
@@ -1827,15 +1847,16 @@ export class ItemHandler extends Handler {
       return false;
     }
 
-    if (event.altKey && !event.metaKey) {
+    // No item shortcut uses Ctrl/Cmd; leave those combos (copy, save, find, reload...) to the browser
+    if (event.ctrlKey || event.metaKey) {
+      return false;
+    }
+
+    if (event.altKey) {
       return this.handleRuleShortcut(event);
     }
 
-    if (!event.metaKey) {
-      return this.handleItemAction(event);
-    }
-
-    return false;
+    return this.handleItemAction(event);
   }
 
   handleRuleShortcut(event) {
@@ -1984,6 +2005,10 @@ export class ItemHandler extends Handler {
     if (this.isPopupVisible) {
       return;
     }
+    // No movement shortcut uses Ctrl/Cmd; leave those combos to the browser
+    if (event.ctrlKey || event.metaKey) {
+      return;
+    }
     // Temporarily suppress mouse hover and scroll-to-focus during keyboard navigation
     this.ignoreMouseMovement = true;
     this.userInitiatedScroll = false;
@@ -1994,7 +2019,18 @@ export class ItemHandler extends Handler {
 
     if (this.keyState.length == 0) {
       // Build list of movement keys, conditionally including page keys
-      const movementKeys = ['j', 'k', 'h', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'J', 'G'];
+      const movementKeys = [
+        'j',
+        'k',
+        'h',
+        'ArrowDown',
+        'ArrowUp',
+        'ArrowLeft',
+        'ArrowRight',
+        'J',
+        'K',
+        'G',
+      ];
       if (pageKeysEnabled) {
         movementKeys.push('PageDown', 'PageUp', 'Home', 'End');
       }
@@ -2103,16 +2139,18 @@ export class ItemHandler extends Handler {
             history.back(1);
           }
         } else if (event.key == 'ArrowLeft') {
-          event.preventDefault();
-          if (!this.isSidecarNavigationAvailable() || this.replyIndex == null) {
+          // Leave Alt+Left (browser Back) alone; only consume the key when we act on it
+          if (event.altKey || !this.isSidecarNavigationAvailable() || this.replyIndex == null) {
             return;
           }
+          event.preventDefault();
           this.toggleFocus();
         } else if (event.key == 'ArrowRight') {
-          event.preventDefault();
-          if (!this.isSidecarNavigationAvailable() || this.replyIndex != null) {
+          // Leave Alt+Right (browser Forward) alone; only consume the key when we act on it
+          if (event.altKey || !this.isSidecarNavigationAvailable() || this.replyIndex != null) {
             return;
           }
+          event.preventDefault();
           this.toggleFocus();
         } else if (event.key == 'G') {
           event.preventDefault();
@@ -5579,6 +5617,8 @@ export class ItemHandler extends Handler {
     if (this.state.parseRulesConfig) {
       this.state.rules = this.state.parseRulesConfig(newConfig);
     }
+    // Mirror into persisted state (carrier for remote sync; main.js copies it back on load)
+    this.state.stateManager?.updateState({ rulesConfig: newConfig });
   }
 
   /**
@@ -6907,7 +6947,11 @@ export class ItemHandler extends Handler {
     const rulesConfig = this.config.get('rulesConfig') || '';
     if (this.state && this.state.rules !== undefined) {
       this.state.rules = this.parseRulesForState(rulesConfig);
-      this.state.rulesConfig = rulesConfig;
+      // Mirror into persisted state via updateState so it is saved/synced (a plain
+      // assignment isn't marked dirty, and main.js copies state.rulesConfig back on load)
+      if (this.state.rulesConfig !== rulesConfig) {
+        this.state.stateManager?.updateState({ rulesConfig });
+      }
     }
 
     // Re-apply styling to all items

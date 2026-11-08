@@ -1021,6 +1021,9 @@ export class FeedItemHandler extends ItemHandler {
       this._scrollHandler = null;
     }
 
+    clearTimeout(this._listRefilterTimeout);
+    this._listRefilterTimeout = null;
+
     // Stop filter enforcement
     if (this._filterEnforcementInterval) {
       clearInterval(this._filterEnforcementInterval);
@@ -1699,8 +1702,8 @@ export class FeedItemHandler extends ItemHandler {
           // Check list membership (sync check - use cached result if available)
           const isInList = listCache.isInListSync?.(authorHandle, listName);
           if (isInList === undefined) {
-            // Not cached yet - trigger async fetch for next time
-            listCache.getMembers(listName);
+            // Not cached yet - trigger async fetch and re-filter once it lands
+            this.fetchListAndRefilter(listName);
             allowed = false; // Default to not matching until cached
           } else {
             allowed = isInList;
@@ -1712,6 +1715,27 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     return rule.invert ? !allowed : allowed;
+  }
+
+  /**
+   * Fetches a list's members (deduplicated by ListCache) and re-applies filtering once
+   * they arrive, so list-based rules take effect without waiting for the next filter pass.
+   * Failed fetches resolve to null and don't trigger a re-filter (ListCache backs off).
+   * @param {string} listName - List name
+   * @private
+   */
+  fetchListAndRefilter(listName) {
+    const listCache = this.state.listCache;
+    if (!listCache) return;
+    Promise.resolve(listCache.getMembers(listName)).then((members) => {
+      if (!members) return;
+      // Coalesce multiple list loads into one re-filter
+      clearTimeout(this._listRefilterTimeout);
+      this._listRefilterTimeout = setTimeout(() => {
+        this._listRefilterTimeout = null;
+        if (this.isCurrentHandler()) this.filterItems();
+      }, 100);
+    });
   }
 
   /**
@@ -1749,7 +1773,7 @@ export class FeedItemHandler extends ItemHandler {
         }
         // If not cached, trigger async fetch for next time
         if (isInList === undefined) {
-          this.state.listCache.getMembers(backingList);
+          this.fetchListAndRefilter(backingList);
         }
       }
     }
@@ -1779,7 +1803,7 @@ export class FeedItemHandler extends ItemHandler {
               allowed = rule.action === 'allow' ? isInList : !isInList;
             } else {
               // Not cached - trigger async fetch
-              listCache.getMembers(rule.value);
+              this.fetchListAndRefilter(rule.value);
             }
           }
         }

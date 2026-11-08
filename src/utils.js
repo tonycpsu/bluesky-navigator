@@ -238,3 +238,22 @@ export function announceToScreenReader(message, priority = 'polite') {
   $('body').append(el);
   setTimeout(() => el.remove(), 1000);
 }
+
+const HTML_ESCAPES = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+/**
+ * Escape a value for safe interpolation into HTML text or a quoted attribute.
+ * Escapes & < > " ' and coerces null/undefined to ''.
+ * @param {*} str - Value to escape
+ * @returns {string} Escaped string
+ */
+export function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
+}

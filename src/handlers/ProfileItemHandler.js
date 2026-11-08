@@ -117,7 +117,7 @@ export class ProfileItemHandler extends FeedItemHandler {
       // Create button with same structure as notification button (wrapped in div)
       const addButton = $(`
         <div class="css-g5y9jx bsky-nav-profile-rules-wrapper">
-          <button class="bsky-nav-profile-rules-btn" aria-label="Add @${handle} to filter rules" title="Add @${handle} to filter rules" type="button">
+          <button class="bsky-nav-profile-rules-btn" aria-label="Add @${this.escapeHtml(handle)} to filter rules" title="Add @${this.escapeHtml(handle)} to filter rules" type="button">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M5 12h14"/>
             </svg>
@@ -417,7 +417,7 @@ export class ProfileItemHandler extends FeedItemHandler {
     const popup = $(`
       <div class="bsky-nav-follow-popup bsky-nav-timeout-popup">
         <div class="bsky-nav-timeout-header">
-          ${action} @${handle}?
+          ${action} @${this.escapeHtml(handle)}?
         </div>
         <div class="bsky-nav-timeout-buttons">
           <button class="bsky-nav-timeout-btn cancel">Cancel</button>

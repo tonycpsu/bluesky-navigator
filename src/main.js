@@ -684,20 +684,21 @@ function getScreenFromElement(element) {
     // Infinity means "Until dismissed" (null duration skips auto-remove)
     const duration = durationSeconds === Infinity ? null : durationSeconds * 1000;
 
+    const esc = utils.escapeHtml;
     const $toast = $(`
-      <div class="bsky-nav-toast" data-indexed-at="${notification.indexedAt || ''}">
-        <div class="bsky-nav-toast-icon ${notification.type}">
+      <div class="bsky-nav-toast" data-indexed-at="${esc(notification.indexedAt)}">
+        <div class="bsky-nav-toast-icon ${esc(notification.type)}">
           ${iconSvgs[notification.type] || ''}
         </div>
         <div class="bsky-nav-toast-content">
           <div class="bsky-nav-toast-header">
-            ${notification.avatar ? `<img class="bsky-nav-toast-avatar" src="${notification.avatar}" alt="">` : ''}
-            <span class="bsky-nav-toast-author">${notification.author || 'Someone'}</span>
-            ${notification.handle ? `<span class="bsky-nav-toast-handle">@${notification.handle}</span>` : ''}
+            ${notification.avatar ? `<img class="bsky-nav-toast-avatar" src="${esc(notification.avatar)}" alt="">` : ''}
+            <span class="bsky-nav-toast-author">${esc(notification.author || 'Someone')}</span>
+            ${notification.handle ? `<span class="bsky-nav-toast-handle">@${esc(notification.handle)}</span>` : ''}
           </div>
-          <span class="bsky-nav-toast-action">${notification.action}</span>
-          ${notification.preview ? `<div class="bsky-nav-toast-preview">${notification.preview}</div>` : ''}
-          ${notification.time ? `<span class="bsky-nav-toast-time">${notification.time}</span>` : ''}
+          <span class="bsky-nav-toast-action">${esc(notification.action)}</span>
+          ${notification.preview ? `<div class="bsky-nav-toast-preview">${esc(notification.preview)}</div>` : ''}
+          ${notification.time ? `<span class="bsky-nav-toast-time">${esc(notification.time)}</span>` : ''}
         </div>
         <button class="bsky-nav-toast-close" aria-label="Dismiss">×</button>
       </div>
@@ -1056,7 +1057,7 @@ function getScreenFromElement(element) {
           .map((arg) => (typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg))
           .join(' ')}`;
 
-        $('#logContent').append(`<div style="margin-bottom: 5px;">${message}</div>`);
+        $('#logContent').append($('<div style="margin-bottom: 5px;"></div>').text(message));
         $('#logContent').scrollTop($('#logContent')[0].scrollHeight);
       }
 
@@ -1511,15 +1512,15 @@ function getScreenFromElement(element) {
     onSave: onConfigSave,
   });
 
-  // Expose config and state to window for debugging and access from ConfigModal
-  unsafeWindow.config = config;
-  unsafeWindow.blueskyNavigatorState = state;
+  // Note: config and state are intentionally NOT exposed on unsafeWindow. They
+  // hold the app password, session tokens, and remote-sync credentials, and
+  // bsky.app page scripts can read anything placed there.
 
-  // Expose debug helpers on window for console access
+  // Expose debug helpers on window for console access. Only expose functions that
+  // return filter rules / log diagnostics -- never state, config, api, or session.
   unsafeWindow.bskyDebug = {
     rulesSync: () => handlers.feed?.debugRulesSync(),
     handleMatch: (handle, category) => handlers.feed?.debugHandleMatch(handle, category),
-    state: () => state,
     rules: () => state.rules,
     config: () => config.get('rulesConfig'),
   };

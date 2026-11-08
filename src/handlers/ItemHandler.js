@@ -1471,7 +1471,7 @@ export class ItemHandler extends Handler {
         // Add padding to make room for badge, like unrolled-reply does
         parent.css('padding-left', '44px');
         parent.css('position', 'relative');
-        firstBadge = $(`<a href="${firstPostUrl}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`);
+        firstBadge = $(`<a href="${this.escapeHtml(firstPostUrl)}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`);
         parent.prepend(firstBadge);
       } else {
         firstBadge.attr('title', `Post 1 of ${totalPosts}`);
@@ -1492,7 +1492,7 @@ export class ItemHandler extends Handler {
         const postNumberClass = isLastPost ? 'unrolled-post-number unrolled-post-last' : 'unrolled-post-number';
         reply.append(
           $(
-            `<a href="${urlForPost(p)}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
+            `<a href="${this.escapeHtml(urlForPost(p))}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
           )
         );
         reply.append($(this.bodyTemplate(formatPost(p))));
@@ -3223,9 +3223,7 @@ export class ItemHandler extends Handler {
   }
 
   escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return utils.escapeHtml(text);
   }
 
   markItemRead(index, isRead) {
@@ -4102,12 +4100,12 @@ export class ItemHandler extends Handler {
 
       // Build the card HTML
       card.innerHTML = `
-        <div class="bsky-nav-profile-card-banner" style="${profile.banner ? `background-image: url(${profile.banner})` : ''}"></div>
+        <div class="bsky-nav-profile-card-banner"></div>
         <div class="bsky-nav-profile-card-content">
-          <img class="bsky-nav-profile-card-avatar" src="${profile.avatar || ''}" alt="${profile.displayName || handle}'s avatar">
+          <img class="bsky-nav-profile-card-avatar" src="${this.escapeHtml(profile.avatar || '')}" alt="${this.escapeHtml(profile.displayName || handle)}'s avatar">
           <div class="bsky-nav-profile-card-names">
             <div class="bsky-nav-profile-card-displayname">${this.escapeHtml(profile.displayName || handle)}</div>
-            <div class="bsky-nav-profile-card-handle"><a href="https://bsky.app/profile/${handle}" target="_blank">@${handle}</a></div>
+            <div class="bsky-nav-profile-card-handle"><a href="https://bsky.app/profile/${this.escapeHtml(handle)}" target="_blank">@${this.escapeHtml(handle)}</a></div>
           </div>
           ${profile.description ? `<div class="bsky-nav-profile-card-bio">${this.escapeHtml(profile.description)}</div>` : ''}
           <div class="bsky-nav-profile-card-stats">
@@ -4129,6 +4127,17 @@ export class ItemHandler extends Handler {
           </div>
         </div>
       `;
+
+      // Set banner via the style API (not an HTML/CSS string) so the URL can't
+      // break out of the declaration. Quotes and backslashes are CSS-escaped.
+      if (profile.banner) {
+        const bannerUrl = String(profile.banner).replace(
+          /["\\\n\r]/g,
+          (ch) => `\\${ch.charCodeAt(0).toString(16)} `
+        );
+        card.querySelector('.bsky-nav-profile-card-banner').style.backgroundImage =
+          `url("${bannerUrl}")`;
+      }
 
       // Add click handler for View Profile button
       card.querySelector('[data-action="view-profile"]').addEventListener('click', () => {
@@ -4255,7 +4264,7 @@ export class ItemHandler extends Handler {
     // Create dropdown
     const dropdown = $(`
       <div class="bsky-nav-rules-dropdown">
-        <div class="bsky-nav-rules-dropdown-header">${headerText}</div>
+        <div class="bsky-nav-rules-dropdown-header">${this.escapeHtml(headerText)}</div>
         ${hasLists ? `
         <div class="bsky-nav-rules-dropdown-tabs">
           <button class="bsky-nav-rules-tab active" data-tab="rules">Rules</button>
@@ -4285,8 +4294,8 @@ export class ItemHandler extends Handler {
                   const sc = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
                   const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
                   return `
-                  <button class="bsky-nav-rules-category-btn${activeCategory === cat ? ' selected' : ''}" data-category="${cat}" style="color: ${color}; text-shadow: ${shadow}">
-                    ${cat}
+                  <button class="bsky-nav-rules-category-btn${activeCategory === cat ? ' selected' : ''}" data-category="${this.escapeHtml(cat)}" style="color: ${color}; text-shadow: ${shadow}">
+                    ${this.escapeHtml(cat)}
                   </button>
                 `;
                 }).join('')
@@ -4705,10 +4714,10 @@ export class ItemHandler extends Handler {
     const popup = $(`
       <div class="bsky-nav-list-choice-popup">
         <div class="bsky-nav-list-choice-header">
-          Add @${handle} to "${category}"
+          Add @${this.escapeHtml(handle)} to "${this.escapeHtml(category)}"
         </div>
         <div class="bsky-nav-list-choice-info">
-          This category is backed by list "${backingList}"
+          This category is backed by list "${this.escapeHtml(backingList)}"
         </div>
         <div class="bsky-nav-list-choice-buttons">
           <button class="bsky-nav-list-choice-btn primary" data-choice="list">
@@ -4826,7 +4835,7 @@ export class ItemHandler extends Handler {
     const popup = $(`
       <div class="bsky-nav-timeout-popup">
         <div class="bsky-nav-timeout-header">
-          Timeout @${handle}
+          Timeout @${this.escapeHtml(handle)}
         </div>
         <div class="bsky-nav-timeout-body">
           <label class="bsky-nav-timeout-label">
@@ -4899,7 +4908,7 @@ export class ItemHandler extends Handler {
     const popup = $(`
       <div class="bsky-nav-timeout-popup">
         <div class="bsky-nav-timeout-header">
-          @${handle} is timed out
+          @${this.escapeHtml(handle)} is timed out
         </div>
         <div class="bsky-nav-timeout-body">
           <div class="bsky-nav-timeout-info">
@@ -4975,7 +4984,7 @@ export class ItemHandler extends Handler {
     const popup = $(`
       <div class="bsky-nav-follow-popup bsky-nav-timeout-popup">
         <div class="bsky-nav-timeout-header">
-          ${action} @${handle}?
+          ${action} @${this.escapeHtml(handle)}?
         </div>
         <div class="bsky-nav-timeout-buttons">
           <button class="bsky-nav-timeout-btn cancel">Cancel</button>
@@ -5318,7 +5327,7 @@ export class ItemHandler extends Handler {
     // Create dropdown
     const dropdown = $(`
       <div class="bsky-nav-rules-dropdown">
-        <div class="bsky-nav-rules-dropdown-header">Remove @${handle} from:</div>
+        <div class="bsky-nav-rules-dropdown-header">Remove @${this.escapeHtml(handle)} from:</div>
         <div class="bsky-nav-rules-dropdown-categories">
           ${categoriesWithAuthor.map(({ category, inList, inRules, listName }) => {
             const color = this.getColorForCategory(category);
@@ -5328,12 +5337,12 @@ export class ItemHandler extends Handler {
             const location = inList && inRules ? `(list & rules)` : inList ? `(list: ${listName})` : `(rules)`;
             return `
             <button class="bsky-nav-rules-category-btn bsky-nav-rules-remove-btn"
-                    data-category="${category}"
+                    data-category="${this.escapeHtml(category)}"
                     data-in-list="${inList}"
                     data-in-rules="${inRules}"
-                    data-list-name="${listName || ''}"
+                    data-list-name="${this.escapeHtml(listName || '')}"
                     style="color: ${color}; text-shadow: ${shadow}">
-              ${category} <span class="bsky-nav-rules-location">${location}</span>
+              ${this.escapeHtml(category)} <span class="bsky-nav-rules-location">${this.escapeHtml(location)}</span>
             </button>
           `;
           }).join('')}
@@ -5885,7 +5894,7 @@ export class ItemHandler extends Handler {
 
   /**
    * Debug helper - check why a handle matches a category
-   * Call from console: unsafeWindow.blueskyNavigatorState.handlers.feed.debugHandleMatch('@handle', 'category')
+   * Call from console: bskyDebug.handleMatch('@handle', 'category')
    */
   debugHandleMatch(handle, categoryName) {
     const normalizedHandle = handle.startsWith('@') ? handle : `@${handle}`;
@@ -5897,7 +5906,7 @@ export class ItemHandler extends Handler {
 
   /**
    * Debug helper - compare state.rules with what would be parsed from config
-   * Call from console: unsafeWindow.blueskyNavigatorState.handlers.feed.debugRulesSync()
+   * Call from console: bskyDebug.rulesSync()
    */
   debugRulesSync() {
     const configText = this.config.get('rulesConfig') || '';
@@ -6201,7 +6210,7 @@ export class ItemHandler extends Handler {
     const notification = $(`
       <div class="bsky-nav-rule-notification">
         <span class="bsky-nav-rule-notification-icon">${icon}</span>
-        <span>${message}</span>
+        <span>${this.escapeHtml(message)}</span>
       </div>
     `);
 
@@ -7766,7 +7775,7 @@ export class ItemHandler extends Handler {
     // Add the root post (post 1) at the top - this is the missing/filtered post
     const rootPostUrl = urlForPost(rootPost);
     const rootDiv = $('<div class="proactive-unroll-root"/>');
-    rootDiv.append($(`<a href="${rootPostUrl}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`));
+    rootDiv.append($(`<a href="${this.escapeHtml(rootPostUrl)}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`));
     rootDiv.append($(this.bodyTemplate(formatPost(rootPost))));
     rootDiv.append($(this.footerTemplate(formatPost(rootPost))));
     parent.prepend(rootDiv);
@@ -7798,7 +7807,7 @@ export class ItemHandler extends Handler {
       const isLastPost = postNum === totalPosts;
       const postNumberClass = isLastPost ? 'unrolled-post-number unrolled-post-last' : 'unrolled-post-number';
       reply.append(
-        $(`<a href="${urlForPost(p)}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`)
+        $(`<a href="${this.escapeHtml(urlForPost(p))}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`)
       );
       reply.append($(this.bodyTemplate(formatPost(p))));
       reply.append($(this.footerTemplate(formatPost(p))));

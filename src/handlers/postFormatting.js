@@ -1,137 +1,172 @@
 // postFormatting.js - Post text formatting and facet processing utilities
+/* global TextDecoder */
 
 import constants from '../constants.js';
+import { escapeHtml } from '../utils.js';
+
+/**
+ * Returns the URL string if it parses as an http(s) URL, otherwise null.
+ * Used to block javascript:, data:, and other non-web schemes from hrefs.
+ * @param {string} url - Candidate URL
+ * @returns {string|null} The original URL string, or null if not http(s)
+ */
+export function safeHttpUrl(url) {
+  if (typeof url !== 'string' || !url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Converts a URL to an embeddable HTML format for supported platforms.
+ * Non-http(s) URLs are rendered as escaped plain text.
  * @param {string} url - The URL to convert
  * @returns {string} HTML embed code or a simple link
  */
 export function convertToEmbed(url) {
+  const label = escapeHtml(url);
+  const safeUrl = safeHttpUrl(url);
+  if (!safeUrl) return label;
+  const href = escapeHtml(safeUrl);
+
   try {
     let embedHtml = '';
 
     // YouTube Embed
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      const videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
+    if (safeUrl.includes('youtube.com') || safeUrl.includes('youtu.be')) {
+      const videoId = safeUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)?.[1];
       if (videoId) {
         embedHtml = `<iframe width="320" height="200" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
       }
     }
 
     // Twitter/X Embed
-    else if (url.includes('twitter.com') || url.includes('x.com')) {
-      embedHtml = `<blockquote class="twitter-tweet"><a href="${url}"></a></blockquote>
+    else if (safeUrl.includes('twitter.com') || safeUrl.includes('x.com')) {
+      embedHtml = `<blockquote class="twitter-tweet"><a href="${href}"></a></blockquote>
                          <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>`;
     }
 
     // TikTok Embed
-    else if (url.includes('tiktok.com')) {
-      embedHtml = `<blockquote class="tiktok-embed" cite="${url}" data-video-id="${url.split('/').pop()}" style="max-width: 605px; min-width: 325px;">
-                            <a href="${url}">Watch on TikTok</a>
+    else if (safeUrl.includes('tiktok.com')) {
+      embedHtml = `<blockquote class="tiktok-embed" cite="${href}" data-video-id="${escapeHtml(safeUrl.split('/').pop())}" style="max-width: 605px; min-width: 325px;">
+                            <a href="${href}">Watch on TikTok</a>
                          </blockquote>
                          <script async src="https://www.tiktok.com/embed.js"></script>`;
     }
 
     // Instagram Embed
-    else if (url.includes('instagram.com/p/')) {
-      embedHtml = `<blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="13">
-                            <a href="${url}">View on Instagram</a>
+    else if (safeUrl.includes('instagram.com/p/')) {
+      embedHtml = `<blockquote class="instagram-media" data-instgrm-permalink="${href}" data-instgrm-version="13">
+                            <a href="${href}">View on Instagram</a>
                          </blockquote>
                          <script async src="https://www.instagram.com/embed.js"></script>`;
     }
 
     // Default: Just return a linked URL if not recognized
-    return embedHtml || `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    return embedHtml || `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
   } catch (error) {
     console.error('Error generating embed:', error);
-    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
   }
 }
 
 /**
  * Formats post text by converting facets (mentions, links, hashtags) to HTML.
  *
- * AT Protocol uses UTF-8 byte offsets for facet indices, but JavaScript strings
- * use UTF-16 code units. This function builds a mapping between byte offsets
- * and character indices to correctly locate and replace facet text.
+ * All post-derived content is HTML-escaped: plain-text segments, facet display
+ * text, and attribute values. Link facets are only rendered as links when they
+ * use http(s); anything else is rendered as escaped text.
+ *
+ * AT Protocol facet indices are UTF-8 byte offsets, so the text is encoded to
+ * bytes, sliced by facet ranges, and each slice decoded back to a string.
+ * Facets are processed in byteStart order; overlapping or out-of-range facets
+ * are skipped.
  *
  * @param {Object} post - The post record object
  * @param {string} post.text - The raw post text
  * @param {Array} [post.facets] - Array of facet objects with byte-based indices
- * @returns {string} HTML-formatted text with clickable mentions, links, and hashtags
+ * @returns {string} Safe HTML with clickable mentions, links, and hashtags
  *
  * @example
- * // Input post with mention and link
  * const post = {
- *   text: "Hi @alice check this https://example.com",
+ *   text: "Hi @alice check this",
  *   facets: [
  *     { index: { byteStart: 3, byteEnd: 9 }, features: [{ $type: 'app.bsky.richtext.facet#mention', did: 'did:plc:...' }] }
  *   ]
  * };
- * const html = formatPostText(post);
- * // Returns: 'Hi <a href="https://bsky.app/profile/did:plc:..." class="mention">@alice</a> check this...'
+ * formatPostText(post);
+ * // => 'Hi <a href="https://bsky.app/profile/did:plc:..." class="mention">@alice</a> check this'
  */
 export function formatPostText(post) {
-  let text = post.text;
-  if (!post.facets) return text;
+  const text = typeof post?.text === 'string' ? post.text : '';
+  if (!Array.isArray(post?.facets) || post.facets.length === 0) return escapeHtml(text);
 
-  // Build byte offset -> character index mapping
-  // This is needed because facet indices are UTF-8 byte offsets
-  const charOffsets = buildByteToCharMap(text);
+  const bytes = new TextEncoder().encode(text);
+  const decoder = new TextDecoder();
+  const decode = (from, to) => decoder.decode(bytes.subarray(from, to));
 
-  // Process facets in reverse order to preserve earlier indices
-  const sortedFacets = [...post.facets].reverse();
+  const facets = post.facets
+    .filter((facet) => {
+      const start = facet?.index?.byteStart;
+      const end = facet?.index?.byteEnd;
+      return (
+        Number.isInteger(start) &&
+        Number.isInteger(end) &&
+        start >= 0 &&
+        end > start &&
+        end <= bytes.length
+      );
+    })
+    .sort((a, b) => a.index.byteStart - b.index.byteStart);
 
-  for (const facet of sortedFacets) {
-    const { index, features } = facet;
-    const start = charOffsets.findLast((c) => c.byteOffset <= index.byteStart)?.charIndex || 0;
-    const end = charOffsets.findLast((c) => c.byteOffset <= index.byteEnd)?.charIndex || text.length;
-    const originalText = text.slice(start, end);
+  let html = '';
+  let cursor = 0;
+  for (const facet of facets) {
+    const { byteStart, byteEnd } = facet.index;
+    if (byteStart < cursor) continue; // overlaps previous facet
 
-    for (const feature of features) {
-      const replacement = formatFacetFeature(feature, originalText);
-      if (replacement) {
-        text = text.slice(0, start) + replacement + text.slice(end + 1);
-      }
-    }
+    html += escapeHtml(decode(cursor, byteStart));
+    const facetText = decode(byteStart, byteEnd);
+    html += formatFacet(facet.features, facetText) ?? escapeHtml(facetText);
+    cursor = byteEnd;
   }
+  html += escapeHtml(decode(cursor, bytes.length));
 
-  return text;
+  return html;
 }
 
 /**
- * Builds a mapping from UTF-8 byte offsets to JavaScript string character indices.
+ * Converts a facet's features to HTML, using the first recognized feature.
+ * Returns null if no feature is recognized.
  * @private
  */
-function buildByteToCharMap(text) {
-  const charOffsets = [];
-  const encoder = new TextEncoder();
-  let byteOffset = 0;
-
-  for (let charIndex = 0; charIndex < [...text].length; charIndex++) {
-    const char = [...text][charIndex];
-    charOffsets.push({ byteOffset, charIndex });
-    byteOffset += encoder.encode(char).length;
+function formatFacet(features, facetText) {
+  if (!Array.isArray(features)) return null;
+  for (const feature of features) {
+    const replacement = formatFacetFeature(feature, facetText);
+    if (replacement !== null) return replacement;
   }
-
-  return charOffsets;
+  return null;
 }
 
 /**
  * Converts a facet feature to its HTML representation.
  * @private
  */
-function formatFacetFeature(feature, originalText) {
-  switch (feature.$type) {
+function formatFacetFeature(feature, facetText) {
+  switch (feature?.$type) {
     case 'app.bsky.richtext.facet#mention':
-      return `<a href="https://bsky.app/profile/${feature.did}" class="mention">${originalText}</a>`;
+      return `<a href="https://bsky.app/profile/${escapeHtml(feature.did)}" class="mention">${escapeHtml(facetText)}</a>`;
 
     case 'app.bsky.richtext.facet#link':
-      return convertToEmbed(feature.uri);
+      // Non-http(s) links (e.g. javascript:) are rendered as plain text
+      return safeHttpUrl(feature.uri) ? convertToEmbed(feature.uri) : escapeHtml(facetText);
 
     case 'app.bsky.richtext.facet#tag':
-      return `<a href="https://bsky.app/search?q=%23${feature.tag}" class="hashtag">${originalText}</a>`;
+      return `<a href="https://bsky.app/search?q=%23${escapeHtml(encodeURIComponent(feature.tag ?? ''))}" class="hashtag">${escapeHtml(facetText)}</a>`;
 
     default:
       return null;
@@ -196,29 +231,33 @@ export function extractExternalLink(embed) {
   // Type is "app.bsky.embed.external#view"
   if (embed.external) {
     const ext = embed.external;
-    return {
-      uri: ext.uri,
-      title: ext.title || '',
-      description: ext.description || '',
-      thumb: ext.thumb || null,
-      domain: ext.uri ? new URL(ext.uri).hostname : '',
-    };
+    return externalLinkData(ext);
   }
 
   // External link with media: embed.media.external
   // Type is "app.bsky.embed.recordWithMedia#view"
   if (embed.media?.external) {
     const ext = embed.media.external;
-    return {
-      uri: ext.uri,
-      title: ext.title || '',
-      description: ext.description || '',
-      thumb: ext.thumb || null,
-      domain: ext.uri ? new URL(ext.uri).hostname : '',
-    };
+    return externalLinkData(ext);
   }
 
   return null;
+}
+
+/**
+ * Normalizes an external embed for the sidecar template. Non-http(s) URIs are
+ * dropped so they can't end up in an href.
+ * @private
+ */
+function externalLinkData(ext) {
+  const uri = safeHttpUrl(ext.uri);
+  return {
+    uri: uri || '',
+    title: ext.title || '',
+    description: ext.description || '',
+    thumb: ext.thumb || null,
+    domain: uri ? new URL(uri).hostname : '',
+  };
 }
 
 /**

@@ -1379,6 +1379,8 @@ function getScreenFromElement(element) {
       }
     }
 
+    let tiptapRemovalObserver = null;
+
     function onFocus(e) {
       const target = e.target;
       if (typeof target.tagName === 'undefined') {
@@ -1397,11 +1399,13 @@ function getScreenFromElement(element) {
         case 'div': {
           const maybeTiptap = $(target).closest('.tiptap');
           if (maybeTiptap.length) {
-            waitForElement(
-              '.tiptap',
-              () => null,
-              () => onBlur({ target: maybeTiptap[0] })
-            );
+            // One removal watcher at a time; it disconnects once the composer closes
+            if (tiptapRemovalObserver) tiptapRemovalObserver.disconnect();
+            tiptapRemovalObserver = waitForElement('.tiptap', null, (_el, observer) => {
+              observer.disconnect();
+              if (tiptapRemovalObserver === observer) tiptapRemovalObserver = null;
+              onBlur({ target: maybeTiptap[0] });
+            });
             setContext('input');
           } else {
             setContextFromUrl();
@@ -1439,7 +1443,12 @@ function getScreenFromElement(element) {
     document.addEventListener('focus', onFocus, true);
     document.addEventListener('blur', onBlur, true);
 
+    // Declared before viewportChangeObserver below, whose callback can run synchronously
+    let suggestedFollowsObserver = null;
+
     function startMonitor() {
+      // Called each time the sidebar/drawer element appears; don't stack intervals
+      if (monitor_interval) clearInterval(monitor_interval);
       monitor_interval = setInterval(function () {
         if (window.location.href !== current_url) {
           setContextFromUrl();
@@ -1492,6 +1501,8 @@ function getScreenFromElement(element) {
      * Hide "Suggested for you" sections in the feed
      */
     function hideSuggestedFollows() {
+      // Called each time the sidebar/drawer element appears; keep a single observer
+      if (suggestedFollowsObserver) return;
       // Find and hide elements containing "Suggested for you" text
       const observer = new MutationObserver(() => {
         document.querySelectorAll('div[dir="auto"]').forEach((el) => {
@@ -1506,6 +1517,7 @@ function getScreenFromElement(element) {
       });
 
       observer.observe(document.body, { childList: true, subtree: true });
+      suggestedFollowsObserver = observer;
 
       // Run once immediately
       document.querySelectorAll('div[dir="auto"]').forEach((el) => {

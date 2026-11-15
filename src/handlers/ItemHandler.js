@@ -1654,8 +1654,8 @@ export class ItemHandler extends Handler {
             `<a href="${this.escapeHtml(urlForPost(p))}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
           )
         );
-        reply.append($(this.bodyTemplate(formatPost(p))));
-        reply.append($(this.footerTemplate(formatPost(p))));
+        reply.append($(this.bodyTemplate(this.formatPostData(p))));
+        reply.append($(this.footerTemplate(this.formatPostData(p))));
         div.append(reply);
       });
       const threadIndex = $(item).closest('.thread').attr('data-bsky-navigator-thread-index');
@@ -1795,11 +1795,11 @@ export class ItemHandler extends Handler {
             console.error(`unknown sort order: ${this.config.get('sidecarReplySortOrder')}`);
         }
       })
-      .map(formatPost);
+      .map((p) => this.formatPostData(p));
 
     return this.repliesTemplate({
       postId: post.cid,
-      parent: thread.parent ? formatPost(thread.parent.post) : null,
+      parent: thread.parent ? this.formatPostData(thread.parent.post) : null,
       replies: replies,
     });
   }
@@ -3386,7 +3386,7 @@ export class ItemHandler extends Handler {
 
     posts.forEach((post, index) => {
       const postNum = index + 1;
-      const formattedPost = formatPost(post);
+      const formattedPost = this.formatPostData(post);
       html += `
         <article class="reader-mode-post" data-post-index="${index}">
           <div class="reader-mode-post-number">${postNum}<span class="reader-mode-post-total">/${totalPosts}</span></div>
@@ -6808,6 +6808,18 @@ export class ItemHandler extends Handler {
     this.applyRuleColorStyling(element);
   }
 
+  /**
+   * formatPost() with the user's timestamp format applied, so footer timestamps
+   * match the format used on Bluesky's own post headers.
+   */
+  formatPostData(post) {
+    return formatPost(post, {
+      timestampFormat: this.config.get(
+        this.state.mobileView ? 'postTimestampFormatMobile' : 'postTimestampFormat'
+      ),
+    });
+  }
+
   applyTimestampFormat(element) {
     const postTimestampElement = $(element)
       .find('a[href^="/profile/"][data-tooltip*=" at "]')
@@ -8009,8 +8021,8 @@ export class ItemHandler extends Handler {
     const rootPostUrl = urlForPost(rootPost);
     const rootDiv = $('<div class="proactive-unroll-root"/>');
     rootDiv.append($(`<a href="${this.escapeHtml(rootPostUrl)}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`));
-    rootDiv.append($(this.bodyTemplate(formatPost(rootPost))));
-    rootDiv.append($(this.footerTemplate(formatPost(rootPost))));
+    rootDiv.append($(this.bodyTemplate(this.formatPostData(rootPost))));
+    rootDiv.append($(this.footerTemplate(this.formatPostData(rootPost))));
     parent.prepend(rootDiv);
 
     // Mark root post as read (since it was likely already read/filtered)
@@ -8042,8 +8054,8 @@ export class ItemHandler extends Handler {
       reply.append(
         $(`<a href="${this.escapeHtml(urlForPost(p))}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`)
       );
-      reply.append($(this.bodyTemplate(formatPost(p))));
-      reply.append($(this.footerTemplate(formatPost(p))));
+      reply.append($(this.bodyTemplate(this.formatPostData(p))));
+      reply.append($(this.footerTemplate(this.formatPostData(p))));
 
       // Apply read status
       if (this.state.seen[postId]) {

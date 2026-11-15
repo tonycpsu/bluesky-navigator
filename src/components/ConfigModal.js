@@ -363,7 +363,7 @@ const CONFIG_SCHEMA = {
         default: 600,
         min: 400,
         max: 1200,
-        help: 'Minimum viewport width to show sidecar',
+        help: 'Fixed: minimum window width. Inline: minimum post width',
       },
       sidecarWidthPercent: {
         label: 'Sidecar width (%)',
@@ -371,7 +371,7 @@ const CONFIG_SCHEMA = {
         default: 30,
         min: 20,
         max: 50,
-        help: 'Sidecar width relative to post',
+        help: 'Inline: share of the post row. Fixed: max share of the window',
       },
       sidecarReplySortOrder: {
         label: 'Sidecar sort order',

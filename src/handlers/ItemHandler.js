@@ -1184,61 +1184,76 @@ export class ItemHandler extends Handler {
   positionFixedSidecarPanel() {
     const panel = $('#fixed-sidecar-panel');
     if (!panel.length) return;
+    const minPanelWidth = 250;
 
-    // Find the feed/post container to position next to
-    // Try various selectors for different page types
-    let feedContainer = document.querySelector('[data-testid="postThreadScreen"]') ||
-                        document.querySelector('[data-testid="homeScreen"]') ||
-                        document.querySelector('main[role="main"] [style*="max-width"]');
+    // Find the visible feed column to position next to. Screen-level wrappers
+    // (homeScreen etc.) can span the whole window, so prefer the posts
+    // themselves, then the max-width column, then the screen wrappers.
+    const selectedThread = this.selectedItem?.closest?.('.thread')?.[0];
+    const candidates = [
+      selectedThread,
+      document.querySelector('.thread'),
+      document.querySelector('main[role="main"] [style*="max-width"]'),
+      document.querySelector('[data-testid="postThreadScreen"]'),
+      document.querySelector('[data-testid="homeScreen"]'),
+    ];
+    const feedContainer = candidates.find((el) => {
+      if (!el || !document.contains(el)) return false;
+      const r = el.getBoundingClientRect();
+      // Must be laid out and leave room on its right for a panel
+      return r.width >= 100 && r.right < window.innerWidth - minPanelWidth;
+    });
 
     // Use consistent top position (below toolbar)
     const toolbarHeight = this.getToolbarHeight() || 60;
     const top = toolbarHeight + 8;
-    const panelWidth = 350;
     const gap = 16; // Gap between feed and sidecar
+    const edgeMargin = 16; // Gap between sidecar and window edge
 
-    if (feedContainer) {
-      const rect = feedContainer.getBoundingClientRect();
+    // The panel fills the space to the right of the feed, capped at
+    // sidecarWidthPercent of the window width (but never below minPanelWidth).
+    const percent = Number(this.config.get('sidecarWidthPercent')) || 30;
+    const maxPanelWidth = Math.max(minPanelWidth, Math.round((window.innerWidth * percent) / 100));
+    // Width used when the panel is right-aligned (overlapping the feed if needed)
+    const fallbackWidth = Math.max(
+      minPanelWidth,
+      Math.min(maxPanelWidth, window.innerWidth - 2 * edgeMargin)
+    );
+    const rightAligned = {
+      left: 'auto',
+      right: `${edgeMargin}px`,
+      top: `${top}px`,
+      width: `${fallbackWidth}px`,
+    };
 
-      // Guard against race condition: if rect.right is too small (page not fully laid out),
-      // fall back to right-aligned positioning to avoid placing panel on the left
-      const minExpectedRight = window.innerWidth * 0.3; // Feed should be at least 30% into viewport
-      if (rect.right < minExpectedRight || rect.width < 100) {
-        // Page layout not ready, use fallback
-        panel.css({
-          left: 'auto',
-          right: '16px',
-          top: `${top}px`
-        });
-        return;
-      }
+    if (!feedContainer) {
+      panel.css(rightAligned);
+      return;
+    }
 
-      // Position to the right of the feed container
-      const left = rect.right + gap;
+    const rect = feedContainer.getBoundingClientRect();
 
-      // Check if there's enough space on the right
-      const availableWidth = window.innerWidth - left;
-      if (availableWidth >= panelWidth) {
-        panel.css({
-          left: `${left}px`,
-          right: 'auto',
-          top: `${top}px`
-        });
-      } else {
-        // Fall back to right-aligned if not enough space
-        panel.css({
-          left: 'auto',
-          right: '16px',
-          top: `${top}px`
-        });
-      }
-    } else {
-      // Fallback positioning
+    // Guard against race condition: if rect.right is too small (page not fully laid out),
+    // fall back to right-aligned positioning to avoid placing panel on the left
+    const minExpectedRight = window.innerWidth * 0.3; // Feed should be at least 30% into viewport
+    if (rect.right < minExpectedRight || rect.width < 100) {
+      panel.css(rightAligned);
+      return;
+    }
+
+    // Position to the right of the feed container, filling the available space
+    const left = rect.right + gap;
+    const availableWidth = window.innerWidth - left - edgeMargin;
+    if (availableWidth >= minPanelWidth) {
       panel.css({
-        left: 'auto',
-        right: '16px',
-        top: `${top}px`
+        left: `${left}px`,
+        right: 'auto',
+        top: `${top}px`,
+        width: `${Math.min(availableWidth, maxPanelWidth)}px`,
       });
+    } else {
+      // Not enough space beside the feed
+      panel.css(rightAligned);
     }
   }
 
@@ -1564,10 +1579,14 @@ export class ItemHandler extends Handler {
   }
 
   shouldShowSidecar(item) {
-    return (
-      this.config.get('showReplySidecar') &&
-      $(item).closest('.thread').outerWidth() >= this.config.get('showReplySidecarMinimumWidth')
-    );
+    if (!this.config.get('showReplySidecar')) return false;
+    const minWidth = this.config.get('showReplySidecarMinimumWidth');
+    // Fixed panel sits beside the feed, so gate on the window width;
+    // inline sidecar shares the post's row, so gate on the thread width.
+    const width = this.isFixedSidecar()
+      ? window.innerWidth
+      : $(item).closest('.thread').outerWidth();
+    return width >= minWidth;
   }
 
   shouldExpand(item) {

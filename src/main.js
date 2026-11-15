@@ -304,6 +304,15 @@ function getScreenFromElement(element) {
           if (handler.isActive() && typeof handler.onRulesChanged === 'function') {
             handler.onRulesChanged();
           }
+          // Sidecar width or content width may have changed
+          if (
+            handler.isActive() &&
+            typeof handler.positionFixedSidecarPanel === 'function' &&
+            $('#fixed-sidecar-panel').hasClass('visible')
+          ) {
+            handler.positionFixedSidecarPanel();
+            handler.updateSidecarConnector?.();
+          }
         }
       }
     }, 100);

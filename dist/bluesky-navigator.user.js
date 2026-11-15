@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+664.2f7daef4
+// @version     1.0.31+664.3c7a78a2
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -46090,7 +46090,7 @@ if (cid) {
           default: 600,
           min: 400,
           max: 1200,
-          help: "Minimum viewport width to show sidecar"
+          help: "Fixed: minimum window width. Inline: minimum post width"
         },
         sidecarWidthPercent: {
           label: "Sidecar width (%)",
@@ -46098,7 +46098,7 @@ if (cid) {
           default: 30,
           min: 20,
           max: 50,
-          help: "Sidecar width relative to post"
+          help: "Inline: share of the post row. Fixed: max share of the window"
         },
         sidecarReplySortOrder: {
           label: "Sidecar sort order",
@@ -65900,43 +65900,57 @@ div#statusBar.has-feed-map {
     positionFixedSidecarPanel() {
       const panel = $("#fixed-sidecar-panel");
       if (!panel.length) return;
-      let feedContainer = document.querySelector('[data-testid="postThreadScreen"]') || document.querySelector('[data-testid="homeScreen"]') || document.querySelector('main[role="main"] [style*="max-width"]');
+      const minPanelWidth = 250;
+      const selectedThread = this.selectedItem?.closest?.(".thread")?.[0];
+      const candidates = [
+        selectedThread,
+        document.querySelector(".thread"),
+        document.querySelector('main[role="main"] [style*="max-width"]'),
+        document.querySelector('[data-testid="postThreadScreen"]'),
+        document.querySelector('[data-testid="homeScreen"]')
+      ];
+      const feedContainer = candidates.find((el) => {
+        if (!el || !document.contains(el)) return false;
+        const r = el.getBoundingClientRect();
+        return r.width >= 100 && r.right < window.innerWidth - minPanelWidth;
+      });
       const toolbarHeight = this.getToolbarHeight() || 60;
       const top = toolbarHeight + 8;
-      const panelWidth = 350;
       const gap = 16;
-      if (feedContainer) {
-        const rect = feedContainer.getBoundingClientRect();
-        const minExpectedRight = window.innerWidth * 0.3;
-        if (rect.right < minExpectedRight || rect.width < 100) {
-          panel.css({
-            left: "auto",
-            right: "16px",
-            top: `${top}px`
-          });
-          return;
-        }
-        const left = rect.right + gap;
-        const availableWidth = window.innerWidth - left;
-        if (availableWidth >= panelWidth) {
-          panel.css({
-            left: `${left}px`,
-            right: "auto",
-            top: `${top}px`
-          });
-        } else {
-          panel.css({
-            left: "auto",
-            right: "16px",
-            top: `${top}px`
-          });
-        }
-      } else {
+      const edgeMargin = 16;
+      const percent = Number(this.config.get("sidecarWidthPercent")) || 30;
+      const maxPanelWidth = Math.max(minPanelWidth, Math.round(window.innerWidth * percent / 100));
+      const fallbackWidth = Math.max(
+        minPanelWidth,
+        Math.min(maxPanelWidth, window.innerWidth - 2 * edgeMargin)
+      );
+      const rightAligned = {
+        left: "auto",
+        right: `${edgeMargin}px`,
+        top: `${top}px`,
+        width: `${fallbackWidth}px`
+      };
+      if (!feedContainer) {
+        panel.css(rightAligned);
+        return;
+      }
+      const rect = feedContainer.getBoundingClientRect();
+      const minExpectedRight = window.innerWidth * 0.3;
+      if (rect.right < minExpectedRight || rect.width < 100) {
+        panel.css(rightAligned);
+        return;
+      }
+      const left = rect.right + gap;
+      const availableWidth = window.innerWidth - left - edgeMargin;
+      if (availableWidth >= minPanelWidth) {
         panel.css({
-          left: "auto",
-          right: "16px",
-          top: `${top}px`
+          left: `${left}px`,
+          right: "auto",
+          top: `${top}px`,
+          width: `${Math.min(availableWidth, maxPanelWidth)}px`
         });
+      } else {
+        panel.css(rightAligned);
       }
     }
     /**
@@ -66181,7 +66195,10 @@ div#statusBar.has-feed-map {
       return this.config.get("unrollThreads");
     }
     shouldShowSidecar(item) {
-      return this.config.get("showReplySidecar") && $(item).closest(".thread").outerWidth() >= this.config.get("showReplySidecarMinimumWidth");
+      if (!this.config.get("showReplySidecar")) return false;
+      const minWidth = this.config.get("showReplySidecarMinimumWidth");
+      const width = this.isFixedSidecar() ? window.innerWidth : $(item).closest(".thread").outerWidth();
+      return width >= minWidth;
     }
     shouldExpand(item) {
       return this.shouldShowSidecar(item) || this.shouldUnroll(item);
@@ -75354,6 +75371,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           for (const handler of Object.values(handlers)) {
             if (handler.isActive() && typeof handler.onRulesChanged === "function") {
               handler.onRulesChanged();
+            }
+            if (handler.isActive() && typeof handler.positionFixedSidecarPanel === "function" && $("#fixed-sidecar-panel").hasClass("visible")) {
+              handler.positionFixedSidecarPanel();
+              handler.updateSidecarConnector?.();
             }
           }
         }

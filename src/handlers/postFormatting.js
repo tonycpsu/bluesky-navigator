@@ -1,6 +1,7 @@
 // postFormatting.js - Post text formatting and facet processing utilities
 /* global TextDecoder */
 
+import { format } from 'date-fns';
 import constants from '../constants.js';
 import { escapeHtml } from '../utils.js';
 
@@ -266,11 +267,53 @@ function externalLinkData(ext) {
 }
 
 /**
+ * Short relative age in the style of Bluesky's own timestamps ("40m", "3h", "2d").
+ * @param {Date} date - The post time
+ * @param {Date} [now] - Reference time (defaults to now)
+ * @returns {string} Relative age string
+ */
+export function shortAge(date, now = new Date()) {
+  const seconds = Math.max(0, Math.floor((now - date) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo`;
+  return `${Math.floor(days / 365)}y`;
+}
+
+/**
+ * Formats a post timestamp with the user's date-fns format string, where
+ * '$age' expands to the short relative age. Falls back to the locale format
+ * when no format is given or the format string is invalid.
+ * @param {string} createdAt - ISO timestamp
+ * @param {string} [userFormat] - date-fns format string
+ * @returns {string} Formatted timestamp
+ */
+export function formatPostTimestamp(createdAt, userFormat) {
+  const date = new Date(createdAt);
+  if (userFormat) {
+    try {
+      return format(date, userFormat).replace('$age', shortAge(date));
+    } catch {
+      // Invalid user format string - fall through to the locale format
+    }
+  }
+  return date.toLocaleString();
+}
+
+/**
  * Formats a post object for display in sidecars/templates.
  * @param {Object} post - The raw post object from AT Protocol
+ * @param {Object} [options]
+ * @param {string} [options.timestampFormat] - date-fns format for the timestamp
  * @returns {Object} Formatted post data for templates
  */
-export function formatPost(post) {
+export function formatPost(post, options = {}) {
   const formatter = Intl.NumberFormat('en', { notation: 'compact' });
 
   return {
@@ -283,7 +326,7 @@ export function formatPost(post) {
     embed: post.embed,
     quotedPost: extractQuotedPost(post.embed),
     externalLink: extractExternalLink(post.embed),
-    timestamp: new Date(post.record.createdAt).toLocaleString(),
+    timestamp: formatPostTimestamp(post.record.createdAt, options.timestampFormat),
     replySvg: constants.SIDECAR_SVG_REPLY,
     replyCount: formatter.format(post.replyCount),
     repostSvg: constants.SIDECAR_SVG_REPOST[post.viewer.repost ? 1 : 0],

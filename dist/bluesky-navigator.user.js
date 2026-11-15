@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+662.30f5a14c
+// @version     1.0.31+664.2f7daef4
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -49933,6 +49933,10 @@ div.item-banner {
     display: inline-flex;
     vertical-align: middle;
     flex: 3;
+    /* Keep the timestamp on one line; it must not shrink below its text width.
+       Otherwise screenshots (html-to-image renders text slightly wider) wrap it. */
+    white-space: nowrap;
+    min-width: max-content;
 }
 
 .sidecar-parent .sidecar-post {
@@ -64000,7 +64004,30 @@ div#statusBar.has-feed-map {
       domain: uri ? new URL(uri).hostname : ""
     };
   }
-  function formatPost(post2) {
+  function shortAge(date, now = /* @__PURE__ */ new Date()) {
+    const seconds = Math.max(0, Math.floor((now - date) / 1e3));
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months}mo`;
+    return `${Math.floor(days / 365)}y`;
+  }
+  function formatPostTimestamp(createdAt, userFormat) {
+    const date = new Date(createdAt);
+    if (userFormat) {
+      try {
+        return format(date, userFormat).replace("$age", shortAge(date));
+      } catch {
+      }
+    }
+    return date.toLocaleString();
+  }
+  function formatPost(post2, options = {}) {
     const formatter = Intl.NumberFormat("en", { notation: "compact" });
     return {
       postId: post2.cid,
@@ -64012,7 +64039,7 @@ div#statusBar.has-feed-map {
       embed: post2.embed,
       quotedPost: extractQuotedPost(post2.embed),
       externalLink: extractExternalLink(post2.embed),
-      timestamp: new Date(post2.record.createdAt).toLocaleString(),
+      timestamp: formatPostTimestamp(post2.record.createdAt, options.timestampFormat),
       replySvg: constants.SIDECAR_SVG_REPLY,
       replyCount: formatter.format(post2.replyCount),
       repostSvg: constants.SIDECAR_SVG_REPOST[post2.viewer.repost ? 1 : 0],
@@ -66227,8 +66254,8 @@ div#statusBar.has-feed-map {
               `<a href="${this.escapeHtml(urlForPost(p))}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`
             )
           );
-          reply.append($(this.bodyTemplate(formatPost(p))));
-          reply.append($(this.footerTemplate(formatPost(p))));
+          reply.append($(this.bodyTemplate(this.formatPostData(p))));
+          reply.append($(this.footerTemplate(this.formatPostData(p))));
           div.append(reply);
         });
         const threadIndex = $(item).closest(".thread").attr("data-bsky-navigator-thread-index");
@@ -66320,10 +66347,10 @@ div#statusBar.has-feed-map {
           default:
             console.error(`unknown sort order: ${this.config.get("sidecarReplySortOrder")}`);
         }
-      }).map(formatPost);
+      }).map((p) => this.formatPostData(p));
       return this.repliesTemplate({
         postId: post2.cid,
-        parent: thread.parent ? formatPost(thread.parent.post) : null,
+        parent: thread.parent ? this.formatPostData(thread.parent.post) : null,
         replies
       });
     }
@@ -67561,7 +67588,7 @@ div#statusBar.has-feed-map {
       html += `<div class="reader-mode-author">Thread by ${this.escapeHtml(authorName)} (${totalPosts} post${totalPosts > 1 ? "s" : ""})</div>`;
       posts.forEach((post2, index) => {
         const postNum = index + 1;
-        const formattedPost = formatPost(post2);
+        const formattedPost = this.formatPostData(post2);
         html += `
         <article class="reader-mode-post" data-post-index="${index}">
           <div class="reader-mode-post-number">${postNum}<span class="reader-mode-post-total">/${totalPosts}</span></div>
@@ -70171,6 +70198,17 @@ ${rule}`;
       this.applyBlockStatus(element);
       this.applyRuleColorStyling(element);
     }
+    /**
+     * formatPost() with the user's timestamp format applied, so footer timestamps
+     * match the format used on Bluesky's own post headers.
+     */
+    formatPostData(post2) {
+      return formatPost(post2, {
+        timestampFormat: this.config.get(
+          this.state.mobileView ? "postTimestampFormatMobile" : "postTimestampFormat"
+        )
+      });
+    }
     applyTimestampFormat(element) {
       const postTimestampElement = $(element).find('a[href^="/profile/"][data-tooltip*=" at "]').first();
       if (!postTimestampElement.attr("data-bsky-navigator-age")) {
@@ -71044,8 +71082,8 @@ ${rule}`;
       const rootPostUrl = urlForPost(rootPost);
       const rootDiv = $('<div class="proactive-unroll-root"/>');
       rootDiv.append($(`<a href="${this.escapeHtml(rootPostUrl)}" class="unrolled-post-number unrolled-post-first" title="Post 1 of ${totalPosts}">1<span class="unrolled-post-total">/${totalPosts}</span></a>`));
-      rootDiv.append($(this.bodyTemplate(formatPost(rootPost))));
-      rootDiv.append($(this.footerTemplate(formatPost(rootPost))));
+      rootDiv.append($(this.bodyTemplate(this.formatPostData(rootPost))));
+      rootDiv.append($(this.footerTemplate(this.formatPostData(rootPost))));
       parent.prepend(rootDiv);
       const rootPostId = rootPost.uri.split("/").slice(-1)[0];
       if (this.state.seen[rootPostId]) {
@@ -71070,8 +71108,8 @@ ${rule}`;
         reply.append(
           $(`<a href="${this.escapeHtml(urlForPost(p))}" class="${postNumberClass}" title="Post ${postNum} of ${totalPosts}">${postNum}<span class="unrolled-post-total">/${totalPosts}</span></a>`)
         );
-        reply.append($(this.bodyTemplate(formatPost(p))));
-        reply.append($(this.footerTemplate(formatPost(p))));
+        reply.append($(this.bodyTemplate(this.formatPostData(p))));
+        reply.append($(this.footerTemplate(this.formatPostData(p))));
         if (this.state.seen[postId]) {
           reply.addClass("item-read");
         }

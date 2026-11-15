@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+662.30f5a14c
+// @version     1.0.31+663.8c852cd8
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -49933,6 +49933,10 @@ div.item-banner {
     display: inline-flex;
     vertical-align: middle;
     flex: 3;
+    /* Keep the timestamp on one line; it must not shrink below its text width.
+       Otherwise screenshots (html-to-image renders text slightly wider) wrap it. */
+    white-space: nowrap;
+    min-width: max-content;
 }
 
 .sidecar-parent .sidecar-post {

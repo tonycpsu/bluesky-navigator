@@ -22,6 +22,7 @@ const SHORTCUTS = {
       { keys: ['Alt+P'], description: 'Profile' },
       { keys: ['Alt+,'], description: 'Settings' },
       { keys: ['Alt+.'], description: 'Extension preferences' },
+      { keys: ['Alt+B'], description: 'Collapse/expand left sidebar' },
     ],
   },
   Navigation: {

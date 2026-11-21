@@ -1,6 +1,7 @@
 // Handler.js - Base handler class for keyboard input handling
 
 import { ShortcutOverlay } from '../components/ShortcutOverlay.js';
+import { TOGGLE_LEFT_SIDEBAR_EVENT } from '../components/LeftSidebar.js';
 import { isUserTyping, isModalOpen } from '../utils.js';
 
 /**
@@ -81,6 +82,9 @@ export class Handler {
       } else if (event.code === 'Period') {
         event.preventDefault();
         this.config.open();
+      } else if (event.code === 'KeyB') {
+        event.preventDefault();
+        document.dispatchEvent(new window.CustomEvent(TOGGLE_LEFT_SIDEBAR_EVENT));
       } else if (event.code === 'Enter' && $('.config-modal').is(':visible')) {
         event.preventDefault();
         // Enter to save is handled by the modal's Save button

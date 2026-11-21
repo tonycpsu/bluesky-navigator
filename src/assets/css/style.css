@@ -6754,3 +6754,184 @@ div#statusBar.has-feed-map {
     color: #9ca3af;
   }
 }
+
+/* =============================================================================
+   Left Navigation Sidebar: Collapsible / Auto-hide (leftSidebarMode setting)
+   Desktop only. Body classes and CSS variables are managed by
+   src/components/LeftSidebar.js; nothing here applies in Fixed mode.
+   ============================================================================= */
+
+.bsky-nav-left-nav-toggle,
+.bsky-nav-left-nav-edge {
+  display: none;
+}
+
+@media only screen and (min-width: 801px) {
+  /* Widen the center column(s) leftwards into the space the nav occupied.
+     The right edge stays where Bluesky / the other layout settings put it. */
+  body.bsky-nav-left-nav-reclaim main[role="main"] [style*="max-width: 600px"],
+  body.bsky-nav-left-nav-reclaim main[role="main"] [style*="max-width:600px"],
+  body.bsky-nav-left-nav-reclaim-global #bsky-navigator-global-statusbar {
+    max-width: var(--bsky-nav-ln-content-width) !important;
+    margin-left: var(--bsky-nav-ln-content-margin) !important;
+    margin-right: 0 !important;
+    transform: none !important;
+  }
+
+  /* Bluesky's column border lines (a separate full-height element centered on the
+     column); only moved when they were aligned with the column to begin with */
+  body.bsky-nav-left-nav-reclaim-borders
+    main[role="main"]
+    div[style*="inset: 0px 0px 0px 50%"][style*="border-left-width"] {
+    left: calc(var(--bsky-nav-ln-content-margin) - 1px) !important;
+    width: calc(var(--bsky-nav-ln-content-width) + 2px) !important;
+    transform: none !important;
+  }
+
+  /* The home feed tabs have their own 600px width */
+  body.bsky-nav-left-nav-reclaim div[data-testid="homeScreenFeedTabs"] {
+    width: 100% !important;
+  }
+
+  /* The feed status bar lives inside the column, so it just fills it */
+  body.bsky-nav-left-nav-reclaim main[role="main"] [style*="max-width"] #statusBar {
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    transform: none !important;
+  }
+
+  /* Collapsible mode, collapsed: hide the nav (it stays in the DOM so Alt+H etc. work).
+     Dropping its transform makes it stop being the containing block for the
+     position: fixed prev/next buttons below, so they're placed against the viewport. */
+  body.bsky-nav-left-nav-collapsed nav[role="navigation"][style*="translateX(-100%)"] {
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transform: none !important;
+  }
+
+  /* Auto-hide mode: the nav becomes an off-screen overlay that slides in from the left
+     edge. It's position: fixed, so revealing it never reflows the content. */
+  body.bsky-nav-left-nav-autohide nav[role="navigation"][style*="translateX(-100%)"] {
+    left: calc(-1 * var(--bsky-nav-ln-nav-width, 300px) - 24px) !important;
+    right: auto !important;
+    transform: none !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    background-color: var(--bsky-nav-ln-bg, #ffffff) !important;
+    z-index: var(--z-panel) !important;
+    box-shadow: none;
+    transition:
+      left var(--transition-duration) ease,
+      box-shadow var(--transition-duration) ease;
+  }
+
+  body.bsky-nav-left-nav-autohide.bsky-nav-left-nav-revealed
+    nav[role="navigation"][style*="translateX(-100%)"] {
+    left: 0 !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+  }
+
+  body.bsky-nav-left-nav-measuring nav[role="navigation"][style*="translateX(-100%)"] {
+    transition: none !important;
+  }
+
+  /* Floating prev/next buttons normally hang off the nav's right edge; move them to
+     the left gutter while the nav is collapsed or auto-hidden */
+  body.bsky-nav-left-nav-collapsed nav[role="navigation"] > #prevButton,
+  body.bsky-nav-left-nav-collapsed nav[role="navigation"] > #nextButton,
+  body.bsky-nav-left-nav-autohide nav[role="navigation"] > #prevButton,
+  body.bsky-nav-left-nav-autohide nav[role="navigation"] > #nextButton {
+    position: fixed;
+    left: 12px;
+    right: auto;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  body.bsky-nav-left-nav-autohide.bsky-nav-left-nav-revealed nav[role="navigation"] > #prevButton,
+  body.bsky-nav-left-nav-autohide.bsky-nav-left-nav-revealed nav[role="navigation"] > #nextButton {
+    opacity: 0 !important;
+    pointer-events: none;
+  }
+
+  /* Invisible hover strip along the left edge that reveals the auto-hidden nav */
+  .bsky-nav-left-nav-edge {
+    display: block;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 8px;
+    z-index: calc(var(--z-panel) - 1);
+  }
+
+  /* Collapse/expand toggle (Collapsible mode) */
+  .bsky-nav-left-nav-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 6px;
+    left: 6px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background-color: #ffffff;
+    color: #6b7280;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    opacity: 0.55;
+    z-index: var(--z-dropdown);
+    transition:
+      opacity var(--transition-duration) ease,
+      background-color var(--transition-duration) ease;
+  }
+
+  .bsky-nav-left-nav-toggle:hover,
+  .bsky-nav-left-nav-toggle:focus-visible {
+    opacity: 1;
+    background-color: #f3f4f6;
+    color: #1f2937;
+  }
+
+  .bsky-nav-left-nav-toggle:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
+
+  .bsky-nav-left-nav-toggle-chevron {
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: transform var(--transition-duration) ease;
+  }
+
+  .bsky-nav-left-nav-toggle.collapsed .bsky-nav-left-nav-toggle-chevron {
+    transform: rotate(180deg);
+  }
+}
+
+@media only screen and (min-width: 801px) and (prefers-color-scheme: dark) {
+  body.bsky-nav-left-nav-autohide nav[role="navigation"][style*="translateX(-100%)"] {
+    background-color: var(--bsky-nav-ln-bg, #161e27) !important;
+  }
+
+  body.bsky-nav-left-nav-autohide.bsky-nav-left-nav-revealed
+    nav[role="navigation"][style*="translateX(-100%)"] {
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .bsky-nav-left-nav-toggle {
+    background-color: #1f2937;
+    border-color: #374151;
+    color: #9ca3af;
+  }
+
+  .bsky-nav-left-nav-toggle:hover,
+  .bsky-nav-left-nav-toggle:focus-visible {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+}

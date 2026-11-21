@@ -3532,6 +3532,93 @@ div#statusBar.has-feed-map {
 }
 
 /* ==========================================================================
+   Fit Posts to Screen
+   Inert unless body.bsky-nav-fit-posts is set (see src/fitPosts.js, which also
+   publishes --bsky-nav-fit-height on <html>).
+   ========================================================================== */
+
+body.bsky-nav-fit-posts {
+  --bsky-nav-fit-media-height: calc(var(--bsky-nav-fit-height) * 0.7);
+}
+
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) {
+  max-height: var(--bsky-nav-fit-height);
+  overflow-y: auto;
+  overscroll-behavior: auto;
+  scrollbar-width: thin;
+}
+
+/* Unrolled threads: the container scrolls (not the item), so the item loses its cap.
+   Same specificity as the .item cap above, so it wins by coming later. */
+body.bsky-nav-fit-posts .item:has(.unrolled-replies) {
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* !important is required: it beats the container's inline max-height: 80vH and
+   overscroll-behavior: contain (which would trap the wheel at the thread's end). */
+body.bsky-nav-fit-posts .bsky-nav-unroll-scroll {
+  overscroll-behavior: auto !important;
+  max-height: calc(var(--bsky-nav-fit-height) - var(--bsky-nav-unroll-chrome, 0px)) !important;
+}
+
+/* Screenshots capture the whole thread, so lift the container cap too. */
+body.bsky-nav-fit-posts .bsky-nav-fit-capture .bsky-nav-unroll-scroll {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* The sidecar layout gives the post's first child flex: 1 (basis 0), which would
+   shrink it to the cap and clip its content; keep its content height instead so
+   the item itself scrolls. */
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) > div:first-of-type {
+  flex: 1 0 auto;
+}
+
+/* Link card thumbnails: a box with an inline aspect-ratio; Bluesky already crops
+   the img to it (object-fit: cover), so cap the box height and keep the crop. */
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="aspect-ratio"] {
+  max-height: var(--bsky-nav-fit-media-height);
+}
+
+/* Image embeds: Bluesky sizes the box with an inline padding-top percentage
+   (a wrapper holding one absolutely positioned row that wraps a button, the img
+   container and its overlays: border ring, ALT badge). Padding can't be capped
+   with max-height, so drop the box sizing and let the img size the row instead:
+   width auto + max-height keeps the aspect ratio. Every box in the chain stays
+   bound to the column width (max-width: 100%); positioned overlays stay absolute. */
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) {
+  padding-top: 0 !important;
+}
+
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) > div[style*="inset"] {
+  position: static !important;
+}
+
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) :is(div, button):not([style*="position: absolute"]) {
+  height: auto !important;
+  aspect-ratio: auto !important;
+  max-width: 100%;
+}
+
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) img {
+  position: static !important;
+  display: block;
+  width: auto !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: var(--bsky-nav-fit-media-height) !important;
+  object-fit: contain !important;
+  border-radius: 12px;
+}
+
+/* Videos */
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] video {
+  max-height: var(--bsky-nav-fit-media-height);
+  object-fit: contain;
+}
+
+/* ==========================================================================
    Breadcrumb Trail
    ========================================================================== */
 

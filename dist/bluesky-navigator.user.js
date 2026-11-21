@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+666.637f2ae8
+// @version     1.0.31+667.59e55381
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45765,6 +45765,12 @@ if (cid) {
           default: "Off",
           help: "Collapse unfocused posts to max height; expands when selected"
         },
+        fitPostsToScreen: {
+          label: "Fit posts to screen",
+          type: "checkbox",
+          default: false,
+          help: "Cap posts at the visible screen height; media shrinks first, then the post scrolls"
+        },
         postActionButtonPosition: {
           label: "Action buttons",
           type: "select",
@@ -52444,6 +52450,93 @@ div#statusBar.has-feed-map {
     background-color: #450a0a;
     border-top-color: #7f1d1d;
   }
+}
+
+/* ==========================================================================
+   Fit Posts to Screen
+   Inert unless body.bsky-nav-fit-posts is set (see src/fitPosts.js, which also
+   publishes --bsky-nav-fit-height on <html>).
+   ========================================================================== */
+
+body.bsky-nav-fit-posts {
+  --bsky-nav-fit-media-height: calc(var(--bsky-nav-fit-height) * 0.7);
+}
+
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) {
+  max-height: var(--bsky-nav-fit-height);
+  overflow-y: auto;
+  overscroll-behavior: auto;
+  scrollbar-width: thin;
+}
+
+/* Unrolled threads: the container scrolls (not the item), so the item loses its cap.
+   Same specificity as the .item cap above, so it wins by coming later. */
+body.bsky-nav-fit-posts .item:has(.unrolled-replies) {
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* !important is required: it beats the container's inline max-height: 80vH and
+   overscroll-behavior: contain (which would trap the wheel at the thread's end). */
+body.bsky-nav-fit-posts .bsky-nav-unroll-scroll {
+  overscroll-behavior: auto !important;
+  max-height: calc(var(--bsky-nav-fit-height) - var(--bsky-nav-unroll-chrome, 0px)) !important;
+}
+
+/* Screenshots capture the whole thread, so lift the container cap too. */
+body.bsky-nav-fit-posts .bsky-nav-fit-capture .bsky-nav-unroll-scroll {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* The sidecar layout gives the post's first child flex: 1 (basis 0), which would
+   shrink it to the cap and clip its content; keep its content height instead so
+   the item itself scrolls. */
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) > div:first-of-type {
+  flex: 1 0 auto;
+}
+
+/* Link card thumbnails: a box with an inline aspect-ratio; Bluesky already crops
+   the img to it (object-fit: cover), so cap the box height and keep the crop. */
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="aspect-ratio"] {
+  max-height: var(--bsky-nav-fit-media-height);
+}
+
+/* Image embeds: Bluesky sizes the box with an inline padding-top percentage
+   (a wrapper holding one absolutely positioned row that wraps a button, the img
+   container and its overlays: border ring, ALT badge). Padding can't be capped
+   with max-height, so drop the box sizing and let the img size the row instead:
+   width auto + max-height keeps the aspect ratio. Every box in the chain stays
+   bound to the column width (max-width: 100%); positioned overlays stay absolute. */
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) {
+  padding-top: 0 !important;
+}
+
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) > div[style*="inset"] {
+  position: static !important;
+}
+
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) :is(div, button):not([style*="position: absolute"]) {
+  height: auto !important;
+  aspect-ratio: auto !important;
+  max-width: 100%;
+}
+
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) img {
+  position: static !important;
+  display: block;
+  width: auto !important;
+  height: auto !important;
+  max-width: 100% !important;
+  max-height: var(--bsky-nav-fit-media-height) !important;
+  object-fit: contain !important;
+  border-radius: 12px;
+}
+
+/* Videos */
+body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] video {
+  max-height: var(--bsky-nav-fit-media-height);
+  object-fit: contain;
 }
 
 /* ==========================================================================
@@ -64189,6 +64282,114 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
     const blob2 = await canvasToBlob(canvas);
     return blob2;
   }
+  const FIT_HEIGHT_VAR = "--bsky-nav-fit-height";
+  const FIT_BODY_CLASS = "bsky-nav-fit-posts";
+  const FIT_CAPTURE_CLASS = "bsky-nav-fit-capture";
+  const TOOLBAR_SELECTOR = "#bsky-navigator-toolbar, #bsky-navigator-global-toolbar";
+  const TAB_BAR_SELECTOR = 'div[data-testid="profilePager"] [role="tablist"], div[data-testid="homeScreenFeedTabs"]';
+  const MIN_FIT_HEIGHT = 150;
+  const STATUS_BAR_SELECTOR = "#statusBar";
+  const MOBILE_MAX_WIDTH = 800;
+  function measureToolbarHeight() {
+    let height = 0;
+    const navigatorToolbar = $(TOOLBAR_SELECTOR).filter(":visible").first();
+    if (navigatorToolbar.length) {
+      height += navigatorToolbar.outerHeight(true) || 0;
+    }
+    const tabBar = $(TAB_BAR_SELECTOR).filter(":visible").first();
+    if (tabBar.length) {
+      height += tabBar.outerHeight(true) || 0;
+    }
+    const focusRingSpace = 4;
+    return Math.max(height, 60) + focusRingSpace;
+  }
+  function measureStatusBarHeight() {
+    const statusBar = $(STATUS_BAR_SELECTOR);
+    if (statusBar.length && statusBar.is(":visible")) {
+      return statusBar.outerHeight() || 0;
+    }
+    return 0;
+  }
+  function measureBottomBarHeight() {
+    if (window.innerWidth > MOBILE_MAX_WIDTH) return 0;
+    for (const nav of document.querySelectorAll('nav[role="navigation"]')) {
+      if (window.getComputedStyle(nav).position !== "fixed") continue;
+      const rect = nav.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0 && rect.bottom >= window.innerHeight - 1 && rect.top > window.innerHeight / 2) {
+        return Math.round(window.innerHeight - rect.top);
+      }
+    }
+    return 0;
+  }
+  function computeFitHeight({ innerHeight, top, bottom }) {
+    return Math.max(0, Math.floor(innerHeight - top - bottom));
+  }
+  function applyMeasurement() {
+    const px2 = computeFitHeight({
+      innerHeight: window.innerHeight,
+      top: measureToolbarHeight(),
+      bottom: measureStatusBarHeight() + measureBottomBarHeight()
+    });
+    if (px2 < MIN_FIT_HEIGHT) {
+      document.documentElement.style.removeProperty(FIT_HEIGHT_VAR);
+    } else {
+      document.documentElement.style.setProperty(FIT_HEIGHT_VAR, `${px2}px`);
+    }
+  }
+  let watcher = null;
+  function startWatcher() {
+    if (watcher) return;
+    let frame = 0;
+    let observed = [];
+    const observer = new window.ResizeObserver(() => schedule());
+    const observe = () => {
+      const bars = [
+        ...document.querySelectorAll(
+          `${TOOLBAR_SELECTOR}, ${STATUS_BAR_SELECTOR}, ${TAB_BAR_SELECTOR}`
+        )
+      ];
+      if (bars.length === observed.length && bars.every((el, i) => el === observed[i])) return;
+      observer.disconnect();
+      bars.forEach((el) => observer.observe(el));
+      observed = bars;
+    };
+    function schedule() {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        observe();
+        applyMeasurement();
+      });
+    }
+    const mutations = new window.MutationObserver(schedule);
+    mutations.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", schedule);
+    document.addEventListener(LAYOUT_CHANGED_EVENT, schedule);
+    observe();
+    watcher = {
+      stop() {
+        if (frame) window.cancelAnimationFrame(frame);
+        observer.disconnect();
+        mutations.disconnect();
+        window.removeEventListener("resize", schedule);
+        document.removeEventListener(LAYOUT_CHANGED_EVENT, schedule);
+      }
+    };
+  }
+  function setFitPostsEnabled(enabled) {
+    if (enabled) {
+      document.body.classList.add(FIT_BODY_CLASS);
+      applyMeasurement();
+      startWatcher();
+    } else {
+      document.body.classList.remove(FIT_BODY_CLASS);
+      document.documentElement.style.removeProperty(FIT_HEIGHT_VAR);
+      if (watcher) {
+        watcher.stop();
+        watcher = null;
+      }
+    }
+  }
   function safeHttpUrl(url) {
     if (typeof url !== "string" || !url) return null;
     try {
@@ -66709,6 +66910,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
           reply.append($(this.footerTemplate(this.formatPostData(p))));
           div.append(reply);
         });
+        this._markUnrollContainer(item, parent);
         const threadIndex = $(item).closest(".thread").attr("data-bsky-navigator-thread-index");
         this.items.each((i, feedItem) => {
           const feedItemPostId = this.postIdForItem(feedItem);
@@ -67089,7 +67291,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
               }
             } else {
               const isVisible = this.isElementFullyVisible(this.selectedItem);
-              if (!isVisible) {
+              if (this.scrollInsideItem(this.selectedItem[0], 1)) ;
+              else if (!isVisible) {
                 if (!this.scrollElementIntoView(this.selectedItem[0], 1)) {
                   moved = this.jumpToNext(event.key == "j");
                 }
@@ -67112,7 +67315,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
                 }
               }
             } else {
-              if (!this.isElementFullyVisible(this.selectedItem)) {
+              if (this.scrollInsideItem(this.selectedItem[0], -1)) ;
+              else if (!this.isElementFullyVisible(this.selectedItem)) {
                 if (!this.scrollElementIntoView(this.selectedItem[0], -1)) {
                   moved = this.jumpToPrev(event.key == "k");
                 }
@@ -67526,8 +67730,44 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         this.replyIndex = null;
       }
     }
+    /**
+     * With "Fit posts to screen" on, scroll inside a capped post before moving on.
+     * Returns true if the key was consumed, false once the post is at its end.
+     */
+    scrollInsideItem(el, direction) {
+      if (!el || !document.body.classList.contains(FIT_BODY_CLASS)) return false;
+      el = this.getFitScroller(el);
+      if (!(el.scrollHeight > el.clientHeight + 1)) return false;
+      const max = el.scrollHeight - el.clientHeight;
+      const remaining = direction > 0 ? max - el.scrollTop : el.scrollTop;
+      if (remaining <= 1) return false;
+      const step = Math.min(el.clientHeight * 0.5, remaining + 10);
+      el.scrollTo({
+        top: el.scrollTop + direction * step,
+        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant"
+      });
+      return true;
+    }
+    /**
+     * The element that scrolls inside a post: the post itself when it is capped, else the
+     * capped container of an unrolled thread (the CSS un-caps the item in that case).
+     */
+    getFitScroller(el) {
+      if (el.scrollHeight > el.clientHeight + 1) return el;
+      return el.querySelector(".bsky-nav-unroll-scroll") || el;
+    }
+    /**
+     * After moving to another post, start at its top (moving down) or bottom (moving up).
+     */
+    resetItemInnerScroll(el, direction) {
+      if (!el || !document.body.classList.contains(FIT_BODY_CLASS)) return;
+      el = this.getFitScroller(el);
+      el.scrollTop = direction > 0 ? 0 : el.scrollHeight;
+    }
     jumpToPrev(mark) {
+      const before = this.index;
       this.setIndex(this.index - 1, mark, true);
+      if (this.index !== before) this.resetItemInnerScroll(this.selectedItem?.[0], -1);
       return true;
     }
     jumpToNext(mark) {
@@ -67537,7 +67777,9 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
             this.markItemRead(this.index, true);
           }
         } else {
+          const before = this.index;
           this.setIndex(this.index + 1, mark, true);
+          if (this.index !== before) this.resetItemInnerScroll(this.selectedItem?.[0], 1);
         }
       } else {
         const next = $(this.selectedItem).parent().parent().parent().next();
@@ -67688,6 +67930,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
     }
     async captureScreenshot(item, options = {}) {
       const { clean = false } = options;
+      item.classList.add(FIT_CAPTURE_CLASS);
       try {
         const fetchImageAsDataUrl = (url) => {
           return new Promise((resolve) => {
@@ -67950,6 +68193,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         const errorNotification = $("<div>").addClass("bsky-nav-status-toast bsky-nav-status-toast-error").text("Screenshot failed: " + (err.message || "Unknown error"));
         $("body").append(errorNotification);
         setTimeout(() => errorNotification.fadeOut(500, () => errorNotification.remove()), 3e3);
+      } finally {
+        item.classList.remove(FIT_CAPTURE_CLASS);
       }
     }
     async showPostViewModal(item) {
@@ -68378,27 +68623,13 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
      * Includes any sticky tab bars (profile page, home feed tabs)
      */
     getToolbarHeight() {
-      let height = 0;
-      const navigatorToolbar = $("#bsky-navigator-toolbar, #bsky-navigator-global-toolbar").filter(":visible").first();
-      if (navigatorToolbar.length) {
-        height += navigatorToolbar.outerHeight(true) || 0;
-      }
-      const tabBar = $('div[data-testid="profilePager"], div[data-testid="homeScreenFeedTabs"]').filter(":visible").first();
-      if (tabBar.length) {
-        height += tabBar.outerHeight(true) || 0;
-      }
-      const focusRingSpace = 4;
-      return Math.max(height, 60) + focusRingSpace;
+      return measureToolbarHeight();
     }
     /**
      * Get the height of the status bar at the bottom
      */
     getStatusBarHeight() {
-      const statusBar = $("#statusBar");
-      if (statusBar.length && statusBar.is(":visible")) {
-        return statusBar.outerHeight() || 0;
-      }
-      return 0;
+      return measureStatusBarHeight();
     }
     /**
      * Scroll to make an element more visible, accounting for toolbar and status bar.
@@ -68413,6 +68644,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       const statusBarHeight = this.getStatusBarHeight();
       const viewportHeight = window.innerHeight - toolbarHeight - statusBarHeight;
       const viewportBottom = window.innerHeight - statusBarHeight;
+      const fitPostsOn = document.body.classList.contains(FIT_BODY_CLASS);
       let scrollAmount;
       const postHeight = rect.bottom - rect.top;
       if (postHeight > viewportHeight) {
@@ -68435,7 +68667,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         if (bottomOverlap > 0 && topOverlap < 20 && bottomOverlap < 20) {
           return false;
         }
-        scrollAmount = rect.top - toolbarHeight - 10;
+        const desiredTop = toolbarHeight + 10;
+        scrollAmount = rect.top - (fitPostsOn ? Math.min(desiredTop, viewportBottom - postHeight) : desiredTop);
       } else if (rect.bottom > viewportBottom) {
         const bottomOverlap = rect.bottom - viewportBottom;
         const topGap = rect.top - toolbarHeight;
@@ -68443,7 +68676,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
           return false;
         }
         if (direction > 0) {
-          scrollAmount = rect.bottom - viewportBottom + 10;
+          const desiredBottom = viewportBottom - 10;
+          scrollAmount = rect.bottom - (fitPostsOn ? Math.max(desiredBottom, toolbarHeight + postHeight) : desiredBottom);
         } else {
           scrollAmount = rect.top - toolbarHeight - 10;
         }
@@ -71487,6 +71721,20 @@ ${rule}`;
       }
     }
     /**
+     * Tag an unrolled thread's scroll container for "Fit posts to screen" (the CSS caps it
+     * at the visible height minus the post chrome) and publish that chrome height: the
+     * post's header and action bar, which sit outside the container. Call after the replies
+     * are inserted so the measurement includes them.
+     * @private
+     */
+    _markUnrollContainer($item, $container) {
+      const container = $($container)[0];
+      const item = $($item)[0];
+      if (!container || !item) return;
+      container.classList.add("bsky-nav-unroll-scroll");
+      container.style.setProperty("--bsky-nav-unroll-chrome", `${item.offsetHeight - container.offsetHeight}px`);
+    }
+    /**
      * Render an unrolled thread view for a continuation post where the root was missing.
      * Shows all posts starting from the root (which may have been read/filtered).
      * @param {Element} item - The continuation post DOM element
@@ -71546,6 +71794,7 @@ ${rule}`;
         }
         div.append(reply);
       });
+      this._markUnrollContainer(item, parent);
       this.items.each((i, feedItem) => {
         const feedItemPostId = this.postIdForItem(feedItem);
         if (feedItemPostId && unrolledIds.includes(feedItemPostId)) {
@@ -75897,6 +76146,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         styleEl.textContent = "";
       }
       updatePostMaxHeight();
+      setFitPostsEnabled(!!config.get("fitPostsToScreen"));
       leftSidebar?.scheduleApply();
     }
     function updatePostMaxHeight() {
@@ -76703,6 +76953,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           state.mobileView = isMobileByElement || isMobileByWidth;
           startMonitor();
           setContextFromUrl();
+          setFitPostsEnabled(!!config.get("fitPostsToScreen"));
           if (!state.mobileView) {
             applyDesktopFullWidth();
           }

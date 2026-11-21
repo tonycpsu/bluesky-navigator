@@ -6,6 +6,7 @@ import * as dateFns from 'date-fns';
 import Handlebars from 'handlebars';
 import * as htmlToImage from 'html-to-image';
 import { Handler } from './Handler.js';
+import { measureToolbarHeight, measureStatusBarHeight, FIT_BODY_CLASS, FIT_CAPTURE_CLASS } from '../fitPosts.js';
 import { formatPost, urlForPost } from './postFormatting.js';
 import { GestureHandler } from '../components/GestureHandler.js';
 import { BottomSheet } from '../components/BottomSheet.js';
@@ -1678,6 +1679,7 @@ export class ItemHandler extends Handler {
         reply.append($(this.footerTemplate(this.formatPostData(p))));
         div.append(reply);
       });
+      this._markUnrollContainer(item, parent);
       const threadIndex = $(item).closest('.thread').attr('data-bsky-navigator-thread-index');
 
       // Filter out feed items that are now shown as unrolled replies
@@ -2220,7 +2222,9 @@ export class ItemHandler extends Handler {
           } else {
             // Normal post - check visibility first
             const isVisible = this.isElementFullyVisible(this.selectedItem);
-            if (!isVisible) {
+            if (this.scrollInsideItem(this.selectedItem[0], 1)) {
+              // Consumed by scrolling inside a capped post
+            } else if (!isVisible) {
               // Scroll to make the post visible (direction: down)
               // If scrollElementIntoView returns false, post scrolled past - jump to next
               if (!this.scrollElementIntoView(this.selectedItem[0], 1)) {
@@ -2251,7 +2255,9 @@ export class ItemHandler extends Handler {
             }
           } else {
             // Normal post - check visibility first
-            if (!this.isElementFullyVisible(this.selectedItem)) {
+            if (this.scrollInsideItem(this.selectedItem[0], -1)) {
+              // Consumed by scrolling inside a capped post
+            } else if (!this.isElementFullyVisible(this.selectedItem)) {
               // Scroll to make the post visible (direction: up)
               // If scrollElementIntoView returns false, post scrolled past - jump to prev
               if (!this.scrollElementIntoView(this.selectedItem[0], -1)) {
@@ -2750,8 +2756,47 @@ export class ItemHandler extends Handler {
     }
   }
 
+  /**
+   * With "Fit posts to screen" on, scroll inside a capped post before moving on.
+   * Returns true if the key was consumed, false once the post is at its end.
+   */
+  scrollInsideItem(el, direction) {
+    if (!el || !document.body.classList.contains(FIT_BODY_CLASS)) return false;
+    el = this.getFitScroller(el);
+    if (!(el.scrollHeight > el.clientHeight + 1)) return false;
+    const max = el.scrollHeight - el.clientHeight;
+    const remaining = direction > 0 ? max - el.scrollTop : el.scrollTop;
+    if (remaining <= 1) return false;
+    const step = Math.min(el.clientHeight * 0.5, remaining + 10);
+    el.scrollTo({
+      top: el.scrollTop + direction * step,
+      behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
+    });
+    return true;
+  }
+
+  /**
+   * The element that scrolls inside a post: the post itself when it is capped, else the
+   * capped container of an unrolled thread (the CSS un-caps the item in that case).
+   */
+  getFitScroller(el) {
+    if (el.scrollHeight > el.clientHeight + 1) return el;
+    return el.querySelector('.bsky-nav-unroll-scroll') || el;
+  }
+
+  /**
+   * After moving to another post, start at its top (moving down) or bottom (moving up).
+   */
+  resetItemInnerScroll(el, direction) {
+    if (!el || !document.body.classList.contains(FIT_BODY_CLASS)) return;
+    el = this.getFitScroller(el);
+    el.scrollTop = direction > 0 ? 0 : el.scrollHeight;
+  }
+
   jumpToPrev(mark) {
+    const before = this.index;
     this.setIndex(this.index - 1, mark, true);
+    if (this.index !== before) this.resetItemInnerScroll(this.selectedItem?.[0], -1);
     return true;
   }
 
@@ -2763,7 +2808,9 @@ export class ItemHandler extends Handler {
           this.markItemRead(this.index, true);
         }
       } else {
+        const before = this.index;
         this.setIndex(this.index + 1, mark, true);
+        if (this.index !== before) this.resetItemInnerScroll(this.selectedItem?.[0], 1);
       }
     } else {
       const next = $(this.selectedItem).parent().parent().parent().next();
@@ -2957,6 +3004,8 @@ export class ItemHandler extends Handler {
 
   async captureScreenshot(item, options = {}) {
     const { clean = false } = options;
+    // Lift the fit-to-screen caps so the whole post is captured
+    item.classList.add(FIT_CAPTURE_CLASS);
     try {
       // Helper to fetch image as data URL using GM_xmlhttpRequest (bypasses CORS)
       const fetchImageAsDataUrl = (url) => {
@@ -3286,6 +3335,8 @@ export class ItemHandler extends Handler {
 
       $('body').append(errorNotification);
       setTimeout(() => errorNotification.fadeOut(500, () => errorNotification.remove()), 3000);
+    } finally {
+      item.classList.remove(FIT_CAPTURE_CLASS);
     }
   }
 
@@ -3837,36 +3888,14 @@ export class ItemHandler extends Handler {
    * Includes any sticky tab bars (profile page, home feed tabs)
    */
   getToolbarHeight() {
-    let height = 0;
-
-    // Get navigator toolbar height
-    const navigatorToolbar = $('#bsky-navigator-toolbar, #bsky-navigator-global-toolbar').filter(':visible').first();
-    if (navigatorToolbar.length) {
-      height += navigatorToolbar.outerHeight(true) || 0;
-    }
-
-    // Get tab bar height (profile page or home feed tabs)
-    const tabBar = $('div[data-testid="profilePager"], div[data-testid="homeScreenFeedTabs"]').filter(':visible').first();
-    if (tabBar.length) {
-      height += tabBar.outerHeight(true) || 0;
-    }
-
-    // Add space for the focus ring outline (2px) plus a small buffer
-    const focusRingSpace = 4;
-
-    // Return at least a minimum height
-    return Math.max(height, 60) + focusRingSpace;
+    return measureToolbarHeight();
   }
 
   /**
    * Get the height of the status bar at the bottom
    */
   getStatusBarHeight() {
-    const statusBar = $('#statusBar');
-    if (statusBar.length && statusBar.is(':visible')) {
-      return statusBar.outerHeight() || 0;
-    }
-    return 0;
+    return measureStatusBarHeight();
   }
 
   /**
@@ -3883,6 +3912,7 @@ export class ItemHandler extends Handler {
     const statusBarHeight = this.getStatusBarHeight();
     const viewportHeight = window.innerHeight - toolbarHeight - statusBarHeight;
     const viewportBottom = window.innerHeight - statusBarHeight;
+    const fitPostsOn = document.body.classList.contains(FIT_BODY_CLASS);
 
     let scrollAmount;
 
@@ -3918,7 +3948,9 @@ export class ItemHandler extends Handler {
         // Post almost fits, both edges just slightly off - consider visible
         return false;
       }
-      scrollAmount = rect.top - toolbarHeight - 10;
+      // Keep a 10px margin under the toolbar; with fit-to-screen on, never push the bottom past the status bar
+      const desiredTop = toolbarHeight + 10;
+      scrollAmount = rect.top - (fitPostsOn ? Math.min(desiredTop, viewportBottom - postHeight) : desiredTop);
     } else if (rect.bottom > viewportBottom) {
       // Normal post below viewport - scroll to show bottom
       // But if top would go off-screen and post almost fits, consider it visible
@@ -3931,7 +3963,9 @@ export class ItemHandler extends Handler {
       // Scroll minimally based on direction to avoid oscillation
       if (direction > 0) {
         // Going down: scroll just enough to show the bottom
-        scrollAmount = rect.bottom - viewportBottom + 10;
+        // Keep a 10px margin above the status bar; with fit-to-screen on, never push the top under the toolbar
+        const desiredBottom = viewportBottom - 10;
+        scrollAmount = rect.bottom - (fitPostsOn ? Math.max(desiredBottom, toolbarHeight + postHeight) : desiredBottom);
       } else {
         // Going up: align top with toolbar (unusual case - post is below but navigating up)
         scrollAmount = rect.top - toolbarHeight - 10;
@@ -7988,6 +8022,21 @@ export class ItemHandler extends Handler {
   }
 
   /**
+   * Tag an unrolled thread's scroll container for "Fit posts to screen" (the CSS caps it
+   * at the visible height minus the post chrome) and publish that chrome height: the
+   * post's header and action bar, which sit outside the container. Call after the replies
+   * are inserted so the measurement includes them.
+   * @private
+   */
+  _markUnrollContainer($item, $container) {
+    const container = $($container)[0];
+    const item = $($item)[0];
+    if (!container || !item) return;
+    container.classList.add('bsky-nav-unroll-scroll');
+    container.style.setProperty('--bsky-nav-unroll-chrome', `${item.offsetHeight - container.offsetHeight}px`);
+  }
+
+  /**
    * Render an unrolled thread view for a continuation post where the root was missing.
    * Shows all posts starting from the root (which may have been read/filtered).
    * @param {Element} item - The continuation post DOM element
@@ -8064,6 +8113,7 @@ export class ItemHandler extends Handler {
 
       div.append(reply);
     });
+    this._markUnrollContainer(item, parent);
 
     // Filter out any other feed items that match unrolled posts
     this.items.each((i, feedItem) => {

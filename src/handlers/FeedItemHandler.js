@@ -407,13 +407,13 @@ export class FeedItemHandler extends ItemHandler {
 
     // Load older/newer indicator
     this.topLoadIndicator = $(`
-<div id="topLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
+<div id="topLoadIndicator" class="toolbar-icon">
 </div>`);
     $(this.toolbarRow).append(this.topLoadIndicator);
 
     // Sort indicator
     this.sortIndicator = $(
-      `<div id="sortIndicator" title="change sort order" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[+this.state.feedSortReverse]}"/></div>`
+      `<div id="sortIndicator" title="change sort order" class="toolbar-icon"><img id="sortIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.sort[+this.state.feedSortReverse]}"/></div>`
     );
     $(this.toolbarRow).append(this.sortIndicator);
     $('.indicator-image path').attr('fill', 'currentColor');
@@ -424,7 +424,7 @@ export class FeedItemHandler extends ItemHandler {
 
     // Show all/unread filter indicator
     this.filterIndicator = $(
-      `<div id="filterIndicator" title="show all or unread" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[+this.state.feedHideRead]}"/></div>`
+      `<div id="filterIndicator" title="show all or unread" class="toolbar-icon"><img id="filterIndicatorImage" class="indicator-image" src="${this.INDICATOR_IMAGES.filter[+this.state.feedHideRead]}"/></div>`
     );
     $(this.toolbarRow).append(this.filterIndicator);
     $('#filterIndicator').on('click', (event) => {
@@ -840,20 +840,20 @@ export class FeedItemHandler extends ItemHandler {
     $(statusBarContainer).append(this.statusBar);
 
     this.bottomLoadIndicator = $(`
-<div id="bottomLoadIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"/>
+<div id="bottomLoadIndicator" class="toolbar-icon"/>
 `);
     $(this.statusBarLeft).append(this.bottomLoadIndicator);
 
     if (!this.infoIndicator) {
       this.infoIndicator = $(
-        `<div id="infoIndicator" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="infoIndicatorText"/></div>`
+        `<div id="infoIndicator"><div id="infoIndicatorText"/></div>`
       );
       $(this.statusBarCenter).append(this.infoIndicator);
     }
 
     if (!this.preferencesIcon) {
       this.preferencesIcon = $(
-        `<div id="preferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`
+        `<div id="preferencesIndicator" class="toolbar-icon"><div id="preferencesIcon"><img id="preferencesIconImage" class="indicator-image preferences-icon-overlay" src="${this.INDICATOR_IMAGES.preferences[0]}"/></div></div>`
       );
       $(this.preferencesIcon).on('click', () => {
         $('#preferencesIconImage').attr('src', this.INDICATOR_IMAGES.preferences[1]);
@@ -1120,7 +1120,7 @@ export class FeedItemHandler extends ItemHandler {
         ][0];
       $(`#${bar}LoadIndicator`).empty();
       $(`#${bar}LoadIndicator`).append(`
-<div id="load${which}Indicator" title="Load ${which.toLowerCase()} items" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb">
+<div id="load${which}Indicator" title="Load ${which.toLowerCase()} items" class="toolbar-icon">
       <a id="load${which}IndicatorLink">
 <img id="load${which}IndicatorImage" class="indicator-image" src="${img}"/>
 <img id="loadTime${which}IndicatorImage" class="indicator-image load-time-icon ${which == 'Newer' ? 'image-flip-x' : ''}" src="${this.INDICATOR_IMAGES.loadTime[0]}"/>

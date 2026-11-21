@@ -12,6 +12,7 @@ import { BottomSheet } from '../components/BottomSheet.js';
 import { PostViewModal } from '../components/PostViewModal.js';
 import { NavigableList } from '../utils/NavigableList.js';
 import icons from '../icons.js';
+import { isDarkTheme, getThemeBackground } from '../theme.js';
 
 const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
 
@@ -3189,7 +3190,7 @@ export class ItemHandler extends Handler {
 
       // Use html-to-image which handles modern CSS better than html2canvas
       const blob = await htmlToImage.toBlob(item, {
-        backgroundColor: '#ffffff',
+        backgroundColor: getThemeBackground(),
         pixelRatio: 2,
         skipFonts: true,  // Skip font processing to avoid issues
         filter: (node) => {
@@ -3260,27 +3261,17 @@ export class ItemHandler extends Handler {
       }
 
       let notificationText;
-      let backgroundColor;
+      let variant;
       if (clipboardSuccess) {
         notificationText = clean ? 'Clean screenshot copied to clipboard!' : 'Screenshot copied to clipboard!';
-        backgroundColor = '#4CAF50';
+        variant = 'success';
       } else {
         notificationText = clean ? 'Clean screenshot captured (clipboard unavailable)' : 'Screenshot captured (clipboard unavailable)';
-        backgroundColor = '#FF9800';
+        variant = 'warning';
       }
 
       const notification = $('<div>')
-        .css({
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          padding: '10px 20px',
-          backgroundColor: backgroundColor,
-          color: 'white',
-          borderRadius: '4px',
-          zIndex: 10000,
-          fontSize: '14px',
-        })
+        .addClass(`bsky-nav-status-toast bsky-nav-status-toast-${variant}`)
         .text(notificationText);
 
       $('body').append(notification);
@@ -3290,17 +3281,7 @@ export class ItemHandler extends Handler {
 
       // Show error notification so user knows something went wrong
       const errorNotification = $('<div>')
-        .css({
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          padding: '10px 20px',
-          backgroundColor: '#f44336',
-          color: 'white',
-          borderRadius: '4px',
-          zIndex: 10000,
-          fontSize: '14px',
-        })
+        .addClass('bsky-nav-status-toast bsky-nav-status-toast-error')
         .text('Screenshot failed: ' + (err.message || 'Unknown error'));
 
       $('body').append(errorNotification);
@@ -3619,7 +3600,7 @@ export class ItemHandler extends Handler {
       (container) => {
         if (!this.prevButton) {
           this.prevButton = $(
-            `<div id="prevButton" title="previous post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`
+            `<div id="prevButton" title="previous post"><img id="prevButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.prev[0]}"/></div>`
           );
           $(container).append(this.prevButton);
           if (this.state.mobileView) {
@@ -3633,7 +3614,7 @@ export class ItemHandler extends Handler {
 
         if (!this.nextButton) {
           this.nextButton = $(
-            `<div id="nextButton" title="next post" class="css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><img id="nextButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.next[0]}"/></div>`
+            `<div id="nextButton" title="next post"><img id="nextButtonImage" class="indicator-image" src="${this.FLOATING_BUTTON_IMAGES.next[0]}"/></div>`
           );
           $(this.prevButton).after(this.nextButton);
           if (this.state.mobileView) {
@@ -4524,7 +4505,7 @@ export class ItemHandler extends Handler {
             ${categories.length > 0
               ? categories.map((cat, index) => {
                   const color = this.getColorForCategory(cat);
-                  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  const isDark = isDarkTheme();
                   const sc = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
                   const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
                   return `
@@ -5565,7 +5546,7 @@ export class ItemHandler extends Handler {
         <div class="bsky-nav-rules-dropdown-categories">
           ${categoriesWithAuthor.map(({ category, inList, inRules, listName }) => {
             const color = this.getColorForCategory(category);
-            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const isDark = isDarkTheme();
             const sc = isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)';
             const shadow = `1px 1px 0 ${sc}, -1px -1px 0 ${sc}, 1px -1px 0 ${sc}, -1px 1px 0 ${sc}`;
             const location = inList && inRules ? `(list & rules)` : inList ? `(list: ${listName})` : `(rules)`;
@@ -7490,9 +7471,9 @@ export class ItemHandler extends Handler {
     if ($('#feedLoadingIndicator').length) return;
 
     const indicator = $(`
-      <div id="feedLoadingIndicator" style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(255,255,255,0.95);z-index:999;min-height:200px;">
-        <div class="spinner" style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-        <div class="loading-text" style="color:#6b7280;font-size:14px;margin-top:12px;">Loading...</div>
+      <div id="feedLoadingIndicator" style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:var(--bsky-nav-bg);z-index:999;min-height:200px;">
+        <div class="spinner" style="width:40px;height:40px;border:3px solid var(--bsky-nav-border);border-top-color:var(--bsky-nav-primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+        <div class="loading-text" style="color:var(--bsky-nav-text-medium);font-size:14px;margin-top:12px;">Loading...</div>
       </div>
     `);
     // Try to append to main content area, fall back to body with fixed position

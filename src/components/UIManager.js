@@ -110,13 +110,13 @@ class UIManager {
 
     // Info indicator (always present in center)
     this.infoIndicator = $(
-      `<div class="global-info-indicator css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div class="global-info-indicator-text"/></div>`
+      `<div class="global-info-indicator"><div class="global-info-indicator-text"/></div>`
     );
     this.statusBarCenter.append(this.infoIndicator);
 
     // Preferences icon (always present in right section)
     this.preferencesIcon = $(
-      `<div id="globalPreferencesIndicator" class="toolbar-icon css-175oi2r r-1loqt21 r-1otgn73 r-1oszu61 r-16y2uox r-1777fci r-gu64tb"><div id="globalPreferencesIcon"><img id="globalPreferencesIconImage" class="indicator-image preferences-icon-overlay" src="${icons.preferencesOutline}"/></div></div>`
+      `<div id="globalPreferencesIndicator" class="toolbar-icon"><div id="globalPreferencesIcon"><img id="globalPreferencesIconImage" class="indicator-image preferences-icon-overlay" src="${icons.preferencesOutline}"/></div></div>`
     );
     this.preferencesIcon.on('click', () => {
       $('#globalPreferencesIconImage').attr('src', icons.preferencesFilled);

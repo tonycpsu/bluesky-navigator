@@ -28,8 +28,10 @@ import PostUIAdapter from './components/ui-adapters/PostUIAdapter.js';
 import ProfileUIAdapter from './components/ui-adapters/ProfileUIAdapter.js';
 import SavedUIAdapter from './components/ui-adapters/SavedUIAdapter.js';
 import LeftSidebar from './components/LeftSidebar.js';
+import { startThemeWatcher } from './theme.js';
 
 GM_addStyle(style);
+startThemeWatcher();
 
 // Show fullscreen loading indicator immediately on first load
 // Check config from GM storage (default to true if not set)
@@ -46,10 +48,10 @@ if (showLoadingIndicator) {
 
   const indicator = document.createElement('div');
   indicator.id = 'feedLoadingIndicator';
-  indicator.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(255,255,255,0.95);z-index:99999;';
+  indicator.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:var(--bsky-nav-bg);z-index:99999;';
   indicator.innerHTML = `
-    <div class="spinner" style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-    <div class="loading-text" style="color:#6b7280;font-size:14px;margin-top:12px;">Loading...</div>
+    <div class="spinner" style="width:40px;height:40px;border:3px solid var(--bsky-nav-border);border-top-color:var(--bsky-nav-primary);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+    <div class="loading-text" style="color:var(--bsky-nav-text-medium);font-size:14px;margin-top:12px;">Loading...</div>
   `;
   // Append to body immediately or wait for it
   if (document.body) {
@@ -473,7 +475,7 @@ function getScreenFromElement(element) {
           left: 0;
           right: 0;
           height: 40px;
-          background: linear-gradient(transparent, var(--background-color, white));
+          background: linear-gradient(transparent, var(--bsky-nav-bg));
           pointer-events: none;
         }
         /* Expand when post is selected */
@@ -1136,13 +1138,19 @@ function getScreenFromElement(element) {
     function applyAccessibilityStyles() {
       const reducedMotion = config.get('reducedMotion');
       const highContrast = config.get('highContrastMode');
-      const focusRingColor = config.get('focusRingColor') || '#0066cc';
+      const focusRingColor = config.get('focusRingColor') || '#1085fe';
       const focusRingWidth = config.get('focusRingWidth') || 2;
 
       // Build accessibility CSS overrides
       let accessibilityStyles = `:root {
         --focus-ring-color: ${focusRingColor};
         --focus-ring-width: ${focusRingWidth}px;
+      }
+      @media (prefers-contrast: more) {
+        :root {
+          --focus-ring-color: var(--bsky-nav-text);
+          --focus-ring-width: 3px;
+        }
       }`;
 
       // Override reduced motion if user has explicit preference
@@ -1171,7 +1179,7 @@ function getScreenFromElement(element) {
       if (highContrast) {
         accessibilityStyles += `
           :root {
-            --focus-ring-color: #000000;
+            --focus-ring-color: var(--bsky-nav-text);
             --focus-ring-width: 3px;
           }
         `;
@@ -1244,15 +1252,14 @@ function getScreenFromElement(element) {
         }
 
         .reply-selection-child-focused {
-            outline: 1px color-mix(in srgb, var(--focus-ring-color, #0066cc) 35%, transparent) solid !important;
+            outline: none !important;
         }
 
         .sidecar-collapsed {
-            border-right: 3px dashed var(--focus-ring-color, #0066cc) !important;
+            border-right: 3px dashed var(--bsky-nav-accent) !important;
         }
 
         .sidecar-post {
-            margin: 1px;
             ${config.get('replySelectionInactive')}
         }
 
@@ -1280,34 +1287,42 @@ function getScreenFromElement(element) {
             : ''
         }
 
-        @media (prefers-color-scheme:light){
-            .item-unread {
-                ${config.get('unreadPosts')};
-                ${config.get('unreadPostsLightMode')};
-            }
-
-            .item-read {
-                ${config.get('readPosts')};
-                ${config.get('readPostsLightMode')};
-            }
-
+        /* Specificity (0,3,1): .item.item-* beats the show rule
+           body.bsky-nav-feed-ready div[data-testid^="feedItem-by-"] { opacity: 1 !important } (0,2,2),
+           but stays below the hide rule in style.css
+           html body.bsky-nav-loading-enabled:not(.bsky-nav-feed-ready) div[data-testid^="feedItem-by-"] (0,3,3),
+           so items stay hidden until the feed is sorted. */
+        html[data-bsky-nav-theme="light"] .item.item-unread {
+            ${config.get('unreadPosts')};
+            ${config.get('unreadPostsLightMode')};
         }
 
-        @media (prefers-color-scheme:dark){
-            .item-unread {
-                ${config.get('unreadPosts')};
-                ${config.get('unreadPostsDarkMode')};
-            }
+        html[data-bsky-nav-theme="light"] .item.item-read {
+            ${config.get('readPosts')};
+            ${config.get('readPostsLightMode')};
+        }
 
-            .item-read {
-                ${config.get('readPosts')};
-                ${config.get('readPostsDarkMode')};
-            }
+        html[data-bsky-nav-theme="dim"] .item.item-unread,
+        html[data-bsky-nav-theme="dark"] .item.item-unread {
+            ${config.get('unreadPosts')};
+            ${config.get('unreadPostsDarkMode')};
+        }
+
+        html[data-bsky-nav-theme="dim"] .item.item-read,
+        html[data-bsky-nav-theme="dark"] .item.item-read {
+            ${config.get('readPosts')};
+            ${config.get('readPostsDarkMode')};
+        }
+
+        /* The selected post stays at full opacity so the ring keeps its contrast */
+        html[data-bsky-nav-theme] .item.item-read.item-selection-active,
+        html[data-bsky-nav-theme] .item.item-read.item-selection-child-focused {
+            opacity: 1 !important;
         }
 
         .thread-first {
             margin-top: ${config.get('threadMargin')};
-            border-top: 1px rgb(212, 219, 226) solid;
+            border-top: 1px var(--bsky-nav-border) solid;
         }
 
         .thread-last {

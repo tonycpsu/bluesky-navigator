@@ -77,6 +77,13 @@ const CONFIG_SCHEMA = {
         default: false,
         help: 'Remove whitespace next to the left navigation',
       },
+      leftSidebarMode: {
+        label: 'Left sidebar',
+        type: 'select',
+        options: ['Fixed', 'Collapsible', 'Auto-hide'],
+        default: 'Fixed',
+        help: 'Collapsible: toggle button; Auto-hide: shows at the left edge (desktop only)',
+      },
       hideLoadNewButton: {
         label: 'Hide "Load New" button',
         type: 'checkbox',
@@ -679,6 +686,7 @@ const CONFIG_SCHEMA = {
 const HIDDEN_FIELDS = {
   savedSearches: { default: '[]' },
   rulesetColors: { default: '{}' }, // Maps category name to color index
+  leftSidebarCollapsed: { default: false }, // Collapsible left sidebar state (per device)
 };
 
 let instance = null;

@@ -5,6 +5,7 @@ import * as utils from '../utils.js';
 import { ItemHandler } from './ItemHandler.js';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import icons from '../icons.js';
+import { LAYOUT_CHANGED_EVENT } from '../components/LeftSidebar.js';
 import {
   getFeedMapConfig,
   createFeedMapElements,
@@ -1156,6 +1157,8 @@ export class FeedItemHandler extends ItemHandler {
 
     // Update CSS
     this.updateContentWidthCSS(newWidth);
+    // Let the left sidebar layout re-measure the new column width
+    document.dispatchEvent(new window.CustomEvent(LAYOUT_CHANGED_EVENT));
   }
 
   updateContentWidthCSS(contentWidth) {

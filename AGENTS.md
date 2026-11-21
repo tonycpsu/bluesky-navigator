@@ -29,6 +29,7 @@ npm run test:headed  # Tests with visible browser
 - `ConfigModal.js` - Settings UI with tabs (Display, Rules, Timeouts, etc.)
 - `ShortcutOverlay.js` - Keyboard shortcuts help overlay
 - `PostViewModal.js` - Full-screen post view with sidecar
+- `LeftSidebar.js` - Desktop left nav modes (`leftSidebarMode`: Fixed / Collapsible / Auto-hide). Widens the center column into the nav's space by measuring the natural layout (so it composes with `hideRightSidebar`, `compactLayout`, `postWidthDesktop`); collapsed state persists in config (`leftSidebarCollapsed`). Anything that changes the column's natural width should dispatch `LAYOUT_CHANGED_EVENT` so it re-measures. Alt+B (Handler.js) dispatches `TOGGLE_LEFT_SIDEBAR_EVENT` to toggle it in Collapsible mode
 
 ### Other
 - `src/assets/css/style.css` - All CSS styles

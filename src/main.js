@@ -27,6 +27,7 @@ import FeedUIAdapter from './components/ui-adapters/FeedUIAdapter.js';
 import PostUIAdapter from './components/ui-adapters/PostUIAdapter.js';
 import ProfileUIAdapter from './components/ui-adapters/ProfileUIAdapter.js';
 import SavedUIAdapter from './components/ui-adapters/SavedUIAdapter.js';
+import LeftSidebar from './components/LeftSidebar.js';
 
 GM_addStyle(style);
 
@@ -60,6 +61,7 @@ if (showLoadingIndicator) {
 
 let config;
 let handlers;
+let leftSidebar;
 
 // Proxy IntersectionObserver immediately to intercept before Bluesky creates its observers
 // This must run as early as possible, before the app's code executes
@@ -275,7 +277,31 @@ function getScreenFromElement(element) {
       unsafeWindow.__bskyNavSetDisableLoadMore(config.get('disableLoadMoreOnScroll'));
     }
 
+    // Left nav sidebar mode only needs config, so set it up before state loads
+    // (avoids the nav flashing in before it collapses)
+    leftSidebar = new LeftSidebar(config, { onLayoutChange: refreshLayoutDependents });
+
     state.init(constants.STATE_KEY, stateManagerConfig, onStateInit);
+  }
+
+  /**
+   * Re-measure UI that is positioned relative to the content column after its position
+   * or width changes (left sidebar collapsed/expanded, mode changed, window resized).
+   */
+  function refreshLayoutDependents() {
+    if (!handlers) return;
+    for (const handler of Object.values(handlers)) {
+      if (!(handler instanceof ItemHandler) || !handler.isCurrentHandler()) continue;
+      if ($('#fixed-sidecar-panel').hasClass('visible')) {
+        handler.positionFixedSidecarPanel?.();
+        handler.updateSidecarConnector?.();
+      }
+      if ($('#fixed-sidecar-toggle').hasClass('visible')) {
+        handler.positionFixedSidecarToggle?.();
+      }
+      // Feed map viewport indicator / zoom connector are drawn in pixels
+      handler.updateScrollPosition?.();
+    }
   }
 
   function onConfigSave() {
@@ -290,6 +316,7 @@ function getScreenFromElement(element) {
     // Fetch Clearsky block lists if just enabled (no-op if disabled or cache is fresh)
     state.stateManager.updateBlockList(config.get('clearskyEnabled'));
     // Update content width dynamically
+    // (also re-applies the left sidebar mode against the new width)
     updateContentWidth();
     // Recreate toast container with new position
     if (config.get('toastNotifications')) {
@@ -413,6 +440,9 @@ function getScreenFromElement(element) {
 
     // Apply post max height setting
     updatePostMaxHeight();
+
+    // The collapsed/auto-hidden left sidebar layout is derived from the content width
+    leftSidebar?.scheduleApply();
   }
 
   function updatePostMaxHeight() {
@@ -1370,6 +1400,9 @@ function getScreenFromElement(element) {
       const newUrl = window.location.href;
       const urlChanged = newUrl !== current_url;
       current_url = newUrl;
+
+      // Some screens (e.g. Messages) use a different nav width
+      if (urlChanged) leftSidebar?.scheduleApply();
 
       let matched = false;
       // Check URL-based handlers (exclude 'input' which is focus-based, not URL-based)

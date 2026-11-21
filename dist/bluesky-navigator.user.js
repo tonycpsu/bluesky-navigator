@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+664.3c7a78a2
+// @version     1.0.31+666.e3327e70
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -144,6 +144,12 @@
     },
     FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
     LEFT_SIDEBAR_SELECTOR: 'nav[role="navigation"]',
+    // The desktop left nav column only. Bluesky positions it with `left: 50%` plus
+    // `translateX(-300px) translateX(-100%)`; the bottom tab bar (also
+    // nav[role="navigation"]) uses translateY, so this excludes it.
+    LEFT_NAV_COLUMN_SELECTOR: 'nav[role="navigation"][style*="translateX(-100%)"]',
+    // Bluesky's center content column(s) (feed header, feed list, thread, profile...)
+    CENTER_COLUMN_SELECTOR: 'main[role="main"] [style*="max-width: 600px"], main[role="main"] [style*="max-width:600px"]',
     POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
     POST_CONTENT_SELECTOR: 'div[data-testid="contentHider-post"]',
     MAIN_SELECTOR: 'main[role="main"]',
@@ -45804,6 +45810,13 @@ if (cid) {
           default: false,
           help: "Remove whitespace next to the left navigation"
         },
+        leftSidebarMode: {
+          label: "Left sidebar",
+          type: "select",
+          options: ["Fixed", "Collapsible", "Auto-hide"],
+          default: "Fixed",
+          help: "Collapsible: toggle button; Auto-hide: shows at the left edge (desktop only)"
+        },
         hideLoadNewButton: {
           label: 'Hide "Load New" button',
           type: "checkbox",
@@ -46403,8 +46416,10 @@ if (cid) {
   };
   const HIDDEN_FIELDS = {
     savedSearches: { default: "[]" },
-    rulesetColors: { default: "{}" }
+    rulesetColors: { default: "{}" },
     // Maps category name to color index
+    leftSidebarCollapsed: { default: false }
+    // Collapsible left sidebar state (per device)
   };
   let instance$2 = null;
   class ConfigModal {
@@ -55571,6 +55586,187 @@ div#statusBar.has-feed-map {
     color: #9ca3af;
   }
 }
+
+/* =============================================================================
+   Left Navigation Sidebar: Collapsible / Auto-hide (leftSidebarMode setting)
+   Desktop only. Body classes and CSS variables are managed by
+   src/components/LeftSidebar.js; nothing here applies in Fixed mode.
+   ============================================================================= */
+
+.bsky-nav-left-nav-toggle,
+.bsky-nav-left-nav-edge {
+  display: none;
+}
+
+@media only screen and (min-width: 801px) {
+  /* Widen the center column(s) leftwards into the space the nav occupied.
+     The right edge stays where Bluesky / the other layout settings put it. */
+  body.bsky-nav-left-nav-reclaim main[role="main"] [style*="max-width: 600px"],
+  body.bsky-nav-left-nav-reclaim main[role="main"] [style*="max-width:600px"],
+  body.bsky-nav-left-nav-reclaim-global #bsky-navigator-global-statusbar {
+    max-width: var(--bsky-nav-ln-content-width) !important;
+    margin-left: var(--bsky-nav-ln-content-margin) !important;
+    margin-right: 0 !important;
+    transform: none !important;
+  }
+
+  /* Bluesky's column border lines (a separate full-height element centered on the
+     column); only moved when they were aligned with the column to begin with */
+  body.bsky-nav-left-nav-reclaim-borders
+    main[role="main"]
+    div[style*="inset: 0px 0px 0px 50%"][style*="border-left-width"] {
+    left: calc(var(--bsky-nav-ln-content-margin) - 1px) !important;
+    width: calc(var(--bsky-nav-ln-content-width) + 2px) !important;
+    transform: none !important;
+  }
+
+  /* The home feed tabs have their own 600px width */
+  body.bsky-nav-left-nav-reclaim div[data-testid="homeScreenFeedTabs"] {
+    width: 100% !important;
+  }
+
+  /* The feed status bar lives inside the column, so it just fills it */
+  body.bsky-nav-left-nav-reclaim main[role="main"] [style*="max-width"] #statusBar {
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    transform: none !important;
+  }
+
+  /* Collapsible mode, collapsed: hide the nav (it stays in the DOM so Alt+H etc. work).
+     Dropping its transform makes it stop being the containing block for the
+     position: fixed prev/next buttons below, so they're placed against the viewport. */
+  body.bsky-nav-left-nav-collapsed nav[role="navigation"][style*="translateX(-100%)"] {
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transform: none !important;
+  }
+
+  /* Auto-hide mode: the nav becomes an off-screen overlay that slides in from the left
+     edge. It's position: fixed, so revealing it never reflows the content. */
+  body.bsky-nav-left-nav-autohide nav[role="navigation"][style*="translateX(-100%)"] {
+    left: calc(-1 * var(--bsky-nav-ln-nav-width, 300px) - 24px) !important;
+    right: auto !important;
+    transform: none !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    background-color: var(--bsky-nav-ln-bg, #ffffff) !important;
+    z-index: var(--z-panel) !important;
+    box-shadow: none;
+    transition:
+      left var(--transition-duration) ease,
+      box-shadow var(--transition-duration) ease;
+  }
+
+  body.bsky-nav-left-nav-autohide.bsky-nav-left-nav-revealed
+    nav[role="navigation"][style*="translateX(-100%)"] {
+    left: 0 !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+  }
+
+  body.bsky-nav-left-nav-measuring nav[role="navigation"][style*="translateX(-100%)"] {
+    transition: none !important;
+  }
+
+  /* Floating prev/next buttons normally hang off the nav's right edge; move them to
+     the left gutter while the nav is collapsed or auto-hidden */
+  body.bsky-nav-left-nav-collapsed nav[role="navigation"] > #prevButton,
+  body.bsky-nav-left-nav-collapsed nav[role="navigation"] > #nextButton,
+  body.bsky-nav-left-nav-autohide nav[role="navigation"] > #prevButton,
+  body.bsky-nav-left-nav-autohide nav[role="navigation"] > #nextButton {
+    position: fixed;
+    left: 12px;
+    right: auto;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  body.bsky-nav-left-nav-autohide.bsky-nav-left-nav-revealed nav[role="navigation"] > #prevButton,
+  body.bsky-nav-left-nav-autohide.bsky-nav-left-nav-revealed nav[role="navigation"] > #nextButton {
+    opacity: 0 !important;
+    pointer-events: none;
+  }
+
+  /* Invisible hover strip along the left edge that reveals the auto-hidden nav */
+  .bsky-nav-left-nav-edge {
+    display: block;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 8px;
+    z-index: calc(var(--z-panel) - 1);
+  }
+
+  /* Collapse/expand toggle (Collapsible mode) */
+  .bsky-nav-left-nav-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 6px;
+    left: 6px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    background-color: #ffffff;
+    color: #6b7280;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    opacity: 0.55;
+    z-index: var(--z-dropdown);
+    transition:
+      opacity var(--transition-duration) ease,
+      background-color var(--transition-duration) ease;
+  }
+
+  .bsky-nav-left-nav-toggle:hover,
+  .bsky-nav-left-nav-toggle:focus-visible {
+    opacity: 1;
+    background-color: #f3f4f6;
+    color: #1f2937;
+  }
+
+  .bsky-nav-left-nav-toggle:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
+
+  .bsky-nav-left-nav-toggle-chevron {
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: transform var(--transition-duration) ease;
+  }
+
+  .bsky-nav-left-nav-toggle.collapsed .bsky-nav-left-nav-toggle-chevron {
+    transform: rotate(180deg);
+  }
+}
+
+@media only screen and (min-width: 801px) and (prefers-color-scheme: dark) {
+  body.bsky-nav-left-nav-autohide nav[role="navigation"][style*="translateX(-100%)"] {
+    background-color: var(--bsky-nav-ln-bg, #161e27) !important;
+  }
+
+  body.bsky-nav-left-nav-autohide.bsky-nav-left-nav-revealed
+    nav[role="navigation"][style*="translateX(-100%)"] {
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .bsky-nav-left-nav-toggle {
+    background-color: #1f2937;
+    border-color: #374151;
+    color: #9ca3af;
+  }
+
+  .bsky-nav-left-nav-toggle:hover,
+  .bsky-nav-left-nav-toggle:focus-visible {
+    background-color: #374151;
+    color: #f9fafb;
+  }
+}
 `;
   const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-section sidecar-parent-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Parent</span>\n    </button>\n    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">\n      <div class="sidecar-parent">\n        <div class="sidecar-parent-indicator">\u2199\uFE0F</div>\n        {{> postTemplate parent}}\n      </div>\n    </div>\n  </div>\n  {{/if}}\n  {{#if replies.length}}\n  <div class="sidecar-section sidecar-replies-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Replies ({{replies.length}})</span>\n    </button>\n    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">\n      {{#each replies}}\n      {{> postTemplate this}}\n      {{/each}}\n    </div>\n  </div>\n  {{/if}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-user-info">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-author">\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-username">{{displayName}}</div>\n  </a>\n  <a href="https://bsky.app/profile/{{handle}}">\n  <div class="sidecar-post-handle">@{{handle}}</div>\n  </a>\n  </div>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this}}\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n        <button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" role="button" tabindex="0" class="css-175oi2r r-1loqt21 r-1otgn73" style="flex: 1 1 0%; overflow: hidden; background-color: rgb(241, 243, 245);" type="button"><div data-expoimage="true" class="css-175oi2r" style="overflow: hidden; flex: 1 1 0%;"><div><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" style="object-position: left 50% top 50%; width: 100%; height: 100%; object-fit: cover; transition-duration: 0ms; transition-timing-function: linear;" fetchpriority="auto" title="{{alt}}"></div></div><div class="css-175oi2r" style="position: absolute; inset: 0px; border-radius: 12px 0px 0px 12px; border-width: 1px; border-color: rgb(212, 219, 226); opacity: 0.6; pointer-events: none;"></div></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; padding: 12px; margin-top: 8px;">\n  <div class="sidecar-quote-author" style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" style="width: 20px; height: 20px; border-radius: 50%;" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}" style="text-decoration: none;">\n      <span class="sidecar-quote-displayname" style="font-weight: 600;">{{displayName}}</span>\n      <span class="sidecar-quote-handle" style="color: rgb(112, 127, 140);">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{text}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images" style="margin-top: 8px;">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" style="max-width: 100%; border-radius: 8px;" loading="lazy">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a href="{{uri}}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;">\n  <div class="sidecar-embed-external" style="border: 1px solid rgb(212, 219, 226); border-radius: 12px; margin-top: 8px; overflow: hidden;">\n    {{#if thumb}}\n    <div class="sidecar-external-thumb" style="width: 100%; max-height: 200px; overflow: hidden;">\n      <img src="{{thumb}}" alt="{{title}}" style="width: 100%; object-fit: cover;" loading="lazy">\n    </div>\n    {{/if}}\n    <div class="sidecar-external-info" style="padding: 12px;">\n      <div class="sidecar-external-domain" style="font-size: 12px; color: rgb(112, 127, 140); margin-bottom: 4px;">{{domain}}</div>\n      <div class="sidecar-external-title" style="font-weight: 600; margin-bottom: 4px;">{{title}}</div>\n      {{#if description}}\n      <div class="sidecar-external-description" style="font-size: 14px; color: rgb(66, 87, 108); line-height: 1.3;">{{description}}</div>\n      {{/if}}\n    </div>\n  </div>\n</a>\n<\/script>\n\n<script id="sidecar-skeleton-template" type="text/x-handlebars-template">\n<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <span class="sr-only">Loading replies...</span>\n</div>\n<\/script>\n';
   const SHORTCUTS = {
@@ -55587,7 +55783,8 @@ div#statusBar.has-feed-map {
         { keys: ["Alt+L"], description: "Lists" },
         { keys: ["Alt+P"], description: "Profile" },
         { keys: ["Alt+,"], description: "Settings" },
-        { keys: ["Alt+."], description: "Extension preferences" }
+        { keys: ["Alt+."], description: "Extension preferences" },
+        { keys: ["Alt+B"], description: "Collapse/expand left sidebar" }
       ]
     },
     Navigation: {
@@ -55842,6 +56039,375 @@ div#statusBar.has-feed-map {
       return escapeHtml(text);
     }
   }
+  const LEFT_SIDEBAR_MODES = {
+    FIXED: "Fixed",
+    COLLAPSIBLE: "Collapsible",
+    AUTO_HIDE: "Auto-hide"
+  };
+  const LAYOUT_CHANGED_EVENT = "bsky-nav:layout-changed";
+  const TOGGLE_LEFT_SIDEBAR_EVENT = "bsky-nav:toggle-left-sidebar";
+  const CLASS = {
+    collapsed: "bsky-nav-left-nav-collapsed",
+    // Collapsible mode, nav collapsed
+    autoHide: "bsky-nav-left-nav-autohide",
+    // Auto-hide mode, nav is an off-screen overlay
+    revealed: "bsky-nav-left-nav-revealed",
+    // Auto-hide overlay currently slid out
+    reclaim: "bsky-nav-left-nav-reclaim",
+    // Center column widened into the nav's space
+    // Global status bar follows the column (only when a custom post width constrains it)
+    reclaimGlobal: "bsky-nav-left-nav-reclaim-global",
+    // Bluesky's column border lines follow the column
+    reclaimBorders: "bsky-nav-left-nav-reclaim-borders",
+    measuring: "bsky-nav-left-nav-measuring"
+    // Transitions disabled while measuring
+  };
+  const LAYOUT_CLASSES = [
+    CLASS.collapsed,
+    CLASS.autoHide,
+    CLASS.revealed,
+    CLASS.reclaim,
+    CLASS.reclaimGlobal,
+    CLASS.reclaimBorders
+  ];
+  const CSS_VARS = {
+    contentMargin: "--bsky-nav-ln-content-margin",
+    contentWidth: "--bsky-nav-ln-content-width",
+    navWidth: "--bsky-nav-ln-nav-width",
+    background: "--bsky-nav-ln-bg"
+  };
+  const TOGGLE_ID = "bsky-nav-left-nav-toggle";
+  const EDGE_ID = "bsky-nav-left-nav-edge";
+  const MOBILE_QUERY = "(max-width: 800px)";
+  const CONTENT_GUTTER = 44;
+  const HIDE_DELAY = 300;
+  const COLUMN_BORDERS_SELECTOR = 'main[role="main"] div[style*="inset: 0px 0px 0px 50%"][style*="border-left-width"]';
+  const OPEN_MENU_SELECTOR = '[role="menu"], [data-radix-popper-content-wrapper]';
+  const TOGGLE_ICON = `
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+       aria-hidden="true" focusable="false">
+    <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+    <path d="M9 4v16"></path>
+    <path class="bsky-nav-left-nav-toggle-chevron" d="M16 10l-2 2 2 2"></path>
+  </svg>`;
+  class LeftSidebar {
+    /**
+     * @param {object} config - ConfigWrapper instance
+     * @param {object} [options]
+     * @param {Function} [options.onLayoutChange] - Called after the content area changes
+     *   position/width, so dependents (fixed sidecar, feed map...) can re-measure
+     */
+    constructor(config2, { onLayoutChange } = {}) {
+      this.config = config2;
+      this.onLayoutChange = onLayoutChange || null;
+      this.nav = null;
+      this.toggleButton = null;
+      this.edgeZone = null;
+      this.hideTimer = null;
+      this.applyFrame = null;
+      this.lastLayoutKey = null;
+      this.revealedByFocus = false;
+      this.scheduleApply = this.scheduleApply.bind(this);
+      this.onKeyDownCapture = this.onKeyDownCapture.bind(this);
+      this.onNavMouseEnter = this.onNavMouseEnter.bind(this);
+      this.onNavMouseLeave = this.onNavMouseLeave.bind(this);
+      this.onNavFocusIn = this.onNavFocusIn.bind(this);
+      this.onNavFocusOut = this.onNavFocusOut.bind(this);
+      window.addEventListener("resize", this.scheduleApply);
+      document.addEventListener(LAYOUT_CHANGED_EVENT, this.scheduleApply);
+      document.addEventListener(TOGGLE_LEFT_SIDEBAR_EVENT, () => this.toggle());
+      window.addEventListener("keydown", this.onKeyDownCapture, true);
+      this.observer = waitForElement$3(
+        `${constants.LEFT_NAV_COLUMN_SELECTOR}, ${constants.CENTER_COLUMN_SELECTOR}`,
+        this.scheduleApply
+      );
+      this.apply();
+    }
+    getMode() {
+      const mode = this.config.get("leftSidebarMode");
+      return Object.values(LEFT_SIDEBAR_MODES).includes(mode) ? mode : LEFT_SIDEBAR_MODES.FIXED;
+    }
+    isCollapsed() {
+      return this.config.get("leftSidebarCollapsed") === true;
+    }
+    /**
+     * Coalesce re-application into the next animation frame
+     */
+    scheduleApply() {
+      if (this.applyFrame) return;
+      this.applyFrame = requestAnimationFrame(() => {
+        this.applyFrame = null;
+        this.apply();
+      });
+    }
+    /**
+     * Apply the current mode/state to the page. Safe to call repeatedly.
+     */
+    apply() {
+      const body = document.body;
+      if (!body) return;
+      const mode = this.getMode();
+      const nav = document.querySelector(constants.LEFT_NAV_COLUMN_SELECTOR);
+      const isMobile = window.matchMedia(MOBILE_QUERY).matches;
+      if (mode === LEFT_SIDEBAR_MODES.FIXED || isMobile || !nav) {
+        this.teardown();
+        return;
+      }
+      if (nav !== this.nav) this.bindNav(nav);
+      const autoHide = mode === LEFT_SIDEBAR_MODES.AUTO_HIDE;
+      const collapsed = mode === LEFT_SIDEBAR_MODES.COLLAPSIBLE && this.isCollapsed();
+      const geometry = collapsed || autoHide ? this.measure(nav) : null;
+      const rootStyle = document.documentElement.style;
+      if (geometry) {
+        rootStyle.setProperty(CSS_VARS.navWidth, `${geometry.navWidth}px`);
+        if (geometry.reclaim > 0) {
+          rootStyle.setProperty(CSS_VARS.contentMargin, `${geometry.contentMargin}px`);
+          rootStyle.setProperty(CSS_VARS.contentWidth, `${geometry.contentWidth}px`);
+        }
+      }
+      const reclaim = !!geometry && geometry.reclaim > 0;
+      body.classList.toggle(CLASS.reclaim, reclaim);
+      body.classList.toggle(CLASS.reclaimGlobal, reclaim && geometry.reclaimGlobal);
+      body.classList.toggle(CLASS.reclaimBorders, reclaim && geometry.reclaimBorders);
+      body.classList.toggle(CLASS.collapsed, collapsed);
+      body.classList.toggle(CLASS.autoHide, autoHide);
+      if (!autoHide) {
+        body.classList.remove(CLASS.revealed);
+        this.clearHideTimer();
+      }
+      this.updateToggleButton(mode === LEFT_SIDEBAR_MODES.COLLAPSIBLE, collapsed);
+      this.updateEdgeZone(autoHide);
+      this.notifyIfChanged([mode, collapsed, geometry]);
+    }
+    /**
+     * Restore Bluesky's default layout and remove our controls
+     */
+    teardown() {
+      const body = document.body;
+      if (body) body.classList.remove(...LAYOUT_CLASSES);
+      const rootStyle = document.documentElement.style;
+      Object.values(CSS_VARS).forEach((name) => rootStyle.removeProperty(name));
+      this.clearHideTimer();
+      this.updateToggleButton(false);
+      this.updateEdgeZone(false);
+      this.bindNav(null);
+      this.notifyIfChanged(null);
+    }
+    /**
+     * Measure the nav and center column as Bluesky (plus the other layout settings) lays
+     * them out, i.e. with our classes removed. Everything happens synchronously within one
+     * task, so nothing is painted in between, and transitions are disabled so the class
+     * round-trip doesn't animate.
+     * @returns {{navWidth:number, reclaim:number, reclaimGlobal?:boolean,
+     *   reclaimBorders?:boolean, contentMargin?:number,
+     *   contentWidth?:number}|null}
+     */
+    measure(nav) {
+      const body = document.body;
+      const active = LAYOUT_CLASSES.filter((cls) => body.classList.contains(cls));
+      body.classList.add(CLASS.measuring);
+      body.classList.remove(...active);
+      try {
+        const navRect = nav.getBoundingClientRect();
+        if (navRect.width === 0) return null;
+        const result = { navWidth: Math.round(navRect.width), reclaim: 0 };
+        const column = Array.from(document.querySelectorAll(constants.CENTER_COLUMN_SELECTOR)).find(
+          (el) => el.getBoundingClientRect().width > 0
+        );
+        if (!column || !column.parentElement) return result;
+        const colRect = column.getBoundingClientRect();
+        const parentRect = column.parentElement.getBoundingClientRect();
+        if (navRect.left >= colRect.left) return result;
+        const targetLeft = Math.max(CONTENT_GUTTER, navRect.left);
+        const reclaim = Math.max(0, Math.round(colRect.left - targetLeft));
+        if (reclaim === 0) return result;
+        const globalBar = document.getElementById("bsky-navigator-global-statusbar");
+        const reclaimGlobal = !!globalBar && window.getComputedStyle(globalBar).maxWidth !== "none";
+        const borders = Array.from(document.querySelectorAll(COLUMN_BORDERS_SELECTOR)).find(
+          (el) => el.getBoundingClientRect().width > 0
+        );
+        const bordersRect = borders?.getBoundingClientRect();
+        const reclaimBorders = !!bordersRect && Math.round(parentRect.left) === 0 && Math.abs(bordersRect.left - (colRect.left - 1)) <= 2 && Math.abs(bordersRect.width - (colRect.width + 2)) <= 2;
+        return {
+          ...result,
+          reclaim,
+          reclaimGlobal,
+          reclaimBorders,
+          contentMargin: Math.round(colRect.left - reclaim - parentRect.left),
+          contentWidth: Math.round(colRect.width + reclaim)
+        };
+      } finally {
+        body.classList.add(...active);
+        void window.getComputedStyle(nav).left;
+        body.classList.remove(CLASS.measuring);
+      }
+    }
+    notifyIfChanged(layout) {
+      const key = JSON.stringify(layout);
+      if (key === this.lastLayoutKey) return;
+      const isFirst = this.lastLayoutKey === null && layout === null;
+      this.lastLayoutKey = key;
+      if (isFirst || !this.onLayoutChange) return;
+      requestAnimationFrame(() => this.onLayoutChange());
+    }
+    /**
+     * Toggle the collapsed state (Collapsible mode only). Persisted in config.
+     */
+    toggle() {
+      if (this.getMode() !== LEFT_SIDEBAR_MODES.COLLAPSIBLE) {
+        announceToScreenReader$2("Set Left sidebar to Collapsible in settings to toggle it");
+        return;
+      }
+      const collapsed = !this.isCollapsed();
+      this.config.set("leftSidebarCollapsed", collapsed);
+      this.apply();
+      announceToScreenReader$2(
+        collapsed ? "Navigation sidebar collapsed" : "Navigation sidebar expanded"
+      );
+    }
+    updateToggleButton(show, collapsed = false) {
+      if (!show) {
+        if (this.toggleButton) {
+          this.toggleButton.remove();
+          this.toggleButton = null;
+        }
+        return;
+      }
+      if (!this.toggleButton) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.id = TOGGLE_ID;
+        button.className = "bsky-nav-left-nav-toggle";
+        button.innerHTML = TOGGLE_ICON;
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.toggle();
+        });
+        document.body.appendChild(button);
+        this.toggleButton = button;
+      }
+      const label = collapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar";
+      this.toggleButton.setAttribute("aria-label", label);
+      this.toggleButton.setAttribute("aria-expanded", String(!collapsed));
+      this.toggleButton.title = label;
+      this.toggleButton.classList.toggle("collapsed", collapsed);
+    }
+    /**
+     * Keep Enter/Space on the toggle button away from the shortcut handlers (which
+     * listen on document in the capture phase), so the button's native activation runs.
+     */
+    onKeyDownCapture(event) {
+      if (this.toggleButton && event.target === this.toggleButton && (event.key === "Enter" || event.key === " ")) {
+        event.stopImmediatePropagation();
+      }
+    }
+    updateEdgeZone(show) {
+      if (!show) {
+        if (this.edgeZone) {
+          this.edgeZone.remove();
+          this.edgeZone = null;
+        }
+        return;
+      }
+      if (this.edgeZone) return;
+      const zone = document.createElement("div");
+      zone.id = EDGE_ID;
+      zone.className = "bsky-nav-left-nav-edge";
+      zone.setAttribute("aria-hidden", "true");
+      zone.addEventListener("mouseenter", () => {
+        this.revealedByFocus = false;
+        this.reveal();
+      });
+      zone.addEventListener("mouseleave", () => this.scheduleHide());
+      document.body.appendChild(zone);
+      this.edgeZone = zone;
+    }
+    bindNav(nav) {
+      if (this.nav) {
+        this.nav.removeEventListener("mouseenter", this.onNavMouseEnter);
+        this.nav.removeEventListener("mouseleave", this.onNavMouseLeave);
+        this.nav.removeEventListener("focusin", this.onNavFocusIn);
+        this.nav.removeEventListener("focusout", this.onNavFocusOut);
+      }
+      this.nav = nav;
+      if (nav) {
+        nav.addEventListener("mouseenter", this.onNavMouseEnter);
+        nav.addEventListener("mouseleave", this.onNavMouseLeave);
+        nav.addEventListener("focusin", this.onNavFocusIn);
+        nav.addEventListener("focusout", this.onNavFocusOut);
+      }
+    }
+    isAutoHideActive() {
+      return document.body.classList.contains(CLASS.autoHide);
+    }
+    onNavMouseEnter() {
+      if (!this.isAutoHideActive()) return;
+      this.revealedByFocus = false;
+      this.clearHideTimer();
+    }
+    onNavMouseLeave() {
+      if (!this.isAutoHideActive()) return;
+      this.scheduleHide();
+    }
+    onNavFocusIn() {
+      if (!this.isAutoHideActive()) return;
+      if (!document.body.classList.contains(CLASS.revealed)) {
+        this.revealedByFocus = !this.nav?.matches(":hover");
+      }
+      this.reveal();
+    }
+    onNavFocusOut(event) {
+      if (!this.isAutoHideActive()) return;
+      if (this.nav && event.relatedTarget && this.nav.contains(event.relatedTarget)) return;
+      this.revealedByFocus = false;
+      this.scheduleHide();
+    }
+    /**
+     * Slide the auto-hidden nav out as an overlay
+     */
+    reveal() {
+      if (!this.isAutoHideActive() || !this.nav) return;
+      this.clearHideTimer();
+      const background = this.getShellBackground(this.nav);
+      if (background) {
+        document.documentElement.style.setProperty(CSS_VARS.background, background);
+      }
+      document.body.classList.add(CLASS.revealed);
+    }
+    scheduleHide() {
+      this.clearHideTimer();
+      this.hideTimer = setTimeout(() => {
+        this.hideTimer = null;
+        const nav = this.nav;
+        if (!nav || !this.isAutoHideActive()) return;
+        if (nav.matches(":hover") || this.edgeZone?.matches(":hover")) return;
+        if (this.revealedByFocus && nav.contains(document.activeElement)) return;
+        if (document.querySelector(OPEN_MENU_SELECTOR)) {
+          this.scheduleHide();
+          return;
+        }
+        document.body.classList.remove(CLASS.revealed);
+      }, HIDE_DELAY);
+    }
+    clearHideTimer() {
+      if (this.hideTimer) {
+        clearTimeout(this.hideTimer);
+        this.hideTimer = null;
+      }
+    }
+    /**
+     * Find the first opaque background behind the nav (Bluesky's themed shell)
+     */
+    getShellBackground(nav) {
+      for (let el = nav.parentElement; el; el = el.parentElement) {
+        const bg = window.getComputedStyle(el).backgroundColor;
+        if (bg && bg !== "transparent" && !/rgba\([^)]*,\s*0\)$/.test(bg)) return bg;
+      }
+      return "";
+    }
+  }
   class Handler {
     constructor(name, config2, state2, api) {
       this.name = name;
@@ -55905,6 +56471,9 @@ div#statusBar.has-feed-map {
         } else if (event.code === "Period") {
           event.preventDefault();
           this.config.open();
+        } else if (event.code === "KeyB") {
+          event.preventDefault();
+          document.dispatchEvent(new window.CustomEvent(TOGGLE_LEFT_SIDEBAR_EVENT));
         } else if (event.code === "Enter" && $(".config-modal").is(":visible")) {
           event.preventDefault();
         }
@@ -72327,6 +72896,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.config.save();
       $("#widthDisplay").text(newWidth);
       this.updateContentWidthCSS(newWidth);
+      document.dispatchEvent(new window.CustomEvent(LAYOUT_CHANGED_EVENT));
     }
     updateContentWidthCSS(contentWidth) {
       const styleId = "bsky-nav-width-style";
@@ -75214,6 +75784,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
   }
   let config;
   let handlers;
+  let leftSidebar;
   (function proxyIntersectionObserverEarly() {
     const OriginalIntersectionObserver = unsafeWindow.IntersectionObserver;
     let disableLoadMore = false;
@@ -75352,7 +75923,22 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (unsafeWindow.__bskyNavSetDisableLoadMore) {
         unsafeWindow.__bskyNavSetDisableLoadMore(config.get("disableLoadMoreOnScroll"));
       }
+      leftSidebar = new LeftSidebar(config, { onLayoutChange: refreshLayoutDependents });
       state.init(constants.STATE_KEY, stateManagerConfig, onStateInit);
+    }
+    function refreshLayoutDependents() {
+      if (!handlers) return;
+      for (const handler of Object.values(handlers)) {
+        if (!(handler instanceof ItemHandler) || !handler.isCurrentHandler()) continue;
+        if ($("#fixed-sidecar-panel").hasClass("visible")) {
+          handler.positionFixedSidecarPanel?.();
+          handler.updateSidecarConnector?.();
+        }
+        if ($("#fixed-sidecar-toggle").hasClass("visible")) {
+          handler.positionFixedSidecarToggle?.();
+        }
+        handler.updateScrollPosition?.();
+      }
     }
     function onConfigSave() {
       const savedRulesConfig = config.get("rulesConfig");
@@ -75465,6 +76051,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         styleEl.textContent = "";
       }
       updatePostMaxHeight();
+      leftSidebar?.scheduleApply();
     }
     function updatePostMaxHeight() {
       const postMaxHeight = config.get("postMaxHeight");
@@ -76165,6 +76752,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const newUrl = window.location.href;
         const urlChanged = newUrl !== current_url;
         current_url = newUrl;
+        if (urlChanged) leftSidebar?.scheduleApply();
         let matched = false;
         for (const [name, handler] of Object.entries(handlers)) {
           if (name === "input") continue;

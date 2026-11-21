@@ -91,6 +91,13 @@ const constants = {
   },
   FEED_ITEM_SELECTOR: 'div:not(.css-175oi2r) > div[tabindex="0"][role="link"]:not(.r-1awozwy)',
   LEFT_SIDEBAR_SELECTOR: 'nav[role="navigation"]',
+  // The desktop left nav column only. Bluesky positions it with `left: 50%` plus
+  // `translateX(-300px) translateX(-100%)`; the bottom tab bar (also
+  // nav[role="navigation"]) uses translateY, so this excludes it.
+  LEFT_NAV_COLUMN_SELECTOR: 'nav[role="navigation"][style*="translateX(-100%)"]',
+  // Bluesky's center content column(s) (feed header, feed list, thread, profile...)
+  CENTER_COLUMN_SELECTOR:
+    'main[role="main"] [style*="max-width: 600px"], main[role="main"] [style*="max-width:600px"]',
   POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
   POST_CONTENT_SELECTOR: 'div[data-testid="contentHider-post"]',
   MAIN_SELECTOR: 'main[role="main"]',

@@ -1,7 +1,7 @@
 {
   "name": "bluesky-navigator",
   "private": true,
-  "version": "1.0.31+665.98a03022",
+  "version": "1.0.31+666.e3327e70",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch --mode development",
@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@playwright/test": "^1.57.0",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^22.15.29",
     "dotenv": "^17.2.3",
     "eslint": "^9.39.1",

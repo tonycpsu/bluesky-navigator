@@ -29,6 +29,7 @@ import ProfileUIAdapter from './components/ui-adapters/ProfileUIAdapter.js';
 import SavedUIAdapter from './components/ui-adapters/SavedUIAdapter.js';
 import LeftSidebar from './components/LeftSidebar.js';
 import { startThemeWatcher } from './theme.js';
+import { setFitPostsEnabled } from './fitPosts.js';
 
 GM_addStyle(style);
 startThemeWatcher();
@@ -442,6 +443,7 @@ function getScreenFromElement(element) {
 
     // Apply post max height setting
     updatePostMaxHeight();
+    setFitPostsEnabled(!!config.get('fitPostsToScreen'));
 
     // The collapsed/auto-hidden left sidebar layout is derived from the content width
     leftSidebar?.scheduleApply();
@@ -1530,6 +1532,8 @@ function getScreenFromElement(element) {
         state.mobileView = isMobileByElement || isMobileByWidth;
         startMonitor();
         setContextFromUrl();
+        // Updates are applied on config save via updateContentWidth(); this is the startup path
+        setFitPostsEnabled(!!config.get('fitPostsToScreen'));
 
         // Apply desktop layout on desktop view
         if (!state.mobileView) {

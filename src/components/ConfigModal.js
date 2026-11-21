@@ -32,6 +32,12 @@ const CONFIG_SCHEMA = {
         default: 'Off',
         help: 'Collapse unfocused posts to max height; expands when selected',
       },
+      fitPostsToScreen: {
+        label: 'Fit posts to screen',
+        type: 'checkbox',
+        default: false,
+        help: 'Cap posts at the visible screen height; media shrinks first, then the post scrolls',
+      },
       postActionButtonPosition: {
         label: 'Action buttons',
         type: 'select',

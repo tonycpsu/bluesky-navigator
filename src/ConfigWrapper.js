@@ -1,6 +1,7 @@
 // ConfigWrapper.js - Config management using GM_setValue/GM_getValue with custom modal UI
 
 import { ConfigModal, CONFIG_SCHEMA, HIDDEN_FIELDS } from './components/ConfigModal.js';
+import { migrateSupersededDefaults } from './configMigrations.js';
 
 const STORAGE_KEY = 'bluesky_navigator_config';
 const OLD_GM_CONFIG_KEY = 'GM_config'; // Legacy key for migration from old versions
@@ -122,7 +123,19 @@ export class ConfigWrapper {
     try {
       const stored = GM_getValue(STORAGE_KEY, '{}');
       const parsed = typeof stored === 'string' ? JSON.parse(stored) : stored;
-      this.values = { ...this.defaults, ...parsed };
+      // Drop stored values that still equal an old default so the new defaults apply.
+      // The removed values are backed up in the same write.
+      const migrated = migrateSupersededDefaults(parsed);
+      const isPlain = migrated !== null && typeof migrated === 'object' && !Array.isArray(migrated);
+      this.values = { ...this.defaults, ...(isPlain ? migrated : {}) };
+      if (isPlain && migrated !== parsed) {
+        // A failed write leaves the old store intact; the migration retries next load
+        try {
+          GM_setValue(STORAGE_KEY, JSON.stringify(migrated));
+        } catch (e) {
+          console.error('Failed to persist config migration:', e);
+        }
+      }
     } catch (e) {
       console.error('Failed to load config:', e);
       this.values = { ...this.defaults };

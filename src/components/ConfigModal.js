@@ -409,8 +409,8 @@ const CONFIG_SCHEMA = {
       focusRingColor: {
         label: 'Focus ring color',
         type: 'color',
-        default: '#0066cc',
-        help: 'Color of selection outline',
+        default: '#1085fe',
+        help: 'Accent color for the selected post ring and thread highlight',
       },
       focusRingWidth: {
         label: 'Focus ring width (px)',
@@ -431,7 +431,7 @@ const CONFIG_SCHEMA = {
       threadIndicatorColor: {
         label: 'Thread indicator color',
         type: 'text',
-        default: 'rgb(212, 219, 226)',
+        default: 'var(--bsky-nav-border)',
         help: 'Color of the vertical thread line',
       },
       threadMargin: {
@@ -461,13 +461,13 @@ const CONFIG_SCHEMA = {
       unreadPostsLightMode: {
         label: 'Unread (light)',
         type: 'css',
-        default: 'background-color: white;',
+        default: 'background-color: var(--bsky-nav-bg);',
         help: 'Unread posts in light mode',
       },
       unreadPostsDarkMode: {
         label: 'Unread (dark)',
         type: 'css',
-        default: 'background-color: #202020;',
+        default: 'background-color: var(--bsky-nav-bg);',
         help: 'Unread posts in dark mode',
       },
       readPosts: {
@@ -479,43 +479,43 @@ const CONFIG_SCHEMA = {
       readPostsLightMode: {
         label: 'Read (light)',
         type: 'css',
-        default: 'background-color: #f0f0f0;',
+        default: 'background-color: var(--bsky-nav-bg-read);',
         help: 'Read posts in light mode',
       },
       readPostsDarkMode: {
         label: 'Read (dark)',
         type: 'css',
-        default: 'background-color: black;',
+        default: 'background-color: var(--bsky-nav-bg-read);',
         help: 'Read posts in dark mode',
       },
       selectionActive: {
         label: 'Selected post',
         type: 'css',
-        default: 'outline: var(--focus-ring-width, 2px) var(--focus-ring-color, #0066cc) solid !important; box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus-ring-color, #0066cc) 15%, transparent);',
+        default: 'outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent) !important; outline-offset: calc(-1 * var(--bsky-nav-ring-width)); box-shadow: var(--bsky-nav-ring-lift) !important;',
         help: 'CSS for the currently selected post',
       },
       selectionChildFocused: {
         label: 'Child focused',
         type: 'css',
-        default: 'outline: var(--focus-ring-width, 2px) color-mix(in srgb, var(--focus-ring-color, #0066cc) 35%, transparent) solid !important;',
+        default: 'outline: none;',
         help: 'Post style when reply is focused',
       },
       selectionInactive: {
         label: 'Unselected post',
         type: 'css',
-        default: 'outline: var(--focus-ring-width, 2px) solid transparent;',
+        default: 'outline: none;',
         help: 'CSS for non-selected posts',
       },
       replySelectionActive: {
         label: 'Selected reply',
         type: 'css',
-        default: 'outline: 3px var(--focus-ring-color, #0066cc) solid !important; outline-offset: -1px;',
+        default: 'outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent) !important; outline-offset: calc(-1 * var(--bsky-nav-ring-width)); box-shadow: var(--bsky-nav-ring-lift) !important;',
         help: 'CSS for selected reply in sidecar',
       },
       replySelectionInactive: {
         label: 'Unselected reply',
         type: 'css',
-        default: 'outline: 1px rgb(212, 219, 226) solid',
+        default: 'outline: none;',
         help: 'CSS for non-selected replies',
       },
     },

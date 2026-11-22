@@ -6,7 +6,15 @@ import * as dateFns from 'date-fns';
 import Handlebars from 'handlebars';
 import * as htmlToImage from 'html-to-image';
 import { Handler } from './Handler.js';
-import { measureToolbarHeight, measureStatusBarHeight, FIT_BODY_CLASS, FIT_CAPTURE_CLASS } from '../fitPosts.js';
+import {
+  measureToolbarHeight,
+  measureStatusBarHeight,
+  FIT_BODY_CLASS,
+  FIT_CAPTURE_CLASS,
+  FIT_SCROLL_SLACK,
+  FIT_RESET_PENDING_CLASS,
+  isInVisibleArea,
+} from '../fitPosts.js';
 import { formatPost, urlForPost } from './postFormatting.js';
 import { GestureHandler } from '../components/GestureHandler.js';
 import { BottomSheet } from '../components/BottomSheet.js';
@@ -415,6 +423,8 @@ export class ItemHandler extends Handler {
     if (item && document.contains(item)) {
       this.applyItemStyle(item, true);
     }
+    // Selected again before it left the screen: keep the reader's place
+    item?.classList.remove(FIT_RESET_PENDING_CLASS);
 
     // Expand sidecar for new item (unless skipSidecar was set)
     // Store promise so updateItems can wait for it before scrolling
@@ -455,6 +465,20 @@ export class ItemHandler extends Handler {
     // Remove visual styling
     if (item && document.contains(item)) {
       this.applyItemStyle(item, false);
+    }
+
+    // "Fit posts to screen": a capped post that loses the selection goes back to its top,
+    // so it starts there however it is selected again (jumpToPrev() then moves it to its
+    // bottom so k enters from below). Resetting on deselect, not on select, leaves alone
+    // a post the reader is scrolling while scroll-to-focus or hover selects it. A post
+    // still on screen is reset once it has scrolled out of view (fitPosts.js), so its
+    // visible content never jumps.
+    if (item && document.body.classList.contains(FIT_BODY_CLASS)) {
+      if (!isInVisibleArea(item)) {
+        this.resetItemInnerScroll(item, 1);
+      } else {
+        item.classList.add(FIT_RESET_PENDING_CLASS);
+      }
     }
   }
 
@@ -2220,16 +2244,15 @@ export class ItemHandler extends Handler {
               }
             }
           } else {
-            // Normal post - check visibility first
-            const isVisible = this.isElementFullyVisible(this.selectedItem);
-            if (this.scrollInsideItem(this.selectedItem[0], 1)) {
+            // Normal post - bring it into view first, then scroll inside a capped post,
+            // then move on (scrollElementIntoView returns false once nothing is left to show)
+            if (
+              !this.isElementFullyVisible(this.selectedItem) &&
+              this.scrollElementIntoView(this.selectedItem[0], 1)
+            ) {
+              // Scrolled the page to show more of the post (direction: down)
+            } else if (this.scrollInsideItem(this.selectedItem[0], 1)) {
               // Consumed by scrolling inside a capped post
-            } else if (!isVisible) {
-              // Scroll to make the post visible (direction: down)
-              // If scrollElementIntoView returns false, post scrolled past - jump to next
-              if (!this.scrollElementIntoView(this.selectedItem[0], 1)) {
-                moved = this.jumpToNext(event.key == 'j');
-              }
             } else {
               moved = this.jumpToNext(event.key == 'j');
             }
@@ -2254,15 +2277,15 @@ export class ItemHandler extends Handler {
               }
             }
           } else {
-            // Normal post - check visibility first
-            if (this.scrollInsideItem(this.selectedItem[0], -1)) {
+            // Normal post - bring it into view first, then scroll inside a capped post,
+            // then move back (scrollElementIntoView returns false once nothing is left to show)
+            if (
+              !this.isElementFullyVisible(this.selectedItem) &&
+              this.scrollElementIntoView(this.selectedItem[0], -1)
+            ) {
+              // Scrolled the page to show more of the post (direction: up)
+            } else if (this.scrollInsideItem(this.selectedItem[0], -1)) {
               // Consumed by scrolling inside a capped post
-            } else if (!this.isElementFullyVisible(this.selectedItem)) {
-              // Scroll to make the post visible (direction: up)
-              // If scrollElementIntoView returns false, post scrolled past - jump to prev
-              if (!this.scrollElementIntoView(this.selectedItem[0], -1)) {
-                moved = this.jumpToPrev(event.key == 'k');
-              }
             } else {
               moved = this.jumpToPrev(event.key == 'k');
             }
@@ -2766,7 +2789,7 @@ export class ItemHandler extends Handler {
     if (!(el.scrollHeight > el.clientHeight + 1)) return false;
     const max = el.scrollHeight - el.clientHeight;
     const remaining = direction > 0 ? max - el.scrollTop : el.scrollTop;
-    if (remaining <= 1) return false;
+    if (remaining <= FIT_SCROLL_SLACK) return false;
     const step = Math.min(el.clientHeight * 0.5, remaining + 10);
     el.scrollTo({
       top: el.scrollTop + direction * step,
@@ -3681,9 +3704,19 @@ export class ItemHandler extends Handler {
   }
 
   enableFooterObserver() {
+    // Watch only the current last post: a previous last post left observed in the middle
+    // of the feed would load more and throw the selection ahead when it scrolls into view
+    this.disableFooterObserver();
     if (this.config.get('disableLoadMoreOnScroll')) return;
+    // A load-older at this post count found nothing; wait until posts are added
+    if (this._footerPausedAtCount != null) {
+      if (this.items.length === this._footerPausedAtCount) return;
+      this._footerPausedAtCount = null;
+    }
     if (!this.state.feedSortReverse && this.items.length > 0) {
-      this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
+      // A hidden (filtered) post never intersects, so watch the last one that is shown
+      const last = $(this.items).not('.filtered').last()[0] || this.items.slice(-1)[0];
+      this.footerIntersectionObserver.observe(last);
     }
   }
 
@@ -3968,7 +4001,10 @@ export class ItemHandler extends Handler {
         scrollAmount = rect.bottom - (fitPostsOn ? Math.max(desiredBottom, toolbarHeight + postHeight) : desiredBottom);
       } else {
         // Going up: align top with toolbar (unusual case - post is below but navigating up)
-        scrollAmount = rect.top - toolbarHeight - 10;
+        // With fit-to-screen on, never push the bottom past the status bar
+        const desiredTop = toolbarHeight + 10;
+        scrollAmount =
+          rect.top - (fitPostsOn ? Math.min(desiredTop, viewportBottom - postHeight) : desiredTop);
       }
     } else {
       // Already fully visible - no scrolling needed, can advance
@@ -4009,6 +4045,79 @@ export class ItemHandler extends Handler {
 
     // Element is fully visible if entirely within the unobstructed viewport
     return rect.top >= viewportTop - tolerance && rect.bottom <= viewportBottom + tolerance;
+  }
+
+  /**
+   * Give each thread (a run of thread-first .. thread-last post rows) a sort index the
+   * first time it appears; sortItems() orders by it and it never changes. Hidden
+   * (filtered) posts count too, so new posts can't reuse an index an old post has.
+   *
+   * A new row's place in the feed comes from where Bluesky inserted it: React inserts a
+   * new row right before the row that follows it in the feed, or at the end. So a run of
+   * new threads followed by a known thread is placed just before it (between it and the
+   * known thread that precedes it in feed order, with fractional indexes if needed), and
+   * a run with no known thread after it goes after all known threads. This holds whatever
+   * order sortItems() left the rows in, so newer posts loaded at the top and older posts
+   * loaded at the end both land in place, forward or reversed.
+   */
+  assignSortIndexes() {
+    const ATTR = 'data-bsky-navigator-sort-index';
+    const rows = [];
+    const seen = new Set();
+    $(this.selector).each((i, item) => {
+      const row = item.parentElement?.parentElement;
+      if (row && !seen.has(row)) {
+        seen.add(row);
+        rows.push(row);
+      }
+    });
+    // Group rows into threads, in DOM order
+    const threadClasses = ['thread-first', 'thread-middle', 'thread-last'];
+    const groups = [];
+    let group = null;
+    for (const row of rows) {
+      if (!group || row.classList.contains('thread-first')) {
+        group = [];
+        groups.push(group);
+      }
+      group.push(row);
+      if (
+        row.classList.contains('thread-last') ||
+        !threadClasses.some((c) => row.classList.contains(c))
+      ) {
+        group = null;
+      }
+    }
+    const knownRow = (g) => g.find((row) => row.hasAttribute(ATTR));
+    const valueOf = (row) => parseFloat(row.getAttribute(ATTR));
+    const known = groups.filter(knownRow).map((g) => valueOf(knownRow(g)));
+    let max = known.length ? Math.max(...known) : -1;
+    for (let i = 0; i < groups.length; i++) {
+      const anchor = knownRow(groups[i]);
+      if (anchor) {
+        // Rows that joined a known thread take its index
+        groups[i].forEach(
+          (row) => row.hasAttribute(ATTR) || row.setAttribute(ATTR, valueOf(anchor))
+        );
+        continue;
+      }
+      let j = i;
+      while (j < groups.length && !knownRow(groups[j])) j++;
+      const run = groups.slice(i, j);
+      let values;
+      if (j < groups.length) {
+        const next = valueOf(knownRow(groups[j]));
+        const below = known.filter((v) => v < next);
+        const lower = below.length ? Math.max(...below) : next - run.length - 1;
+        values = run.map((g, n) => lower + ((next - lower) * (n + 1)) / (run.length + 1));
+      } else {
+        values = run.map((g, n) => max + 1 + n);
+      }
+      run.forEach((g, n) => g.forEach((row) => row.setAttribute(ATTR, values[n])));
+      known.push(...values);
+      max = Math.max(max, ...values);
+      i = j - 1;
+    }
   }
 
   onPopupAdd() {
@@ -6482,7 +6591,8 @@ export class ItemHandler extends Handler {
     entries.forEach((entry) => {
       if (entry.isIntersecting) {
         this.disableFooterObserver();
-        this.loadOlderItems();
+        // Reaching the end by scrolling loads more without moving the selection
+        this.loadOlderItems({ moveSelection: false });
       }
     });
   }
@@ -7651,6 +7761,9 @@ export class ItemHandler extends Handler {
       }
     });
 
+    // Stable sort indexes (feed order), counted over all posts, hidden ones included
+    this.assignSortIndexes();
+
     // Items are hidden via CSS body.bsky-nav-feed-loading class
     let itemIndex = 0;
     let threadIndex = 0;
@@ -7662,11 +7775,6 @@ export class ItemHandler extends Handler {
         $(item).attr('data-bsky-navigator-item-index', itemIndex++);
         const threadDiv = $(item).parent().parent();
         threadDiv.attr('data-bsky-navigator-thread-index', threadIndex);
-        // Set stable sort index only once - this preserves original feed order for sorting
-        // even after DOM reordering
-        if (!threadDiv.attr('data-bsky-navigator-sort-index')) {
-          threadDiv.attr('data-bsky-navigator-sort-index', threadIndex);
-        }
         // Add .thread class early so sortItems() can find it
         threadDiv.addClass('thread');
         if (classes.some((cls) => $(threadDiv).hasClass(cls))) {
@@ -8253,7 +8361,11 @@ ${
     }, 1000);
   }
 
-  loadOlderItems() {
+  /**
+   * Load the next page of older posts. Asked for explicitly (U, the toolbar), the
+   * selection moves to the last post first; from the footer observer it stays put.
+   */
+  loadOlderItems({ moveSelection = true } = {}) {
     if (this.loading) return;
 
     // Get the stored callback and sentinel from the IntersectionObserver proxy
@@ -8276,8 +8388,10 @@ ${
     this.loading = true;
     const reversed = this.state.feedSortReverse;
     const index = reversed ? 0 : this.items.length - 1;
-    this.setIndex(index);
-    this.updateItems();
+    if (moveSelection) {
+      this.setIndex(index);
+      this.updateItems();
+    }
     const indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
     $(indicatorElement)
       .closest('div.thread')
@@ -8307,7 +8421,13 @@ ${
         this.loading = false;
         $('img#loadOlderIndicatorImage').addClass('image-highlight');
         $('img#loadOlderIndicatorImage').removeClass('toolbar-icon-pending');
-        this.loadItems();
+        // Nothing arrived in time (the real end of the feed, or a slow page): keep the
+        // reader's selection and place, and don't let the footer observer ask again until
+        // the number of posts changes (else it would retry every few seconds at the end).
+        // A page that arrives later still goes through onItemAdded -> loadItems, which
+        // re-arms the observer on the new last post.
+        this._footerPausedAtCount = this.items.length;
+        this.loadItems({ preserveSelection: true });
       }
     }, 3000);
   }

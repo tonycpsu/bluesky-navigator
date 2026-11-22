@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+667.59e55381
+// @version     1.0.31+668.496de989
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45769,7 +45769,7 @@ if (cid) {
           label: "Fit posts to screen",
           type: "checkbox",
           default: false,
-          help: "Cap posts at the visible screen height; media shrinks first, then the post scrolls"
+          help: "Cap posts at the visible screen height: media shrinks first, then long posts scroll inside, and j/k scroll the post before moving on"
         },
         postActionButtonPosition: {
           label: "Action buttons",
@@ -52456,13 +52456,17 @@ div#statusBar.has-feed-map {
    Fit Posts to Screen
    Inert unless body.bsky-nav-fit-posts is set (see src/fitPosts.js, which also
    publishes --bsky-nav-fit-height on <html>).
+   Every rule is scoped to top-level posts (.item:not(.item .item)): embedded
+   quote posts are .items too, but they must not get a cap or scroller of their
+   own. Media inside a quote still shrinks through the top-level post's rules,
+   and .bsky-nav-fit-capture on the top-level post lifts every cap within it.
    ========================================================================== */
 
 body.bsky-nav-fit-posts {
   --bsky-nav-fit-media-height: calc(var(--bsky-nav-fit-height) * 0.7);
 }
 
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) {
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) {
   max-height: var(--bsky-nav-fit-height);
   overflow-y: auto;
   overscroll-behavior: auto;
@@ -52471,7 +52475,7 @@ body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) {
 
 /* Unrolled threads: the container scrolls (not the item), so the item loses its cap.
    Same specificity as the .item cap above, so it wins by coming later. */
-body.bsky-nav-fit-posts .item:has(.unrolled-replies) {
+body.bsky-nav-fit-posts .item:not(.item .item):has(.unrolled-replies) {
   max-height: none;
   overflow-y: visible;
 }
@@ -52492,49 +52496,105 @@ body.bsky-nav-fit-posts .bsky-nav-fit-capture .bsky-nav-unroll-scroll {
 /* The sidecar layout gives the post's first child flex: 1 (basis 0), which would
    shrink it to the cap and clip its content; keep its content height instead so
    the item itself scrolls. */
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) > div:first-of-type {
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) > div:first-of-type {
   flex: 1 0 auto;
 }
 
-/* Link card thumbnails: a box with an inline aspect-ratio; Bluesky already crops
-   the img to it (object-fit: cover), so cap the box height and keep the crop. */
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="aspect-ratio"] {
+/* "More below" fade: fitPosts.js keeps .bsky-nav-fit-more on capped posts near
+   the viewport while more than a few px of content remain below the visible part,
+   and sets --bsky-nav-fit-fade-height (40px at most, less near the end). Same look
+   as the "Collapse posts" fade (transparent to the post background). The
+   pseudo-element is sticky to the bottom of the post's scrollport and its
+   negative margin cancels its height, so it never changes the scroll range.
+   Read posts and the selected thread's tint get a matching end color. */
+body.bsky-nav-fit-posts .item:not(.item .item) {
+  --bsky-nav-fit-fade-base: var(--bsky-nav-bg);
+  --bsky-nav-fit-fade-tint: transparent;
+  --bsky-nav-fit-fade-hover-mix: transparent;
+}
+
+body.bsky-nav-fit-posts .item.item-read:not(.item .item) {
+  --bsky-nav-fit-fade-base: var(--bsky-nav-bg-read);
+}
+
+body.bsky-nav-fit-posts .thread:has(> div > .item-selection-active, > div > .item-selection-child-focused) > div > .item {
+  --bsky-nav-fit-fade-tint: var(--bsky-nav-thread-tint);
+}
+
+/* Bluesky tints a hovered post with an overlay (inline background color; inline
+   opacity 0.5 in light, 0.4 in dim and dark while hovered, else 0). The fade
+   paints above it, so add the same tint on top; fitPosts.js copies the overlay's
+   color into --bsky-nav-fit-fade-hover. */
+body.bsky-nav-fit-posts .item:not(.item .item):has(> * > div[style*="pointer-events: none"][style*="transition-property: opacity"]:not([style*="opacity: 0;"])) {
+  --bsky-nav-fit-fade-hover-mix: color-mix(in srgb, var(--bsky-nav-fit-fade-hover, transparent) 45%, transparent);
+}
+
+body.bsky-nav-fit-posts .item:not(.item .item):has(> * > div[style*="pointer-events: none"][style*="opacity: 0.4"]) {
+  --bsky-nav-fit-fade-hover-mix: color-mix(in srgb, var(--bsky-nav-fit-fade-hover, transparent) 40%, transparent);
+}
+
+body.bsky-nav-fit-posts .item:not(.item .item):has(> * > div[style*="pointer-events: none"][style*="opacity: 0.5"]) {
+  --bsky-nav-fit-fade-hover-mix: color-mix(in srgb, var(--bsky-nav-fit-fade-hover, transparent) 50%, transparent);
+}
+
+body.bsky-nav-fit-posts .item.bsky-nav-fit-more:not(.item .item):not(.bsky-nav-fit-capture)::after {
+  content: '';
+  display: block;
+  flex: none;
+  position: sticky;
+  bottom: 0;
+  height: var(--bsky-nav-fit-fade-height, 40px);
+  margin-top: calc(-1 * var(--bsky-nav-fit-fade-height, 40px));
+  background:
+    linear-gradient(transparent, var(--bsky-nav-fit-fade-hover-mix)),
+    linear-gradient(transparent, var(--bsky-nav-fit-fade-tint)),
+    linear-gradient(transparent, var(--bsky-nav-fit-fade-base));
+  pointer-events: none;
+}
+
+/* Keep the selection ring (an outline drawn inside the post's edge) above the fade */
+body.bsky-nav-fit-posts .item.bsky-nav-fit-more:is(.item-selection-active, .item-selection-child-focused):not(.item .item):not(.bsky-nav-fit-capture)::after {
+  bottom: var(--bsky-nav-ring-width);
+  margin-left: var(--bsky-nav-ring-width);
+  margin-right: var(--bsky-nav-ring-width);
+}
+
+/* Link card thumbnails and other ratio boxes: Bluesky already crops the img to
+   the box (object-fit: cover), so cap the box height and keep the crop. */
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="aspect-ratio"] {
   max-height: var(--bsky-nav-fit-media-height);
 }
 
-/* Image embeds: Bluesky sizes the box with an inline padding-top percentage
-   (a wrapper holding one absolutely positioned row that wraps a button, the img
-   container and its overlays: border ring, ALT badge). Padding can't be capped
-   with max-height, so drop the box sizing and let the img size the row instead:
-   width auto + max-height keeps the aspect ratio. Every box in the chain stays
-   bound to the column width (max-width: 100%); positioned overlays stay absolute. */
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) {
+/* Image and video embeds (markup checked 2026-11-21): a wrapper reserves the
+   space with an inline padding-top percentage and holds one absolutely
+   positioned row (inset: 0) with a ratio box (inline aspect-ratio, height: 100%)
+   that wraps the media and its overlays (border ring, ALT badge, video
+   controls). Padding can't be capped with max-height, so drop it and let the
+   ratio box size itself from the column width and its aspect-ratio instead: it
+   reserves space before the media loads, max-height also caps its width (the
+   ratio transfers it), and the media keeps filling it as Bluesky lays it out.
+   Embeds whose box has no inline aspect-ratio keep Bluesky's padding box. */
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] > div[style*="aspect-ratio"]) {
   padding-top: 0 !important;
+  container-type: inline-size;
 }
 
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) > div[style*="inset"] {
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"] > div[style*="inset"]:has(> div[style*="aspect-ratio"]) {
   position: static !important;
+  display: block !important;
 }
 
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) :is(div, button):not([style*="position: absolute"]) {
+/* Bluesky never makes the wrapper taller than it is wide (a square at most), so
+   keep that limit as well (100cqw is the wrapper's width): media is never larger
+   than with the setting off. */
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"] > div[style*="inset"] > div[style*="aspect-ratio"] {
   height: auto !important;
-  aspect-ratio: auto !important;
   max-width: 100%;
-}
-
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) img {
-  position: static !important;
-  display: block;
-  width: auto !important;
-  height: auto !important;
-  max-width: 100% !important;
-  max-height: var(--bsky-nav-fit-media-height) !important;
-  object-fit: contain !important;
-  border-radius: 12px;
+  max-height: min(var(--bsky-nav-fit-media-height), 100cqw);
 }
 
 /* Videos */
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] video {
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] video {
   max-height: var(--bsky-nav-fit-media-height);
   object-fit: contain;
 }
@@ -64285,9 +64345,18 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
   const FIT_HEIGHT_VAR = "--bsky-nav-fit-height";
   const FIT_BODY_CLASS = "bsky-nav-fit-posts";
   const FIT_CAPTURE_CLASS = "bsky-nav-fit-capture";
+  const FIT_MORE_CLASS = "bsky-nav-fit-more";
+  const FIT_ITEM_SELECTOR = ".item:not(.item .item)";
   const TOOLBAR_SELECTOR = "#bsky-navigator-toolbar, #bsky-navigator-global-toolbar";
   const TAB_BAR_SELECTOR = 'div[data-testid="profilePager"] [role="tablist"], div[data-testid="homeScreenFeedTabs"]';
   const MIN_FIT_HEIGHT = 150;
+  const FIT_SCROLL_SLACK = 4;
+  const FIT_RESET_PENDING_CLASS = "bsky-nav-fit-reset-pending";
+  const FADE_MAX_HEIGHT = 40;
+  const FADE_HEIGHT_VAR = "--bsky-nav-fit-fade-height";
+  const FADE_HOVER_VAR = "--bsky-nav-fit-fade-hover";
+  const HOVER_OVERLAY_SELECTOR = 'div[style*="position: absolute"][style*="inset: 0px"][style*="pointer-events: none"][style*="transition-property: opacity"]';
+  let shortWindow = false;
   const STATUS_BAR_SELECTOR = "#statusBar";
   const MOBILE_MAX_WIDTH = 800;
   function measureToolbarHeight() {
@@ -64330,16 +64399,66 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       top: measureToolbarHeight(),
       bottom: measureStatusBarHeight() + measureBottomBarHeight()
     });
-    if (px2 < MIN_FIT_HEIGHT) {
-      document.documentElement.style.removeProperty(FIT_HEIGHT_VAR);
-    } else {
-      document.documentElement.style.setProperty(FIT_HEIGHT_VAR, `${px2}px`);
+    const usable = px2 >= MIN_FIT_HEIGHT;
+    if (usable === shortWindow) {
+      document.body.classList.toggle(FIT_BODY_CLASS, usable);
+      shortWindow = !usable;
     }
+    if (usable) {
+      document.documentElement.style.setProperty(FIT_HEIGHT_VAR, `${px2}px`);
+    } else {
+      document.documentElement.style.removeProperty(FIT_HEIGHT_VAR);
+    }
+  }
+  function updateFitFade(el, readHoverColor = false) {
+    const remaining = el.scrollHeight - el.clientHeight - el.scrollTop;
+    const more = remaining > FIT_SCROLL_SLACK;
+    el.classList.toggle(FIT_MORE_CLASS, more);
+    if (!more) return;
+    el.style.setProperty(FADE_HEIGHT_VAR, `${Math.min(FADE_MAX_HEIGHT, Math.round(remaining))}px`);
+    if (readHoverColor || !el.style.getPropertyValue(FADE_HOVER_VAR)) {
+      const overlay = [...el.querySelectorAll(HOVER_OVERLAY_SELECTOR)].find(
+        (node) => node.closest(".item") === el
+      );
+      if (overlay) {
+        el.style.setProperty(FADE_HOVER_VAR, window.getComputedStyle(overlay).backgroundColor);
+      }
+    }
+  }
+  function isInVisibleArea(el) {
+    const rect = el.getBoundingClientRect();
+    const bottom = window.innerHeight - measureStatusBarHeight() - measureBottomBarHeight();
+    return rect.bottom > measureToolbarHeight() && rect.top < bottom;
+  }
+  function refreshFades() {
+    for (const el of document.querySelectorAll(`.${FIT_RESET_PENDING_CLASS}`)) {
+      if (isInVisibleArea(el)) continue;
+      el.classList.remove(FIT_RESET_PENDING_CLASS);
+      el.scrollTop = 0;
+      const unroll = el.querySelector(".bsky-nav-unroll-scroll");
+      if (unroll) unroll.scrollTop = 0;
+    }
+    const lo = -window.innerHeight;
+    const hi = 2 * window.innerHeight;
+    for (const el of document.querySelectorAll(FIT_ITEM_SELECTOR)) {
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom < lo || rect.top > hi) continue;
+      updateFitFade(el, true);
+    }
+  }
+  function clearFades() {
+    document.querySelectorAll(`.${FIT_RESET_PENDING_CLASS}`).forEach((el) => el.classList.remove(FIT_RESET_PENDING_CLASS));
+    document.querySelectorAll(`.${FIT_MORE_CLASS}`).forEach((el) => {
+      el.classList.remove(FIT_MORE_CLASS);
+      el.style.removeProperty(FADE_HEIGHT_VAR);
+      el.style.removeProperty(FADE_HOVER_VAR);
+    });
   }
   let watcher = null;
   function startWatcher() {
     if (watcher) return;
     let frame = 0;
+    let fadeFrame = 0;
     let observed = [];
     const observer = new window.ResizeObserver(() => schedule());
     const observe = () => {
@@ -64359,28 +64478,51 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         frame = 0;
         observe();
         applyMeasurement();
+        refreshFades();
       });
     }
+    function scheduleFades() {
+      if (fadeFrame || frame) return;
+      fadeFrame = requestAnimationFrame(() => {
+        fadeFrame = 0;
+        refreshFades();
+      });
+    }
+    const onScroll = (event) => {
+      const target2 = event.target;
+      if (target2 instanceof window.Element) {
+        if (target2.matches(FIT_ITEM_SELECTOR)) updateFitFade(target2);
+      } else {
+        scheduleFades();
+      }
+    };
     const mutations = new window.MutationObserver(schedule);
     mutations.observe(document.body, { childList: true, subtree: true });
     window.addEventListener("resize", schedule);
     document.addEventListener(LAYOUT_CHANGED_EVENT, schedule);
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    document.addEventListener("load", scheduleFades, true);
     observe();
     watcher = {
       stop() {
         if (frame) window.cancelAnimationFrame(frame);
+        if (fadeFrame) window.cancelAnimationFrame(fadeFrame);
         observer.disconnect();
         mutations.disconnect();
         window.removeEventListener("resize", schedule);
         document.removeEventListener(LAYOUT_CHANGED_EVENT, schedule);
+        document.removeEventListener("scroll", onScroll, { capture: true });
+        document.removeEventListener("load", scheduleFades, true);
       }
     };
   }
   function setFitPostsEnabled(enabled) {
+    shortWindow = false;
     if (enabled) {
       document.body.classList.add(FIT_BODY_CLASS);
       applyMeasurement();
       startWatcher();
+      refreshFades();
     } else {
       document.body.classList.remove(FIT_BODY_CLASS);
       document.documentElement.style.removeProperty(FIT_HEIGHT_VAR);
@@ -64388,6 +64530,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         watcher.stop();
         watcher = null;
       }
+      clearFades();
     }
   }
   function safeHttpUrl(url) {
@@ -65950,6 +66093,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       if (item && document.contains(item)) {
         this.applyItemStyle(item, true);
       }
+      item?.classList.remove(FIT_RESET_PENDING_CLASS);
       if (!this._skipSidecar) {
         this._expandPromise = this.expandItem($(item));
       } else {
@@ -65978,6 +66122,13 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       }
       if (item && document.contains(item)) {
         this.applyItemStyle(item, false);
+      }
+      if (item && document.body.classList.contains(FIT_BODY_CLASS)) {
+        if (!isInVisibleArea(item)) {
+          this.resetItemInnerScroll(item, 1);
+        } else {
+          item.classList.add(FIT_RESET_PENDING_CLASS);
+        }
       }
     }
     /**
@@ -67290,13 +67441,9 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
                 }
               }
             } else {
-              const isVisible = this.isElementFullyVisible(this.selectedItem);
-              if (this.scrollInsideItem(this.selectedItem[0], 1)) ;
-              else if (!isVisible) {
-                if (!this.scrollElementIntoView(this.selectedItem[0], 1)) {
-                  moved = this.jumpToNext(event.key == "j");
-                }
-              } else {
+              if (!this.isElementFullyVisible(this.selectedItem) && this.scrollElementIntoView(this.selectedItem[0], 1)) ;
+              else if (this.scrollInsideItem(this.selectedItem[0], 1)) ;
+              else {
                 moved = this.jumpToNext(event.key == "j");
               }
             }
@@ -67315,12 +67462,9 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
                 }
               }
             } else {
-              if (this.scrollInsideItem(this.selectedItem[0], -1)) ;
-              else if (!this.isElementFullyVisible(this.selectedItem)) {
-                if (!this.scrollElementIntoView(this.selectedItem[0], -1)) {
-                  moved = this.jumpToPrev(event.key == "k");
-                }
-              } else {
+              if (!this.isElementFullyVisible(this.selectedItem) && this.scrollElementIntoView(this.selectedItem[0], -1)) ;
+              else if (this.scrollInsideItem(this.selectedItem[0], -1)) ;
+              else {
                 moved = this.jumpToPrev(event.key == "k");
               }
             }
@@ -67740,7 +67884,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       if (!(el.scrollHeight > el.clientHeight + 1)) return false;
       const max = el.scrollHeight - el.clientHeight;
       const remaining = direction > 0 ? max - el.scrollTop : el.scrollTop;
-      if (remaining <= 1) return false;
+      if (remaining <= FIT_SCROLL_SLACK) return false;
       const step = Math.min(el.clientHeight * 0.5, remaining + 10);
       el.scrollTo({
         top: el.scrollTop + direction * step,
@@ -68463,9 +68607,15 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       );
     }
     enableFooterObserver() {
+      this.disableFooterObserver();
       if (this.config.get("disableLoadMoreOnScroll")) return;
+      if (this._footerPausedAtCount != null) {
+        if (this.items.length === this._footerPausedAtCount) return;
+        this._footerPausedAtCount = null;
+      }
       if (!this.state.feedSortReverse && this.items.length > 0) {
-        this.footerIntersectionObserver.observe(this.items.slice(-1)[0]);
+        const last = $(this.items).not(".filtered").last()[0] || this.items.slice(-1)[0];
+        this.footerIntersectionObserver.observe(last);
       }
     }
     disableFooterObserver() {
@@ -68679,7 +68829,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
           const desiredBottom = viewportBottom - 10;
           scrollAmount = rect.bottom - (fitPostsOn ? Math.max(desiredBottom, toolbarHeight + postHeight) : desiredBottom);
         } else {
-          scrollAmount = rect.top - toolbarHeight - 10;
+          const desiredTop = toolbarHeight + 10;
+          scrollAmount = rect.top - (fitPostsOn ? Math.min(desiredTop, viewportBottom - postHeight) : desiredTop);
         }
       } else {
         return false;
@@ -68708,6 +68859,73 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       const viewportBottom = window.innerHeight - statusBarHeight;
       const tolerance = 2;
       return rect.top >= viewportTop - tolerance && rect.bottom <= viewportBottom + tolerance;
+    }
+    /**
+     * Give each thread (a run of thread-first .. thread-last post rows) a sort index the
+     * first time it appears; sortItems() orders by it and it never changes. Hidden
+     * (filtered) posts count too, so new posts can't reuse an index an old post has.
+     *
+     * A new row's place in the feed comes from where Bluesky inserted it: React inserts a
+     * new row right before the row that follows it in the feed, or at the end. So a run of
+     * new threads followed by a known thread is placed just before it (between it and the
+     * known thread that precedes it in feed order, with fractional indexes if needed), and
+     * a run with no known thread after it goes after all known threads. This holds whatever
+     * order sortItems() left the rows in, so newer posts loaded at the top and older posts
+     * loaded at the end both land in place, forward or reversed.
+     */
+    assignSortIndexes() {
+      const ATTR = "data-bsky-navigator-sort-index";
+      const rows = [];
+      const seen = /* @__PURE__ */ new Set();
+      $(this.selector).each((i, item) => {
+        const row = item.parentElement?.parentElement;
+        if (row && !seen.has(row)) {
+          seen.add(row);
+          rows.push(row);
+        }
+      });
+      const threadClasses = ["thread-first", "thread-middle", "thread-last"];
+      const groups = [];
+      let group = null;
+      for (const row of rows) {
+        if (!group || row.classList.contains("thread-first")) {
+          group = [];
+          groups.push(group);
+        }
+        group.push(row);
+        if (row.classList.contains("thread-last") || !threadClasses.some((c) => row.classList.contains(c))) {
+          group = null;
+        }
+      }
+      const knownRow = (g) => g.find((row) => row.hasAttribute(ATTR));
+      const valueOf = (row) => parseFloat(row.getAttribute(ATTR));
+      const known = groups.filter(knownRow).map((g) => valueOf(knownRow(g)));
+      let max = known.length ? Math.max(...known) : -1;
+      for (let i = 0; i < groups.length; i++) {
+        const anchor = knownRow(groups[i]);
+        if (anchor) {
+          groups[i].forEach(
+            (row) => row.hasAttribute(ATTR) || row.setAttribute(ATTR, valueOf(anchor))
+          );
+          continue;
+        }
+        let j = i;
+        while (j < groups.length && !knownRow(groups[j])) j++;
+        const run = groups.slice(i, j);
+        let values;
+        if (j < groups.length) {
+          const next = valueOf(knownRow(groups[j]));
+          const below = known.filter((v) => v < next);
+          const lower = below.length ? Math.max(...below) : next - run.length - 1;
+          values = run.map((g, n) => lower + (next - lower) * (n + 1) / (run.length + 1));
+        } else {
+          values = run.map((g, n) => max + 1 + n);
+        }
+        run.forEach((g, n) => g.forEach((row) => row.setAttribute(ATTR, values[n])));
+        known.push(...values);
+        max = Math.max(max, ...values);
+        i = j - 1;
+      }
     }
     onPopupAdd() {
       this.isPopupVisible = true;
@@ -70597,7 +70815,7 @@ ${rule}`;
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
           this.disableFooterObserver();
-          this.loadOlderItems();
+          this.loadOlderItems({ moveSelection: false });
         }
       });
     }
@@ -71477,6 +71695,7 @@ ${rule}`;
         } catch (e) {
         }
       });
+      this.assignSortIndexes();
       let itemIndex = 0;
       let threadIndex = 0;
       let threadOffset = 0;
@@ -71484,9 +71703,6 @@ ${rule}`;
         $(item).attr("data-bsky-navigator-item-index", itemIndex++);
         const threadDiv = $(item).parent().parent();
         threadDiv.attr("data-bsky-navigator-thread-index", threadIndex);
-        if (!threadDiv.attr("data-bsky-navigator-sort-index")) {
-          threadDiv.attr("data-bsky-navigator-sort-index", threadIndex);
-        }
         threadDiv.addClass("thread");
         if (classes.some((cls) => $(threadDiv).hasClass(cls))) {
           set.push(threadDiv[0]);
@@ -71891,7 +72107,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.setupLoadNewerObserver();
       }, 1e3);
     }
-    loadOlderItems() {
+    /**
+     * Load the next page of older posts. Asked for explicitly (U, the toolbar), the
+     * selection moves to the last post first; from the footer observer it stays put.
+     */
+    loadOlderItems({ moveSelection = true } = {}) {
       if (this.loading) return;
       const loadMoreCallback = unsafeWindow.__bskyNavGetLoadMoreCallback?.();
       const loadMoreSentinel = unsafeWindow.__bskyNavGetLoadMoreSentinel?.();
@@ -71907,8 +72127,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.loading = true;
       const reversed = this.state.feedSortReverse;
       const index = reversed ? 0 : this.items.length - 1;
-      this.setIndex(index);
-      this.updateItems();
+      if (moveSelection) {
+        this.setIndex(index);
+        this.updateItems();
+      }
       const indicatorElement = this.items.length ? this.items[index] : $(this.selector).eq(index)[0];
       $(indicatorElement).closest("div.thread").addClass(
         this.state.feedSortReverse ? "loading-indicator-forward" : "loading-indicator-reverse"
@@ -71931,7 +72153,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           this.loading = false;
           $("img#loadOlderIndicatorImage").addClass("image-highlight");
           $("img#loadOlderIndicatorImage").removeClass("toolbar-icon-pending");
-          this.loadItems();
+          this._footerPausedAtCount = this.items.length;
+          this.loadItems({ preserveSelection: true });
         }
       }, 3e3);
     }
@@ -73638,8 +73861,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const parent = $(this.selector).closest(".thread").first().parent();
       const newItems = parent.children().filter((i, item) => $(item).hasClass("thread")).get();
       newItems.sort((a, b) => {
-        const sortIndexA = parseInt($(a).attr("data-bsky-navigator-sort-index"));
-        const sortIndexB = parseInt($(b).attr("data-bsky-navigator-sort-index"));
+        const sortIndexA = parseFloat($(a).attr("data-bsky-navigator-sort-index"));
+        const sortIndexB = parseFloat($(b).attr("data-bsky-navigator-sort-index"));
         const itemIndexA = parseInt($(a).find(".item").attr("data-bsky-navigator-item-index"));
         const itemIndexB = parseInt($(b).find(".item").attr("data-bsky-navigator-item-index"));
         if (sortIndexA !== sortIndexB) {
@@ -73647,12 +73870,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
         return itemIndexA - itemIndexB;
       });
-      const shouldPrepend = reversed ^ this.loadingNew;
-      if (shouldPrepend) {
-        parent.prepend(newItems);
-      } else {
-        const afterTarget = parent.children(".thread").last().next();
-        afterTarget.after(newItems);
+      const parentEl = parent[0];
+      if (parentEl && newItems.length) {
+        let ref = parent.children(".thread")[0];
+        for (const node of newItems) {
+          if (node === ref) {
+            ref = ref.nextSibling;
+          } else {
+            parentEl.insertBefore(node, ref);
+          }
+        }
       }
       perfEnd();
     }

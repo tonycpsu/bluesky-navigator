@@ -1977,8 +1977,8 @@ export class FeedItemHandler extends ItemHandler {
 
     // Sort by stable sort-index (set once when item first appears, never changes)
     newItems.sort((a, b) => {
-        const sortIndexA = parseInt($(a).attr('data-bsky-navigator-sort-index'));
-        const sortIndexB = parseInt($(b).attr('data-bsky-navigator-sort-index'));
+        const sortIndexA = parseFloat($(a).attr('data-bsky-navigator-sort-index'));
+        const sortIndexB = parseFloat($(b).attr('data-bsky-navigator-sort-index'));
         const itemIndexA = parseInt($(a).find('.item').attr('data-bsky-navigator-item-index'));
         const itemIndexB = parseInt($(b).find('.item').attr('data-bsky-navigator-item-index'));
         if (sortIndexA !== sortIndexB) {
@@ -1987,12 +1987,22 @@ export class FeedItemHandler extends ItemHandler {
         return itemIndexA - itemIndexB;
       });
 
-    const shouldPrepend = reversed ^ this.loadingNew;
-    if (shouldPrepend) {
-      parent.prepend(newItems);
-    } else {
-      const afterTarget = parent.children('.thread').last().next();
-      afterTarget.after(newItems);
+    // Lay the threads out as one block in sorted order, starting where the first thread
+    // already is, and move only the nodes that are out of place. Moving a node resets the
+    // inner scroll of a post capped by "Fit posts to screen", and Bluesky's own list
+    // children (a zero-height header before the posts, the end-of-list marker and loader
+    // after them) must keep their places: with the end marker above the first post,
+    // Bluesky keeps loading pages while the feed is scrolled to the top.
+    const parentEl = parent[0];
+    if (parentEl && newItems.length) {
+      let ref = parent.children('.thread')[0];
+      for (const node of newItems) {
+        if (node === ref) {
+          ref = ref.nextSibling;
+        } else {
+          parentEl.insertBefore(node, ref);
+        }
+      }
     }
     perfEnd();
   }

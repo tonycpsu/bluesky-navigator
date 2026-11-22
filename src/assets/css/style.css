@@ -6601,9 +6601,15 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
 
 @media only screen and (min-width: 801px) {
   /* Widen the center column(s) leftwards into the space the nav occupied.
-     The right edge stays where Bluesky / the other layout settings put it. */
-  body.bsky-nav-left-nav-reclaim main[role="main"] [style*="max-width: 600px"],
-  body.bsky-nav-left-nav-reclaim main[role="main"] [style*="max-width:600px"],
+     The right edge stays where Bluesky / the other layout settings put it.
+     Not on the Messages screen, whose split panes also match. :where() adds no
+     specificity, so the rule's precedence is unchanged elsewhere. */
+  body.bsky-nav-left-nav-reclaim:where(:not(.bsky-nav-route-messages))
+    main[role="main"]
+    [style*="max-width: 600px"],
+  body.bsky-nav-left-nav-reclaim:where(:not(.bsky-nav-route-messages))
+    main[role="main"]
+    [style*="max-width:600px"],
   body.bsky-nav-left-nav-reclaim-global #bsky-navigator-global-statusbar {
     max-width: var(--bsky-nav-ln-content-width) !important;
     margin-left: var(--bsky-nav-ln-content-margin) !important;

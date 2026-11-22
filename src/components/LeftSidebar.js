@@ -223,6 +223,8 @@ export default class LeftSidebar {
       const navRect = nav.getBoundingClientRect();
       if (navRect.width === 0) return null;
       const result = { navWidth: Math.round(navRect.width), reclaim: 0 };
+      // The Messages screen has no single center column to widen
+      if (constants.MESSAGES_PATH_REGEX.test(window.location.pathname)) return result;
 
       const column = Array.from(document.querySelectorAll(constants.CENTER_COLUMN_SELECTOR)).find(
         (el) => el.getBoundingClientRect().width > 0

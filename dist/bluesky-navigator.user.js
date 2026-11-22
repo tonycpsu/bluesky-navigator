@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+669.e6c1da56
+// @version     1.0.31+670.5bb916f4
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -150,6 +150,10 @@
     LEFT_NAV_COLUMN_SELECTOR: 'nav[role="navigation"][style*="translateX(-100%)"]',
     // Bluesky's center content column(s) (feed header, feed list, thread, profile...)
     CENTER_COLUMN_SELECTOR: 'main[role="main"] [style*="max-width: 600px"], main[role="main"] [style*="max-width:600px"]',
+    // Messages (chat) screen: a split list + conversation layout whose panes also contain
+    // max-width: 600px elements, so the center column width overrides must skip it.
+    MESSAGES_PATH_REGEX: /^\/messages(\/|$)/,
+    MESSAGES_ROUTE_CLASS: "bsky-nav-route-messages",
     POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
     POST_CONTENT_SELECTOR: 'div[data-testid="contentHider-post"]',
     MAIN_SELECTOR: 'main[role="main"]',
@@ -55522,9 +55526,15 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
 
 @media only screen and (min-width: 801px) {
   /* Widen the center column(s) leftwards into the space the nav occupied.
-     The right edge stays where Bluesky / the other layout settings put it. */
-  body.bsky-nav-left-nav-reclaim main[role="main"] [style*="max-width: 600px"],
-  body.bsky-nav-left-nav-reclaim main[role="main"] [style*="max-width:600px"],
+     The right edge stays where Bluesky / the other layout settings put it.
+     Not on the Messages screen, whose split panes also match. :where() adds no
+     specificity, so the rule's precedence is unchanged elsewhere. */
+  body.bsky-nav-left-nav-reclaim:where(:not(.bsky-nav-route-messages))
+    main[role="main"]
+    [style*="max-width: 600px"],
+  body.bsky-nav-left-nav-reclaim:where(:not(.bsky-nav-route-messages))
+    main[role="main"]
+    [style*="max-width:600px"],
   body.bsky-nav-left-nav-reclaim-global #bsky-navigator-global-statusbar {
     max-width: var(--bsky-nav-ln-content-width) !important;
     margin-left: var(--bsky-nav-ln-content-margin) !important;
@@ -56117,6 +56127,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         const navRect = nav.getBoundingClientRect();
         if (navRect.width === 0) return null;
         const result = { navWidth: Math.round(navRect.width), reclaim: 0 };
+        if (constants.MESSAGES_PATH_REGEX.test(window.location.pathname)) return result;
         const column = Array.from(document.querySelectorAll(constants.CENTER_COLUMN_SELECTOR)).find(
           (el) => el.getBoundingClientRect().width > 0
         );
@@ -76292,6 +76303,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const hideRightSidebar = config.get("hideRightSidebar");
       const maxWidth = config.get("postWidthDesktop");
       const contentWidth = maxWidth || 600;
+      const scope = `:where(body:not(.${constants.MESSAGES_ROUTE_CLASS}))`;
       const styleId = "bsky-nav-width-style";
       let styleEl = document.getElementById(styleId);
       if (hideRightSidebar && contentWidth !== 600) {
@@ -76308,15 +76320,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           styleEl.textContent = `
           /* Desktop: full nav width */
           @media (min-width: 1301px) {
-            main[role="main"] [style*="max-width: 600px"],
-            main[role="main"] [style*="max-width:600px"] {
+            ${scope} main[role="main"] [style*="max-width: 600px"],
+            ${scope} main[role="main"] [style*="max-width:600px"] {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthFull + gap}px !important;
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar,
-            #bsky-navigator-global-statusbar {
+            ${scope} #statusBar,
+            ${scope} #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthFull + gap}px !important;
               margin-right: auto !important;
@@ -76325,26 +76337,26 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
           /* Narrow: collapsed nav width */
           @media (max-width: 1300px) {
-            main[role="main"] [style*="max-width: 600px"],
-            main[role="main"] [style*="max-width:600px"] {
+            ${scope} main[role="main"] [style*="max-width: 600px"],
+            ${scope} main[role="main"] [style*="max-width:600px"] {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthCollapsed + gap}px !important;
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar,
-            #bsky-navigator-global-statusbar {
+            ${scope} #statusBar,
+            ${scope} #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthCollapsed + gap}px !important;
               margin-right: auto !important;
               transform: none !important;
             }
           }
-          div[data-testid="homeScreenFeedTabs"] {
+          ${scope} div[data-testid="homeScreenFeedTabs"] {
             width: 100% !important;
           }
           /* Position nav from left edge instead of center-relative */
-          nav[role="navigation"] {
+          ${scope} nav[role="navigation"] {
             left: 0 !important;
             transform: none !important;
             padding-left: 20px !important;
@@ -76354,16 +76366,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const extraWidth = contentWidth - 600;
           const shiftRight = Math.floor(extraWidth / 2);
           styleEl.textContent = `
-          main[role="main"] [style*="max-width: 600px"],
-          main[role="main"] [style*="max-width:600px"] {
+          ${scope} main[role="main"] [style*="max-width: 600px"],
+          ${scope} main[role="main"] [style*="max-width:600px"] {
             max-width: ${contentWidth}px !important;
             transform: translateX(${shiftRight}px) !important;
           }
-          div[data-testid="homeScreenFeedTabs"] {
+          ${scope} div[data-testid="homeScreenFeedTabs"] {
             width: 100% !important;
           }
-          #statusBar,
-          #bsky-navigator-global-statusbar {
+          ${scope} #statusBar,
+          ${scope} #bsky-navigator-global-statusbar {
             max-width: ${contentWidth}px !important;
             transform: translateX(${shiftRight}px) !important;
           }
@@ -77091,6 +77103,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const newUrl = window.location.href;
         const urlChanged = newUrl !== current_url;
         current_url = newUrl;
+        document.body.classList.toggle(
+          constants.MESSAGES_ROUTE_CLASS,
+          constants.MESSAGES_PATH_REGEX.test(window.location.pathname)
+        );
         if (urlChanged) leftSidebar?.scheduleApply();
         let matched = false;
         for (const [name, handler] of Object.entries(handlers)) {

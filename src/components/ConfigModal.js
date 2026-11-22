@@ -36,7 +36,7 @@ const CONFIG_SCHEMA = {
         label: 'Fit posts to screen',
         type: 'checkbox',
         default: false,
-        help: 'Cap posts at the visible screen height; media shrinks first, then the post scrolls',
+        help: 'Cap posts at the visible screen height: media shrinks first, then long posts scroll inside, and j/k scroll the post before moving on',
       },
       postActionButtonPosition: {
         label: 'Action buttons',

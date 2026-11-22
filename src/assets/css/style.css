@@ -3535,13 +3535,17 @@ div#statusBar.has-feed-map {
    Fit Posts to Screen
    Inert unless body.bsky-nav-fit-posts is set (see src/fitPosts.js, which also
    publishes --bsky-nav-fit-height on <html>).
+   Every rule is scoped to top-level posts (.item:not(.item .item)): embedded
+   quote posts are .items too, but they must not get a cap or scroller of their
+   own. Media inside a quote still shrinks through the top-level post's rules,
+   and .bsky-nav-fit-capture on the top-level post lifts every cap within it.
    ========================================================================== */
 
 body.bsky-nav-fit-posts {
   --bsky-nav-fit-media-height: calc(var(--bsky-nav-fit-height) * 0.7);
 }
 
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) {
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) {
   max-height: var(--bsky-nav-fit-height);
   overflow-y: auto;
   overscroll-behavior: auto;
@@ -3550,7 +3554,7 @@ body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) {
 
 /* Unrolled threads: the container scrolls (not the item), so the item loses its cap.
    Same specificity as the .item cap above, so it wins by coming later. */
-body.bsky-nav-fit-posts .item:has(.unrolled-replies) {
+body.bsky-nav-fit-posts .item:not(.item .item):has(.unrolled-replies) {
   max-height: none;
   overflow-y: visible;
 }
@@ -3571,49 +3575,105 @@ body.bsky-nav-fit-posts .bsky-nav-fit-capture .bsky-nav-unroll-scroll {
 /* The sidecar layout gives the post's first child flex: 1 (basis 0), which would
    shrink it to the cap and clip its content; keep its content height instead so
    the item itself scrolls. */
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) > div:first-of-type {
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) > div:first-of-type {
   flex: 1 0 auto;
 }
 
-/* Link card thumbnails: a box with an inline aspect-ratio; Bluesky already crops
-   the img to it (object-fit: cover), so cap the box height and keep the crop. */
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="aspect-ratio"] {
+/* "More below" fade: fitPosts.js keeps .bsky-nav-fit-more on capped posts near
+   the viewport while more than a few px of content remain below the visible part,
+   and sets --bsky-nav-fit-fade-height (40px at most, less near the end). Same look
+   as the "Collapse posts" fade (transparent to the post background). The
+   pseudo-element is sticky to the bottom of the post's scrollport and its
+   negative margin cancels its height, so it never changes the scroll range.
+   Read posts and the selected thread's tint get a matching end color. */
+body.bsky-nav-fit-posts .item:not(.item .item) {
+  --bsky-nav-fit-fade-base: var(--bsky-nav-bg);
+  --bsky-nav-fit-fade-tint: transparent;
+  --bsky-nav-fit-fade-hover-mix: transparent;
+}
+
+body.bsky-nav-fit-posts .item.item-read:not(.item .item) {
+  --bsky-nav-fit-fade-base: var(--bsky-nav-bg-read);
+}
+
+body.bsky-nav-fit-posts .thread:has(> div > .item-selection-active, > div > .item-selection-child-focused) > div > .item {
+  --bsky-nav-fit-fade-tint: var(--bsky-nav-thread-tint);
+}
+
+/* Bluesky tints a hovered post with an overlay (inline background color; inline
+   opacity 0.5 in light, 0.4 in dim and dark while hovered, else 0). The fade
+   paints above it, so add the same tint on top; fitPosts.js copies the overlay's
+   color into --bsky-nav-fit-fade-hover. */
+body.bsky-nav-fit-posts .item:not(.item .item):has(> * > div[style*="pointer-events: none"][style*="transition-property: opacity"]:not([style*="opacity: 0;"])) {
+  --bsky-nav-fit-fade-hover-mix: color-mix(in srgb, var(--bsky-nav-fit-fade-hover, transparent) 45%, transparent);
+}
+
+body.bsky-nav-fit-posts .item:not(.item .item):has(> * > div[style*="pointer-events: none"][style*="opacity: 0.4"]) {
+  --bsky-nav-fit-fade-hover-mix: color-mix(in srgb, var(--bsky-nav-fit-fade-hover, transparent) 40%, transparent);
+}
+
+body.bsky-nav-fit-posts .item:not(.item .item):has(> * > div[style*="pointer-events: none"][style*="opacity: 0.5"]) {
+  --bsky-nav-fit-fade-hover-mix: color-mix(in srgb, var(--bsky-nav-fit-fade-hover, transparent) 50%, transparent);
+}
+
+body.bsky-nav-fit-posts .item.bsky-nav-fit-more:not(.item .item):not(.bsky-nav-fit-capture)::after {
+  content: '';
+  display: block;
+  flex: none;
+  position: sticky;
+  bottom: 0;
+  height: var(--bsky-nav-fit-fade-height, 40px);
+  margin-top: calc(-1 * var(--bsky-nav-fit-fade-height, 40px));
+  background:
+    linear-gradient(transparent, var(--bsky-nav-fit-fade-hover-mix)),
+    linear-gradient(transparent, var(--bsky-nav-fit-fade-tint)),
+    linear-gradient(transparent, var(--bsky-nav-fit-fade-base));
+  pointer-events: none;
+}
+
+/* Keep the selection ring (an outline drawn inside the post's edge) above the fade */
+body.bsky-nav-fit-posts .item.bsky-nav-fit-more:is(.item-selection-active, .item-selection-child-focused):not(.item .item):not(.bsky-nav-fit-capture)::after {
+  bottom: var(--bsky-nav-ring-width);
+  margin-left: var(--bsky-nav-ring-width);
+  margin-right: var(--bsky-nav-ring-width);
+}
+
+/* Link card thumbnails and other ratio boxes: Bluesky already crops the img to
+   the box (object-fit: cover), so cap the box height and keep the crop. */
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="aspect-ratio"] {
   max-height: var(--bsky-nav-fit-media-height);
 }
 
-/* Image embeds: Bluesky sizes the box with an inline padding-top percentage
-   (a wrapper holding one absolutely positioned row that wraps a button, the img
-   container and its overlays: border ring, ALT badge). Padding can't be capped
-   with max-height, so drop the box sizing and let the img size the row instead:
-   width auto + max-height keeps the aspect ratio. Every box in the chain stays
-   bound to the column width (max-width: 100%); positioned overlays stay absolute. */
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) {
+/* Image and video embeds (markup checked 2026-11-21): a wrapper reserves the
+   space with an inline padding-top percentage and holds one absolutely
+   positioned row (inset: 0) with a ratio box (inline aspect-ratio, height: 100%)
+   that wraps the media and its overlays (border ring, ALT badge, video
+   controls). Padding can't be capped with max-height, so drop it and let the
+   ratio box size itself from the column width and its aspect-ratio instead: it
+   reserves space before the media loads, max-height also caps its width (the
+   ratio transfers it), and the media keeps filling it as Bluesky lays it out.
+   Embeds whose box has no inline aspect-ratio keep Bluesky's padding box. */
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] > div[style*="aspect-ratio"]) {
   padding-top: 0 !important;
+  container-type: inline-size;
 }
 
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) > div[style*="inset"] {
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"] > div[style*="inset"]:has(> div[style*="aspect-ratio"]) {
   position: static !important;
+  display: block !important;
 }
 
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) :is(div, button):not([style*="position: absolute"]) {
+/* Bluesky never makes the wrapper taller than it is wide (a square at most), so
+   keep that limit as well (100cqw is the wrapper's width): media is never larger
+   than with the setting off. */
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"] > div[style*="inset"] > div[style*="aspect-ratio"] {
   height: auto !important;
-  aspect-ratio: auto !important;
   max-width: 100%;
-}
-
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] div[style*="padding-top"]:has(> div[style*="inset"] img) img {
-  position: static !important;
-  display: block;
-  width: auto !important;
-  height: auto !important;
-  max-width: 100% !important;
-  max-height: var(--bsky-nav-fit-media-height) !important;
-  object-fit: contain !important;
-  border-radius: 12px;
+  max-height: min(var(--bsky-nav-fit-media-height), 100cqw);
 }
 
 /* Videos */
-body.bsky-nav-fit-posts .item:not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] video {
+body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-testid="contentHider-post"] video {
   max-height: var(--bsky-nav-fit-media-height);
   object-fit: contain;
 }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+670.5bb916f4
+// @version     1.0.31+671.95cbfcb8
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -54243,30 +54243,34 @@ body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-
   font-style: italic;
 }
 
-/* Hide right sidebar - target the fixed-position feeds panel */
-.bsky-nav-hide-right-sidebar div[style*="position: fixed"][style*="width: 330px"],
-.bsky-nav-hide-right-sidebar div[style*="position: fixed"][style*="translateX(300px)"] {
+/* Hide right sidebar - target the fixed-position feeds panel. Bluesky renders it 330px
+   wide above 1300px and 280px wide from 1100px to 1300px. */
+.bsky-nav-hide-right-sidebar
+  div[style*="position: fixed"][style*="left: 50%"]:is([style*="width: 330px"], [style*="width: 280px"]) {
   display: none !important;
 }
 
-/* Hide vertical column dividers when right sidebar is hidden */
-.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-left"],
-.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-right"],
-.bsky-nav-hide-right-sidebar main div[style*="border-left"],
-.bsky-nav-hide-right-sidebar main div[style*="border-right"] {
-  border-left: none !important;
-  border-right: none !important;
-}
+/* Desktop only: the class is set at every width */
+@media (min-width: 801px) {
+  /* Hide vertical column dividers when right sidebar is hidden */
+  .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-left"],
+  .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-right"],
+  .bsky-nav-hide-right-sidebar main div[style*="border-left"],
+  .bsky-nav-hide-right-sidebar main div[style*="border-right"] {
+    border-left: none !important;
+    border-right: none !important;
+  }
 
-/* Broader approach - target column containers */
-.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] > div > div {
-  border-left: none !important;
-  border-right: none !important;
-}
+  /* Broader approach - target column containers */
+  .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] > div > div {
+    border-left: none !important;
+    border-right: none !important;
+  }
 
-.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] > div > div > div {
-  border-left: none !important;
-  border-right: none !important;
+  .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] > div > div > div {
+    border-left: none !important;
+    border-right: none !important;
+  }
 }
 
 /* =============================================================================
@@ -76280,6 +76284,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       state.stateManager.saveStateImmediately(true, true);
       state.stateManager.updateBlockList(config.get("clearskyEnabled"));
+      updateRightSidebarClass();
       updateContentWidth();
       if (config.get("toastNotifications")) {
         createToastContainer();
@@ -76299,7 +76304,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }, 100);
     }
-    function updateContentWidth() {
+    function updateRightSidebarClass() {
+      document.body.classList.toggle("bsky-nav-hide-right-sidebar", !!config.get("hideRightSidebar"));
+    }
+    function updateContentWidthStyle() {
       const hideRightSidebar = config.get("hideRightSidebar");
       const maxWidth = config.get("postWidthDesktop");
       const contentWidth = maxWidth || 600;
@@ -76318,72 +76326,79 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           const navWidthCollapsed = 80;
           const gap = 20;
           styleEl.textContent = `
-          /* Desktop: full nav width */
-          @media (min-width: 1301px) {
-            ${scope} main[role="main"] [style*="max-width: 600px"],
-            ${scope} main[role="main"] [style*="max-width:600px"] {
-              max-width: ${contentWidth}px !important;
-              margin-left: ${navWidthFull + gap}px !important;
-              margin-right: auto !important;
-              transform: none !important;
+          @media (min-width: 801px) {
+            /* Desktop: full nav width */
+            @media (min-width: 1301px) {
+              ${scope} main[role="main"] [style*="max-width: 600px"],
+              ${scope} main[role="main"] [style*="max-width:600px"] {
+                max-width: ${contentWidth}px !important;
+                margin-left: ${navWidthFull + gap}px !important;
+                margin-right: auto !important;
+                transform: none !important;
+              }
+              ${scope} #statusBar,
+              ${scope} #bsky-navigator-global-statusbar {
+                max-width: ${contentWidth}px !important;
+                margin-left: ${navWidthFull + gap}px !important;
+                margin-right: auto !important;
+                transform: none !important;
+              }
             }
-            ${scope} #statusBar,
-            ${scope} #bsky-navigator-global-statusbar {
-              max-width: ${contentWidth}px !important;
-              margin-left: ${navWidthFull + gap}px !important;
-              margin-right: auto !important;
-              transform: none !important;
+            /* Narrow: collapsed nav width */
+            @media (max-width: 1300px) {
+              ${scope} main[role="main"] [style*="max-width: 600px"],
+              ${scope} main[role="main"] [style*="max-width:600px"] {
+                max-width: ${contentWidth}px !important;
+                margin-left: ${navWidthCollapsed + gap}px !important;
+                margin-right: auto !important;
+                transform: none !important;
+              }
+              ${scope} #statusBar,
+              ${scope} #bsky-navigator-global-statusbar {
+                max-width: ${contentWidth}px !important;
+                margin-left: ${navWidthCollapsed + gap}px !important;
+                margin-right: auto !important;
+                transform: none !important;
+              }
             }
-          }
-          /* Narrow: collapsed nav width */
-          @media (max-width: 1300px) {
-            ${scope} main[role="main"] [style*="max-width: 600px"],
-            ${scope} main[role="main"] [style*="max-width:600px"] {
-              max-width: ${contentWidth}px !important;
-              margin-left: ${navWidthCollapsed + gap}px !important;
-              margin-right: auto !important;
-              transform: none !important;
+            ${scope} div[data-testid="homeScreenFeedTabs"] {
+              width: 100% !important;
             }
-            ${scope} #statusBar,
-            ${scope} #bsky-navigator-global-statusbar {
-              max-width: ${contentWidth}px !important;
-              margin-left: ${navWidthCollapsed + gap}px !important;
-              margin-right: auto !important;
+            /* Position nav from left edge instead of center-relative */
+            ${scope} nav[role="navigation"] {
+              left: 0 !important;
               transform: none !important;
+              padding-left: 20px !important;
             }
-          }
-          ${scope} div[data-testid="homeScreenFeedTabs"] {
-            width: 100% !important;
-          }
-          /* Position nav from left edge instead of center-relative */
-          ${scope} nav[role="navigation"] {
-            left: 0 !important;
-            transform: none !important;
-            padding-left: 20px !important;
           }
         `;
         } else {
           const extraWidth = contentWidth - 600;
           const shiftRight = Math.floor(extraWidth / 2);
           styleEl.textContent = `
-          ${scope} main[role="main"] [style*="max-width: 600px"],
-          ${scope} main[role="main"] [style*="max-width:600px"] {
-            max-width: ${contentWidth}px !important;
-            transform: translateX(${shiftRight}px) !important;
-          }
-          ${scope} div[data-testid="homeScreenFeedTabs"] {
-            width: 100% !important;
-          }
-          ${scope} #statusBar,
-          ${scope} #bsky-navigator-global-statusbar {
-            max-width: ${contentWidth}px !important;
-            transform: translateX(${shiftRight}px) !important;
+          @media (min-width: 801px) {
+            ${scope} main[role="main"] [style*="max-width: 600px"],
+            ${scope} main[role="main"] [style*="max-width:600px"] {
+              max-width: ${contentWidth}px !important;
+              transform: translateX(${shiftRight}px) !important;
+            }
+            ${scope} div[data-testid="homeScreenFeedTabs"] {
+              width: 100% !important;
+            }
+            ${scope} #statusBar,
+            ${scope} #bsky-navigator-global-statusbar {
+              max-width: ${contentWidth}px !important;
+              transform: translateX(${shiftRight}px) !important;
+            }
           }
         `;
         }
       } else if (styleEl) {
         styleEl.textContent = "";
       }
+    }
+    function updateContentWidth() {
+      updateContentWidthStyle();
       updatePostMaxHeight();
       setFitPostsEnabled(!!config.get("fitPostsToScreen"));
       leftSidebar?.scheduleApply();
@@ -77191,6 +77206,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           }
         }, constants.URL_MONITOR_INTERVAL);
       }
+      updateRightSidebarClass();
+      updateContentWidthStyle();
       waitForElement(
         `${constants.DRAWER_MENU_SELECTOR}, ${constants.LEFT_SIDEBAR_SELECTOR}`,
         (element) => {
@@ -77206,9 +77223,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       );
       function applyDesktopFullWidth() {
-        const hideRightSidebar = config.get("hideRightSidebar");
-        if (hideRightSidebar) {
-          document.body.classList.add("bsky-nav-hide-right-sidebar");
+        if (config.get("hideRightSidebar")) {
           updateContentWidth();
         }
         if (config.get("hideSuggestedFollows")) {

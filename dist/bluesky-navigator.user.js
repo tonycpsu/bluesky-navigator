@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+668.496de989
+// @version     1.0.31+669.e6c1da56
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -67499,7 +67499,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
               this.setIndex(this.items.length - 1, false, true);
             }
             moved = true;
-          } else if (event.key == "h") {
+          } else if (event.key == "h" && !event.altKey) {
             const back_button = $("button[aria-label^='Back' i]").filter(":visible");
             if (back_button.length) {
               back_button.click();
@@ -76788,7 +76788,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         post: new PostItemHandler("post", config, state, api, constants.POST_ITEM_SELECTOR),
         profile: new ProfileItemHandler("profile", config, state, api, constants.FEED_ITEM_SELECTOR),
         saved: new SavedItemHandler("saved", config, state, api, constants.FEED_ITEM_SELECTOR),
-        input: new Handler("input", config, state, api)
+        input: new Handler("input", config, state, api),
+        // Pages no item handler matches (notifications, search, chat, settings...) still need
+        // the global shortcuts (Alt+H/N/..., Alt+., Alt+B, ?)
+        default: new Handler("default", config, state, api)
       };
       const hasActiveItemHandler = ["feed", "post", "profile", "saved"].some((name) => handlers[name]?.isActive());
       if (!hasActiveItemHandler) {
@@ -77091,7 +77094,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (urlChanged) leftSidebar?.scheduleApply();
         let matched = false;
         for (const [name, handler] of Object.entries(handlers)) {
-          if (name === "input") continue;
+          if (name === "input" || name === "default") continue;
           if (handler.isActive()) {
             setContext(name, urlChanged);
             matched = true;

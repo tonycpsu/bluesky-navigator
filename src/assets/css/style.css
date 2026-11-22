@@ -5318,30 +5318,34 @@ body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-
   font-style: italic;
 }
 
-/* Hide right sidebar - target the fixed-position feeds panel */
-.bsky-nav-hide-right-sidebar div[style*="position: fixed"][style*="width: 330px"],
-.bsky-nav-hide-right-sidebar div[style*="position: fixed"][style*="translateX(300px)"] {
+/* Hide right sidebar - target the fixed-position feeds panel. Bluesky renders it 330px
+   wide above 1300px and 280px wide from 1100px to 1300px. */
+.bsky-nav-hide-right-sidebar
+  div[style*="position: fixed"][style*="left: 50%"]:is([style*="width: 330px"], [style*="width: 280px"]) {
   display: none !important;
 }
 
-/* Hide vertical column dividers when right sidebar is hidden */
-.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-left"],
-.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-right"],
-.bsky-nav-hide-right-sidebar main div[style*="border-left"],
-.bsky-nav-hide-right-sidebar main div[style*="border-right"] {
-  border-left: none !important;
-  border-right: none !important;
-}
+/* Desktop only: the class is set at every width */
+@media (min-width: 801px) {
+  /* Hide vertical column dividers when right sidebar is hidden */
+  .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-left"],
+  .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] div[style*="border-right"],
+  .bsky-nav-hide-right-sidebar main div[style*="border-left"],
+  .bsky-nav-hide-right-sidebar main div[style*="border-right"] {
+    border-left: none !important;
+    border-right: none !important;
+  }
 
-/* Broader approach - target column containers */
-.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] > div > div {
-  border-left: none !important;
-  border-right: none !important;
-}
+  /* Broader approach - target column containers */
+  .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] > div > div {
+    border-left: none !important;
+    border-right: none !important;
+  }
 
-.bsky-nav-hide-right-sidebar [data-testid="homeScreen"] > div > div > div {
-  border-left: none !important;
-  border-right: none !important;
+  .bsky-nav-hide-right-sidebar [data-testid="homeScreen"] > div > div > div {
+    border-left: none !important;
+    border-right: none !important;
+  }
 }
 
 /* =============================================================================

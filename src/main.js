@@ -318,6 +318,7 @@ function getScreenFromElement(element) {
     state.stateManager.saveStateImmediately(true, true);
     // Fetch Clearsky block lists if just enabled (no-op if disabled or cache is fresh)
     state.stateManager.updateBlockList(config.get('clearskyEnabled'));
+    updateRightSidebarClass();
     // Update content width dynamically
     // (also re-applies the left sidebar mode against the new width)
     updateContentWidth();
@@ -348,8 +349,15 @@ function getScreenFromElement(element) {
     }, 100);
   }
 
-  // Update content width CSS - can be called on config save
-  function updateContentWidth() {
+  // Keep the class that hides the right sidebar in step with the setting. Set at every
+  // window width, so it already applies if a narrow window is widened.
+  function updateRightSidebarClass() {
+    document.body.classList.toggle('bsky-nav-hide-right-sidebar', !!config.get('hideRightSidebar'));
+  }
+
+  // Write the post width CSS. The rules are limited to desktop widths, so this can run at
+  // any window width and they take effect if a narrow window is widened.
+  function updateContentWidthStyle() {
     const hideRightSidebar = config.get('hideRightSidebar');
     const maxWidth = config.get('postWidthDesktop');
     const contentWidth = maxWidth || 600;
@@ -375,48 +383,50 @@ function getScreenFromElement(element) {
         const navWidthCollapsed = 80;
         const gap = 20;
         styleEl.textContent = `
-          /* Desktop: full nav width */
-          @media (min-width: 1301px) {
-            ${scope} main[role="main"] [style*="max-width: 600px"],
-            ${scope} main[role="main"] [style*="max-width:600px"] {
-              max-width: ${contentWidth}px !important;
-              margin-left: ${navWidthFull + gap}px !important;
-              margin-right: auto !important;
-              transform: none !important;
+          @media (min-width: 801px) {
+            /* Desktop: full nav width */
+            @media (min-width: 1301px) {
+              ${scope} main[role="main"] [style*="max-width: 600px"],
+              ${scope} main[role="main"] [style*="max-width:600px"] {
+                max-width: ${contentWidth}px !important;
+                margin-left: ${navWidthFull + gap}px !important;
+                margin-right: auto !important;
+                transform: none !important;
+              }
+              ${scope} #statusBar,
+              ${scope} #bsky-navigator-global-statusbar {
+                max-width: ${contentWidth}px !important;
+                margin-left: ${navWidthFull + gap}px !important;
+                margin-right: auto !important;
+                transform: none !important;
+              }
             }
-            ${scope} #statusBar,
-            ${scope} #bsky-navigator-global-statusbar {
-              max-width: ${contentWidth}px !important;
-              margin-left: ${navWidthFull + gap}px !important;
-              margin-right: auto !important;
-              transform: none !important;
+            /* Narrow: collapsed nav width */
+            @media (max-width: 1300px) {
+              ${scope} main[role="main"] [style*="max-width: 600px"],
+              ${scope} main[role="main"] [style*="max-width:600px"] {
+                max-width: ${contentWidth}px !important;
+                margin-left: ${navWidthCollapsed + gap}px !important;
+                margin-right: auto !important;
+                transform: none !important;
+              }
+              ${scope} #statusBar,
+              ${scope} #bsky-navigator-global-statusbar {
+                max-width: ${contentWidth}px !important;
+                margin-left: ${navWidthCollapsed + gap}px !important;
+                margin-right: auto !important;
+                transform: none !important;
+              }
             }
-          }
-          /* Narrow: collapsed nav width */
-          @media (max-width: 1300px) {
-            ${scope} main[role="main"] [style*="max-width: 600px"],
-            ${scope} main[role="main"] [style*="max-width:600px"] {
-              max-width: ${contentWidth}px !important;
-              margin-left: ${navWidthCollapsed + gap}px !important;
-              margin-right: auto !important;
-              transform: none !important;
+            ${scope} div[data-testid="homeScreenFeedTabs"] {
+              width: 100% !important;
             }
-            ${scope} #statusBar,
-            ${scope} #bsky-navigator-global-statusbar {
-              max-width: ${contentWidth}px !important;
-              margin-left: ${navWidthCollapsed + gap}px !important;
-              margin-right: auto !important;
+            /* Position nav from left edge instead of center-relative */
+            ${scope} nav[role="navigation"] {
+              left: 0 !important;
               transform: none !important;
+              padding-left: 20px !important;
             }
-          }
-          ${scope} div[data-testid="homeScreenFeedTabs"] {
-            width: 100% !important;
-          }
-          /* Position nav from left edge instead of center-relative */
-          ${scope} nav[role="navigation"] {
-            left: 0 !important;
-            transform: none !important;
-            padding-left: 20px !important;
           }
         `;
       } else {
@@ -424,18 +434,20 @@ function getScreenFromElement(element) {
         const extraWidth = contentWidth - 600;
         const shiftRight = Math.floor(extraWidth / 2);
         styleEl.textContent = `
-          ${scope} main[role="main"] [style*="max-width: 600px"],
-          ${scope} main[role="main"] [style*="max-width:600px"] {
-            max-width: ${contentWidth}px !important;
-            transform: translateX(${shiftRight}px) !important;
-          }
-          ${scope} div[data-testid="homeScreenFeedTabs"] {
-            width: 100% !important;
-          }
-          ${scope} #statusBar,
-          ${scope} #bsky-navigator-global-statusbar {
-            max-width: ${contentWidth}px !important;
-            transform: translateX(${shiftRight}px) !important;
+          @media (min-width: 801px) {
+            ${scope} main[role="main"] [style*="max-width: 600px"],
+            ${scope} main[role="main"] [style*="max-width:600px"] {
+              max-width: ${contentWidth}px !important;
+              transform: translateX(${shiftRight}px) !important;
+            }
+            ${scope} div[data-testid="homeScreenFeedTabs"] {
+              width: 100% !important;
+            }
+            ${scope} #statusBar,
+            ${scope} #bsky-navigator-global-statusbar {
+              max-width: ${contentWidth}px !important;
+              transform: translateX(${shiftRight}px) !important;
+            }
           }
         `;
       }
@@ -443,6 +455,11 @@ function getScreenFromElement(element) {
       // Remove width styles if sidebar not hidden or width is default
       styleEl.textContent = '';
     }
+  }
+
+  // Update content width CSS - can be called on config save
+  function updateContentWidth() {
+    updateContentWidthStyle();
 
     // Apply post max height setting
     updatePostMaxHeight();
@@ -1533,6 +1550,9 @@ function getScreenFromElement(element) {
       }, constants.URL_MONITOR_INTERVAL);
     }
 
+    updateRightSidebarClass();
+    updateContentWidthStyle();
+
     // set up observer to detect if mobile interface is active
     // mobileView is already initialized above before handler creation
     const viewportChangeObserver = waitForElement(
@@ -1556,17 +1576,11 @@ function getScreenFromElement(element) {
 
     /**
      * Apply layout adjustments for desktop mode
-     * Hides right sidebar and adjusts content width
+     * Adjusts content width (updateRightSidebarClass() hides the right sidebar)
      */
     function applyDesktopFullWidth() {
-      // Hide right sidebar if option is enabled
-      const hideRightSidebar = config.get('hideRightSidebar');
-
-      if (hideRightSidebar) {
-        // Add class - CSS rules handle hiding the sidebar
-        document.body.classList.add('bsky-nav-hide-right-sidebar');
-
-        // Apply custom width
+      // Apply custom width (only used when the right sidebar is hidden)
+      if (config.get('hideRightSidebar')) {
         updateContentWidth();
       }
 

@@ -354,6 +354,9 @@ function getScreenFromElement(element) {
     const maxWidth = config.get('postWidthDesktop');
     const contentWidth = maxWidth || 600;
 
+    // Scope every override off the Messages screen; :where() adds no specificity
+    const scope = `:where(body:not(.${constants.MESSAGES_ROUTE_CLASS}))`;
+
     const styleId = 'bsky-nav-width-style';
     let styleEl = document.getElementById(styleId);
 
@@ -374,15 +377,15 @@ function getScreenFromElement(element) {
         styleEl.textContent = `
           /* Desktop: full nav width */
           @media (min-width: 1301px) {
-            main[role="main"] [style*="max-width: 600px"],
-            main[role="main"] [style*="max-width:600px"] {
+            ${scope} main[role="main"] [style*="max-width: 600px"],
+            ${scope} main[role="main"] [style*="max-width:600px"] {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthFull + gap}px !important;
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar,
-            #bsky-navigator-global-statusbar {
+            ${scope} #statusBar,
+            ${scope} #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthFull + gap}px !important;
               margin-right: auto !important;
@@ -391,26 +394,26 @@ function getScreenFromElement(element) {
           }
           /* Narrow: collapsed nav width */
           @media (max-width: 1300px) {
-            main[role="main"] [style*="max-width: 600px"],
-            main[role="main"] [style*="max-width:600px"] {
+            ${scope} main[role="main"] [style*="max-width: 600px"],
+            ${scope} main[role="main"] [style*="max-width:600px"] {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthCollapsed + gap}px !important;
               margin-right: auto !important;
               transform: none !important;
             }
-            #statusBar,
-            #bsky-navigator-global-statusbar {
+            ${scope} #statusBar,
+            ${scope} #bsky-navigator-global-statusbar {
               max-width: ${contentWidth}px !important;
               margin-left: ${navWidthCollapsed + gap}px !important;
               margin-right: auto !important;
               transform: none !important;
             }
           }
-          div[data-testid="homeScreenFeedTabs"] {
+          ${scope} div[data-testid="homeScreenFeedTabs"] {
             width: 100% !important;
           }
           /* Position nav from left edge instead of center-relative */
-          nav[role="navigation"] {
+          ${scope} nav[role="navigation"] {
             left: 0 !important;
             transform: none !important;
             padding-left: 20px !important;
@@ -421,16 +424,16 @@ function getScreenFromElement(element) {
         const extraWidth = contentWidth - 600;
         const shiftRight = Math.floor(extraWidth / 2);
         styleEl.textContent = `
-          main[role="main"] [style*="max-width: 600px"],
-          main[role="main"] [style*="max-width:600px"] {
+          ${scope} main[role="main"] [style*="max-width: 600px"],
+          ${scope} main[role="main"] [style*="max-width:600px"] {
             max-width: ${contentWidth}px !important;
             transform: translateX(${shiftRight}px) !important;
           }
-          div[data-testid="homeScreenFeedTabs"] {
+          ${scope} div[data-testid="homeScreenFeedTabs"] {
             width: 100% !important;
           }
-          #statusBar,
-          #bsky-navigator-global-statusbar {
+          ${scope} #statusBar,
+          ${scope} #bsky-navigator-global-statusbar {
             max-width: ${contentWidth}px !important;
             transform: translateX(${shiftRight}px) !important;
           }
@@ -1420,6 +1423,12 @@ function getScreenFromElement(element) {
       const newUrl = window.location.href;
       const urlChanged = newUrl !== current_url;
       current_url = newUrl;
+
+      // The layout width overrides are scoped off the Messages screen by this class
+      document.body.classList.toggle(
+        constants.MESSAGES_ROUTE_CLASS,
+        constants.MESSAGES_PATH_REGEX.test(window.location.pathname)
+      );
 
       // Some screens (e.g. Messages) use a different nav width
       if (urlChanged) leftSidebar?.scheduleApply();

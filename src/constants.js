@@ -98,6 +98,10 @@ const constants = {
   // Bluesky's center content column(s) (feed header, feed list, thread, profile...)
   CENTER_COLUMN_SELECTOR:
     'main[role="main"] [style*="max-width: 600px"], main[role="main"] [style*="max-width:600px"]',
+  // Messages (chat) screen: a split list + conversation layout whose panes also contain
+  // max-width: 600px elements, so the center column width overrides must skip it.
+  MESSAGES_PATH_REGEX: /^\/messages(\/|$)/,
+  MESSAGES_ROUTE_CLASS: 'bsky-nav-route-messages',
   POST_ITEM_SELECTOR: 'div[data-testid^="postThreadItem-by-"]',
   POST_CONTENT_SELECTOR: 'div[data-testid="contentHider-post"]',
   MAIN_SELECTOR: 'main[role="main"]',

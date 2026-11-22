@@ -1055,6 +1055,9 @@ function getScreenFromElement(element) {
       profile: new ProfileItemHandler('profile', config, state, api, constants.FEED_ITEM_SELECTOR),
       saved: new SavedItemHandler('saved', config, state, api, constants.FEED_ITEM_SELECTOR),
       input: new Handler('input', config, state, api),
+      // Pages no item handler matches (notifications, search, chat, settings...) still need
+      // the global shortcuts (Alt+H/N/..., Alt+., Alt+B, ?)
+      default: new Handler('default', config, state, api),
     };
 
     // Immediately hide loading indicator if no feed/item handler matches current URL
@@ -1422,9 +1425,9 @@ function getScreenFromElement(element) {
       if (urlChanged) leftSidebar?.scheduleApply();
 
       let matched = false;
-      // Check URL-based handlers (exclude 'input' which is focus-based, not URL-based)
+      // Check URL-based handlers (exclude 'input', which is focus-based, and 'default', the fallback)
       for (const [name, handler] of Object.entries(handlers)) {
-        if (name === 'input') continue;
+        if (name === 'input' || name === 'default') continue;
         if (handler.isActive()) {
           setContext(name, urlChanged);
           matched = true;

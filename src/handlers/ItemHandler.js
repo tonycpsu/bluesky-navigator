@@ -2321,7 +2321,8 @@ export class ItemHandler extends Handler {
             this.setIndex(this.items.length - 1, false, true);
           }
           moved = true;
-        } else if (event.key == 'h') {
+        } else if (event.key == 'h' && !event.altKey) {
+          // Alt+H is the global Home shortcut, not Back
           const back_button = $("button[aria-label^='Back' i]").filter(':visible');
           if (back_button.length) {
             back_button.click();

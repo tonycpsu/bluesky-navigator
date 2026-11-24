@@ -2050,7 +2050,8 @@ export class FeedItemHandler extends ItemHandler {
     if (this.threadIndex != null && this.unrolledReplies.length > 0) {
       parts.push({ label: `Post ${this.threadIndex + 1}/${this.unrolledReplies.length + 1}`, type: 'position' });
     } else if (this.replyIndex != null) {
-      const replyCount = $(this.selectedItem).parent().find('.sidecar-post').length;
+      // Counts the current sidecar level, in the fixed panel or inline
+      const replyCount = this.getSidecarReplies().length;
       parts.push({ label: `Reply ${this.replyIndex + 1}/${replyCount}`, type: 'reply' });
     }
 

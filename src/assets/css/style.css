@@ -3953,6 +3953,62 @@ body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-
   overflow: hidden;
 }
 
+/* Drilled reply levels */
+.sidecar-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  font-family: var(--bsky-nav-font-family);
+  font-size: var(--bsky-nav-font-sm);
+  color: var(--bsky-nav-text-medium);
+}
+
+.sidecar-crumb {
+  padding: 4px 6px;
+  border: none;
+  border-radius: var(--bsky-nav-radius-sm);
+  background-color: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sidecar-crumb:hover {
+  background-color: var(--bsky-nav-bg-subtle);
+}
+
+.sidecar-crumb:focus-visible {
+  outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent);
+  outline-offset: 2px;
+}
+
+.sidecar-breadcrumb .sidecar-crumb:last-of-type {
+  color: var(--bsky-nav-text);
+}
+
+.sidecar-drill-marker {
+  margin-left: 4px;
+  color: var(--bsky-nav-accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sidecar-post[data-has-replies='true'] .sidecar-count-replies {
+  cursor: pointer;
+}
+
+.sidecar-replies-none,
+.sidecar-replies-error {
+  padding: 12px 10px;
+  border-top: 1px solid var(--bsky-nav-border);
+  color: var(--bsky-nav-text-medium);
+  font-family: var(--bsky-nav-font-family);
+  font-size: var(--bsky-nav-font-sm);
+}
+
 @media (prefers-contrast: more) {
   .sidecar-section-toggle {
     border: 2px solid var(--bsky-nav-text);

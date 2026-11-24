@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+673.7481e743
+// @version     1.0.31+673.b5977869
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -52878,6 +52878,62 @@ body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-
   overflow: hidden;
 }
 
+/* Drilled reply levels */
+.sidecar-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  font-family: var(--bsky-nav-font-family);
+  font-size: var(--bsky-nav-font-sm);
+  color: var(--bsky-nav-text-medium);
+}
+
+.sidecar-crumb {
+  padding: 4px 6px;
+  border: none;
+  border-radius: var(--bsky-nav-radius-sm);
+  background-color: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sidecar-crumb:hover {
+  background-color: var(--bsky-nav-bg-subtle);
+}
+
+.sidecar-crumb:focus-visible {
+  outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent);
+  outline-offset: 2px;
+}
+
+.sidecar-breadcrumb .sidecar-crumb:last-of-type {
+  color: var(--bsky-nav-text);
+}
+
+.sidecar-drill-marker {
+  margin-left: 4px;
+  color: var(--bsky-nav-accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sidecar-post[data-has-replies='true'] .sidecar-count-replies {
+  cursor: pointer;
+}
+
+.sidecar-replies-none,
+.sidecar-replies-error {
+  padding: 12px 10px;
+  border-top: 1px solid var(--bsky-nav-border);
+  color: var(--bsky-nav-text-medium);
+  font-family: var(--bsky-nav-font-family);
+  font-size: var(--bsky-nav-font-sm);
+}
+
 @media (prefers-contrast: more) {
   .sidecar-section-toggle {
     border: 2px solid var(--bsky-nav-text);
@@ -55687,7 +55743,238 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
   }
 }
 `;
-  const sidecarTemplatesHtml = '<script id="sidecar-replies-template" type="text/x-handlebars-template">\n  {{#if this.postId}}\n  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">\n  {{#if parent}}\n  <div class="sidecar-section sidecar-parent-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Replying to</span>\n    </button>\n    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">\n      <div class="sidecar-parent">\n        {{> postTemplate parent}}\n      </div>\n    </div>\n  </div>\n  {{/if}}\n  {{#if replies.length}}\n  <div class="sidecar-section sidecar-replies-section">\n    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">\n      <span class="sidecar-section-icon">\u25BC</span>\n      <span class="sidecar-section-title">Replies \xB7 {{replies.length}}</span>\n    </button>\n    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">\n      {{#each replies}}\n      {{> postTemplate this}}\n      {{/each}}\n    </div>\n  </div>\n  {{/if}}\n  </div>\n  {{else}}\n  <div class="sidecar-replies-empty sidecar-replies">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-post-template" type="text/x-handlebars-template">\n  {{#if postId}}\n  <div id="sidecar-post-{{postId}}" class="sidecar-post">\n  <div class="sidecar-post-avatar-col">\n  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n  <div class="sidecar-post-connector" aria-hidden="true"></div>\n  </div>\n  <div class="sidecar-post-main">\n  <div class="sidecar-post-header">\n  <span class="sidecar-post-byline">\n  <a class="sidecar-post-name-link" href="https://bsky.app/profile/{{handle}}"><span class="sidecar-post-username">{{displayName}}</span></a>\n  <a class="sidecar-post-handle-link" href="https://bsky.app/profile/{{handle}}"><span class="sidecar-post-handle">@{{handle}}</span></a>\n  <span class="sidecar-post-dot" aria-hidden="true">\xB7</span>\n  </span>\n  <span class="sidecar-post-timestamp"><a href="{{postUrl}}">{{timestamp}}</a></span>\n  </div>\n  {{> bodyTemplate this}}\n  {{> footerTemplate this hideTimestamp=true}}\n  </div>\n  </div>\n  {{else}}\n  <div class="sidecar-post-empty" class="sidecar-post">\n  </div>\n  {{/if}}\n<\/script>\n\n<script id="sidecar-footer-template" type="text/x-handlebars-template">\n  <div class="sidecar-post-footer">\n  {{#unless hideTimestamp}}\n  <div class="sidecar-post-timestamp">\n  <a href="{{postUrl}}">\n  {{timestamp}}\n  </a>\n  </div>\n  {{/unless}}\n  {{> postCountsTemplate this}}\n  </div>\n<\/script>\n\n<script id="sidecar-post-counts-template" type="text/x-handlebars-template">\n\n  <div class="sidecar-post-counts">\n  <div class="sidecar-count sidecar-count-replies">\n  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-reposts">\n  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>\n  </div>\n\n  <div class="sidecar-count sidecar-count-likes">\n  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>\n  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>\n  </div>\n\n  </div>\n<\/script>\n\n\n<script id="sidecar-body-template" type="text/x-handlebars-template">\n<div class="sidecar-post-body">\n<div class="sidecar-post-content">{{{content}}}</div>\n  {{#if embed}}\n  {{#each embed.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{#if embed.media.images}}\n  {{#each embed.media.images}}\n  {{> imageTemplate this}}\n  {{/each}}\n  {{/if}}\n  {{/if}}\n  {{#if quotedPost}}\n  {{> quoteTemplate quotedPost}}\n  {{/if}}\n  {{#if externalLink}}\n  {{> externalTemplate externalLink}}\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-image-template" type="text/x-handlebars-template">\n<button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" tabindex="0" class="sidecar-embed-image" type="button"><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" title="{{alt}}" style="width: 100%; object-fit: cover;"><span class="sidecar-embed-image-border"></span></button>\n<\/script>\n\n<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">\n<div class="sidecar-embed-quote">\n  <div class="sidecar-quote-author">\n    {{#if avatar}}\n    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">\n    {{/if}}\n    <a href="https://bsky.app/profile/{{handle}}">\n      <span class="sidecar-quote-displayname">{{displayName}}</span>\n      <span class="sidecar-quote-handle">@{{handle}}</span>\n    </a>\n  </div>\n  <div class="sidecar-quote-content">{{text}}</div>\n  {{#if images}}\n  <div class="sidecar-quote-images">\n    {{#each images}}\n    <img src="{{this.thumb}}" alt="Embedded image" loading="lazy" style="max-width: 100%; object-fit: cover;">\n    {{/each}}\n  </div>\n  {{/if}}\n</div>\n<\/script>\n\n<script id="sidecar-embed-external-template" type="text/x-handlebars-template">\n<a class="sidecar-embed-external" href="{{uri}}" target="_blank" rel="noopener noreferrer">\n  {{#if thumb}}\n  <div class="sidecar-external-thumb">\n    <img src="{{thumb}}" alt="{{title}}" loading="lazy" style="width: 100%; object-fit: cover;">\n  </div>\n  {{/if}}\n  <div class="sidecar-external-info">\n    <div class="sidecar-external-domain">{{domain}}</div>\n    <div class="sidecar-external-title">{{title}}</div>\n    {{#if description}}\n    <div class="sidecar-external-description">{{description}}</div>\n    {{/if}}\n  </div>\n</a>\n<\/script>\n\n<script id="sidecar-skeleton-template" type="text/x-handlebars-template">\n<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <div class="skeleton-post">\n    <div class="skeleton-header">\n      <div class="skeleton-avatar skeleton-shimmer"></div>\n      <div class="skeleton-author">\n        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>\n        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n      </div>\n    </div>\n    <div class="skeleton-body">\n      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>\n      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>\n    </div>\n  </div>\n  <span class="sr-only">Loading replies...</span>\n</div>\n<\/script>\n';
+  const sidecarTemplatesHtml = `<script id="sidecar-replies-template" type="text/x-handlebars-template">
+  {{#if this.postId}}
+  <div id="sidecar-replies-{{postId}}" class="sidecar-replies">
+  {{#if breadcrumb}}
+  <nav class="sidecar-breadcrumb" aria-label="Reply levels">
+  {{#each breadcrumb}}
+  {{#unless @first}}<span class="sidecar-breadcrumb-sep" aria-hidden="true">\u203A</span>{{/unless}}
+  <button type="button" class="sidecar-crumb" data-depth="{{depth}}">{{label}}</button>
+  {{/each}}
+  </nav>
+  <div class="sidecar-parent sidecar-drill-pinned">
+  {{> postTemplate pinned}}
+  </div>
+  {{#if loading}}
+  <div class="sidecar-replies-loading sidecar-skeleton" role="status" aria-label="Loading replies">
+    <div class="skeleton-post">
+      <div class="skeleton-header">
+        <div class="skeleton-avatar skeleton-shimmer"></div>
+        <div class="skeleton-author">
+          <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>
+          <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+        </div>
+      </div>
+      <div class="skeleton-body">
+        <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+      </div>
+    </div>
+    <span class="sr-only">Loading replies...</span>
+  </div>
+  {{else if error}}
+  <div class="sidecar-replies-error" role="alert">Couldn't load replies</div>
+  {{else}}
+  {{#unless replies.length}}
+  <div class="sidecar-replies-none">No replies</div>
+  {{/unless}}
+  {{/if}}
+  {{else}}
+  {{#if parent}}
+  <div class="sidecar-section sidecar-parent-section">
+    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">
+      <span class="sidecar-section-icon">\u25BC</span>
+      <span class="sidecar-section-title">Replying to</span>
+    </button>
+    <div id="sidecar-parent-content-{{postId}}" class="sidecar-section-content">
+      <div class="sidecar-parent">
+        {{> postTemplate parent}}
+      </div>
+    </div>
+  </div>
+  {{/if}}
+  {{/if}}
+  {{#if replies.length}}
+  <div class="sidecar-section sidecar-replies-section">
+    <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-replies-content-{{postId}}">
+      <span class="sidecar-section-icon">\u25BC</span>
+      <span class="sidecar-section-title">Replies \xB7 {{replies.length}}</span>
+    </button>
+    <div id="sidecar-replies-content-{{postId}}" class="sidecar-section-content">
+      {{#each replies}}
+      {{> postTemplate this}}
+      {{/each}}
+    </div>
+  </div>
+  {{/if}}
+  </div>
+  {{else}}
+  <div class="sidecar-replies-empty sidecar-replies">
+  </div>
+  {{/if}}
+<\/script>
+
+<script id="sidecar-post-template" type="text/x-handlebars-template">
+  {{#if postId}}
+  <div id="sidecar-post-{{postId}}" class="sidecar-post"{{#if uri}} data-uri="{{uri}}"{{/if}}{{#if hasReplies}} data-has-replies="true"{{/if}}>
+  <div class="sidecar-post-avatar-col">
+  <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">
+  <div class="sidecar-post-connector" aria-hidden="true"></div>
+  </div>
+  <div class="sidecar-post-main">
+  <div class="sidecar-post-header">
+  <span class="sidecar-post-byline">
+  <a class="sidecar-post-name-link" href="https://bsky.app/profile/{{handle}}"><span class="sidecar-post-username">{{displayName}}</span></a>
+  <a class="sidecar-post-handle-link" href="https://bsky.app/profile/{{handle}}"><span class="sidecar-post-handle">@{{handle}}</span></a>
+  <span class="sidecar-post-dot" aria-hidden="true">\xB7</span>
+  </span>
+  <span class="sidecar-post-timestamp"><a href="{{postUrl}}">{{timestamp}}</a></span>
+  </div>
+  {{> bodyTemplate this}}
+  {{> footerTemplate this hideTimestamp=true}}
+  </div>
+  </div>
+  {{else}}
+  <div class="sidecar-post-empty" class="sidecar-post">
+  </div>
+  {{/if}}
+<\/script>
+
+<script id="sidecar-footer-template" type="text/x-handlebars-template">
+  <div class="sidecar-post-footer">
+  {{#unless hideTimestamp}}
+  <div class="sidecar-post-timestamp">
+  <a href="{{postUrl}}">
+  {{timestamp}}
+  </a>
+  </div>
+  {{/unless}}
+  {{> postCountsTemplate this}}
+  </div>
+<\/script>
+
+<script id="sidecar-post-counts-template" type="text/x-handlebars-template">
+
+  <div class="sidecar-post-counts">
+  <div class="sidecar-count sidecar-count-replies">
+  <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>
+  <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>
+  {{#if hasReplies}}<span class="sidecar-drill-marker" aria-hidden="true">\u203A</span>{{/if}}
+  </div>
+
+  <div class="sidecar-count sidecar-count-reposts">
+  <div class="sidecar-count-icon sidecar-repost-button">{{{repostSvg}}}</div>
+  <div class="sidecar-count-label sidecar-count-label-reposts">{{repostCount}}</div>
+  </div>
+
+  <div class="sidecar-count sidecar-count-likes">
+  <div class="sidecar-count-icon sidecar-like-button">{{{likeSvg}}}</div>
+  <div class="sidecar-count-label sidecar-count-label-likes">{{likeCount}}</div>
+  </div>
+
+  </div>
+<\/script>
+
+
+<script id="sidecar-body-template" type="text/x-handlebars-template">
+<div class="sidecar-post-body">
+<div class="sidecar-post-content">{{{content}}}</div>
+  {{#if embed}}
+  {{#each embed.images}}
+  {{> imageTemplate this}}
+  {{/each}}
+  {{#if embed.media.images}}
+  {{#each embed.media.images}}
+  {{> imageTemplate this}}
+  {{/each}}
+  {{/if}}
+  {{/if}}
+  {{#if quotedPost}}
+  {{> quoteTemplate quotedPost}}
+  {{/if}}
+  {{#if externalLink}}
+  {{> externalTemplate externalLink}}
+  {{/if}}
+</div>
+<\/script>
+
+<script id="sidecar-embed-image-template" type="text/x-handlebars-template">
+<button aria-label="{{#if alt}}{{alt}}{{else}}Image{{/if}}" tabindex="0" class="sidecar-embed-image" type="button"><img alt="{{#if alt}}{{alt}}{{else}}Image{{/if}}" src="{{thumb}}" loading="lazy" title="{{alt}}" style="width: 100%; object-fit: cover;"><span class="sidecar-embed-image-border"></span></button>
+<\/script>
+
+<script id="sidecar-embed-quote-template" type="text/x-handlebars-template">
+<div class="sidecar-embed-quote">
+  <div class="sidecar-quote-author">
+    {{#if avatar}}
+    <img class="sidecar-quote-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">
+    {{/if}}
+    <a href="https://bsky.app/profile/{{handle}}">
+      <span class="sidecar-quote-displayname">{{displayName}}</span>
+      <span class="sidecar-quote-handle">@{{handle}}</span>
+    </a>
+  </div>
+  <div class="sidecar-quote-content">{{text}}</div>
+  {{#if images}}
+  <div class="sidecar-quote-images">
+    {{#each images}}
+    <img src="{{this.thumb}}" alt="Embedded image" loading="lazy" style="max-width: 100%; object-fit: cover;">
+    {{/each}}
+  </div>
+  {{/if}}
+</div>
+<\/script>
+
+<script id="sidecar-embed-external-template" type="text/x-handlebars-template">
+<a class="sidecar-embed-external" href="{{uri}}" target="_blank" rel="noopener noreferrer">
+  {{#if thumb}}
+  <div class="sidecar-external-thumb">
+    <img src="{{thumb}}" alt="{{title}}" loading="lazy" style="width: 100%; object-fit: cover;">
+  </div>
+  {{/if}}
+  <div class="sidecar-external-info">
+    <div class="sidecar-external-domain">{{domain}}</div>
+    <div class="sidecar-external-title">{{title}}</div>
+    {{#if description}}
+    <div class="sidecar-external-description">{{description}}</div>
+    {{/if}}
+  </div>
+</a>
+<\/script>
+
+<script id="sidecar-skeleton-template" type="text/x-handlebars-template">
+<div class="sidecar-replies sidecar-skeleton" role="status" aria-label="Loading replies">
+  <div class="skeleton-post">
+    <div class="skeleton-header">
+      <div class="skeleton-avatar skeleton-shimmer"></div>
+      <div class="skeleton-author">
+        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>
+        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+      </div>
+    </div>
+    <div class="skeleton-body">
+      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+    </div>
+  </div>
+  <div class="skeleton-post">
+    <div class="skeleton-header">
+      <div class="skeleton-avatar skeleton-shimmer"></div>
+      <div class="skeleton-author">
+        <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>
+        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+      </div>
+    </div>
+    <div class="skeleton-body">
+      <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+      <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+    </div>
+  </div>
+  <span class="sr-only">Loading replies...</span>
+</div>
+<\/script>
+`;
   const SHORTCUTS = {
     "Global Navigation": {
       contexts: null,
@@ -55723,7 +56010,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         { keys: ["g", "g"], description: "Go to first item (vim)" },
         { keys: ["G"], description: "Go to last item (vim)" },
         { keys: ["h"], description: "Go back" },
-        { keys: ["\u2190", "\u2192"], description: "Toggle focus (post/replies)" }
+        { keys: ["\u2192"], description: "Enter sidecar / drill into replies" },
+        { keys: ["\u2190"], description: "Up a level / leave sidecar" }
       ]
     },
     "Post Actions": {
@@ -55735,7 +56023,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         { keys: ["l"], description: "Like/Unlike" },
         { keys: ["p"], description: "Repost menu" },
         { keys: ["P"], description: "Repost immediately" },
-        { keys: ["r"], description: "Reply" },
+        { keys: ["r"], description: "Reply (or to focused sidecar reply)" },
         { keys: ["f"], description: "Follow author" },
         { keys: ["F"], description: "Unfollow author" },
         { keys: ["+"], description: "Add author to rules" },
@@ -55748,7 +56036,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         { keys: ["c"], description: "Screenshot to clipboard" },
         { keys: ["v"], description: "Full-screen post view" },
         { keys: ["V"], description: "Reader mode (thread)" },
-        { keys: ["t"], description: "Toggle thread context" },
+        { keys: ["t"], description: "Show or hide sidecar" },
         { keys: ["a"], description: "Show author hover card" },
         { keys: ["A"], description: "Open author profile" }
       ]
@@ -64728,6 +65016,46 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       likeCount: formatter.format(post2.likeCount)
     };
   }
+  function sortReplyPosts(posts, sortOrder) {
+    return [...posts].sort((a, b) => {
+      switch (sortOrder) {
+        case "Default":
+          return 0;
+        case "Oldest First":
+          return new Date(a.record.createdAt) - new Date(b.record.createdAt);
+        case "Newest First":
+          return new Date(b.record.createdAt) - new Date(a.record.createdAt);
+        case "Most Liked First":
+          return b.likeCount - a.likeCount;
+        case "Most Reposted First":
+          return b.repostCount - a.repostCount;
+        default:
+          console.error(`unknown sort order: ${sortOrder}`);
+      }
+    });
+  }
+  function getLevelReplies(node, { sortOrder, excludePostIds }) {
+    const visible = (node?.replies ?? []).filter((reply) => reply.post).filter((reply) => {
+      const replyPostId = reply.post.uri?.split("/").slice(-1)[0];
+      return !replyPostId || !excludePostIds?.has(replyPostId);
+    });
+    const sortedPosts = sortReplyPosts(
+      visible.map((reply) => reply.post),
+      sortOrder
+    );
+    const nodeByPost = new Map(visible.map((reply) => [reply.post, reply]));
+    return sortedPosts.map((post2) => nodeByPost.get(post2));
+  }
+  const REPLIES_FETCHED = Symbol("repliesFetched");
+  function markRepliesFetched(node) {
+    if (node) node[REPLIES_FETCHED] = true;
+  }
+  function needsFetch(node) {
+    return node?.post?.replyCount > 0 && !node.replies?.length && !node[REPLIES_FETCHED];
+  }
+  function hasChildReplies(node) {
+    return node?.post?.replyCount > 0;
+  }
   class GestureHandler {
     constructor(config2, itemHandler) {
       this.config = config2;
@@ -65361,9 +65689,12 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
      * @param {HTMLElement} postElement - The post element to display
      * @param {string} sidecarHtml - HTML content for the sidecar
      * @param {boolean} isUnrolledThread - Whether this is an unrolled thread (navigate posts, not replies)
+     * @param {object|null} drillHooks - Reply drill callbacks: canDrillIn(index), drillIn(index),
+     *   drillUp(toDepth), isDrilled(), replyTo(index, onLeave)
      */
-    show(postElement, sidecarHtml, isUnrolledThread = false) {
+    show(postElement, sidecarHtml, isUnrolledThread = false, drillHooks = null) {
       if (this.isVisible) return;
+      this.drillHooks = drillHooks;
       this.previousActiveElement = document.activeElement;
       this.isVisible = true;
       this.isReaderMode = false;
@@ -65478,7 +65809,46 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       }
       modal.querySelector(".post-view-modal-backdrop").addEventListener("click", () => this.hide());
       modal.querySelector(".post-view-modal-close").addEventListener("click", () => this.hide());
+      sidecarContainer.addEventListener("click", (e) => this.handleSidecarClick(e));
       return modal;
+    }
+    /**
+     * Drill with the mouse: a breadcrumb goes up to its level, a reply's count or marker
+     * drills into that reply
+     * @param {MouseEvent} e - The click event
+     */
+    handleSidecarClick(e) {
+      if (!this.drillHooks || typeof e.target.closest !== "function") return;
+      const crumb = e.target.closest(".sidecar-crumb");
+      const count = e.target.closest('.sidecar-post[data-has-replies="true"] .sidecar-count-replies');
+      if (crumb) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.drillHooks.drillUp(Number(crumb.dataset.depth));
+      } else if (count) {
+        e.preventDefault();
+        e.stopPropagation();
+        const index = this.getSidecarItems().indexOf(count.closest(".sidecar-post"));
+        if (index >= 0) this.drillHooks.drillIn(index);
+      }
+    }
+    /**
+     * The reply posts currently shown in the replies pane (the pinned reply first when drilled)
+     * @returns {HTMLElement[]}
+     */
+    getSidecarItems() {
+      if (!this.modalEl) return [];
+      return Array.from(this.modalEl.querySelectorAll(".post-view-modal-sidecar .sidecar-post"));
+    }
+    /**
+     * Select the reply at index in the replies pane, re-applying the highlight after a re-render
+     * @param {number} index - Index into getSidecarItems()
+     */
+    focusSidecarReply(index) {
+      if (this.isUnrolledThread && this.focusedPane !== "sidecar") {
+        this.switchPane("sidecar");
+      }
+      this.navList?.jumpTo(index, true);
     }
     /**
      * Update the sidecar content (for async loading)
@@ -65512,6 +65882,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       this.previousActiveElement = document.activeElement;
       this.isVisible = true;
       this.isReaderMode = true;
+      this.drillHooks = null;
       this.modalEl = this.createReaderModal(contentHtml, title);
       document.body.appendChild(this.modalEl);
       this.navList = new NavigableList({
@@ -65615,6 +65986,33 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         e.stopPropagation();
         e.stopImmediatePropagation();
         this.hide();
+        return;
+      }
+      if (this.drillHooks && this.focusedPane === "sidecar" && !e.altKey && !e.ctrlKey && !e.metaKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        const index = this.navList?.getSelectedIndex();
+        if (e.key === "ArrowRight" && this.drillHooks.canDrillIn(index)) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          this.drillHooks.drillIn(index);
+          return;
+        }
+        if (e.key === "ArrowLeft" && this.drillHooks.isDrilled()) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          this.drillHooks.drillUp();
+          return;
+        }
+      }
+      if (this.drillHooks && this.focusedPane === "sidecar" && e.key === "r" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        this.drillHooks.replyTo(this.navList?.getSelectedIndex(), () => {
+          this.previousActiveElement = null;
+          this.hide();
+        });
         return;
       }
       if (this.isUnrolledThread && (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "h" || e.key === "l")) {
@@ -65796,6 +66194,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
     return value || "#FFFFFF";
   }
   const { waitForElement: waitForElement$2, announceToScreenReader: announceToScreenReader$1, getAnimationDuration } = utils$1;
+  const PENDING_REPLY_KEY = "bsky-nav-pending-reply";
+  const PENDING_REPLY_TTL_MS = 1e4;
   function extractPostIdFromUrl(url) {
     const match2 = url.match(/post\/([^/]+)/);
     return match2 ? match2[1] : null;
@@ -65833,6 +66233,12 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       this.scrollDirection = 0;
       this.selfThreadCache = {};
       this.unrolledPostIds = /* @__PURE__ */ new Set();
+      this.sidecarThread = null;
+      this.sidecarDrill = null;
+      this.modalDrill = null;
+      this._modalRenderSeq = 0;
+      this._sidecarItem = null;
+      this._sidecarRenderSeq = 0;
       this.handleToDidCache = /* @__PURE__ */ new Map();
       this.hoverDebounceTimeout = null;
       this.hoverDebounceDelay = 100;
@@ -66115,6 +66521,9 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         this._expandPromise = this.expandItem($(item));
       } else {
         this._expandPromise = null;
+        if (this.sidecarDrill?.repaintPending && this.isSidecarDrillCurrent(this.sidecarDrill)) {
+          this.renderSidecarLevel();
+        }
       }
       $(item).find("video").each((_i, video2) => {
         const playbackMode = this.config.get("videoPreviewPlayback");
@@ -66933,20 +67342,40 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         return;
       }
       this._currentSidecarPostId = itemPostId;
+      const drillStack = this.setSidecarThread(item, thread);
       const contentContainer = $("#fixed-sidecar-panel .fixed-sidecar-panel-content");
       contentContainer.html(this.getSkeletonContent());
       await this.waitForElementStable(item);
       this.showFixedSidecarPanel();
-      const sidecarContent = await this.getSidecarContent(item, thread);
+      const sidecarContent = await this.getSidecarContent(item, thread, drillStack);
       contentContainer.html(sidecarContent);
-      contentContainer.find(".sidecar-post").each((i, post2) => {
+      this.bindSidecarHandlers(contentContainer);
+      this.restoreSidecarFocus();
+    }
+    /**
+     * Bind mouseover, highlights, and section toggles for the sidecar content in a container
+     */
+    bindSidecarHandlers(container) {
+      container.find(".sidecar-post").each((i, post2) => {
         $(post2).on("mouseover", this.onSidecarItemMouseOver);
         if (this.highlightFilterMatches) {
           this.highlightFilterMatches(post2);
         }
         this.applySidecarAuthorHighlight(post2);
       });
-      contentContainer.find(".sidecar-section-toggle").each((i, toggle) => {
+      container.find('.sidecar-post[data-has-replies="true"] .sidecar-count-replies').on("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const index = this.getSidecarReplies().index($(e.currentTarget).closest(".sidecar-post"));
+        if (index >= 0) this.drillIntoReply(index);
+      });
+      container.find(".sidecar-crumb").on("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!this.getSidecarContainer()[0]?.contains(e.currentTarget)) return;
+        this.drillUp(Number(e.currentTarget.dataset.depth));
+      });
+      container.find(".sidecar-section-toggle").each((i, toggle) => {
         $(toggle).on("click", (e) => {
           e.preventDefault();
           const btn = $(e.currentTarget);
@@ -67145,35 +67574,311 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         }
       }
     }
-    async getSidecarContent(item, thread) {
+    /**
+     * Remember the thread the sidecar is about to render (re)fully, and return the drill
+     * stack to render it at. A different main post resets the drill state to the top
+     * level; the same post (hover, `;`, re-showing the panel) keeps its current level.
+     */
+    setSidecarThread(item, thread) {
+      const mainPostId = this.postIdForItem(item);
+      const previousItem = this._sidecarItem;
+      const previousThread = this.sidecarThread;
+      const previousDrill = this.sidecarDrill;
+      this.sidecarThread = thread;
+      this._sidecarItem = $(item)[0] ?? null;
+      this._sidecarRenderSeq++;
+      if (previousDrill && previousDrill.mainPostId === mainPostId) {
+        return previousDrill.stack;
+      }
+      this.sidecarDrill = { mainPostId, stack: [] };
+      if (!this.isFixedSidecar() && previousDrill?.stack.length && previousItem && previousItem !== this._sidecarItem && previousThread) {
+        this.paintInlineSidecar(previousItem, previousThread, []);
+      }
+      return this.sidecarDrill.stack;
+    }
+    /**
+     * After a full sidecar re-render, re-apply the sidecar focus highlight if focus is there
+     */
+    restoreSidecarFocus() {
+      if (this._replyIndex == null) return;
+      const navList = this.getSidecarNavList();
+      navList.updateSelection();
+      this._replyIndex = navList.getSelectedIndex();
+    }
+    /**
+     * True when drill is the live drill state and still belongs to the selected main post
+     */
+    isSidecarDrillCurrent(drill) {
+      return drill != null && this.sidecarDrill === drill && drill.mainPostId === this.postIdForItem(this.selectedItem);
+    }
+    /**
+     * True when the selected post's sidecar is showing below the top level
+     */
+    isSidecarDrilledAndShown() {
+      return this.sidecarDrill?.stack.length > 0 && this.isSidecarDrillCurrent(this.sidecarDrill) && this.getSidecarContainer().is(":visible");
+    }
+    /**
+     * Format a thread node's post for the sidecar templates, with its drill data
+     */
+    formatSidecarNode(node, { marker = true } = {}) {
+      return {
+        ...this.formatPostData(node.post),
+        uri: node.post.uri,
+        hasReplies: marker && hasChildReplies(node)
+      };
+    }
+    /**
+     * Build the sidecar HTML for a post. With a non-empty drillStack, show the breadcrumb,
+     * the drilled reply pinned in place of "Replying to", and that reply's own replies.
+     */
+    async getSidecarContent(item, thread, drillStack = [], { loading = false, error = false } = {}) {
       if (!item) {
         return this.repliesTemplate({});
       }
       const post2 = thread.post;
-      const replies = thread.replies.filter((reply) => reply.post).filter((reply) => {
-        const replyPostId = reply.post.uri?.split("/").slice(-1)[0];
-        return !replyPostId || !this.unrolledPostIds.has(replyPostId);
-      }).map((reply) => reply?.post).sort((a, b) => {
-        switch (this.config.get("sidecarReplySortOrder")) {
-          case "Default":
-            return 0;
-          case "Oldest First":
-            return new Date(a.record.createdAt) - new Date(b.record.createdAt);
-          case "Newest First":
-            return new Date(b.record.createdAt) - new Date(a.record.createdAt);
-          case "Most Liked First":
-            return b.likeCount - a.likeCount;
-          case "Most Reposted First":
-            return b.repostCount - a.repostCount;
-          default:
-            console.error(`unknown sort order: ${this.config.get("sidecarReplySortOrder")}`);
-        }
-      }).map((p) => this.formatPostData(p));
-      return this.repliesTemplate({
+      const sortOrder = this.config.get("sidecarReplySortOrder");
+      const drilled = drillStack.length > 0;
+      const levelNode = drilled ? drillStack[drillStack.length - 1].node : thread;
+      const replies = getLevelReplies(levelNode, {
+        sortOrder,
+        excludePostIds: drilled ? void 0 : this.unrolledPostIds
+      }).map((node) => this.formatSidecarNode(node));
+      const data = {
         postId: post2.cid,
-        parent: thread.parent ? this.formatPostData(thread.parent.post) : null,
+        parent: !drilled && thread.parent ? this.formatPostData(thread.parent.post) : null,
         replies
+      };
+      if (drilled) {
+        data.breadcrumb = [
+          { depth: 0, label: "Replies" },
+          ...drillStack.map(({ node }, i) => ({
+            depth: i + 1,
+            label: node.post.author.displayName || node.post.author.handle
+          }))
+        ];
+        data.pinned = this.formatSidecarNode(levelNode, { marker: false });
+        const levelEntry = drillStack[drillStack.length - 1];
+        data.loading = loading || !!levelEntry.loading;
+        data.error = error || !!levelEntry.error;
+      }
+      return this.repliesTemplate(data);
+    }
+    /**
+     * Re-render the sidecar (fixed panel or inline) for the current drill level. Returns
+     * false when the render was dropped because a newer render started or the selected
+     * main post changed while it was being built.
+     */
+    async renderSidecarLevel({ loading = false, error = false } = {}) {
+      const thread = this.sidecarThread;
+      const item = this.selectedItem;
+      const drill = this.sidecarDrill;
+      if (!thread || !item?.length || !this.isSidecarDrillCurrent(drill)) return false;
+      drill.repaintPending = false;
+      const seq = ++this._sidecarRenderSeq;
+      const isStale = () => seq !== this._sidecarRenderSeq || !this.isSidecarDrillCurrent(drill);
+      if (this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible")) {
+        const html = await this.getSidecarContent(item, thread, drill.stack, { loading, error });
+        if (isStale()) return false;
+        const contentContainer = $("#fixed-sidecar-panel .fixed-sidecar-panel-content");
+        contentContainer.html(html);
+        this.bindSidecarHandlers(contentContainer);
+        return true;
+      }
+      return this.paintInlineSidecar(item, thread, drill.stack, { loading, error, isStale });
+    }
+    /**
+     * Replace a post's inline sidecar with the given drill level, keeping its display
+     */
+    async paintInlineSidecar(item, thread, stack, { loading = false, error = false, isStale } = {}) {
+      const container = $(item).parent();
+      if (!container.length || !document.contains(container[0])) return false;
+      const html = await this.getSidecarContent(item, thread, stack, { loading, error });
+      if (isStale?.() || !document.contains(container[0])) return false;
+      const previous = container.find(".sidecar-replies");
+      if (!previous.length) return false;
+      const display = previous.first().css("display");
+      previous.remove();
+      const sidecar = $(html);
+      if (display) sidecar.css("display", display);
+      container.append(sidecar);
+      this.bindSidecarHandlers(container);
+      return true;
+    }
+    /**
+     * The node among levelNode's direct replies whose post has the given uri
+     */
+    findReplyNode(levelNode, uri) {
+      return (levelNode?.replies ?? []).find((node) => node.post?.uri === uri) ?? null;
+    }
+    /**
+     * The thread node of the reply at index in the current sidecar level, when it has
+     * replies to drill into; otherwise null
+     */
+    getDrillTarget(index) {
+      const drill = this.sidecarDrill;
+      if (index == null || !this.sidecarThread || !this.isSidecarDrillCurrent(drill)) return null;
+      const reply = this.getSidecarReplies().eq(index);
+      if (reply.attr("data-has-replies") !== "true") return null;
+      const levelNode = drill.stack.length ? drill.stack[drill.stack.length - 1].node : this.sidecarThread;
+      return this.findReplyNode(levelNode, reply.attr("data-uri"));
+    }
+    /**
+     * Move sidecar focus to index, re-applying the highlight after a re-render
+     */
+    focusSidecarReply(index) {
+      if (this._replyIndex == null) {
+        this.replyIndex = index;
+        return;
+      }
+      const navList = this.getSidecarNavList();
+      navList.jumpTo(index, true);
+      this._replyIndex = navList.getSelectedIndex();
+    }
+    /**
+     * The main sidecar as a drill surface: the drill state plus the operations drillInto
+     * and drillUpFrom need to inspect, repaint, and focus it
+     */
+    getMainDrillSurface() {
+      const drill = this.sidecarDrill;
+      return {
+        drill,
+        isCurrent: () => this.isSidecarDrillCurrent(drill),
+        markRepaintPending: () => {
+          if (drill && this.sidecarDrill === drill) drill.repaintPending = true;
+        },
+        target: (index) => this.getDrillTarget(index),
+        render: (state2) => this.renderSidecarLevel(state2),
+        focus: (index) => this.focusSidecarReply(index),
+        indexOfUri: (uri) => this.getSidecarReplies().get().findIndex((reply) => reply.dataset.uri === uri),
+        replyCount: () => this.getSidecarReplies().length - 1
+      };
+    }
+    /**
+     * Drill into the reply at index in the current sidecar level, if it has replies, and
+     * focus its first reply. Fetches the reply's thread first when its replies weren't
+     * part of the loaded thread. Returns whether it drilled.
+     */
+    drillIntoReply(index) {
+      return this.drillInto(this.getMainDrillSurface(), index);
+    }
+    /**
+     * Go back up to toDepth (default: one level up) and refocus the reply drilled from
+     */
+    drillUp(toDepth) {
+      return this.drillUpFrom(this.getMainDrillSurface(), toDepth);
+    }
+    /**
+     * drillIntoReply for any drill surface (the main sidecar or the post view)
+     */
+    async drillInto(surface, index) {
+      const node = surface.target(index);
+      if (!node) return false;
+      const { drill } = surface;
+      const entry = { node, fromIndex: index, fromUri: node.post.uri };
+      drill.stack.push(entry);
+      const name = node.post.author.displayName || node.post.author.handle;
+      let error = false;
+      if (needsFetch(node)) {
+        entry.loading = true;
+        if (await surface.render()) {
+          surface.focus(0);
+        }
+        try {
+          const thread = await this.api.getThread(node.post.uri);
+          node.replies = thread?.replies ?? [];
+          markRepliesFetched(node);
+        } catch (e) {
+          console.warn("[bsky-nav] Failed to load sidecar replies:", e);
+          error = true;
+        }
+        entry.loading = false;
+        entry.error = error;
+        if (drill.stack[drill.stack.length - 1]?.node !== node) return true;
+        if (!surface.isCurrent()) {
+          surface.markRepaintPending?.();
+          return true;
+        }
+      }
+      if (!await surface.render()) return true;
+      const replyCount = surface.replyCount();
+      surface.focus(replyCount > 0 ? 1 : 0);
+      announceToScreenReader$1(
+        error ? `Couldn't load replies to ${name}` : `Replies to ${name}: ${replyCount} ${replyCount === 1 ? "reply" : "replies"}`
+      );
+      return true;
+    }
+    /**
+     * drillUp for any drill surface (the main sidecar or the post view)
+     */
+    async drillUpFrom(surface, toDepth) {
+      const { drill } = surface;
+      if (!surface.isCurrent() || !drill.stack.length) return;
+      const depth = toDepth ?? drill.stack.length - 1;
+      if (!(depth >= 0 && depth < drill.stack.length)) return;
+      const { fromIndex, fromUri } = drill.stack[depth];
+      drill.stack.length = depth;
+      if (!await surface.render()) return;
+      const uriIndex = surface.indexOfUri(fromUri);
+      surface.focus(uriIndex >= 0 ? uriIndex : fromIndex);
+      const parent = drill.stack[depth - 1]?.node.post.author;
+      announceToScreenReader$1(
+        parent ? `Replies to ${parent.displayName || parent.handle}` : "Top-level replies"
+      );
+    }
+    /**
+     * The post view's replies pane as a drill surface. Its drill state is separate from the
+     * main sidecar's: { thread, stack } for the post the modal shows, reset on open.
+     */
+    getModalDrillSurface() {
+      const drill = this.modalDrill;
+      const modal = this.postViewModal;
+      return {
+        drill,
+        isCurrent: () => drill != null && this.modalDrill === drill && !!modal?.visible,
+        target: (index) => {
+          const reply = modal?.getSidecarItems()[index];
+          if (!drill?.thread || reply?.dataset.hasReplies !== "true") return null;
+          const levelNode = drill.stack.length ? drill.stack[drill.stack.length - 1].node : drill.thread;
+          return this.findReplyNode(levelNode, reply.dataset.uri);
+        },
+        render: (state2) => this.renderModalLevel(drill, state2),
+        focus: (index) => modal.focusSidecarReply(index),
+        indexOfUri: (uri) => modal.getSidecarItems().findIndex((reply) => reply.dataset.uri === uri),
+        replyCount: () => modal.getSidecarItems().length - 1
+      };
+    }
+    /**
+     * Repaint the post view's replies pane for the current drill level. Returns false when
+     * dropped because the modal closed or a newer render started.
+     */
+    async renderModalLevel(drill, { loading = false, error = false } = {}) {
+      if (!drill?.thread || this.modalDrill !== drill) return false;
+      const seq = ++this._modalRenderSeq;
+      const html = await this.getSidecarContent(drill.element, drill.thread, drill.stack, {
+        loading,
+        error
       });
+      if (seq !== this._modalRenderSeq || this.modalDrill !== drill || !this.postViewModal?.visible) {
+        return false;
+      }
+      this.postViewModal.updateSidecar(`<div class="post-view-modal-sidecar-content">${html}</div>`);
+      return true;
+    }
+    /**
+     * Drill callbacks the post view's keys and clicks use
+     */
+    getModalDrillHooks() {
+      return {
+        canDrillIn: (index) => !!this.getModalDrillSurface().target(index),
+        drillIn: (index) => this.drillInto(this.getModalDrillSurface(), index),
+        drillUp: (toDepth) => this.drillUpFrom(this.getModalDrillSurface(), toDepth),
+        isDrilled: () => (this.modalDrill?.stack.length ?? 0) > 0,
+        // `r` on a reply: as in the main sidecar; onLeave closes the post view
+        replyTo: (index, onLeave) => {
+          const reply = this.postViewModal?.getSidecarItems()[index];
+          return !!reply && this.openReplyForSidecarReply(reply, onLeave);
+        }
+      };
     }
     async showSidecar(item, thread, action = null) {
       if (this.isFixedSidecar()) {
@@ -67208,6 +67913,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         return;
       }
       container.data("sidecar-loading", itemKey);
+      const drillStack = this.setSidecarThread(item, thread);
       container.find(".sidecar-replies").each((i, el) => {
         try {
           if (el.parentNode) el.parentNode.removeChild(el);
@@ -67220,7 +67926,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       }
       const skeletonContent = this.getSkeletonContent();
       $(container).append(skeletonContent);
-      const sidecarContent = await this.getSidecarContent(item, thread);
+      const sidecarContent = await this.getSidecarContent(item, thread, drillStack);
       if (!document.contains(container[0])) {
         container.removeData("sidecar-loading");
         return;
@@ -67241,29 +67947,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         container.removeData("sidecar-loading");
         return;
       }
-      container.find(".sidecar-post").each((i, post2) => {
-        $(post2).on("mouseover", this.onSidecarItemMouseOver);
-        if (this.highlightFilterMatches) {
-          this.highlightFilterMatches(post2);
-        }
-        this.applySidecarAuthorHighlight(post2);
-      });
-      container.find(".sidecar-section-toggle").each((i, toggle) => {
-        $(toggle).on("click", (e) => {
-          e.preventDefault();
-          const btn = $(e.currentTarget);
-          const contentId = btn.attr("aria-controls");
-          const content = $(`#${contentId}`);
-          const isExpanded = btn.attr("aria-expanded") === "true";
-          btn.attr("aria-expanded", !isExpanded);
-          btn.find(".sidecar-section-icon").text(isExpanded ? "\u25B6" : "\u25BC");
-          if (isExpanded) {
-            content.slideUp(getAnimationDuration(200, this.config));
-          } else {
-            content.slideDown(getAnimationDuration(200, this.config));
-          }
-        });
-      });
+      this.bindSidecarHandlers(container);
+      this.restoreSidecarFocus();
       const sidecar = container.find(".sidecar-replies")[0];
       const globallyHidden = this.config.get("fixedSidecarVisible") === false;
       const display = globallyHidden ? "none" : action == null ? sidecar && $(sidecar).is(":visible") ? "none" : "flex" : action ? "flex" : "none";
@@ -67342,7 +68027,9 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
           this.toggleMedia(item, event);
           break;
         case "r":
-          this.openReplyDialog(item);
+          if (!(this.config.get("showReplySidecar") && this.replyIndex != null && this.selectedReply.is(":visible") && this.openReplyForSidecarReply(this.selectedReply))) {
+            this.openReplyDialog(item);
+          }
           break;
         case "l":
           this.handleLikeAction(item);
@@ -67528,13 +68215,24 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
               return;
             }
             event.preventDefault();
-            this.toggleFocus();
+            if (this.isSidecarDrilledAndShown()) {
+              this.drillUp();
+            } else {
+              this.toggleFocus();
+            }
           } else if (event.key == "ArrowRight") {
-            if (event.altKey || !this.isSidecarNavigationAvailable() || this.replyIndex != null) {
+            if (event.altKey || !this.isSidecarNavigationAvailable()) {
               return;
             }
-            event.preventDefault();
-            this.toggleFocus();
+            if (this.replyIndex == null) {
+              event.preventDefault();
+              this.toggleFocus();
+            } else if (this.getSidecarContainer().is(":visible") && this.getDrillTarget(this.replyIndex)) {
+              event.preventDefault();
+              this.drillIntoReply(this.replyIndex);
+            } else {
+              return;
+            }
           } else if (event.key == "G") {
             event.preventDefault();
             moved = this.setIndex(this.items.length - 1, false, true);
@@ -67658,6 +68356,44 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         document.addEventListener("click", this._mediaCloseHandler, true);
         document.addEventListener("keydown", this._mediaCloseHandler, true);
       }, 300);
+    }
+    /**
+     * Reply to a sidecar reply: remember it as pending, then open its post page (as `o`
+     * does). The post page opens the reply dialog once the post has loaded. When the reply
+     * is this post page's own post, the link wouldn't navigate, so reply in place.
+     * onLeave runs once the sidecar is no longer needed: after following the link (a
+     * detached link can't navigate), or before replying in place.
+     * Returns false, doing nothing, when the reply has no post link.
+     * @param {jQuery|HTMLElement} reply - The .sidecar-post element
+     * @param {Function} [onLeave]
+     * @returns {boolean}
+     */
+    openReplyForSidecarReply(reply, onLeave) {
+      const link = $(reply).find(".sidecar-post-timestamp a")[0];
+      if (!link) return false;
+      const linkPath = new URL(link.href, window.location.href).pathname;
+      const postId = linkPath.split("/")[4];
+      const samePath = (path) => path.replace(/\/+$/, "");
+      if (postId && samePath(linkPath) === samePath(window.location.pathname)) {
+        const pagePost = $(this.items).get().find((item) => this.postIdForItem(item) === postId);
+        if (pagePost) {
+          onLeave?.();
+          this.openReplyDialog(pagePost);
+          return true;
+        }
+      }
+      if (postId) {
+        try {
+          window.sessionStorage.setItem(
+            PENDING_REPLY_KEY,
+            JSON.stringify({ postId, expiresAt: Date.now() + PENDING_REPLY_TTL_MS })
+          );
+        } catch {
+        }
+      }
+      link.click();
+      onLeave?.();
+      return true;
     }
     openReplyDialog(item) {
       const button = $(item).find("button[aria-label^='Reply']");
@@ -68368,16 +69104,18 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       if (!this.postViewModal) {
         this.postViewModal = new PostViewModal(this.config, () => {
           this.isPopupVisible = false;
+          this.modalDrill = null;
         });
       }
       this.isPopupVisible = true;
-      this.postViewModal.show(postElement, null, hasUnrolledThread);
+      const drill = { element: postElement, thread: null, stack: [] };
+      this.modalDrill = drill;
+      this.postViewModal.show(postElement, null, hasUnrolledThread, this.getModalDrillHooks());
       try {
         const thread = await this.getThreadForItem(postElement);
         if (thread) {
-          const sidecarHtml = await this.getSidecarContent(postElement, thread);
-          const wrappedHtml = `<div class="post-view-modal-sidecar-content">${sidecarHtml}</div>`;
-          this.postViewModal.updateSidecar(wrappedHtml);
+          drill.thread = thread;
+          await this.renderModalLevel(drill);
         } else {
           this.postViewModal.updateSidecar('<div class="post-view-modal-error">Could not load replies</div>');
         }
@@ -68395,6 +69133,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       if (!this.postViewModal) {
         this.postViewModal = new PostViewModal(this.config, () => {
           this.isPopupVisible = false;
+          this.modalDrill = null;
         });
       }
       this.isPopupVisible = true;
@@ -70873,6 +71612,7 @@ ${rule}`;
       }
       this.hoverDebounceTimeout = setTimeout(() => {
         if (this.ignoreMouseMovement) return;
+        if (!document.contains(target2[0])) return;
         if (!isFixedSidecar) {
           const parent = target2.closest(".thread").find(".item");
           const parentIndex = this.getIndexFromItem(parent);
@@ -73953,7 +74693,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.threadIndex != null && this.unrolledReplies.length > 0) {
         parts.push({ label: `Post ${this.threadIndex + 1}/${this.unrolledReplies.length + 1}`, type: "position" });
       } else if (this.replyIndex != null) {
-        const replyCount = $(this.selectedItem).parent().find(".sidecar-post").length;
+        const replyCount = this.getSidecarReplies().length;
         parts.push({ label: `Reply ${this.replyIndex + 1}/${replyCount}`, type: "reply" });
       }
       const html = parts.map((part, i) => {
@@ -75112,6 +75852,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
   }
   const THREAD_SCREEN_SELECTOR = 'div[data-testid="postThreadScreen"]';
+  const REPLY_BUTTON_WAIT_MS = 5e3;
   function isShown(element) {
     return !!element?.isConnected && element.offsetParent !== null;
   }
@@ -75133,6 +75874,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     }
     deactivate() {
       this.stopPinningUrlPost?.();
+      this.cancelPendingReplyWait();
       clearTimeout(this.urlChangeLoadTimeout);
       if (!this.isActive()) {
         this.rememberThreadSelection();
@@ -75148,6 +75890,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const fromHistory = this.historyNavUrl === window.location.href;
       if (fromHistory && this.postIdFromUrl() === this.threadPostId && isShown(this.selectedItem?.[0])) {
         this.historyNavUrl = null;
+        this.takePendingReply();
         $(this.items).not(this.selectedItem).filter(".item-selection-active").each((i, item) => this.applyItemStyle(item, false));
         this.applyItemStyle(this.selectedItem, true);
         return;
@@ -75200,8 +75943,49 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         this.historyRestorePostId = null;
         if (this.postId === this.threadPostId) {
           this.pinUrlPost(this.selectedItem[0]);
+          this.consumePendingReply();
         }
       }
+    }
+    /** Read and remove the pending reply (see openReplyForSidecarReply) if it hasn't expired. */
+    takePendingReply() {
+      try {
+        const raw = window.sessionStorage.getItem(PENDING_REPLY_KEY);
+        if (raw == null) return null;
+        window.sessionStorage.removeItem(PENDING_REPLY_KEY);
+        const entry = JSON.parse(raw);
+        return entry?.expiresAt > Date.now() ? entry : null;
+      } catch {
+        return null;
+      }
+    }
+    cancelPendingReplyWait() {
+      clearTimeout(this.pendingReplyTimeout);
+      this.pendingReplyTimeout = null;
+    }
+    /**
+     * After the URL post is selected on a fresh visit: if `r` on a sidecar reply sent us
+     * here, open the reply dialog on that post once its reply button renders. Any other
+     * page or an expired entry just drops the entry.
+     */
+    consumePendingReply() {
+      this.cancelPendingReplyWait();
+      const entry = this.takePendingReply();
+      if (!entry || entry.postId !== this.postIdFromUrl()) return;
+      const post2 = this.selectedItem[0];
+      const deadline = Date.now() + REPLY_BUTTON_WAIT_MS;
+      const tryOpen = () => {
+        this.pendingReplyTimeout = null;
+        if (!post2.isConnected || this.selectedItem[0] !== post2 || this.postIdFromUrl() !== entry.postId) {
+          return;
+        }
+        if ($(post2).find("button[aria-label^='Reply']").length) {
+          this.openReplyDialog(post2);
+        } else if (Date.now() < deadline) {
+          this.pendingReplyTimeout = setTimeout(tryOpen, 100);
+        }
+      };
+      tryOpen();
     }
     updateItems() {
       if (this.keepHistoryScroll) {
@@ -75288,6 +76072,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.rememberThreadSelection();
       const fromHistory = this.historyNavUrl === window.location.href;
       this.historyNavUrl = null;
+      this.cancelPendingReplyWait();
+      if (fromHistory) this.takePendingReply();
       const saved = fromHistory ? this.threadSelections.get(urlPostId)?.find((entry) => isShown(entry.element.deref())) : null;
       const kept = !!saved;
       this.historyRestorePostId = kept ? saved.postId : null;

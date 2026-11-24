@@ -1427,6 +1427,9 @@ function getScreenFromElement(element) {
         if (handlers[context]) {
           handlers[context].activate();
         }
+      } else if (forceRefresh) {
+        // Same context, new URL (e.g. post → post, or Back to a screen Bluesky kept hidden)
+        handlers[ctx]?.onUrlChange?.();
       }
 
       // Always notify UIManager if context changed OR forceRefresh requested
@@ -1536,6 +1539,10 @@ function getScreenFromElement(element) {
 
     document.addEventListener('focus', onFocus, true);
     document.addEventListener('blur', onBlur, true);
+    // Back/Forward: switch handlers now rather than at the next URL poll, so the previous
+    // page's handler can't act on the page shown. Deferred a tick so Bluesky has swapped
+    // screens; a later poll or focus sees the same URL and does nothing.
+    window.addEventListener('popstate', () => setTimeout(setContextFromUrl, 0));
 
     // Declared before viewportChangeObserver below, whose callback can run synchronously
     let suggestedFollowsObserver = null;

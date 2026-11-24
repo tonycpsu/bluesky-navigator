@@ -275,6 +275,8 @@ export class ItemHandler extends Handler {
     // page's DOM after deactivation. Reset the flags/indicator those loads would have.
     clearTimeout(this.loadItemsDebounceTimeout);
     this.loadItemsDebounceTimeout = null;
+    clearTimeout(this._loadRetryTimeout);
+    this._loadRetryTimeout = null;
     let cancelledLoad = false;
     if (this._loadItemsTimeout) {
       clearTimeout(this._loadItemsTimeout);
@@ -691,7 +693,6 @@ export class ItemHandler extends Handler {
     this._replyIndex = null;
     this.sidecarNavList = null;
     this.threadNavList = null;
-    // Read from the element directly - PostItemHandler's index getter ignores _index
     this.postId = this.postIdForItem(item);
     this.updateInfoIndicator();
 
@@ -3946,7 +3947,6 @@ export class ItemHandler extends Handler {
     const statusBarHeight = this.getStatusBarHeight();
     const viewportHeight = window.innerHeight - toolbarHeight - statusBarHeight;
     const viewportBottom = window.innerHeight - statusBarHeight;
-    const fitPostsOn = document.body.classList.contains(FIT_BODY_CLASS);
 
     let scrollAmount;
 
@@ -3955,8 +3955,8 @@ export class ItemHandler extends Handler {
     if (postHeight > viewportHeight) {
       // Tall post handling
       if (direction > 0) {
-        // Going down: check if bottom is visible
-        if (rect.bottom <= viewportBottom) {
+        // Going down: check if bottom is visible (2px sub-pixel tolerance, as in isElementFullyVisible)
+        if (rect.bottom <= viewportBottom + 2) {
           // Bottom is visible - jump to next post
           return false;
         }
@@ -3964,8 +3964,8 @@ export class ItemHandler extends Handler {
         const remaining = rect.bottom - viewportBottom;
         scrollAmount = Math.min(viewportHeight * 0.5, remaining + 10);
       } else {
-        // Going up: check if top is visible
-        if (rect.top >= toolbarHeight) {
+        // Going up: check if top is visible (2px sub-pixel tolerance)
+        if (rect.top >= toolbarHeight - 2) {
           // Top is visible - jump to prev post
           return false;
         }
@@ -3982,9 +3982,10 @@ export class ItemHandler extends Handler {
         // Post almost fits, both edges just slightly off - consider visible
         return false;
       }
-      // Keep a 10px margin under the toolbar; with fit-to-screen on, never push the bottom past the status bar
+      // Keep a 10px margin under the toolbar, but never push the bottom past the status bar
+      // (a post that nearly fills the view would otherwise flip between edges on each press)
       const desiredTop = toolbarHeight + 10;
-      scrollAmount = rect.top - (fitPostsOn ? Math.min(desiredTop, viewportBottom - postHeight) : desiredTop);
+      scrollAmount = rect.top - Math.min(desiredTop, viewportBottom - postHeight);
     } else if (rect.bottom > viewportBottom) {
       // Normal post below viewport - scroll to show bottom
       // But if top would go off-screen and post almost fits, consider it visible
@@ -3997,15 +3998,14 @@ export class ItemHandler extends Handler {
       // Scroll minimally based on direction to avoid oscillation
       if (direction > 0) {
         // Going down: scroll just enough to show the bottom
-        // Keep a 10px margin above the status bar; with fit-to-screen on, never push the top under the toolbar
+        // Keep a 10px margin above the status bar, but never push the top under the toolbar
         const desiredBottom = viewportBottom - 10;
-        scrollAmount = rect.bottom - (fitPostsOn ? Math.max(desiredBottom, toolbarHeight + postHeight) : desiredBottom);
+        scrollAmount = rect.bottom - Math.max(desiredBottom, toolbarHeight + postHeight);
       } else {
         // Going up: align top with toolbar (unusual case - post is below but navigating up)
-        // With fit-to-screen on, never push the bottom past the status bar
+        // Never push the bottom past the status bar
         const desiredTop = toolbarHeight + 10;
-        scrollAmount =
-          rect.top - (fitPostsOn ? Math.min(desiredTop, viewportBottom - postHeight) : desiredTop);
+        scrollAmount = rect.top - Math.min(desiredTop, viewportBottom - postHeight);
       }
     } else {
       // Already fully visible - no scrolling needed, can advance
@@ -6682,10 +6682,16 @@ export class ItemHandler extends Handler {
   scrollToElement(target, block = null) {
     // Temporarily suppress focus changes during programmatic scroll
     this.ignoreMouseMovement = true;
-    target.scrollIntoView({
-      behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
-      block: block == null ? 'start' : block,
-    });
+    const behavior = this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant';
+    if (block == null || block === 'start') {
+      // Scroll the window by the element's own offset: scrollIntoView aligns the nearest
+      // scroll container instead (Bluesky wraps thread replies in overflow: hidden divs),
+      // which drops the element's scroll-margin-top and leaves it under the header
+      const margin = parseFloat(window.getComputedStyle(target).scrollMarginTop) || 0;
+      window.scrollBy({ top: target.getBoundingClientRect().top - margin, behavior });
+    } else {
+      target.scrollIntoView({ behavior, block });
+    }
     // Reset after scroll completes
     setTimeout(() => {
       this.ignoreMouseMovement = false;
@@ -6788,7 +6794,17 @@ export class ItemHandler extends Handler {
   // ===========================================================================
 
   postIdFromUrl() {
-    return window.location.href.split('/')[6];
+    // Use the pathname so a query string or hash (e.g. ?ref_src=embed) isn't part of the ID
+    return window.location.pathname.split('/')[4];
+  }
+
+  /**
+   * Post to select when a page's items first load and nothing is selected yet.
+   * Tried before the persisted focus; handlers whose URL names a post override this.
+   * @returns {string|null}
+   */
+  getInitialTargetPostId() {
+    return null;
   }
 
   urlForItem(item) {
@@ -7649,14 +7665,17 @@ export class ItemHandler extends Handler {
    */
   loadItemsWithRetry(maxRetries = 10, retryDelay = 300, initialDelay = 500) {
     let retryCount = 0;
+    // One retry chain at a time; deactivate() cancels it
+    clearTimeout(this._loadRetryTimeout);
 
     const tryLoad = () => {
-      this.loadItems();
+      this._loadRetryTimeout = null;
+      this.loadItems(this.getRetryRestoreTarget());
       const itemCount = this.items?.length || 0;
 
       if (itemCount === 0 && retryCount < maxRetries) {
         retryCount++;
-        setTimeout(tryLoad, retryDelay);
+        this._loadRetryTimeout = setTimeout(tryLoad, retryDelay);
       } else if (itemCount > 0) {
         // Items found - update feed map
         this.updateScrollPosition(true);
@@ -7664,7 +7683,15 @@ export class ItemHandler extends Handler {
     };
 
     // Initial delay to let feed render
-    setTimeout(tryLoad, initialDelay);
+    this._loadRetryTimeout = setTimeout(tryLoad, initialDelay);
+  }
+
+  /**
+   * Restore target for loadItemsWithRetry() loads (none by default: select the top).
+   * @returns {string|object|undefined}
+   */
+  getRetryRestoreTarget() {
+    return undefined;
   }
 
   /**
@@ -8010,9 +8037,12 @@ export class ItemHandler extends Handler {
         restoreMethod = 'preserveSelection-keep';
       } else if (this.items?.length > 0) {
         // No current selection but we have items - this is first load after items became available
-        // Try to restore from StateManager (cross-session restore)
+        // Select the post the page's URL names, else restore from StateManager (cross-session restore)
+        const initialPostId = this.getInitialTargetPostId();
         const statePostId = this.state?.focusedPostId;
-        if (statePostId && this.jumpToPost(statePostId)) {
+        if (initialPostId && this.jumpToPost(initialPostId)) {
+          restoreMethod = 'preserveSelection-initial-postId';
+        } else if (statePostId && this.jumpToPost(statePostId)) {
           restoreMethod = 'preserveSelection-state-postId';
         } else {
           // Post not found - start fresh at top

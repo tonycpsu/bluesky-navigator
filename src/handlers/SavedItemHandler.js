@@ -18,6 +18,7 @@ export class SavedItemHandler extends FeedItemHandler {
     super(name, config, state, api, selector);
     this.uiManagerStatusBar = null;
     this.uiManagerStatusBarLeft = null;
+    this._statusBarRetryTimeout = null;
   }
 
   /**
@@ -27,11 +28,15 @@ export class SavedItemHandler extends FeedItemHandler {
   setUIManagerStatusBar(statusBar, statusBarLeft) {
     this.uiManagerStatusBar = statusBar;
     this.uiManagerStatusBarLeft = statusBarLeft;
+    clearTimeout(this._statusBarRetryTimeout);
 
     // Ensure status bar is in DOM and visible (may have been removed during SPA navigation)
     if (!$.contains(document, statusBar[0])) {
       // Status bar not in DOM - need to wait for UIManager to re-insert it
-      setTimeout(() => this.setUIManagerStatusBar(statusBar, statusBarLeft), 100);
+      this._statusBarRetryTimeout = setTimeout(
+        () => this.setUIManagerStatusBar(statusBar, statusBarLeft),
+        100
+      );
       return;
     }
     statusBar.show();
@@ -232,6 +237,9 @@ export class SavedItemHandler extends FeedItemHandler {
   }
 
   deactivate() {
+    clearTimeout(this._statusBarRetryTimeout);
+    this._statusBarRetryTimeout = null;
+
     // Disconnect any pending toolbar observer
     if (this._toolbarObserver) {
       this._toolbarObserver.disconnect();

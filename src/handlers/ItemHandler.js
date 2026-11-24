@@ -3947,7 +3947,6 @@ export class ItemHandler extends Handler {
     const statusBarHeight = this.getStatusBarHeight();
     const viewportHeight = window.innerHeight - toolbarHeight - statusBarHeight;
     const viewportBottom = window.innerHeight - statusBarHeight;
-    const fitPostsOn = document.body.classList.contains(FIT_BODY_CLASS);
 
     let scrollAmount;
 
@@ -3983,9 +3982,10 @@ export class ItemHandler extends Handler {
         // Post almost fits, both edges just slightly off - consider visible
         return false;
       }
-      // Keep a 10px margin under the toolbar; with fit-to-screen on, never push the bottom past the status bar
+      // Keep a 10px margin under the toolbar, but never push the bottom past the status bar
+      // (a post that nearly fills the view would otherwise flip between edges on each press)
       const desiredTop = toolbarHeight + 10;
-      scrollAmount = rect.top - (fitPostsOn ? Math.min(desiredTop, viewportBottom - postHeight) : desiredTop);
+      scrollAmount = rect.top - Math.min(desiredTop, viewportBottom - postHeight);
     } else if (rect.bottom > viewportBottom) {
       // Normal post below viewport - scroll to show bottom
       // But if top would go off-screen and post almost fits, consider it visible
@@ -3998,15 +3998,14 @@ export class ItemHandler extends Handler {
       // Scroll minimally based on direction to avoid oscillation
       if (direction > 0) {
         // Going down: scroll just enough to show the bottom
-        // Keep a 10px margin above the status bar; with fit-to-screen on, never push the top under the toolbar
+        // Keep a 10px margin above the status bar, but never push the top under the toolbar
         const desiredBottom = viewportBottom - 10;
-        scrollAmount = rect.bottom - (fitPostsOn ? Math.max(desiredBottom, toolbarHeight + postHeight) : desiredBottom);
+        scrollAmount = rect.bottom - Math.max(desiredBottom, toolbarHeight + postHeight);
       } else {
         // Going up: align top with toolbar (unusual case - post is below but navigating up)
-        // With fit-to-screen on, never push the bottom past the status bar
+        // Never push the bottom past the status bar
         const desiredTop = toolbarHeight + 10;
-        scrollAmount =
-          rect.top - (fitPostsOn ? Math.min(desiredTop, viewportBottom - postHeight) : desiredTop);
+        scrollAmount = rect.top - Math.min(desiredTop, viewportBottom - postHeight);
       }
     } else {
       // Already fully visible - no scrolling needed, can advance

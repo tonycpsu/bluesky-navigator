@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+672.21c8d826
+// @version     1.0.31+673.7481e743
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -68811,7 +68811,6 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       const statusBarHeight = this.getStatusBarHeight();
       const viewportHeight = window.innerHeight - toolbarHeight - statusBarHeight;
       const viewportBottom = window.innerHeight - statusBarHeight;
-      const fitPostsOn = document.body.classList.contains(FIT_BODY_CLASS);
       let scrollAmount;
       const postHeight = rect.bottom - rect.top;
       if (postHeight > viewportHeight) {
@@ -68835,7 +68834,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
           return false;
         }
         const desiredTop = toolbarHeight + 10;
-        scrollAmount = rect.top - (fitPostsOn ? Math.min(desiredTop, viewportBottom - postHeight) : desiredTop);
+        scrollAmount = rect.top - Math.min(desiredTop, viewportBottom - postHeight);
       } else if (rect.bottom > viewportBottom) {
         const bottomOverlap = rect.bottom - viewportBottom;
         const topGap = rect.top - toolbarHeight;
@@ -68844,10 +68843,10 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         }
         if (direction > 0) {
           const desiredBottom = viewportBottom - 10;
-          scrollAmount = rect.bottom - (fitPostsOn ? Math.max(desiredBottom, toolbarHeight + postHeight) : desiredBottom);
+          scrollAmount = rect.bottom - Math.max(desiredBottom, toolbarHeight + postHeight);
         } else {
           const desiredTop = toolbarHeight + 10;
-          scrollAmount = rect.top - (fitPostsOn ? Math.min(desiredTop, viewportBottom - postHeight) : desiredTop);
+          scrollAmount = rect.top - Math.min(desiredTop, viewportBottom - postHeight);
         }
       } else {
         return false;

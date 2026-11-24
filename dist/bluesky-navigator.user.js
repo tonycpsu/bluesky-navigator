@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+671.95cbfcb8
+// @version     1.0.31+672.21c8d826
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -65978,6 +65978,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       this.ignoreMouseMovement = false;
       clearTimeout(this.loadItemsDebounceTimeout);
       this.loadItemsDebounceTimeout = null;
+      clearTimeout(this._loadRetryTimeout);
+      this._loadRetryTimeout = null;
       let cancelledLoad = false;
       if (this._loadItemsTimeout) {
         clearTimeout(this._loadItemsTimeout);
@@ -68814,13 +68816,13 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       const postHeight = rect.bottom - rect.top;
       if (postHeight > viewportHeight) {
         if (direction > 0) {
-          if (rect.bottom <= viewportBottom) {
+          if (rect.bottom <= viewportBottom + 2) {
             return false;
           }
           const remaining = rect.bottom - viewportBottom;
           scrollAmount = Math.min(viewportHeight * 0.5, remaining + 10);
         } else {
-          if (rect.top >= toolbarHeight) {
+          if (rect.top >= toolbarHeight - 2) {
             return false;
           }
           const remaining = toolbarHeight - rect.top;
@@ -70887,10 +70889,13 @@ ${rule}`;
     // ===========================================================================
     scrollToElement(target2, block2 = null) {
       this.ignoreMouseMovement = true;
-      target2.scrollIntoView({
-        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
-        block: block2 == null ? "start" : block2
-      });
+      const behavior = this.config.get("enableSmoothScrolling") ? "smooth" : "instant";
+      if (block2 == null || block2 === "start") {
+        const margin = parseFloat(window.getComputedStyle(target2).scrollMarginTop) || 0;
+        window.scrollBy({ top: target2.getBoundingClientRect().top - margin, behavior });
+      } else {
+        target2.scrollIntoView({ behavior, block: block2 });
+      }
       setTimeout(() => {
         this.ignoreMouseMovement = false;
       }, 500);
@@ -70970,7 +70975,15 @@ ${rule}`;
     // Item Utilities
     // ===========================================================================
     postIdFromUrl() {
-      return window.location.href.split("/")[6];
+      return window.location.pathname.split("/")[4];
+    }
+    /**
+     * Post to select when a page's items first load and nothing is selected yet.
+     * Tried before the persisted focus; handlers whose URL names a post override this.
+     * @returns {string|null}
+     */
+    getInitialTargetPostId() {
+      return null;
     }
     urlForItem(item) {
       const href = $(item).find("a[href*='/post/']").attr("href");
@@ -71637,17 +71650,26 @@ ${rule}`;
      */
     loadItemsWithRetry(maxRetries = 10, retryDelay = 300, initialDelay = 500) {
       let retryCount = 0;
+      clearTimeout(this._loadRetryTimeout);
       const tryLoad = () => {
-        this.loadItems();
+        this._loadRetryTimeout = null;
+        this.loadItems(this.getRetryRestoreTarget());
         const itemCount = this.items?.length || 0;
         if (itemCount === 0 && retryCount < maxRetries) {
           retryCount++;
-          setTimeout(tryLoad, retryDelay);
+          this._loadRetryTimeout = setTimeout(tryLoad, retryDelay);
         } else if (itemCount > 0) {
           this.updateScrollPosition(true);
         }
       };
-      setTimeout(tryLoad, initialDelay);
+      this._loadRetryTimeout = setTimeout(tryLoad, initialDelay);
+    }
+    /**
+     * Restore target for loadItemsWithRetry() loads (none by default: select the top).
+     * @returns {string|object|undefined}
+     */
+    getRetryRestoreTarget() {
+      return void 0;
     }
     /**
      * Load and process items in the feed
@@ -71872,8 +71894,10 @@ ${rule}`;
           }
           this.applyItemStyle(this.selectedItem, true);
         } else if (this.items?.length > 0) {
+          const initialPostId = this.getInitialTargetPostId();
           const statePostId = this.state?.focusedPostId;
-          if (statePostId && this.jumpToPost(statePostId)) ;
+          if (initialPostId && this.jumpToPost(initialPostId)) ;
+          else if (statePostId && this.jumpToPost(statePostId)) ;
           else {
             this.setIndex(0);
             this.updateItems();
@@ -75088,30 +75112,219 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
   }
+  const THREAD_SCREEN_SELECTOR = 'div[data-testid="postThreadScreen"]';
+  function isShown(element) {
+    return !!element?.isConnected && element.offsetParent !== null;
+  }
   class PostItemHandler extends ItemHandler {
     constructor(name, config2, state2, api, selector) {
       super(name, config2, state2, api, selector);
-      this.indexMap = {};
+      this.threadPostId = null;
+      this.stopPinningUrlPost = null;
+      this.threadSelections = /* @__PURE__ */ new Map();
+      this.historyRestorePostId = null;
+      this.keepHistoryScroll = false;
+      this.historyNavUrl = null;
+      this.urlChangeLoadTimeout = null;
+      this.leftPostPages = false;
+      window.addEventListener("popstate", () => {
+        this.historyNavUrl = window.location.href;
+      });
       this.handleInput = this.handleInput.bind(this);
     }
-    get index() {
-      return this.indexMap?.[this.postId] ?? 0;
-    }
-    set index(value) {
-      this.indexMap[this.postId] = value;
+    deactivate() {
+      this.stopPinningUrlPost?.();
+      clearTimeout(this.urlChangeLoadTimeout);
+      if (!this.isActive()) {
+        this.rememberThreadSelection();
+        this.historyNavUrl = null;
+        this.leftPostPages = true;
+      }
+      super.deactivate();
     }
     activate() {
       super.activate();
-      this.postId = this.postIdFromUrl();
+      if (!this.leftPostPages) return;
+      this.leftPostPages = false;
+      const fromHistory = this.historyNavUrl === window.location.href;
+      if (fromHistory && this.postIdFromUrl() === this.threadPostId && isShown(this.selectedItem?.[0])) {
+        this.historyNavUrl = null;
+        $(this.items).not(this.selectedItem).filter(".item-selection-active").each((i, item) => this.applyItemStyle(item, false));
+        this.applyItemStyle(this.selectedItem, true);
+        return;
+      }
+      this.threadPostId = null;
+      if (fromHistory) this.onUrlChange();
     }
-    deactivate() {
-      super.deactivate();
+    /**
+     * Called when the URL changes while the post context stays active (post → post), and
+     * on Back/Forward onto a post page from another page.
+     * Back/Forward shows a post screen Bluesky kept hidden without adding post nodes, so
+     * the item observer never reloads; reload here instead. A new post page adds its
+     * nodes, and the observer's load selects its URL post once they render.
+     */
+    onUrlChange() {
+      clearTimeout(this.urlChangeLoadTimeout);
+      const fromHistory = this.historyNavUrl === window.location.href;
+      if (!this.hasStaleItems() && !(fromHistory && this.postIdFromUrl() !== this.threadPostId)) {
+        this.historyNavUrl = null;
+        return;
+      }
+      let tries = 0;
+      const load = () => {
+        const old = this.selectedItem?.[0];
+        if (old?.isConnected && old.offsetParent !== null && ++tries < 20) {
+          this.urlChangeLoadTimeout = setTimeout(load, 100);
+          return;
+        }
+        this.loadItems({ preserveSelection: true });
+      };
+      load();
+    }
+    /**
+     * True if the items belong to a screen Bluesky removed (or, with includeHidden, one it
+     * hid under a newer screen).
+     */
+    hasStaleItems(includeHidden = false) {
+      const first = $(this.items).get(0);
+      return !!first && (!first.isConnected || includeHidden && first.offsetParent === null);
+    }
+    loadItems(restoreTarget) {
+      this.resetSelectionForNewThread();
+      super.loadItems(restoreTarget);
+    }
+    _doLoadItems(restoreTarget) {
+      const hadSelection = this._index != null;
+      super._doLoadItems(restoreTarget);
+      if (!hadSelection && this._index != null) {
+        this.keepHistoryScroll = false;
+        this.historyRestorePostId = null;
+        if (this.postId === this.threadPostId) {
+          this.pinUrlPost(this.selectedItem[0]);
+        }
+      }
+    }
+    updateItems() {
+      if (this.keepHistoryScroll) {
+        this.keepHistoryScroll = false;
+        if (this.isElementInView(this.selectedItem)) return Promise.resolve();
+      }
+      return super.updateItems();
+    }
+    /**
+     * True if at least half the element (or half the viewport, for a tall one) shows
+     * between the header and status bar.
+     * @param {Element|jQuery} element
+     */
+    isElementInView(element) {
+      const el = $(element).get(0);
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      const top = this.getToolbarHeight();
+      const bottom = window.innerHeight - this.getStatusBarHeight();
+      const shown = Math.min(rect.bottom, bottom) - Math.max(rect.top, top);
+      return rect.height > 0 && shown > 0 && shown >= Math.min(rect.height, bottom - top) / 2;
+    }
+    /**
+     * Remember the selected post for the current thread, so Back/Forward can restore it.
+     */
+    rememberThreadSelection() {
+      const element = this.selectedItem?.[0];
+      if (!this.threadPostId || !this.postId || !element) return;
+      const screen = element.closest(THREAD_SCREEN_SELECTOR);
+      const entries = (this.threadSelections.get(this.threadPostId) || []).filter((entry) => {
+        const el = entry.element.deref();
+        return el?.isConnected && el.closest(THREAD_SCREEN_SELECTOR) !== screen;
+      });
+      entries.push({ postId: this.postId, element: new window.WeakRef(element) });
+      this.threadSelections.delete(this.threadPostId);
+      this.threadSelections.set(this.threadPostId, entries);
+      if (this.threadSelections.size > 50) {
+        this.threadSelections.delete(this.threadSelections.keys().next().value);
+      }
+    }
+    /**
+     * Keep the URL's post where it is while parent posts render above it. Bluesky anchors
+     * it itself only when it's at the top on the first layout, and browsers don't anchor
+     * scrolling at scrollY 0 (or at all, in Safari). Stops on user input, when the
+     * selection moves, or after a few seconds.
+     * @param {Element} post
+     */
+    pinUrlPost(post2) {
+      this.stopPinningUrlPost?.();
+      const screen = post2?.closest('div[data-testid="postThreadScreen"]');
+      if (!screen) return;
+      let docTop = post2.getBoundingClientRect().top + window.scrollY;
+      const keepInPlace = () => {
+        if (!document.contains(post2) || this.selectedItem[0] !== post2) {
+          stop();
+          return;
+        }
+        const top = post2.getBoundingClientRect().top + window.scrollY;
+        if (Math.abs(top - docTop) >= 1) {
+          window.scrollBy(0, top - docTop);
+          docTop = top;
+        }
+      };
+      const resizeObserver = new window.ResizeObserver(keepInPlace);
+      resizeObserver.observe(screen);
+      const userEvents = ["wheel", "touchstart", "keydown", "mousedown"];
+      const stop = () => {
+        resizeObserver.disconnect();
+        clearTimeout(timeout);
+        userEvents.forEach((type) => window.removeEventListener(type, stop, true));
+        if (this.stopPinningUrlPost === stop) this.stopPinningUrlPost = null;
+      };
+      const timeout = setTimeout(stop, 1e4);
+      userEvents.forEach((type) => window.addEventListener(type, stop, true));
+      this.stopPinningUrlPost = stop;
+    }
+    /**
+     * The handler outlives the page: clear the selection when a different thread is shown
+     * so the first load selects that thread's URL post instead of a stale index.
+     */
+    resetSelectionForNewThread() {
+      const urlPostId = this.postIdFromUrl();
+      if (urlPostId === this.threadPostId) return;
+      this.rememberThreadSelection();
+      const fromHistory = this.historyNavUrl === window.location.href;
+      this.historyNavUrl = null;
+      const saved = fromHistory ? this.threadSelections.get(urlPostId)?.find((entry) => isShown(entry.element.deref())) : null;
+      const kept = !!saved;
+      this.historyRestorePostId = kept ? saved.postId : null;
+      this.keepHistoryScroll = kept;
+      this.threadPostId = urlPostId;
+      this.stopPinningUrlPost?.();
+      if (this._index != null && this.selectedItem.length) {
+        this.applyItemStyle(this.selectedItem, false);
+      }
+      this.initSelection();
+    }
+    getInitialTargetPostId() {
+      const items = $(this.items).get();
+      const restoreId = this.historyRestorePostId;
+      const restoreItem = restoreId && items.find((item) => this.postIdForItem(item) === restoreId);
+      if (this.keepHistoryScroll && window.scrollY > 0 && !this.isElementInView(restoreItem)) {
+        const inView = items.filter((item) => this.isElementInView(item));
+        const top = inView.find(
+          (item) => item.getBoundingClientRect().top >= this.getToolbarHeight() - 2
+        );
+        if (top || inView[0]) return this.postIdForItem(top || inView[0]);
+      }
+      return restoreItem ? restoreId : this.postIdFromUrl();
     }
     isActive() {
       return window.location.pathname.match(/\/post\//);
     }
-    get scrollMargin() {
-      return $('div[data-testid="postThreadScreen"] > div:visible').eq(0).outerHeight();
+    /**
+     * Post pages hide the navigator toolbar; Bluesky's sticky post header covers the top
+     * instead. Jumps (scroll-margin-top) and the j/k visibility check both use this, so a
+     * post a jump lands on counts as fully visible on the next press.
+     */
+    getToolbarHeight() {
+      const header = $('div[data-testid="postThreadScreen"] > div:visible').eq(0);
+      if (!header.length) return super.getToolbarHeight();
+      return header.outerHeight() + 4;
     }
     handleInput(event) {
       if (isUserTyping()) {
@@ -75119,6 +75332,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       if (isModalOpen()) {
         return true;
+      }
+      if (this.hasStaleItems(true)) {
+        this.resetSelectionForNewThread();
+        this._doLoadItems({ preserveSelection: true });
       }
       const item = this.selectedItem;
       if (["o", "Enter"].includes(event.key) && !(event.altKey || event.metaKey || event.ctrlKey)) {
@@ -75147,6 +75364,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.uiManagerStatusBar = null;
       this.uiManagerStatusBarLeft = null;
       this._toolbarObserver = null;
+      this.profileSelections = /* @__PURE__ */ new Map();
+      this.selectionPath = null;
+      this.pendingProfileRestore = null;
+      this._statusBarRetryTimeout = null;
     }
     /**
      * Called by ProfileUIAdapter to provide UIManager's status bar
@@ -75156,8 +75377,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     setUIManagerStatusBar(statusBar, statusBarLeft) {
       this.uiManagerStatusBar = statusBar;
       this.uiManagerStatusBarLeft = statusBarLeft;
+      clearTimeout(this._statusBarRetryTimeout);
       if (!$.contains(document, statusBar[0])) {
-        setTimeout(() => this.setUIManagerStatusBar(statusBar, statusBarLeft), 100);
+        this._statusBarRetryTimeout = setTimeout(
+          () => this.setUIManagerStatusBar(statusBar, statusBarLeft),
+          100
+        );
         return;
       }
       statusBar.show();
@@ -75169,7 +75394,44 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (!toolbarValid) {
         this.refreshToolbars();
       }
+      this.syncSelectionPath();
       this.loadItemsWithRetry();
+    }
+    /**
+     * Keep the selection when items are reloaded: the one activate() restored (profile →
+     * post → Back), or the one saved for this profile (profile → profile → Back). A profile
+     * seen for the first time has none, so it starts at the top.
+     */
+    getRetryRestoreTarget() {
+      if (this.pendingProfileRestore) return this.pendingProfileRestore;
+      const el = this.selectedItem?.[0];
+      return el?.isConnected && el.offsetParent !== null ? this.postId ?? void 0 : void 0;
+    }
+    _doLoadItems(restoreTarget) {
+      super._doLoadItems(restoreTarget);
+      const targetId = restoreTarget?.postId ?? restoreTarget;
+      if (targetId && targetId === this.pendingProfileRestore && this.postId === targetId) {
+        this.pendingProfileRestore = null;
+      }
+    }
+    /**
+     * On a different profile than the selection belongs to, save that selection and
+     * aim the next load at the one saved for this profile, if any.
+     */
+    syncSelectionPath() {
+      const path = window.location.pathname;
+      if (this.selectionPath === path) return;
+      this.rememberProfileSelection();
+      this.selectionPath = path;
+      this.pendingProfileRestore = this.profileSelections.get(path) ?? null;
+    }
+    rememberProfileSelection() {
+      if (!this.selectionPath || !this.postId) return;
+      this.profileSelections.delete(this.selectionPath);
+      this.profileSelections.set(this.selectionPath, this.postId);
+      if (this.profileSelections.size > 50) {
+        this.profileSelections.delete(this.profileSelections.keys().next().value);
+      }
     }
     activate() {
       this.setIndex(0);
@@ -75246,6 +75508,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       });
     }
     deactivate() {
+      clearTimeout(this._statusBarRetryTimeout);
+      this._statusBarRetryTimeout = null;
       if (this._toolbarObserver) {
         this._toolbarObserver.disconnect();
         this._toolbarObserver = null;
@@ -75259,6 +75523,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.feedMapWrapper = null;
       this.feedMapZoom = null;
       super.deactivate();
+      this.rememberProfileSelection();
+      this.selectionPath = null;
       this.uiManagerStatusBar = null;
       this.uiManagerStatusBarLeft = null;
     }
@@ -75485,6 +75751,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       super(name, config2, state2, api, selector);
       this.uiManagerStatusBar = null;
       this.uiManagerStatusBarLeft = null;
+      this._statusBarRetryTimeout = null;
     }
     /**
      * Called by SavedUIAdapter to provide UIManager's status bar
@@ -75493,8 +75760,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     setUIManagerStatusBar(statusBar, statusBarLeft) {
       this.uiManagerStatusBar = statusBar;
       this.uiManagerStatusBarLeft = statusBarLeft;
+      clearTimeout(this._statusBarRetryTimeout);
       if (!$.contains(document, statusBar[0])) {
-        setTimeout(() => this.setUIManagerStatusBar(statusBar, statusBarLeft), 100);
+        this._statusBarRetryTimeout = setTimeout(
+          () => this.setUIManagerStatusBar(statusBar, statusBarLeft),
+          100
+        );
         return;
       }
       statusBar.show();
@@ -75635,6 +75906,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.loadItemsWithRetry();
     }
     deactivate() {
+      clearTimeout(this._statusBarRetryTimeout);
+      this._statusBarRetryTimeout = null;
       if (this._toolbarObserver) {
         this._toolbarObserver.disconnect();
         this._toolbarObserver = null;
@@ -77109,6 +77382,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           if (handlers[context]) {
             handlers[context].activate();
           }
+        } else if (forceRefresh) {
+          handlers[ctx]?.onUrlChange?.();
         }
         if ((contextChanged || forceRefresh) && uiManager.isInitialized()) {
           uiManager.setContext(ctx, handlers[ctx] || null);
@@ -77197,6 +77472,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       document.addEventListener("focus", onFocus, true);
       document.addEventListener("blur", onBlur, true);
+      window.addEventListener("popstate", () => setTimeout(setContextFromUrl, 0));
       let suggestedFollowsObserver = null;
       function startMonitor() {
         if (monitor_interval) clearInterval(monitor_interval);

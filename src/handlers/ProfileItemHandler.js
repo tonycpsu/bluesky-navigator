@@ -17,6 +17,13 @@ export class ProfileItemHandler extends FeedItemHandler {
     this.uiManagerStatusBar = null;
     this.uiManagerStatusBarLeft = null;
     this._toolbarObserver = null;
+    // Post last selected on each profile, by pathname (most recent last)
+    this.profileSelections = new Map();
+    // Pathname of the profile the current selection belongs to
+    this.selectionPath = null;
+    // Post the next item load should select, saved when this profile was last left
+    this.pendingProfileRestore = null;
+    this._statusBarRetryTimeout = null;
   }
 
   /**
@@ -27,11 +34,15 @@ export class ProfileItemHandler extends FeedItemHandler {
   setUIManagerStatusBar(statusBar, statusBarLeft) {
     this.uiManagerStatusBar = statusBar;
     this.uiManagerStatusBarLeft = statusBarLeft;
+    clearTimeout(this._statusBarRetryTimeout);
 
     // Ensure status bar is in DOM and visible (may have been removed during SPA navigation)
     if (!$.contains(document, statusBar[0])) {
       // Status bar not in DOM - need to wait for UIManager to re-insert it
-      setTimeout(() => this.setUIManagerStatusBar(statusBar, statusBarLeft), 100);
+      this._statusBarRetryTimeout = setTimeout(
+        () => this.setUIManagerStatusBar(statusBar, statusBarLeft),
+        100
+      );
       return;
     }
     statusBar.show();
@@ -52,7 +63,51 @@ export class ProfileItemHandler extends FeedItemHandler {
     }
 
     // Load items with retry - profile feed takes time to render
+    this.syncSelectionPath();
     this.loadItemsWithRetry();
+  }
+
+  /**
+   * Keep the selection when items are reloaded: the one activate() restored (profile →
+   * post → Back), or the one saved for this profile (profile → profile → Back). A profile
+   * seen for the first time has none, so it starts at the top.
+   */
+  getRetryRestoreTarget() {
+    if (this.pendingProfileRestore) return this.pendingProfileRestore;
+    // Only a selection on this profile's screen (not a hidden or removed one) is kept
+    const el = this.selectedItem?.[0];
+    return el?.isConnected && el.offsetParent !== null ? (this.postId ?? undefined) : undefined;
+  }
+
+  _doLoadItems(restoreTarget) {
+    super._doLoadItems(restoreTarget);
+    // Any load that restored the pending post (activate()'s { postId, index } included) has
+    // done its job: later retries keep the current selection instead of going back to it
+    const targetId = restoreTarget?.postId ?? restoreTarget;
+    if (targetId && targetId === this.pendingProfileRestore && this.postId === targetId) {
+      this.pendingProfileRestore = null;
+    }
+  }
+
+  /**
+   * On a different profile than the selection belongs to, save that selection and
+   * aim the next load at the one saved for this profile, if any.
+   */
+  syncSelectionPath() {
+    const path = window.location.pathname;
+    if (this.selectionPath === path) return;
+    this.rememberProfileSelection();
+    this.selectionPath = path;
+    this.pendingProfileRestore = this.profileSelections.get(path) ?? null;
+  }
+
+  rememberProfileSelection() {
+    if (!this.selectionPath || !this.postId) return;
+    this.profileSelections.delete(this.selectionPath);
+    this.profileSelections.set(this.selectionPath, this.postId);
+    if (this.profileSelections.size > 50) {
+      this.profileSelections.delete(this.profileSelections.keys().next().value);
+    }
   }
 
   activate() {
@@ -166,6 +221,9 @@ export class ProfileItemHandler extends FeedItemHandler {
   }
 
   deactivate() {
+    clearTimeout(this._statusBarRetryTimeout);
+    this._statusBarRetryTimeout = null;
+
     // Disconnect any pending toolbar observer
     if (this._toolbarObserver) {
       this._toolbarObserver.disconnect();
@@ -187,6 +245,10 @@ export class ProfileItemHandler extends FeedItemHandler {
     this.feedMapZoom = null;
 
     super.deactivate();
+
+    // The next activation (Back, or after the composer) restores this profile's selection
+    this.rememberProfileSelection();
+    this.selectionPath = null;
 
     this.uiManagerStatusBar = null;
     this.uiManagerStatusBarLeft = null;

@@ -87,7 +87,8 @@ post, or profile).
  | gg           | move to first item                                 |
  | G            | move to last item                                  |
  | h            | go back to previous page                           |
- | ← / →        | toggle focus between post and replies sidecar      |
+ | →            | enter replies sidecar / drill into replies         |
+ | ←            | up a level / leave replies sidecar                 |
 
 ### Post Actions
 
@@ -99,7 +100,7 @@ post, or profile).
  | m            | view/play/pause media in post                      |
  | a            | show author hover card (press again to dismiss)    |
  | A            | open post author's profile                         |
- | r            | reply to post                                      |
+ | r            | reply to post (or to the focused sidecar reply)    |
  | f            | follow post author                                 |
  | F            | unfollow post author                               |
  | +            | add post author to filter rules                    |
@@ -113,7 +114,7 @@ post, or profile).
  | c            | capture screenshot to clipboard                    |
  | v            | open full-screen post view with sidecar            |
  | V            | open reader mode (full thread)                     |
- | t            | toggle thread context panel                        |
+ | t            | show or hide sidecar                               |
 
 ### Feed Controls
 
@@ -299,6 +300,11 @@ The sidecar (replies panel) can be displayed in two modes:
 
 - **Inline**: Replies appear next to each post as you navigate (traditional mode)
 - **Fixed**: A persistent panel on the right side of the screen
+
+In either mode, you can drill into a reply's own replies: press → on a reply that
+has replies (or click its reply count or ›), press ← or click a breadcrumb to go
+back up, and press `r` to reply to the focused reply. The full-screen post view
+(`v`) drills the same way, independently of the sidecar.
 
 **Fixed panel features:**
 - Stays visible as you navigate through posts

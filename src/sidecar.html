@@ -1,6 +1,41 @@
 <script id="sidecar-replies-template" type="text/x-handlebars-template">
   {{#if this.postId}}
   <div id="sidecar-replies-{{postId}}" class="sidecar-replies">
+  {{#if breadcrumb}}
+  <nav class="sidecar-breadcrumb" aria-label="Reply levels">
+  {{#each breadcrumb}}
+  {{#unless @first}}<span class="sidecar-breadcrumb-sep" aria-hidden="true">›</span>{{/unless}}
+  <button type="button" class="sidecar-crumb" data-depth="{{depth}}">{{label}}</button>
+  {{/each}}
+  </nav>
+  <div class="sidecar-parent sidecar-drill-pinned">
+  {{> postTemplate pinned}}
+  </div>
+  {{#if loading}}
+  <div class="sidecar-replies-loading sidecar-skeleton" role="status" aria-label="Loading replies">
+    <div class="skeleton-post">
+      <div class="skeleton-header">
+        <div class="skeleton-avatar skeleton-shimmer"></div>
+        <div class="skeleton-author">
+          <div class="skeleton-line skeleton-line-short skeleton-shimmer"></div>
+          <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+        </div>
+      </div>
+      <div class="skeleton-body">
+        <div class="skeleton-line skeleton-line-full skeleton-shimmer"></div>
+        <div class="skeleton-line skeleton-line-medium skeleton-shimmer"></div>
+      </div>
+    </div>
+    <span class="sr-only">Loading replies...</span>
+  </div>
+  {{else if error}}
+  <div class="sidecar-replies-error" role="alert">Couldn't load replies</div>
+  {{else}}
+  {{#unless replies.length}}
+  <div class="sidecar-replies-none">No replies</div>
+  {{/unless}}
+  {{/if}}
+  {{else}}
   {{#if parent}}
   <div class="sidecar-section sidecar-parent-section">
     <button class="sidecar-section-toggle" aria-expanded="true" aria-controls="sidecar-parent-content-{{postId}}">
@@ -13,6 +48,7 @@
       </div>
     </div>
   </div>
+  {{/if}}
   {{/if}}
   {{#if replies.length}}
   <div class="sidecar-section sidecar-replies-section">
@@ -36,7 +72,7 @@
 
 <script id="sidecar-post-template" type="text/x-handlebars-template">
   {{#if postId}}
-  <div id="sidecar-post-{{postId}}" class="sidecar-post">
+  <div id="sidecar-post-{{postId}}" class="sidecar-post"{{#if uri}} data-uri="{{uri}}"{{/if}}{{#if hasReplies}} data-has-replies="true"{{/if}}>
   <div class="sidecar-post-avatar-col">
   <img id="avatar-{{postId}}" class="sidecar-post-avatar" src="{{avatar}}" alt="User Avatar" loading="lazy">
   <div class="sidecar-post-connector" aria-hidden="true"></div>
@@ -79,6 +115,7 @@
   <div class="sidecar-count sidecar-count-replies">
   <div class="sidecar-count-icon sidecar-reply-button">{{{replySvg}}}</div>
   <div class="sidecar-count-label sidecar-count-label-replies">{{replyCount}}</div>
+  {{#if hasReplies}}<span class="sidecar-drill-marker" aria-hidden="true">›</span>{{/if}}
   </div>
 
   <div class="sidecar-count sidecar-count-reposts">

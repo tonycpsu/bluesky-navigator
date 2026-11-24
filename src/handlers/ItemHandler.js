@@ -16,6 +16,12 @@ import {
   isInVisibleArea,
 } from '../fitPosts.js';
 import { formatPost, urlForPost } from './postFormatting.js';
+import {
+  getLevelReplies,
+  hasChildReplies,
+  markRepliesFetched,
+  needsFetch,
+} from '../sidecarDrill.js';
 import { GestureHandler } from '../components/GestureHandler.js';
 import { BottomSheet } from '../components/BottomSheet.js';
 import { PostViewModal } from '../components/PostViewModal.js';
@@ -24,6 +30,10 @@ import icons from '../icons.js';
 import { isDarkTheme, getThemeBackground } from '../theme.js';
 
 const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
+
+// Reply the user asked for on another post's page (`r` on a sidecar reply), until it opens
+export const PENDING_REPLY_KEY = 'bsky-nav-pending-reply';
+export const PENDING_REPLY_TTL_MS = 10000;
 
 /**
  * Extract post ID from a URL path segment.
@@ -82,6 +92,12 @@ export class ItemHandler extends Handler {
     this.scrollDirection = 0;
     this.selfThreadCache = {}; // Cache for API-detected self-threads (postId -> true)
     this.unrolledPostIds = new Set(); // Track post IDs shown in unrolled threads
+    this.sidecarThread = null; // Thread the sidecar is rendering
+    this.sidecarDrill = null; // { mainPostId, stack: [{ node, fromIndex, fromUri }], repaintPending }; empty stack is the top level
+    this.modalDrill = null; // post view's own drill state: { element, thread, stack }
+    this._modalRenderSeq = 0;
+    this._sidecarItem = null; // Main post element the sidecar drill state belongs to
+    this._sidecarRenderSeq = 0; // Bumped per sidecar render so stale async renders are dropped
     this.handleToDidCache = new Map(); // Cache handle -> DID mappings for Clearsky block checking
 
     // Hover debounce for mouse focus
@@ -434,6 +450,10 @@ export class ItemHandler extends Handler {
       this._expandPromise = this.expandItem($(item));
     } else {
       this._expandPromise = null;
+      // A drill fetch finished while this post was scrolled away from: show its result
+      if (this.sidecarDrill?.repaintPending && this.isSidecarDrillCurrent(this.sidecarDrill)) {
+        this.renderSidecarLevel();
+      }
     }
 
     // Handle video playback
@@ -1518,6 +1538,7 @@ export class ItemHandler extends Handler {
       return; // Already showing content for this item
     }
     this._currentSidecarPostId = itemPostId;
+    const drillStack = this.setSidecarThread(item, thread);
 
     // Use direct DOM selection to avoid stale jQuery reference
     const contentContainer = $('#fixed-sidecar-panel .fixed-sidecar-panel-content');
@@ -1529,14 +1550,22 @@ export class ItemHandler extends Handler {
     await this.waitForElementStable(item);
     this.showFixedSidecarPanel();
 
-    // Get the sidecar content
-    const sidecarContent = await this.getSidecarContent(item, thread);
+    // Get the sidecar content, at the current drill level
+    const sidecarContent = await this.getSidecarContent(item, thread, drillStack);
 
     // Update the panel content
     contentContainer.html(sidecarContent);
 
-    // Initialize event handlers for sidecar posts
-    contentContainer.find('.sidecar-post').each((i, post) => {
+    // Initialize event handlers for sidecar posts and collapsible sections
+    this.bindSidecarHandlers(contentContainer);
+    this.restoreSidecarFocus();
+  }
+
+  /**
+   * Bind mouseover, highlights, and section toggles for the sidecar content in a container
+   */
+  bindSidecarHandlers(container) {
+    container.find('.sidecar-post').each((i, post) => {
       $(post).on('mouseover', this.onSidecarItemMouseOver);
       // Apply filter highlights if available (defined in FeedItemHandler)
       if (this.highlightFilterMatches) {
@@ -1546,8 +1575,26 @@ export class ItemHandler extends Handler {
       this.applySidecarAuthorHighlight(post);
     });
 
+    // Clicking a reply's count or › marker drills into it
+    container
+      .find('.sidecar-post[data-has-replies="true"] .sidecar-count-replies')
+      .on('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const index = this.getSidecarReplies().index($(e.currentTarget).closest('.sidecar-post'));
+        if (index >= 0) this.drillIntoReply(index);
+      });
+
+    // Breadcrumb levels go back up
+    container.find('.sidecar-crumb').on('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!this.getSidecarContainer()[0]?.contains(e.currentTarget)) return;
+      this.drillUp(Number(e.currentTarget.dataset.depth));
+    });
+
     // Initialize collapsible sections
-    contentContainer.find('.sidecar-section-toggle').each((i, toggle) => {
+    container.find('.sidecar-section-toggle').each((i, toggle) => {
       $(toggle).on('click', (e) => {
         e.preventDefault();
         const btn = $(e.currentTarget);
@@ -1811,44 +1858,372 @@ export class ItemHandler extends Handler {
     }
   }
 
-  async getSidecarContent(item, thread) {
+  /**
+   * Remember the thread the sidecar is about to render (re)fully, and return the drill
+   * stack to render it at. A different main post resets the drill state to the top
+   * level; the same post (hover, `;`, re-showing the panel) keeps its current level.
+   */
+  setSidecarThread(item, thread) {
+    const mainPostId = this.postIdForItem(item);
+    const previousItem = this._sidecarItem;
+    const previousThread = this.sidecarThread;
+    const previousDrill = this.sidecarDrill;
+    this.sidecarThread = thread;
+    this._sidecarItem = $(item)[0] ?? null;
+    this._sidecarRenderSeq++; // Drop any in-flight drill render; this render paints the level
+    if (previousDrill && previousDrill.mainPostId === mainPostId) {
+      return previousDrill.stack;
+    }
+    this.sidecarDrill = { mainPostId, stack: [] };
+
+    // An inline sidecar stays on its post after the selection moves on, so put a
+    // drilled one back to the top level
+    if (
+      !this.isFixedSidecar() &&
+      previousDrill?.stack.length &&
+      previousItem &&
+      previousItem !== this._sidecarItem &&
+      previousThread
+    ) {
+      this.paintInlineSidecar(previousItem, previousThread, []);
+    }
+    return this.sidecarDrill.stack;
+  }
+
+  /**
+   * After a full sidecar re-render, re-apply the sidecar focus highlight if focus is there
+   */
+  restoreSidecarFocus() {
+    if (this._replyIndex == null) return;
+    const navList = this.getSidecarNavList();
+    navList.updateSelection();
+    this._replyIndex = navList.getSelectedIndex();
+  }
+
+  /**
+   * True when drill is the live drill state and still belongs to the selected main post
+   */
+  isSidecarDrillCurrent(drill) {
+    return (
+      drill != null &&
+      this.sidecarDrill === drill &&
+      drill.mainPostId === this.postIdForItem(this.selectedItem)
+    );
+  }
+
+  /**
+   * True when the selected post's sidecar is showing below the top level
+   */
+  isSidecarDrilledAndShown() {
+    return (
+      this.sidecarDrill?.stack.length > 0 &&
+      this.isSidecarDrillCurrent(this.sidecarDrill) &&
+      this.getSidecarContainer().is(':visible')
+    );
+  }
+
+  /**
+   * Format a thread node's post for the sidecar templates, with its drill data
+   */
+  formatSidecarNode(node, { marker = true } = {}) {
+    return {
+      ...this.formatPostData(node.post),
+      uri: node.post.uri,
+      hasReplies: marker && hasChildReplies(node),
+    };
+  }
+
+  /**
+   * Build the sidecar HTML for a post. With a non-empty drillStack, show the breadcrumb,
+   * the drilled reply pinned in place of "Replying to", and that reply's own replies.
+   */
+  async getSidecarContent(item, thread, drillStack = [], { loading = false, error = false } = {}) {
     if (!item) {
       return this.repliesTemplate({});
     }
 
     const post = thread.post;
+    const sortOrder = this.config.get('sidecarReplySortOrder');
+    const drilled = drillStack.length > 0;
+    const levelNode = drilled ? drillStack[drillStack.length - 1].node : thread;
 
-    const replies = thread.replies
-      .filter((reply) => reply.post)
-      .filter((reply) => {
-        // Omit replies already shown in unrolled thread
-        const replyPostId = reply.post.uri?.split('/').slice(-1)[0];
-        return !replyPostId || !this.unrolledPostIds.has(replyPostId);
-      })
-      .map((reply) => reply?.post)
-      .sort((a, b) => {
-        switch (this.config.get('sidecarReplySortOrder')) {
-          case 'Default':
-            return 0;
-          case 'Oldest First':
-            return new Date(a.record.createdAt) - new Date(b.record.createdAt);
-          case 'Newest First':
-            return new Date(b.record.createdAt) - new Date(a.record.createdAt);
-          case 'Most Liked First':
-            return b.likeCount - a.likeCount;
-          case 'Most Reposted First':
-            return b.repostCount - a.repostCount;
-          default:
-            console.error(`unknown sort order: ${this.config.get('sidecarReplySortOrder')}`);
-        }
-      })
-      .map((p) => this.formatPostData(p));
+    // Only the top level omits replies already shown in the unrolled thread
+    const replies = getLevelReplies(levelNode, {
+      sortOrder,
+      excludePostIds: drilled ? undefined : this.unrolledPostIds,
+    }).map((node) => this.formatSidecarNode(node));
 
-    return this.repliesTemplate({
+    const data = {
       postId: post.cid,
-      parent: thread.parent ? this.formatPostData(thread.parent.post) : null,
+      parent: !drilled && thread.parent ? this.formatPostData(thread.parent.post) : null,
       replies: replies,
+    };
+    if (drilled) {
+      data.breadcrumb = [
+        { depth: 0, label: 'Replies' },
+        ...drillStack.map(({ node }, i) => ({
+          depth: i + 1,
+          label: node.post.author.displayName || node.post.author.handle,
+        })),
+      ];
+      data.pinned = this.formatSidecarNode(levelNode, { marker: false });
+      // An entry still fetching, or whose fetch failed, shows that state
+      const levelEntry = drillStack[drillStack.length - 1];
+      data.loading = loading || !!levelEntry.loading;
+      data.error = error || !!levelEntry.error;
+    }
+    return this.repliesTemplate(data);
+  }
+
+  /**
+   * Re-render the sidecar (fixed panel or inline) for the current drill level. Returns
+   * false when the render was dropped because a newer render started or the selected
+   * main post changed while it was being built.
+   */
+  async renderSidecarLevel({ loading = false, error = false } = {}) {
+    const thread = this.sidecarThread;
+    const item = this.selectedItem;
+    const drill = this.sidecarDrill;
+    if (!thread || !item?.length || !this.isSidecarDrillCurrent(drill)) return false;
+    drill.repaintPending = false;
+    const seq = ++this._sidecarRenderSeq;
+    const isStale = () => seq !== this._sidecarRenderSeq || !this.isSidecarDrillCurrent(drill);
+
+    if (this.isFixedSidecar() && $('#fixed-sidecar-panel').hasClass('visible')) {
+      const html = await this.getSidecarContent(item, thread, drill.stack, { loading, error });
+      if (isStale()) return false;
+      const contentContainer = $('#fixed-sidecar-panel .fixed-sidecar-panel-content');
+      contentContainer.html(html);
+      this.bindSidecarHandlers(contentContainer);
+      return true;
+    }
+
+    return this.paintInlineSidecar(item, thread, drill.stack, { loading, error, isStale });
+  }
+
+  /**
+   * Replace a post's inline sidecar with the given drill level, keeping its display
+   */
+  async paintInlineSidecar(item, thread, stack, { loading = false, error = false, isStale } = {}) {
+    const container = $(item).parent();
+    if (!container.length || !document.contains(container[0])) return false;
+    const html = await this.getSidecarContent(item, thread, stack, { loading, error });
+    if (isStale?.() || !document.contains(container[0])) return false;
+    const previous = container.find('.sidecar-replies');
+    if (!previous.length) return false;
+    const display = previous.first().css('display');
+    previous.remove();
+    const sidecar = $(html);
+    if (display) sidecar.css('display', display);
+    container.append(sidecar);
+    this.bindSidecarHandlers(container);
+    return true;
+  }
+
+  /**
+   * The node among levelNode's direct replies whose post has the given uri
+   */
+  findReplyNode(levelNode, uri) {
+    return (levelNode?.replies ?? []).find((node) => node.post?.uri === uri) ?? null;
+  }
+
+  /**
+   * The thread node of the reply at index in the current sidecar level, when it has
+   * replies to drill into; otherwise null
+   */
+  getDrillTarget(index) {
+    const drill = this.sidecarDrill;
+    if (index == null || !this.sidecarThread || !this.isSidecarDrillCurrent(drill)) return null;
+    const reply = this.getSidecarReplies().eq(index);
+    if (reply.attr('data-has-replies') !== 'true') return null;
+    const levelNode = drill.stack.length
+      ? drill.stack[drill.stack.length - 1].node
+      : this.sidecarThread;
+    return this.findReplyNode(levelNode, reply.attr('data-uri'));
+  }
+
+  /**
+   * Move sidecar focus to index, re-applying the highlight after a re-render
+   */
+  focusSidecarReply(index) {
+    if (this._replyIndex == null) {
+      this.replyIndex = index;
+      return;
+    }
+    const navList = this.getSidecarNavList();
+    navList.jumpTo(index, true);
+    this._replyIndex = navList.getSelectedIndex();
+  }
+
+  /**
+   * The main sidecar as a drill surface: the drill state plus the operations drillInto
+   * and drillUpFrom need to inspect, repaint, and focus it
+   */
+  getMainDrillSurface() {
+    const drill = this.sidecarDrill;
+    return {
+      drill,
+      isCurrent: () => this.isSidecarDrillCurrent(drill),
+      markRepaintPending: () => {
+        if (drill && this.sidecarDrill === drill) drill.repaintPending = true;
+      },
+      target: (index) => this.getDrillTarget(index),
+      render: (state) => this.renderSidecarLevel(state),
+      focus: (index) => this.focusSidecarReply(index),
+      indexOfUri: (uri) =>
+        this.getSidecarReplies()
+          .get()
+          .findIndex((reply) => reply.dataset.uri === uri),
+      replyCount: () => this.getSidecarReplies().length - 1,
+    };
+  }
+
+  /**
+   * Drill into the reply at index in the current sidecar level, if it has replies, and
+   * focus its first reply. Fetches the reply's thread first when its replies weren't
+   * part of the loaded thread. Returns whether it drilled.
+   */
+  drillIntoReply(index) {
+    return this.drillInto(this.getMainDrillSurface(), index);
+  }
+
+  /**
+   * Go back up to toDepth (default: one level up) and refocus the reply drilled from
+   */
+  drillUp(toDepth) {
+    return this.drillUpFrom(this.getMainDrillSurface(), toDepth);
+  }
+
+  /**
+   * drillIntoReply for any drill surface (the main sidecar or the post view)
+   */
+  async drillInto(surface, index) {
+    const node = surface.target(index);
+    if (!node) return false;
+    const { drill } = surface;
+    // loading / error live on the entry so a same-post re-render paints the same state.
+    // fromUri refocuses the drilled reply on the way back up even if the level re-sorted.
+    const entry = { node, fromIndex: index, fromUri: node.post.uri };
+    drill.stack.push(entry);
+    const name = node.post.author.displayName || node.post.author.handle;
+
+    let error = false;
+    if (needsFetch(node)) {
+      entry.loading = true;
+      if (await surface.render()) {
+        surface.focus(0);
+      }
+      try {
+        const thread = await this.api.getThread(node.post.uri);
+        // The replies belong to the node, so keep them even if the user moved on meanwhile:
+        // a later render of this level (e.g. coming back to the post) then shows them
+        node.replies = thread?.replies ?? [];
+        markRepliesFetched(node);
+      } catch (e) {
+        console.warn('[bsky-nav] Failed to load sidecar replies:', e);
+        error = true;
+      }
+      entry.loading = false;
+      entry.error = error;
+      // Only paint if this level is still the one showing
+      if (drill.stack[drill.stack.length - 1]?.node !== node) return true;
+      if (!surface.isCurrent()) {
+        // Still on top but its post isn't selected (e.g. scrolled away): what's on screen
+        // may be this level's loading state, so repaint when the post is selected again
+        surface.markRepaintPending?.();
+        return true;
+      }
+    }
+
+    if (!(await surface.render())) return true;
+    const replyCount = surface.replyCount();
+    surface.focus(replyCount > 0 ? 1 : 0);
+    announceToScreenReader(
+      error
+        ? `Couldn't load replies to ${name}`
+        : `Replies to ${name}: ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`
+    );
+    return true;
+  }
+
+  /**
+   * drillUp for any drill surface (the main sidecar or the post view)
+   */
+  async drillUpFrom(surface, toDepth) {
+    const { drill } = surface;
+    if (!surface.isCurrent() || !drill.stack.length) return;
+    const depth = toDepth ?? drill.stack.length - 1;
+    if (!(depth >= 0 && depth < drill.stack.length)) return;
+    const { fromIndex, fromUri } = drill.stack[depth];
+    drill.stack.length = depth;
+    if (!(await surface.render())) return;
+    const uriIndex = surface.indexOfUri(fromUri);
+    surface.focus(uriIndex >= 0 ? uriIndex : fromIndex);
+    const parent = drill.stack[depth - 1]?.node.post.author;
+    announceToScreenReader(
+      parent ? `Replies to ${parent.displayName || parent.handle}` : 'Top-level replies'
+    );
+  }
+
+  /**
+   * The post view's replies pane as a drill surface. Its drill state is separate from the
+   * main sidecar's: { thread, stack } for the post the modal shows, reset on open.
+   */
+  getModalDrillSurface() {
+    const drill = this.modalDrill;
+    const modal = this.postViewModal;
+    return {
+      drill,
+      isCurrent: () => drill != null && this.modalDrill === drill && !!modal?.visible,
+      target: (index) => {
+        const reply = modal?.getSidecarItems()[index];
+        if (!drill?.thread || reply?.dataset.hasReplies !== 'true') return null;
+        const levelNode = drill.stack.length
+          ? drill.stack[drill.stack.length - 1].node
+          : drill.thread;
+        return this.findReplyNode(levelNode, reply.dataset.uri);
+      },
+      render: (state) => this.renderModalLevel(drill, state),
+      focus: (index) => modal.focusSidecarReply(index),
+      indexOfUri: (uri) => modal.getSidecarItems().findIndex((reply) => reply.dataset.uri === uri),
+      replyCount: () => modal.getSidecarItems().length - 1,
+    };
+  }
+
+  /**
+   * Repaint the post view's replies pane for the current drill level. Returns false when
+   * dropped because the modal closed or a newer render started.
+   */
+  async renderModalLevel(drill, { loading = false, error = false } = {}) {
+    if (!drill?.thread || this.modalDrill !== drill) return false;
+    const seq = ++this._modalRenderSeq;
+    const html = await this.getSidecarContent(drill.element, drill.thread, drill.stack, {
+      loading,
+      error,
     });
+    if (seq !== this._modalRenderSeq || this.modalDrill !== drill || !this.postViewModal?.visible) {
+      return false;
+    }
+    // Wrap in modal-specific container to isolate from feed sidecar selectors
+    this.postViewModal.updateSidecar(`<div class="post-view-modal-sidecar-content">${html}</div>`);
+    return true;
+  }
+
+  /**
+   * Drill callbacks the post view's keys and clicks use
+   */
+  getModalDrillHooks() {
+    return {
+      canDrillIn: (index) => !!this.getModalDrillSurface().target(index),
+      drillIn: (index) => this.drillInto(this.getModalDrillSurface(), index),
+      drillUp: (toDepth) => this.drillUpFrom(this.getModalDrillSurface(), toDepth),
+      isDrilled: () => (this.modalDrill?.stack.length ?? 0) > 0,
+      // `r` on a reply: as in the main sidecar; onLeave closes the post view
+      replyTo: (index, onLeave) => {
+        const reply = this.postViewModal?.getSidecarItems()[index];
+        return !!reply && this.openReplyForSidecarReply(reply, onLeave);
+      },
+    };
   }
 
   async showSidecar(item, thread, action = null) {
@@ -1899,6 +2274,7 @@ export class ItemHandler extends Handler {
       return; // Already loading for this item
     }
     container.data('sidecar-loading', itemKey);
+    const drillStack = this.setSidecarThread(item, thread);
 
     // Remove ALL existing sidecars first to prevent duplicates
     // Use native DOM removal with try-catch for each element
@@ -1920,8 +2296,8 @@ export class ItemHandler extends Handler {
     const skeletonContent = this.getSkeletonContent();
     $(container).append(skeletonContent);
 
-    // Load actual content
-    const sidecarContent = await this.getSidecarContent(item, thread);
+    // Load actual content, at the current drill level
+    const sidecarContent = await this.getSidecarContent(item, thread, drillStack);
 
     // Verify container still exists after async operation
     if (!document.contains(container[0])) {
@@ -1951,35 +2327,8 @@ export class ItemHandler extends Handler {
       return;
     }
 
-    container.find('.sidecar-post').each((i, post) => {
-      $(post).on('mouseover', this.onSidecarItemMouseOver);
-      // Apply filter highlights if available (defined in FeedItemHandler)
-      if (this.highlightFilterMatches) {
-        this.highlightFilterMatches(post);
-      }
-      // Apply author rule highlighting
-      this.applySidecarAuthorHighlight(post);
-    });
-
-    // Initialize collapsible sections
-    container.find('.sidecar-section-toggle').each((i, toggle) => {
-      $(toggle).on('click', (e) => {
-        e.preventDefault();
-        const btn = $(e.currentTarget);
-        const contentId = btn.attr('aria-controls');
-        const content = $(`#${contentId}`);
-        const isExpanded = btn.attr('aria-expanded') === 'true';
-
-        btn.attr('aria-expanded', !isExpanded);
-        btn.find('.sidecar-section-icon').text(isExpanded ? '▶' : '▼');
-
-        if (isExpanded) {
-          content.slideUp(getAnimationDuration(200, this.config));
-        } else {
-          content.slideDown(getAnimationDuration(200, this.config));
-        }
-      });
-    });
+    this.bindSidecarHandlers(container);
+    this.restoreSidecarFocus();
 
     const sidecar = container.find('.sidecar-replies')[0];
     // Respect global sidecar visibility setting
@@ -2095,7 +2444,18 @@ export class ItemHandler extends Handler {
         break;
 
       case 'r':
-        this.openReplyDialog(item);
+        // A focused reply only counts while the sidecar shows it (`t` hides it but keeps
+        // replyIndex); otherwise, or if the reply has no post link, reply to the post
+        if (
+          !(
+            this.config.get('showReplySidecar') &&
+            this.replyIndex != null &&
+            this.selectedReply.is(':visible') &&
+            this.openReplyForSidecarReply(this.selectedReply)
+          )
+        ) {
+          this.openReplyDialog(item);
+        }
         break;
 
       case 'l':
@@ -2336,14 +2696,30 @@ export class ItemHandler extends Handler {
             return;
           }
           event.preventDefault();
-          this.toggleFocus();
+          if (this.isSidecarDrilledAndShown()) {
+            // Up one level
+            this.drillUp();
+          } else {
+            this.toggleFocus();
+          }
         } else if (event.key == 'ArrowRight') {
           // Leave Alt+Right (browser Forward) alone; only consume the key when we act on it
-          if (event.altKey || !this.isSidecarNavigationAvailable() || this.replyIndex != null) {
+          if (event.altKey || !this.isSidecarNavigationAvailable()) {
             return;
           }
-          event.preventDefault();
-          this.toggleFocus();
+          if (this.replyIndex == null) {
+            event.preventDefault();
+            this.toggleFocus();
+          } else if (
+            this.getSidecarContainer().is(':visible') &&
+            this.getDrillTarget(this.replyIndex)
+          ) {
+            // Focus is already in the sidecar: drill into the focused reply
+            event.preventDefault();
+            this.drillIntoReply(this.replyIndex);
+          } else {
+            return;
+          }
         } else if (event.key == 'G') {
           event.preventDefault();
           moved = this.setIndex(this.items.length - 1, false, true);
@@ -2488,6 +2864,49 @@ export class ItemHandler extends Handler {
       document.addEventListener('click', this._mediaCloseHandler, true);
       document.addEventListener('keydown', this._mediaCloseHandler, true);
     }, 300);
+  }
+
+  /**
+   * Reply to a sidecar reply: remember it as pending, then open its post page (as `o`
+   * does). The post page opens the reply dialog once the post has loaded. When the reply
+   * is this post page's own post, the link wouldn't navigate, so reply in place.
+   * onLeave runs once the sidecar is no longer needed: after following the link (a
+   * detached link can't navigate), or before replying in place.
+   * Returns false, doing nothing, when the reply has no post link.
+   * @param {jQuery|HTMLElement} reply - The .sidecar-post element
+   * @param {Function} [onLeave]
+   * @returns {boolean}
+   */
+  openReplyForSidecarReply(reply, onLeave) {
+    const link = $(reply).find('.sidecar-post-timestamp a')[0];
+    if (!link) return false;
+    const linkPath = new URL(link.href, window.location.href).pathname;
+    const postId = linkPath.split('/')[4];
+    // Following a link to the page already open doesn't navigate
+    const samePath = (path) => path.replace(/\/+$/, '');
+    if (postId && samePath(linkPath) === samePath(window.location.pathname)) {
+      const pagePost = $(this.items)
+        .get()
+        .find((item) => this.postIdForItem(item) === postId);
+      if (pagePost) {
+        onLeave?.();
+        this.openReplyDialog(pagePost);
+        return true;
+      }
+    }
+    if (postId) {
+      try {
+        window.sessionStorage.setItem(
+          PENDING_REPLY_KEY,
+          JSON.stringify({ postId, expiresAt: Date.now() + PENDING_REPLY_TTL_MS })
+        );
+      } catch {
+        // Storage unavailable: still navigate, the reply dialog just won't open itself
+      }
+    }
+    link.click();
+    onLeave?.();
+    return true;
   }
 
   openReplyDialog(item) {
@@ -3380,6 +3799,7 @@ export class ItemHandler extends Handler {
       this.postViewModal = new PostViewModal(this.config, () => {
         // Callback when modal closes
         this.isPopupVisible = false;
+        this.modalDrill = null;
       });
     }
 
@@ -3388,16 +3808,17 @@ export class ItemHandler extends Handler {
 
     // Show modal immediately with loading state
     // Pass whether this is an unrolled thread to determine navigation selector
-    this.postViewModal.show(postElement, null, hasUnrolledThread);
+    // The post view keeps its own drill state, reset on every open
+    const drill = { element: postElement, thread: null, stack: [] };
+    this.modalDrill = drill;
+    this.postViewModal.show(postElement, null, hasUnrolledThread, this.getModalDrillHooks());
 
     // Fetch thread data and update sidecar
     try {
       const thread = await this.getThreadForItem(postElement);
       if (thread) {
-        const sidecarHtml = await this.getSidecarContent(postElement, thread);
-        // Wrap in modal-specific container to isolate from feed sidecar selectors
-        const wrappedHtml = `<div class="post-view-modal-sidecar-content">${sidecarHtml}</div>`;
-        this.postViewModal.updateSidecar(wrappedHtml);
+        drill.thread = thread;
+        await this.renderModalLevel(drill);
       } else {
         this.postViewModal.updateSidecar('<div class="post-view-modal-error">Could not load replies</div>');
       }
@@ -3419,6 +3840,7 @@ export class ItemHandler extends Handler {
       this.postViewModal = new PostViewModal(this.config, () => {
         // Callback when modal closes
         this.isPopupVisible = false;
+        this.modalDrill = null;
       });
     }
 
@@ -6661,6 +7083,8 @@ export class ItemHandler extends Handler {
     // Debounce the focus change
     this.hoverDebounceTimeout = setTimeout(() => {
       if (this.ignoreMouseMovement) return;
+      // The sidecar was re-rendered (e.g. drilled into) since the hover
+      if (!document.contains(target[0])) return;
 
       if (!isFixedSidecar) {
         // For inline sidecar, check if we need to change parent item

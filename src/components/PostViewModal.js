@@ -34,9 +34,12 @@ export class PostViewModal {
    * @param {HTMLElement} postElement - The post element to display
    * @param {string} sidecarHtml - HTML content for the sidecar
    * @param {boolean} isUnrolledThread - Whether this is an unrolled thread (navigate posts, not replies)
+   * @param {object|null} drillHooks - Reply drill callbacks: canDrillIn(index), drillIn(index),
+   *   drillUp(toDepth), isDrilled(), replyTo(index, onLeave)
    */
-  show(postElement, sidecarHtml, isUnrolledThread = false) {
+  show(postElement, sidecarHtml, isUnrolledThread = false, drillHooks = null) {
     if (this.isVisible) return;
+    this.drillHooks = drillHooks;
 
     this.previousActiveElement = document.activeElement;
     this.isVisible = true;
@@ -191,7 +194,51 @@ export class PostViewModal {
     modal.querySelector('.post-view-modal-backdrop').addEventListener('click', () => this.hide());
     modal.querySelector('.post-view-modal-close').addEventListener('click', () => this.hide());
 
+    // Breadcrumb and the reply count / marker drill, as in the sidecar panel
+    sidecarContainer.addEventListener('click', (e) => this.handleSidecarClick(e));
+
     return modal;
+  }
+
+  /**
+   * Drill with the mouse: a breadcrumb goes up to its level, a reply's count or marker
+   * drills into that reply
+   * @param {MouseEvent} e - The click event
+   */
+  handleSidecarClick(e) {
+    if (!this.drillHooks || typeof e.target.closest !== 'function') return;
+    const crumb = e.target.closest('.sidecar-crumb');
+    const count = e.target.closest('.sidecar-post[data-has-replies="true"] .sidecar-count-replies');
+    if (crumb) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.drillHooks.drillUp(Number(crumb.dataset.depth));
+    } else if (count) {
+      e.preventDefault();
+      e.stopPropagation();
+      const index = this.getSidecarItems().indexOf(count.closest('.sidecar-post'));
+      if (index >= 0) this.drillHooks.drillIn(index);
+    }
+  }
+
+  /**
+   * The reply posts currently shown in the replies pane (the pinned reply first when drilled)
+   * @returns {HTMLElement[]}
+   */
+  getSidecarItems() {
+    if (!this.modalEl) return [];
+    return Array.from(this.modalEl.querySelectorAll('.post-view-modal-sidecar .sidecar-post'));
+  }
+
+  /**
+   * Select the reply at index in the replies pane, re-applying the highlight after a re-render
+   * @param {number} index - Index into getSidecarItems()
+   */
+  focusSidecarReply(index) {
+    if (this.isUnrolledThread && this.focusedPane !== 'sidecar') {
+      this.switchPane('sidecar');
+    }
+    this.navList?.jumpTo(index, true);
   }
 
   /**
@@ -233,6 +280,7 @@ export class PostViewModal {
     this.previousActiveElement = document.activeElement;
     this.isVisible = true;
     this.isReaderMode = true;
+    this.drillHooks = null;
 
     // Create modal
     this.modalEl = this.createReaderModal(contentHtml, title);
@@ -363,6 +411,54 @@ export class PostViewModal {
       e.stopPropagation();
       e.stopImmediatePropagation();
       this.hide();
+      return;
+    }
+
+    // In the replies pane, right drills into the focused reply and left goes up a level
+    // (left at the top level falls through to the pane switch below)
+    if (
+      this.drillHooks &&
+      this.focusedPane === 'sidecar' &&
+      !e.altKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
+    ) {
+      const index = this.navList?.getSelectedIndex();
+      if (e.key === 'ArrowRight' && this.drillHooks.canDrillIn(index)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        this.drillHooks.drillIn(index);
+        return;
+      }
+      if (e.key === 'ArrowLeft' && this.drillHooks.isDrilled()) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        this.drillHooks.drillUp();
+        return;
+      }
+    }
+
+    // r on a focused reply replies to it: opens its post (the reply dialog follows there)
+    // and closes the post view. In the thread pane r does nothing, as before.
+    if (
+      this.drillHooks &&
+      this.focusedPane === 'sidecar' &&
+      e.key === 'r' &&
+      !e.altKey &&
+      !e.ctrlKey &&
+      !e.metaKey
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      this.drillHooks.replyTo(this.navList?.getSelectedIndex(), () => {
+        // Don't hand focus back to the page once closed: it would pull it from the dialog
+        this.previousActiveElement = null;
+        this.hide();
+      });
       return;
     }
 

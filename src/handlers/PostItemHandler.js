@@ -1,9 +1,10 @@
 // PostItemHandler.js - Handler for individual post/thread pages
 
-import { ItemHandler } from './ItemHandler.js';
+import { ItemHandler, PENDING_REPLY_KEY } from './ItemHandler.js';
 import { isUserTyping, isModalOpen } from '../utils.js';
 
 const THREAD_SCREEN_SELECTOR = 'div[data-testid="postThreadScreen"]';
+const REPLY_BUTTON_WAIT_MS = 5000;
 
 /** True if the element is in the page and not hidden (e.g. on a screen Bluesky keeps). */
 function isShown(element) {
@@ -41,6 +42,7 @@ export class PostItemHandler extends ItemHandler {
 
   deactivate() {
     this.stopPinningUrlPost?.();
+    this.cancelPendingReplyWait();
     clearTimeout(this.urlChangeLoadTimeout);
     // Leaving post pages (not just focusing the composer)
     if (!this.isActive()) {
@@ -65,6 +67,7 @@ export class PostItemHandler extends ItemHandler {
       // Back/Forward to the screen Bluesky kept for this thread: its selection still stands.
       // Restore its style, in case the previous page's handler restyled these posts.
       this.historyNavUrl = null;
+      this.takePendingReply();
       $(this.items)
         .not(this.selectedItem)
         .filter('.item-selection-active')
@@ -129,8 +132,57 @@ export class PostItemHandler extends ItemHandler {
       this.historyRestorePostId = null;
       if (this.postId === this.threadPostId) {
         this.pinUrlPost(this.selectedItem[0]);
+        this.consumePendingReply();
       }
     }
+  }
+
+  /** Read and remove the pending reply (see openReplyForSidecarReply) if it hasn't expired. */
+  takePendingReply() {
+    try {
+      const raw = window.sessionStorage.getItem(PENDING_REPLY_KEY);
+      if (raw == null) return null;
+      window.sessionStorage.removeItem(PENDING_REPLY_KEY);
+      const entry = JSON.parse(raw);
+      return entry?.expiresAt > Date.now() ? entry : null;
+    } catch {
+      return null;
+    }
+  }
+
+  cancelPendingReplyWait() {
+    clearTimeout(this.pendingReplyTimeout);
+    this.pendingReplyTimeout = null;
+  }
+
+  /**
+   * After the URL post is selected on a fresh visit: if `r` on a sidecar reply sent us
+   * here, open the reply dialog on that post once its reply button renders. Any other
+   * page or an expired entry just drops the entry.
+   */
+  consumePendingReply() {
+    this.cancelPendingReplyWait();
+    const entry = this.takePendingReply();
+    if (!entry || entry.postId !== this.postIdFromUrl()) return;
+    const post = this.selectedItem[0];
+    const deadline = Date.now() + REPLY_BUTTON_WAIT_MS;
+    const tryOpen = () => {
+      this.pendingReplyTimeout = null;
+      // Gone: the user moved on (another post, other page)
+      if (
+        !post.isConnected ||
+        this.selectedItem[0] !== post ||
+        this.postIdFromUrl() !== entry.postId
+      ) {
+        return;
+      }
+      if ($(post).find("button[aria-label^='Reply']").length) {
+        this.openReplyDialog(post);
+      } else if (Date.now() < deadline) {
+        this.pendingReplyTimeout = setTimeout(tryOpen, 100);
+      }
+    };
+    tryOpen();
   }
 
   updateItems() {
@@ -229,6 +281,9 @@ export class PostItemHandler extends ItemHandler {
     // dropped) is scrolled to its URL post, as on a new visit, so select that.
     const fromHistory = this.historyNavUrl === window.location.href;
     this.historyNavUrl = null;
+    // A Back/Forward visit isn't the one `r` asked for
+    this.cancelPendingReplyWait();
+    if (fromHistory) this.takePendingReply();
     const saved = fromHistory
       ? this.threadSelections.get(urlPostId)?.find((entry) => isShown(entry.element.deref()))
       : null;

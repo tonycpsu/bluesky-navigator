@@ -7,6 +7,11 @@ import { format, formatDistanceToNowStrict } from 'date-fns';
 import icons from '../icons.js';
 import { LAYOUT_CHANGED_EVENT } from '../components/LeftSidebar.js';
 import {
+  VFT_HIDDEN_CLASS,
+  orderFeedRows,
+  viewFullThreadRowsToHide,
+} from './viewFullThread.js';
+import {
   getFeedMapConfig,
   createFeedMapElements,
   attachFeedMapToHandler,
@@ -1926,6 +1931,9 @@ export class FeedItemHandler extends ItemHandler {
       });
     }
 
+    // Hide "View full thread" rows whose thread no longer visibly continues around them
+    if (parent[0]) this.updateViewFullThreadRows(parent[0]);
+
     this.refreshItems();
     // Update info indicator to reflect filtered counts
     this.updateInfoIndicator();
@@ -1981,32 +1989,27 @@ export class FeedItemHandler extends ItemHandler {
     );
 
     const parent = $(this.selector).closest('.thread').first().parent();
-    const newItems = parent
-      .children()
-      .filter((i, item) => $(item).hasClass('thread'))
-      .get();
+    const parentEl = parent[0];
+    if (!parentEl) {
+      perfEnd();
+      return;
+    }
 
-    // Sort by stable sort-index (set once when item first appears, never changes)
-    newItems.sort((a, b) => {
-        const sortIndexA = parseFloat($(a).attr('data-bsky-navigator-sort-index'));
-        const sortIndexB = parseFloat($(b).attr('data-bsky-navigator-sort-index'));
-        const itemIndexA = parseInt($(a).find('.item').attr('data-bsky-navigator-item-index'));
-        const itemIndexB = parseInt($(b).find('.item').attr('data-bsky-navigator-item-index'));
-        if (sortIndexA !== sortIndexB) {
-          return reversed ? sortIndexB - sortIndexA : sortIndexA - sortIndexB;
-        }
-        return itemIndexA - itemIndexB;
-      });
+    // Sort by stable sort-index (set once when item first appears, never changes), and
+    // keep each "View full thread" row right after the root post of its thread
+    const { posts, vfts } = this.collectFeedRows(parentEl);
+    const newItems = orderFeedRows(posts, vfts, reversed).order.map((row) => row.node);
 
     // Lay the threads out as one block in sorted order, starting where the first thread
     // already is, and move only the nodes that are out of place. Moving a node resets the
     // inner scroll of a post capped by "Fit posts to screen", and Bluesky's own list
     // children (a zero-height header before the posts, the end-of-list marker and loader
     // after them) must keep their places: with the end marker above the first post,
-    // Bluesky keeps loading pages while the feed is scrolled to the top.
-    const parentEl = parent[0];
-    if (parentEl && newItems.length) {
-      let ref = parent.children('.thread')[0];
+    // Bluesky keeps loading pages while the feed is scrolled to the top. "View full
+    // thread" rows whose root post is gone are not part of the block (and stay hidden).
+    if (newItems.length) {
+      const placed = new Set(newItems);
+      let ref = [...parentEl.children].find((child) => placed.has(child));
       for (const node of newItems) {
         if (node === ref) {
           ref = ref.nextSibling;
@@ -2015,7 +2018,22 @@ export class FeedItemHandler extends ItemHandler {
         }
       }
     }
+    this.updateViewFullThreadRows(parentEl);
     perfEnd();
+  }
+
+  /**
+   * Show a "View full thread" row only where it connects two visible posts of its thread
+   * (its root and the next post); hide it when either is filtered (rules, search,
+   * hide-read), when it has no root post row, or when it is out of place.
+   */
+  updateViewFullThreadRows(parentEl) {
+    const { rows, vfts } = this.collectFeedRows(parentEl);
+    if (!vfts.length) return;
+    const hide = viewFullThreadRowsToHide(rows);
+    for (const row of vfts) {
+      row.node.classList.toggle(VFT_HIDDEN_CLASS, hide.has(row));
+    }
   }
 
   updateInfoIndicator() {

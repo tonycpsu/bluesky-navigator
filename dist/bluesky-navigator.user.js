@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.31+673.b5977869
+// @version     1.0.32+674.2111a856
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -45927,12 +45927,18 @@ if (cid) {
           default: "Instant",
           help: "Show post preview on hover instantly or after a short delay"
         },
+        feedMapNewPostsMarker: {
+          label: "Mark new posts",
+          type: "checkbox",
+          default: true,
+          help: "Draw a divider on the feed map where the posts that are new since you last looked at this feed end"
+        },
         feedMapHeatmap: {
           label: "Heatmap mode",
           type: "select",
           options: ["None", "Engagement Rate", "Raw Engagement", "Weighted Engagement"],
           default: "None",
-          help: "Color intensity based on post engagement metrics",
+          help: "Color intensity ranks each post against the rest of the feed by engagement (5 levels)",
           showWhen: { feedMapStyle: "Advanced" }
         },
         feedMapIcons: {
@@ -48324,6 +48330,7 @@ if (cid) {
         }
         case "feedMapHeatmap":
         case "feedMapZoom":
+        case "feedMapNewPostsMarker":
           document.dispatchEvent(new CustomEvent("feedMapSettingChanged", {
             detail: { setting: name, value }
           }));
@@ -51418,14 +51425,27 @@ div.item-banner {
   overflow: visible;
 }
 
-/* Basic style - simple thin indicator */
+/* Basic style - simple indicator (12px: 1.5x the old 8px, in the same
+   proportion as Advanced's 12px -> 16px) */
 .feed-map-basic .feed-map-position-indicator {
-  height: calc(8px * var(--indicator-scale, 1));
+  height: calc(12px * var(--indicator-scale, 1));
 }
 
 /* Advanced style - main indicator is compact overview */
 .feed-map-advanced .feed-map-position-indicator {
-  height: calc(12px * var(--indicator-scale, 1));
+  height: calc(16px * var(--indicator-scale, 1));
+}
+
+/* Main bar: room under it for the visible-range rail (2px gap + 3px rail),
+   and no clipping, so the rail, the zoom bracket and the new-posts divider can
+   sit outside the segments. The padding is on the container so the date
+   labels stay centered on the bar. */
+.feed-map-wrapper > .feed-map-container:not(.feed-map-zoom-container) {
+  padding-bottom: calc(5px * var(--indicator-scale, 1));
+}
+
+.feed-map-wrapper > .feed-map-container:not(.feed-map-zoom-container) .feed-map-position-indicator {
+  overflow: visible;
 }
 
 /* Advanced style - zoom indicator auto-scales to fit content */
@@ -51444,24 +51464,54 @@ div.item-banner {
   margin: 0 -1px -1px -1px;
 }
 
+/* Feed map color tokens. Light values here; Dim and Dark override them on
+   html[data-bsky-nav-theme] (see "Feed map dark palettes" below).
+   --fm-ink / --fm-halo: zoom-row text color and the outline drawn around it.
+   --fm-hatch: stripe color of the read-state hatch.
+   --fm-current / --fm-current-halo: current-selection ring and the 1px inner
+   line of the opposite tone, so one of the two always contrasts the fill. */
+.feed-map-wrapper {
+  --fm-ink: #000000; /* pure black: heat-2, the last dark-ink level, is a mid tone */
+  --fm-halo: rgba(255, 255, 255, 0.85);
+  --fm-hatch: rgba(0, 0, 0, 0.32);
+  --fm-current: #3b82f6;
+  --fm-current-halo: #111827;
+  /* Visible-range rail under the main bar (on the page background) */
+  --fm-rail: #4b5563;
+  /* New-posts divider: violet, apart from every ramp, ring and ratioed color */
+  --fm-new: #6d28d9;
+  --fm-new-halo: #ffffff;
+}
+
+/* Deep cells (light palettes): switch to light ink and a light hatch.
+   Every theme's ramp uses the same luminance per level, so the switch is at
+   the same level everywhere: heat-2 measures 7.5:1 with dark ink and heat-3
+   4.9:1 with white (4.3:1 with dark ink). Ratioed sits between heat-2 and
+   heat-3 in lightness and measures 5.6:1 with dark ink, so it keeps the dark
+   ink. */
+.feed-map-wrapper .feed-map-segment-heat-3,
+.feed-map-wrapper .feed-map-segment-heat-4,
+.feed-map-wrapper .feed-map-segment-heat-5 {
+  --fm-ink: #ffffff;
+  --fm-halo: rgba(0, 0, 0, 0.75);
+  --fm-hatch: rgba(255, 255, 255, 0.4);
+}
+
 /* Individual post segment */
 .feed-map-segment {
   height: 100%;
   flex: 1;
   background-color: transparent;
-  border-right: 2px solid white;
+  border-right: 2px solid var(--bsky-nav-bg, white);
   box-sizing: border-box;
   transition: background-color var(--transition-duration, 150ms) ease;
 }
 
 /* Basic mode needs visible segment colors for read/unread to work.
-   Default uses gray background with brightness filter. Themes override unread color. */
+   Default uses a gray background; themes override the unread color. Read
+   segments get the hatch below, so the fill color stays the same. */
 .feed-map-basic .feed-map-segment {
   background-color: #9ca3af; /* Default unread: medium gray */
-}
-
-.feed-map-basic .feed-map-segment-read {
-  filter: brightness(0.6);
 }
 
 /* Basic mode theme colors - unread segments use theme's light color */
@@ -51475,20 +51525,99 @@ div.item-banner {
 }
 
 /* Segment states */
+/* Read: a diagonal hatch painted over the background color, so heat and
+   ratioed colors stay readable and read shows even on transparent (no heat)
+   segments. No filter, so the zoom-row text and the current ring keep full
+   strength. */
 .feed-map-segment-read {
-  filter: brightness(0.6);
+  filter: none;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--fm-hatch) 0 2px,
+    transparent 2px 5px
+  );
 }
 
+/* Zoom row: mute only the avatar on read posts; text stays at full contrast */
+.feed-map-segment-zoom.feed-map-segment-read .feed-map-segment-avatar,
+.feed-map-segment-zoom.feed-map-segment-read .feed-map-segment-reposter-avatar {
+  opacity: 0.55;
+}
+
+/* Current: colored 2px ring plus a 1px inner line of the opposite tone.
+   Drawn on a pseudo-element over the padding box so the ring is even on all
+   sides (the segment's border-right is the gap to its neighbor). */
 .feed-map-segment-current {
-  outline: 2px solid #3b82f6;
-  outline-offset: -1px;
   z-index: var(--z-base);
 }
 
-/* Filtered posts - grayed out in feed map */
-.feed-map-segment-filtered {
-  opacity: 0.25;
-  filter: grayscale(1);
+.feed-map-segment-current::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: var(--fm-current-width, 2px) solid var(--fm-current);
+  box-shadow: inset 0 0 0 1px var(--fm-current-halo);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Ratioed: besides its color, a corner notch (top right) so it does not rely
+   on hue alone. It uses the cell's ink color, which is picked for contrast
+   with the ratioed fill. Inside the current ring, it moves in past the ring. */
+.feed-map-segment-ratioed::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: calc(7px * var(--indicator-scale, 1));
+  height: calc(7px * var(--indicator-scale, 1));
+  background-color: var(--fm-ink);
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.feed-map-segment-zoom.feed-map-segment-ratioed::before {
+  width: calc(12px * var(--indicator-scale, 1));
+  height: calc(12px * var(--indicator-scale, 1));
+}
+
+.feed-map-segment-current.feed-map-segment-ratioed::before {
+  top: calc(var(--fm-current-width, 2px) + 1px);
+  right: calc(var(--fm-current-width, 2px) + 1px);
+}
+
+/* New-posts divider (main map): fills the 2px gap before the first post that
+   is not new, with a light halo and a small cap above the bar. Stays inside
+   the bar's height below, so it never meets the range rail. */
+.feed-map-new-divider {
+  position: absolute;
+  top: calc(-4px * var(--indicator-scale, 1));
+  bottom: 0;
+  width: 2px;
+  background-color: var(--fm-new);
+  box-shadow: 0 0 0 1px var(--fm-new-halo);
+  pointer-events: none;
+  z-index: var(--z-raised);
+}
+
+.feed-map-new-divider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 8px;
+  height: calc(4px * var(--indicator-scale, 1));
+  background-color: var(--fm-new);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+/* Zoom row: the divider runs down the leading edge of the first older post */
+.feed-map-segment-zoom.feed-map-segment-new-boundary {
+  box-shadow:
+    inset 3px 0 0 var(--fm-new),
+    inset 5px 0 0 var(--fm-new-halo);
 }
 
 /* ========================================
@@ -51497,66 +51626,61 @@ div.item-banner {
 
 /* Ratioed posts - distinctive styling for posts with more replies than likes */
 .feed-map-segment-ratioed {
-  background-color: #ef4444 !important; /* Default red */
+  background-color: #e74493 !important; /* Default (campfire): pink, apart from the amber ramp */
 }
 
 /* === CAMPFIRE THEME (amber/orange) === */
-/* Unread: light amber, Read: dimmed (via filter), Current: orange outline */
+/* Unread: light amber, Read: hatched, Current: orange outline */
 .feed-map-theme-campfire .feed-map-position-indicator { background-color: #fffbeb; }
-.feed-map-theme-campfire .feed-map-segment-current { outline-color: #f59e0b !important; }
-.feed-map-theme-campfire .feed-map-segment-ratioed { background-color: #ef4444 !important; }
+.feed-map-wrapper.feed-map-theme-campfire { --fm-current: #f59e0b; }
+.feed-map-theme-campfire .feed-map-segment-ratioed { background-color: #e74493 !important; }
 
-/* Heatmap intensity levels (engagement-based) - Default theme */
-.feed-map-segment-heat-1 { background-color: #fef3c7; } /* lightest - low engagement */
-.feed-map-segment-heat-2 { background-color: #fde68a; }
-.feed-map-segment-heat-3 { background-color: #fcd34d; }
-.feed-map-segment-heat-4 { background-color: #fbbf24; }
-.feed-map-segment-heat-5 { background-color: #f59e0b; }
-.feed-map-segment-heat-6 { background-color: #d97706; }
-.feed-map-segment-heat-7 { background-color: #b45309; }
-.feed-map-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
+/* Heatmap ramps. Levels come from createHeatLevelFn() in feedMapUtils.js
+   (rank based: each of the 5 levels holds about a fifth of the posts). Each
+   ramp was built in OKLCH: the hue drifts along the ramp for identity, and
+   the lightness is set so every theme hits the same luminance per level,
+   spaced evenly in contrast (about 1.75:1 between neighbors in light
+   palettes; in dark ones 1.67:1 from heat-1 to heat-2, then about 1.53:1, so
+   heat-2 is light enough for dark ink). Heat-1 stays at least 1.3:1 from the
+   empty track. Default theme uses the campfire ramp. */
+.feed-map-segment-heat-1 { background-color: #e4cb6b; } /* low engagement */
+.feed-map-segment-heat-2 { background-color: #ca9001; }
+.feed-map-segment-heat-3 { background-color: #a46102; }
+.feed-map-segment-heat-4 { background-color: #7d3803; }
+.feed-map-segment-heat-5 { background-color: #4f0f01; } /* high engagement */
 
 /* === OCEAN THEME (blue/teal) === */
-/* Unread: light sky, Read: dimmed (via filter), Current: yellow outline (contrasts with blue) */
+/* Unread: light sky, Read: hatched, Current: yellow outline (contrasts with blue) */
 .feed-map-theme-ocean .feed-map-position-indicator { background-color: #e0f2fe; }
-.feed-map-theme-ocean .feed-map-segment-current { outline-color: #eab308 !important; }
-.feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #f97316 !important; }
-.feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #e0f2fe; }
-.feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #bae6fd; }
-.feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #7dd3fc; }
-.feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #38bdf8; }
-.feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #0ea5e9; }
-.feed-map-theme-ocean .feed-map-segment-heat-6 { background-color: #0284c7; }
-.feed-map-theme-ocean .feed-map-segment-heat-7 { background-color: #0369a1; }
-.feed-map-theme-ocean .feed-map-segment-heat-8 { background-color: #075985; }
+.feed-map-wrapper.feed-map-theme-ocean { --fm-current: #eab308; }
+.feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #f1453f !important; }
+.feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #9ed5e3; }
+.feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #27a6d3; }
+.feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #0677af; }
+.feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #024d8e; }
+.feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #081f68; }
 
 /* === FOREST THEME (green) === */
-/* Unread: light green, Read: dimmed (via filter), Current: lime outline */
+/* Unread: light green, Read: hatched, Current: lime outline */
 .feed-map-theme-forest .feed-map-position-indicator { background-color: #dcfce7; }
-.feed-map-theme-forest .feed-map-segment-current { outline-color: #84cc16 !important; }
-.feed-map-theme-forest .feed-map-segment-ratioed { background-color: #ea580c !important; }
-.feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #dcfce7; }
-.feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #bbf7d0; }
-.feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #86efac; }
-.feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #4ade80; }
-.feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #22c55e; }
-.feed-map-theme-forest .feed-map-segment-heat-6 { background-color: #16a34a; }
-.feed-map-theme-forest .feed-map-segment-heat-7 { background-color: #15803d; }
-.feed-map-theme-forest .feed-map-segment-heat-8 { background-color: #166534; }
+.feed-map-wrapper.feed-map-theme-forest { --fm-current: #84cc16; }
+.feed-map-theme-forest .feed-map-segment-ratioed { background-color: #f1453f !important; }
+.feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #b8d77f; }
+.feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #66ab37; }
+.feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #058323; }
+.feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #035830; }
+.feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #022d1e; }
 
 /* === MONOCHROME THEME (grayscale) === */
-/* Unread: light gray, Read: dimmed (via filter), Current: dark outline */
+/* Unread: light gray, Read: hatched, Current: dark outline */
 .feed-map-theme-monochrome .feed-map-position-indicator { background-color: #e5e7eb; }
-.feed-map-theme-monochrome .feed-map-segment-current { outline-color: #1f2937 !important; }
-.feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #dc2626 !important; }
-.feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #f3f4f6; }
-.feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #e5e7eb; }
-.feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #d1d5db; }
-.feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #9ca3af; }
-.feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #6b7280; }
-.feed-map-theme-monochrome .feed-map-segment-heat-6 { background-color: #4b5563; }
-.feed-map-theme-monochrome .feed-map-segment-heat-7 { background-color: #374151; }
-.feed-map-theme-monochrome .feed-map-segment-heat-8 { background-color: #1f2937; }
+.feed-map-wrapper.feed-map-theme-monochrome { --fm-current: #1f2937; --fm-current-halo: #ffffff; }
+.feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #f1453f !important; }
+.feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #c9ccd2; }
+.feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #969ba2; }
+.feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #6c717a; }
+.feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #464d57; }
+.feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #212732; }
 
 /* Content type icons in segments */
 .feed-map-segment-icon {
@@ -51765,11 +51889,15 @@ div.item-banner {
   width: auto;
 }
 
-/* Relative time in zoom segments */
+/* Relative time in zoom segments. Ink and halo come from the --fm-* tokens,
+   which flip to light ink on deep cells (and invert in Dim / Dark). */
 .feed-map-segment-time {
-  font-size: calc(8px * var(--indicator-scale, 1));
+  font-size: calc(10px * var(--indicator-scale, 1));
   line-height: 1;
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--fm-ink);
+  text-shadow:
+    0 0 2px var(--fm-halo),
+    0 0 2px var(--fm-halo);
   pointer-events: none;
   flex-shrink: 0;
 }
@@ -51778,7 +51906,7 @@ div.item-banner {
 .feed-map-segment-handle {
   font-family: ui-monospace, monospace;
   line-height: 1.2;
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--fm-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
@@ -51797,27 +51925,26 @@ div.item-banner {
   text-overflow: ellipsis;
   max-width: 100%;
   text-shadow:
-    -1px -1px 0 rgba(255, 255, 255, 0.8),
-    1px -1px 0 rgba(255, 255, 255, 0.8),
-    -1px 1px 0 rgba(255, 255, 255, 0.8),
-    1px 1px 0 rgba(255, 255, 255, 0.8),
-    0 0 3px rgba(255, 255, 255, 0.6);
+    -1px -1px 0 var(--fm-halo),
+    1px -1px 0 var(--fm-halo),
+    -1px 1px 0 var(--fm-halo),
+    1px 1px 0 var(--fm-halo),
+    0 0 3px var(--fm-halo);
 }
 
 .feed-map-segment-handle-domain {
-  font-size: calc(7px * var(--indicator-scale, 1));
-  opacity: 0.7;
+  /* 10px in the cell's ink color (no opacity), so it gets the same contrast
+     as the handle and time */
+  font-size: calc(10px * var(--indicator-scale, 1));
+  color: var(--fm-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
   text-shadow:
-    -1px -1px 0 rgba(255, 255, 255, 0.6),
-    1px -1px 0 rgba(255, 255, 255, 0.6),
-    -1px 1px 0 rgba(255, 255, 255, 0.6),
-    1px 1px 0 rgba(255, 255, 255, 0.6);
+    0 0 2px var(--fm-halo),
+    0 0 2px var(--fm-halo);
 }
-
 
 /* Empty segments (no corresponding item) */
 .feed-map-segment-empty {
@@ -51842,14 +51969,74 @@ div.item-banner {
   z-index: var(--z-base);
 }
 
-/* Zoom indicator connector */
+/* Zoom indicator connector. Toolbar order is main bar, connector, zoom row:
+   the connector starts right under the range rail. flex-shrink: 0 keeps it
+   from being squeezed when the toolbar limits the wrapper's height. */
 .feed-map-connector {
   display: block;
   width: 100%;
   height: calc(20px * var(--indicator-scale, 1));
   position: relative;
   overflow: visible;
-  margin-top: calc(-2px * var(--indicator-scale, 1));
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+/* Heat legend, in the connector row over the end label column (the connector
+   curves never reach that corner). Shown only while the heatmap is on. */
+.feed-map-legend {
+  display: none;
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  align-items: flex-end;
+  gap: 1px;
+  font-size: 8px;
+  line-height: 1;
+  color: #4b5563;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.feed-map-advanced.feed-map-has-heat .feed-map-legend {
+  display: flex;
+}
+
+.feed-map-legend-text:first-child {
+  margin-right: 2px;
+}
+
+.feed-map-legend-text:last-child {
+  margin-left: 2px;
+}
+
+/* Swatches step up in height as well as color, so less -> more reads at a glance */
+.feed-map-legend-swatch {
+  width: 4px;
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.feed-map-legend-swatch:nth-child(2) { height: 4px; }
+.feed-map-legend-swatch:nth-child(3) { height: 5px; }
+.feed-map-legend-swatch:nth-child(4) { height: 6px; }
+.feed-map-legend-swatch:nth-child(5) { height: 7px; }
+.feed-map-legend-swatch:nth-child(6) { height: 8px; }
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-legend {
+  color: #9ca3af;
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-legend-swatch {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+/* Narrow layouts: no room to spare, the tooltip carries the same information */
+@media only screen and (max-width: 800px) {
+  .feed-map-advanced.feed-map-has-heat .feed-map-legend {
+    display: none;
+  }
 }
 
 .feed-map-connector-svg {
@@ -51866,10 +52053,8 @@ div.item-banner {
   fill: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  .feed-map-connector-path {
-    stroke: rgba(200, 200, 200, 0.8);
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-connector-path {
+  stroke: rgba(200, 200, 200, 0.8);
 }
 
 /* Zoom indicator container - inherits from .feed-map-container */
@@ -51907,11 +52092,12 @@ div.item-banner {
   overflow: visible;
 }
 
-/* Zoom highlight on main indicator showing zoomed region - bracket style */
+/* Zoom highlight on main indicator showing zoomed region - bracket style.
+   From 3px above the bar to 1px below it, clear of the range rail (2px below). */
 .feed-map-position-zoom-highlight {
   position: absolute;
-  top: -4px;
-  height: calc(100% + 8px);
+  top: calc(-3px * var(--indicator-scale, 1));
+  height: calc(100% + 4px * var(--indicator-scale, 1));
   background-color: transparent;
   pointer-events: none;
   box-sizing: border-box;
@@ -51977,63 +52163,62 @@ div.item-banner {
   opacity: 0.8;
 }
 
-@media (prefers-color-scheme: dark) {
-  /* Dark mode: use dark outline instead of white, keep colors but brighten */
-  .feed-map-icon-stack img[alt="text"] {
-    filter: brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(800%) hue-rotate(200deg) brightness(110%)
-      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
-  }
-
-  .feed-map-icon-stack img[alt="image"] {
-    filter: brightness(0) saturate(100%) invert(70%) sepia(60%) saturate(500%) hue-rotate(80deg) brightness(110%)
-      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
-  }
-
-  .feed-map-icon-stack img[alt="video"] {
-    filter: brightness(0) saturate(100%) invert(50%) sepia(100%) saturate(1500%) hue-rotate(350deg) brightness(110%)
-      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
-  }
-
-  .feed-map-icon-stack img[alt="embed"] {
-    filter: brightness(0) saturate(100%) invert(55%) sepia(80%) saturate(600%) hue-rotate(250deg) brightness(110%)
-      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
-  }
-
-
-  /* Post type icons */
-  .feed-map-icon-stack img[alt="post"],
-  .feed-map-icon-stack img[alt="reply"],
-  .feed-map-icon-stack img[alt="repost"],
-  .feed-map-icon-stack img[alt="thread"] {
-    filter: invert(1) drop-shadow(0 0 1px rgba(0,0,0,0.8));
-    opacity: 0.8;
-  }
-
-  .feed-map-position-indicator-zoom {
-    border-color: rgba(255, 255, 255, 0.2);
-  }
-
-  .feed-map-position-zoom-highlight::before {
-    border-left-color: rgba(255, 255, 255, 0.8);
-    border-top-color: rgba(255, 255, 255, 0.8);
-    border-bottom-color: rgba(255, 255, 255, 0.8);
-  }
-
-  .feed-map-position-zoom-highlight::after {
-    border-right-color: rgba(255, 255, 255, 0.8);
-    border-top-color: rgba(255, 255, 255, 0.8);
-    border-bottom-color: rgba(255, 255, 255, 0.8);
-  }
+/* Dark palettes (Dim / Dark): dark icon outline instead of white, keep colors but brighten */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="text"] {
+  filter: brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(800%) hue-rotate(200deg) brightness(110%)
+    drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
 }
 
-/* Viewport indicator overlay */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="image"] {
+  filter: brightness(0) saturate(100%) invert(70%) sepia(60%) saturate(500%) hue-rotate(80deg) brightness(110%)
+    drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="video"] {
+  filter: brightness(0) saturate(100%) invert(50%) sepia(100%) saturate(1500%) hue-rotate(350deg) brightness(110%)
+    drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="embed"] {
+  filter: brightness(0) saturate(100%) invert(55%) sepia(80%) saturate(600%) hue-rotate(250deg) brightness(110%)
+    drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+}
+
+/* Post type icons */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="post"],
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="reply"],
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="repost"],
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="thread"] {
+  filter: invert(1) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+  opacity: 0.8;
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-position-indicator-zoom {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-position-zoom-highlight::before {
+  border-left-color: rgba(255, 255, 255, 0.8);
+  border-top-color: rgba(255, 255, 255, 0.8);
+  border-bottom-color: rgba(255, 255, 255, 0.8);
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-position-zoom-highlight::after {
+  border-right-color: rgba(255, 255, 255, 0.8);
+  border-top-color: rgba(255, 255, 255, 0.8);
+  border-bottom-color: rgba(255, 255, 255, 0.8);
+}
+
+/* Visible-range rail: a 3px bar 2px under the main bar (in the container's
+   padding), so it never covers the current ring, the zoom bracket or the
+   segments. left/width are set by updateViewportIndicator(). */
 .feed-map-viewport-indicator {
   position: absolute;
-  top: -1px;
-  height: calc(100% + 2px);
-  background-color: rgba(255, 255, 255, 0.2);
-  border: 2px solid rgba(0, 0, 0, 0.35);
-  border-radius: 2px;
+  top: calc(100% + 2px * var(--indicator-scale, 1));
+  height: calc(3px * var(--indicator-scale, 1));
+  background-color: var(--fm-rail);
+  border: 0;
+  border-radius: calc(1.5px * var(--indicator-scale, 1));
   pointer-events: none;
   transition: left var(--transition-duration, 100ms) ease-out,
               width var(--transition-duration, 100ms) ease-out;
@@ -52078,7 +52263,8 @@ div.item-banner {
 .feed-map-wrapper-statusbar .feed-map-connector {
   height: calc(16px * var(--indicator-scale, 1));
   margin-top: calc(-2px * var(--indicator-scale, 1));
-  margin-bottom: calc(-2px * var(--indicator-scale, 1));
+  /* Ends where the bracket starts (3px above the bar), so the curves meet it */
+  margin-bottom: calc(-3px * var(--indicator-scale, 1));
 }
 
 .feed-map-wrapper-statusbar .feed-map-connector .feed-map-connector-path {
@@ -52148,147 +52334,136 @@ div#statusBar.has-feed-map {
   order: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  .feed-map-position-indicator {
-    background-color: #374151;
-  }
+/* ==========================================================================
+   Feed map dark palettes (Dim and Dark)
+   Keyed on the Bluesky theme mirrored into html[data-bsky-nav-theme] (see
+   theme.js), not on the OS color scheme, so the map always matches the page.
+   ========================================================================== */
 
-  .feed-map-empty {
-    color: #6b7280;
-    background: repeating-linear-gradient(
-      -45deg,
-      transparent,
-      transparent 4px,
-      rgba(107, 114, 128, 0.2) 4px,
-      rgba(107, 114, 128, 0.2) 8px
-    );
-  }
-
-  .feed-map-segment {
-    border-right-color: #374151;
-  }
-
-  .feed-map-segment-read {
-    filter: brightness(0.5);
-  }
-
-  .feed-map-segment-time {
-    color: rgba(255, 255, 255, 0.5);
-    text-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.8);
-  }
-
-  .feed-map-segment-handle {
-    color: rgba(255, 255, 255, 0.9);
-  }
-
-  .feed-map-segment-handle-name {
-    text-shadow:
-      -1px -1px 0 rgba(0, 0, 0, 0.8),
-      1px -1px 0 rgba(0, 0, 0, 0.8),
-      -1px 1px 0 rgba(0, 0, 0, 0.8),
-      1px 1px 0 rgba(0, 0, 0, 0.8),
-      0 0 3px rgba(0, 0, 0, 0.6);
-  }
-
-  .feed-map-segment-handle-domain {
-    text-shadow:
-      -1px -1px 0 rgba(0, 0, 0, 0.6),
-      1px -1px 0 rgba(0, 0, 0, 0.6),
-      -1px 1px 0 rgba(0, 0, 0, 0.6),
-      1px 1px 0 rgba(0, 0, 0, 0.6);
-  }
-
-  /* Basic mode dark: theme colors with brightness filter for read */
-  .feed-map-basic .feed-map-segment { background-color: #4b5563; }
-  .feed-map-basic.feed-map-theme-ocean .feed-map-segment { background-color: #0e7490; } /* cyan-700 */
-  .feed-map-basic.feed-map-theme-campfire .feed-map-segment { background-color: #b45309; } /* amber-700 */
-  .feed-map-basic.feed-map-theme-forest .feed-map-segment { background-color: #15803d; } /* green-700 */
-  .feed-map-basic.feed-map-theme-monochrome .feed-map-segment { background-color: #6b7280; } /* gray-500 */
-
-  .feed-map-segment-current {
-    outline-color: #60a5fa;
-  }
-
-  .feed-map-viewport-indicator {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-color: rgba(255, 255, 255, 0.7);
-  }
-
-  .feed-map-label {
-    color: #9ca3af;
-  }
-
-  /* Dark mode ratioed - brighter for visibility */
-  .feed-map-segment-ratioed {
-    background-color: #f87171 !important; /* red-400 */
-  }
-
-  /* === DARK MODE: CAMPFIRE THEME === */
-  .feed-map-theme-campfire .feed-map-position-indicator { background-color: #451a03; }
-  .feed-map-theme-campfire .feed-map-segment-current { outline-color: #fbbf24 !important; }
-  .feed-map-theme-campfire .feed-map-segment-ratioed { background-color: #f87171 !important; }
-  .feed-map-segment-heat-1 { background-color: #1e3a5f; }
-  .feed-map-segment-heat-2 { background-color: #1e4976; }
-  .feed-map-segment-heat-3 { background-color: #1d5a8d; }
-  .feed-map-segment-heat-4 { background-color: #1c6ba4; }
-  .feed-map-segment-heat-5 { background-color: #1b7cbb; }
-  .feed-map-segment-heat-6 { background-color: #1a8dd2; }
-  .feed-map-segment-heat-7 { background-color: #199ee9; }
-  .feed-map-segment-heat-8 { background-color: #18afff; }
-
-  /* === DARK MODE: OCEAN THEME === */
-  .feed-map-theme-ocean .feed-map-position-indicator { background-color: #164e63; }
-  .feed-map-theme-ocean .feed-map-segment-current { outline-color: #facc15 !important; }
-  .feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #fb923c !important; }
-  .feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #164e63; }
-  .feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #155e75; }
-  .feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #0e7490; }
-  .feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #0891b2; }
-  .feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #06b6d4; }
-  .feed-map-theme-ocean .feed-map-segment-heat-6 { background-color: #22d3ee; }
-  .feed-map-theme-ocean .feed-map-segment-heat-7 { background-color: #67e8f9; }
-  .feed-map-theme-ocean .feed-map-segment-heat-8 { background-color: #a5f3fc; }
-
-  /* === DARK MODE: FOREST THEME === */
-  .feed-map-theme-forest .feed-map-position-indicator { background-color: #14532d; }
-  .feed-map-theme-forest .feed-map-segment-current { outline-color: #a3e635 !important; }
-  .feed-map-theme-forest .feed-map-segment-ratioed { background-color: #fb923c !important; }
-  .feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #14532d; }
-  .feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #166534; }
-  .feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #15803d; }
-  .feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #16a34a; }
-  .feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #22c55e; }
-  .feed-map-theme-forest .feed-map-segment-heat-6 { background-color: #4ade80; }
-  .feed-map-theme-forest .feed-map-segment-heat-7 { background-color: #86efac; }
-  .feed-map-theme-forest .feed-map-segment-heat-8 { background-color: #bbf7d0; }
-
-  /* === DARK MODE: MONOCHROME THEME === */
-  .feed-map-theme-monochrome .feed-map-position-indicator { background-color: #374151; }
-  .feed-map-theme-monochrome .feed-map-segment-current { outline-color: #f9fafb !important; }
-  .feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #ef4444 !important; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #1f2937; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #374151; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #4b5563; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #6b7280; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #9ca3af; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-6 { background-color: #d1d5db; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-7 { background-color: #e5e7eb; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-8 { background-color: #f3f4f6; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper {
+  --fm-ink: #ffffff;
+  --fm-halo: rgba(0, 0, 0, 0.8);
+  --fm-hatch: rgba(255, 255, 255, 0.32);
+  --fm-current: #60a5fa;
+  /* Dark ring outlines are light, so the inner line is dark */
+  --fm-current-halo: #000000;
+  --fm-rail: #d1d5db;
+  --fm-new: #c4b5fd;
+  --fm-new-halo: #000000;
 }
+
+/* Pale cells in dark palettes (heat-2 and up; the dark ramps share one
+   luminance per level): dark ink and a dark hatch. Heat-1 measures 7.0:1
+   with white ink, heat-2 5.0:1 with dark ink (4.2:1 with white). Ratioed is
+   a deep red/magenta between heat-1 and heat-2 in lightness and measures
+   5.4:1 with white, so it keeps the light ink. */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper .feed-map-segment-heat-2,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper .feed-map-segment-heat-3,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper .feed-map-segment-heat-4,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper .feed-map-segment-heat-5 {
+  --fm-ink: #000000; /* pure black: heat-2 is a mid tone */
+  --fm-halo: rgba(255, 255, 255, 0.75);
+  --fm-hatch: rgba(0, 0, 0, 0.4);
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-position-indicator {
+  background-color: #374151;
+}
+
+/* Dim: a lighter, bluish track that matches Bluesky's Dim surfaces */
+html[data-bsky-nav-theme="dim"] .feed-map-position-indicator {
+  background-color: #2c3a4e;
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-empty {
+  color: #6b7280;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(107, 114, 128, 0.2) 4px,
+    rgba(107, 114, 128, 0.2) 8px
+  );
+}
+
+/* Basic mode dark: theme colors; read segments get the light hatch */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-basic .feed-map-segment { background-color: #4b5563; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-basic.feed-map-theme-ocean .feed-map-segment { background-color: #0e7490; } /* cyan-700 */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-basic.feed-map-theme-campfire .feed-map-segment { background-color: #b45309; } /* amber-700 */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-basic.feed-map-theme-forest .feed-map-segment { background-color: #15803d; } /* green-700 */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-basic.feed-map-theme-monochrome .feed-map-segment { background-color: #6b7280; } /* gray-500 */
+
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-label {
+  color: #9ca3af;
+}
+
+/* Dark mode ratioed: a deep red at the luminance midway between heat-1 and
+   heat-2 (about 1.3:1 from each, 2:1 from heat-3), so beyond its hue it
+   also differs in lightness from its nearest levels */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-segment-ratioed {
+  background-color: #d01c21 !important;
+}
+
+/* === DARK MODE: CAMPFIRE THEME (amber ramp, dark to light; also the Default theme) === */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-campfire .feed-map-position-indicator { background-color: #451a03; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper.feed-map-theme-campfire { --fm-current: #fbbf24; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-ratioed { background-color: #aa34b3 !important; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-heat-1 { background-color: #8b4534; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-heat-2 { background-color: #c2611d; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-heat-3 { background-color: #e08709; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-heat-4 { background-color: #fbb51a; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-heat-5 { background-color: #ffedad; }
+
+/* === DARK MODE: OCEAN THEME === */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-position-indicator { background-color: #164e63; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper.feed-map-theme-ocean { --fm-current: #facc15; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #d01c21 !important; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #265d87; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #0f84b4; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #07aad1; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #4dd2e9; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #adfbff; }
+
+/* === DARK MODE: FOREST THEME === */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-position-indicator { background-color: #14532d; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper.feed-map-theme-forest { --fm-current: #a3e635; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-ratioed { background-color: #d01c21 !important; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #066642; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #278d4c; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #51b04c; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #90d45f; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #d8f99f; }
+
+/* === DARK MODE: MONOCHROME THEME === */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-position-indicator { background-color: #374151; }
+html[data-bsky-nav-theme="dim"] .feed-map-theme-monochrome .feed-map-position-indicator { background-color: #2c3a4e; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper.feed-map-theme-monochrome { --fm-current: #f9fafb; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #d01c21 !important; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #535a65; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #767c86; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #989da5; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #bec2c8; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #ebeef2; }
+
 
 @media (prefers-contrast: more) {
   .feed-map-position-indicator {
-    height: 4px;
     background-color: #9ca3af;
   }
 
+  /* Denser hatch for read segments */
   .feed-map-segment-read {
-    filter: brightness(0.4);
+    filter: none;
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--fm-hatch) 0 3px,
+      transparent 3px 5px
+    );
   }
 
-  .feed-map-segment-current {
-    outline: 3px solid #1d4ed8;
-    outline-offset: -1px;
+  .feed-map-wrapper {
+    --fm-current-width: 3px;
   }
 }
 
@@ -52320,7 +52495,7 @@ div#statusBar.has-feed-map {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #6b7280;
+  color: #4b5563;
   margin-bottom: 2px;
 }
 
@@ -52338,11 +52513,11 @@ div#statusBar.has-feed-map {
 }
 
 .feed-map-tooltip-handle {
-  color: #9ca3af;
+  color: #4b5563; /* 7.6:1 on white */
 }
 
 .feed-map-tooltip-time {
-  color: #9ca3af;
+  color: #4b5563;
 }
 
 .feed-map-tooltip-author {
@@ -52390,11 +52565,29 @@ div#statusBar.has-feed-map {
   margin-left: auto;
 }
 
-/* Read post styling - only when visible */
-.feed-map-tooltip.visible.feed-map-tooltip-read {
-  opacity: 0.85;
+/* Heat row: score for the heatmap mode, rank band in this feed, and a swatch
+   of the post's map color (the tooltip carries the map's theme class) */
+.feed-map-tooltip-heat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #374151;
+  margin-bottom: 6px;
 }
 
+.feed-map-tooltip-heat-swatch {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+/* Read post styling - only when visible. Muted text only; the tooltip stays
+   fully opaque so the map does not show through it. */
 .feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-author,
 .feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-content {
   color: #6b7280;
@@ -52409,51 +52602,59 @@ div#statusBar.has-feed-map {
   border-top: 1px solid #fecaca;
 }
 
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-  .feed-map-tooltip {
-    background: #1f2937;
-    border-color: #374151;
-    color: #f3f4f6;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  }
+/* Dark palettes (Dim / Dark) */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip {
+  background: #1f2937;
+  border-color: #374151;
+  color: #f3f4f6;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
 
-  .feed-map-tooltip-header {
-    color: #9ca3af;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-header {
+  color: #9ca3af;
+}
 
-  .feed-map-tooltip-handle,
-  .feed-map-tooltip-time {
-    color: #6b7280;
-  }
+/* 5.8:1 on the #1f2937 tooltip (was #6b7280, 2.57:1) */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-handle,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-time {
+  color: #9ca3af;
+}
 
-  .feed-map-tooltip-author {
-    color: #f9fafb;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-heat {
+  color: #d1d5db;
+}
 
-  .feed-map-tooltip-content {
-    color: #d1d5db;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-heat-swatch {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
 
-  .feed-map-tooltip-engagement {
-    color: #9ca3af;
-    border-top-color: #374151;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-author {
+  color: #f9fafb;
+}
 
-  .feed-map-tooltip-icon,
-  .feed-map-tooltip-media-icon {
-    filter: invert(1);
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-content {
+  color: #d1d5db;
+}
 
-  .feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-author,
-  .feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-content {
-    color: #9ca3af;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-engagement {
+  color: #9ca3af;
+  border-top-color: #374151;
+}
 
-  .feed-map-tooltip.feed-map-tooltip-ratioed .feed-map-tooltip-engagement {
-    background-color: #450a0a;
-    border-top-color: #7f1d1d;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-icon,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-media-icon {
+  filter: invert(1);
+}
+
+/* Same selector shape as the light rule (with .visible) so this one wins */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-author,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-content {
+  color: #9ca3af;
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip.feed-map-tooltip-ratioed .feed-map-tooltip-engagement {
+  background-color: #450a0a;
+  border-top-color: #7f1d1d;
 }
 
 /* ==========================================================================
@@ -66077,6 +66278,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
     detail: svgToDataUrl(`<svg fill="#000000" width="800px" height="800px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20 3H4c-1.103 0-2 .897-2 2v14c0 1.103.897 2 2 2h16c1.103 0 2-.897 2-2V5c0-1.103-.897-2-2-2zM4 19V5h16l.002 14H4z"/><path d="M6 7h12v2H6zm0 4h12v2H6zm0 4h6v2H6z"/></svg>`),
     repost: svgToDataUrl(`<svg fill="#000000" width="800px" height="800px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 7a1 1 0 0 0-1-1h-8v2h7v5h-3l3.969 5L22 13h-3V7zM5 17a1 1 0 0 0 1 1h8v-2H7v-5h3L6 6l-4 5h3v6z"/></svg>`),
     reply: svgToDataUrl(`<svg fill="#000000" width="800px" height="800px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10 11h6v7h2v-8a1 1 0 0 0-1-1h-7V6l-5 4 5 4v-3z"/></svg>`),
+    // Outline heart (Boxicons bx-heart), for like counts
+    heart: svgToDataUrl(`<svg fill="#000000" width="800px" height="800px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 4.595a5.904 5.904 0 0 0-3.996-1.558 5.942 5.942 0 0 0-4.213 1.758c-2.353 2.363-2.352 6.059.002 8.412l7.332 7.332c.17.299.498.492.875.492a.99.99 0 0 0 .792-.409l7.415-7.415c2.354-2.354 2.354-6.049-.002-8.416a5.938 5.938 0 0 0-4.209-1.754A5.906 5.906 0 0 0 12 4.595zm6.791 1.61c1.563 1.571 1.564 4.025.002 5.588L12 18.586l-6.793-6.793c-1.562-1.563-1.561-4.017-.002-5.584.76-.756 1.754-1.172 2.799-1.172s2.035.416 2.789 1.17l.5.5a.999.999 0 0 0 1.414 0l.5-.5c1.512-1.509 4.074-1.505 5.584-.002z"/></svg>`),
     comment: svgToDataUrl(`<svg fill="#000000" width="800px" height="800px" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20 2H4c-1.103 0-2 .897-2 2v18l5.333-4H20c1.103 0 2-.897 2-2V4c0-1.103-.897-2-2-2zm0 14H6.667L4 18V4h16v12z"/></svg>`),
     spoolOfThread: svgToDataUrl(`<svg fill="#000000" height="800px" width="800px" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 436.979 436.979"><path d="m369.299,85.997c5.523,0 10-4.477 10-10 0-10.2 8.298-18.499 18.499-18.499h7.262c5.523,0 10-4.477 10-10v-37.498c0-5.523-4.477-10-10-10h-316.485c-5.523,0-10,4.477-10,10v37.498c0,5.523 4.477,10 10,10h7.262c10.2,0 18.499,8.298 18.499,18.499 0,5.523 4.477,10 10,10h7.487v134.873c0,28.153-22.904,51.057-51.058,51.057-21.419,0-38.846-17.426-38.846-38.846 0-16.033 13.044-29.077 29.077-29.077 11.724,0 21.261,9.538 21.261,21.261 0,5.523 4.477,10 10,10s10-4.477 10-10c0-22.751-18.51-41.261-41.261-41.261-27.061,0-49.077,22.016-49.077,49.077 0,32.448 26.398,58.846 58.846,58.846 20.025,0 38.129-8.34 51.058-21.712v80.767h-7.487c-5.523,0-10,4.477-10,10 0,10.2-8.298,18.499-18.499,18.499h-7.262c-5.523,0-10,4.477-10,10v37.498c0,5.523 4.477,10 10,10h316.485c5.523,0 10-4.477 10-10v-37.498c0-5.523-4.477-10-10-10h-7.262c-10.2,0-18.499-8.298-18.499-18.499 0-5.523-4.477-10-10-10h-7.487v-264.985h7.487zm-187.681,264.985l160.194-73.232v23.783l-108.176,49.449h-52.018zm65.469-264.985l82.86,37.879-26.001,11.886-108.863-49.765h52.004zm32.806,60.76l-26.013,11.892-102.057-46.657v-23.78l128.07,58.545zm-76.073,34.776l-51.997-23.771v-23.779l78.005,35.661-26.008,11.889zm-51.997-1.78l27.945,12.776-27.945,12.775v-25.551zm0,47.541l189.989-86.852v23.779l-189.989,86.852v-23.779zm0,45.77l189.989-86.852v23.779l-189.989,86.852v-23.779zm0,45.769l189.989-86.852v23.779l-189.989,86.852v-23.779zm143.369-232.836h46.62v21.312l-46.62-21.312zm99.868-65.997v17.498h-296.485v-17.498h296.485zm-31.014,37.498c-1.463,2.659-2.625,5.506-3.43,8.499h-227.597c-0.806-2.992-1.967-5.84-3.43-8.499h234.457zm-265.471,359.481v-17.498h296.485v17.498h-296.485zm31.014-37.498c1.463-2.659 2.625-5.506 3.43-8.499h227.597c0.806,2.992 1.967,5.84 3.43,8.499h-234.457zm152.154-28.499l60.069-27.458v27.458h-60.069z"/></svg>`)
   };
@@ -72937,6 +73140,72 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }, 3e3);
     }
   }
+  const HEAT_LEVELS = 5;
+  const HEAT_CLASSES = Array.from(
+    { length: HEAT_LEVELS },
+    (_, i) => `feed-map-segment-heat-${i + 1}`
+  ).join(" ");
+  function createHeatLevelFn(scores) {
+    const sorted = [];
+    for (const score of scores) {
+      if (score > 0 && Number.isFinite(score)) sorted.push(score);
+    }
+    sorted.sort((a, b) => a - b);
+    const n = sorted.length;
+    const bound = (score, strict) => {
+      let lo = 0;
+      let hi = n;
+      while (lo < hi) {
+        const mid = lo + hi >> 1;
+        if (strict ? sorted[mid] <= score : sorted[mid] < score) lo = mid + 1;
+        else hi = mid;
+      }
+      return lo;
+    };
+    const levelOf = (score) => {
+      if (!(score > 0) || n === 0) return 0;
+      const below = bound(score, false);
+      const atOrBelow = bound(score, true);
+      const midRank = (below + atOrBelow) / 2 / n;
+      const quantileLevel = Math.floor(midRank * HEAT_LEVELS) + 1;
+      const topDownLevel = HEAT_LEVELS - (n - atOrBelow);
+      return Math.min(HEAT_LEVELS, Math.max(1, quantileLevel, topDownLevel));
+    };
+    levelOf.rankOf = (score) => {
+      if (!(score > 0) || n === 0) return null;
+      const below = Math.min(bound(score, false), n - 1);
+      const atOrBelow = Math.max(bound(score, true), 1);
+      return {
+        level: levelOf(score),
+        atOrAbove: (n - below) / n,
+        atOrBelow: atOrBelow / n,
+        n
+      };
+    };
+    return levelOf;
+  }
+  function formatRankBand(rank) {
+    if (!rank || !(rank.n > 0)) return "";
+    const pct = (share) => Math.min(100, Math.max(1, Math.ceil(share * 100 - 1e-9)));
+    if (rank.n === 1) return "only post with engagement";
+    if (rank.atOrAbove >= 1 && rank.atOrBelow >= 1) return "tied with every post";
+    if (rank.atOrAbove <= 0.5) return `top ${pct(rank.atOrAbove)}%`;
+    return `bottom ${pct(rank.atOrBelow)}%`;
+  }
+  function findNewPostsBoundary(allPostIds, displayIndices, anchorPostId, reversed = false) {
+    if (!anchorPostId || !allPostIds || !displayIndices) return null;
+    const anchorIndex = allPostIds.indexOf(anchorPostId);
+    if (anchorIndex < 0) return null;
+    const total = displayIndices.length;
+    const before = reversed ? displayIndices.filter((i) => i <= anchorIndex).length : displayIndices.filter((i) => i < anchorIndex).length;
+    if (before === 0 || before === total) return null;
+    return { index: before, newCount: reversed ? total - before : before };
+  }
+  function newestPostId(allPostIds, reversed = false) {
+    if (!allPostIds || !allPostIds.length) return null;
+    const ids = reversed ? [...allPostIds].reverse() : allPostIds;
+    return ids.find((id) => !!id) || null;
+  }
   function getFeedMapConfig(config2) {
     const position = config2.get("feedMapPosition");
     const style2 = config2.get("feedMapStyle") || "Advanced";
@@ -72981,6 +73250,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       <path class="feed-map-connector-path feed-map-connector-right" fill="none"/>
     </svg>
   </div>`);
+    const legendLabel = "Engagement heat, ranked within this feed: less to more";
+    const legendSwatches = Array.from(
+      { length: HEAT_LEVELS },
+      (_, i) => `<span class="feed-map-legend-swatch feed-map-segment-heat-${i + 1}"></span>`
+    ).join("");
+    const legend = $(
+      `<div class="feed-map-legend" role="img" aria-label="${legendLabel}" title="${legendLabel}"><span class="feed-map-legend-text" aria-hidden="true">less</span>${legendSwatches}<span class="feed-map-legend-text" aria-hidden="true">more</span></div>`
+    );
+    connector.append(legend);
     const zoomContainer = $(`<div class="${zoomContainerClass}"></div>`);
     const zoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
     const zoomLabelEnd = $(`<span class="feed-map-label feed-map-label-end"></span>`);
@@ -73012,7 +73290,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       zoomLabelEnd,
       zoom,
       zoomInner,
-      zoomHighlight
+      zoomHighlight,
+      legend
     };
   }
   function attachFeedMapToHandler(handler, elements) {
@@ -73037,12 +73316,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     handler.setupFeedMapTooltipHandlers(feedMap);
     handler.setupFeedMapTooltipHandlers(feedMapZoom);
   }
-  const ZOOM_SEGMENT_STATE_CLASSES = "feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8";
+  const ZOOM_SEGMENT_STATE_CLASSES = "feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed feed-map-segment-new-boundary " + HEAT_CLASSES;
   function renderZoomSegment(handler, $segment, segmentState, options) {
-    const { item, hasItem, isCurrent, engData } = segmentState;
+    const { item, hasItem, isCurrent, engData, isNewBoundary } = segmentState;
     const {
       heatmapMode,
-      maxScore,
+      heatLevelOf,
       showIcons,
       showAvatars,
       avatarScale,
@@ -73067,10 +73346,13 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     if (isCurrent) {
       $segment.addClass("feed-map-segment-current");
     }
+    if (isNewBoundary) {
+      $segment.addClass("feed-map-segment-new-boundary");
+    }
     if (engData?.engagement?.isRatioed) {
       $segment.addClass("feed-map-segment-ratioed");
-    } else if (heatmapMode !== "None" && engData) {
-      const heatLevel = handler.getHeatLevel(engData.score, maxScore);
+    } else if (heatmapMode !== "None" && engData && heatLevelOf) {
+      const heatLevel = heatLevelOf(engData.score);
       if (heatLevel > 0) {
         $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
       }
@@ -73172,6 +73454,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       );
     }
   }
+  const FEED_ANCHORS_KEY = "bluesky_navigator_feed_anchors";
+  const FEED_ANCHORS_MAX = 50;
   const { waitForElement: waitForElement$1, announceToScreenReader } = utils$1;
   class FeedItemHandler extends ItemHandler {
     INDICATOR_IMAGES = {
@@ -73189,7 +73473,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       contentRepost: icons.repost,
       contentReply: icons.reply,
       contentPost: icons.comment,
-      contentThread: icons.spoolOfThread
+      contentThread: icons.spoolOfThread,
+      contentLike: icons.heart
     };
     constructor(name, config2, state2, api, selector) {
       super(name, config2, state2, api, selector);
@@ -73237,7 +73522,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       if (this.feedMapZoom) {
         this.feedMapZoom.find(".feed-map-segment-zoom").remove();
       }
+      this._newPostsPaused = true;
       setTimeout(() => {
+        this._newPostsPaused = false;
         this.loadItems();
         this.updateScrollPosition(true);
       }, 200);
@@ -73922,23 +74209,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
               }
             });
             let engagementData = [];
-            let maxScore = 0;
             if (isAdvancedStyle && (heatmapMode !== "None" || showIcons || showAvatars || showHandles)) {
               engagementData = this.getPostEngagementBatch(allItems).map((engagement) => {
                 const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
                 return { engagement, score };
               });
-              displayItems.forEach((item, i) => {
-                const actualIndex = displayIndices[i];
-                if (engagementData[actualIndex]?.score > maxScore) {
-                  maxScore = engagementData[actualIndex].score;
-                }
-              });
             }
+            const heatLevelOf = this.buildFeedMapHeatLevels(heatmapMode, engagementData, displayIndices);
             const selectedElement = this.items[this.index];
             const currentDisplayIndex = displayItems.indexOf(selectedElement);
             if (isAdvancedStyle) {
-              this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayItems.length, displayItems, displayIndices);
+              this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, heatLevelOf, displayItems.length, displayItems, displayIndices);
             } else {
               if (this.feedMapZoomContainer) this.feedMapZoomContainer.hide();
               if (this.feedMapConnector) this.feedMapConnector.hide();
@@ -74805,19 +75086,17 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const showHandles = isAdvancedStyle ? this.config.get("feedMapHandles") !== false : false;
       const showRuleColors = isAdvancedStyle && this.config.get("ruleColorCoding");
       let engagementData = [];
-      let maxScore = 0;
       if (isAdvancedStyle && (heatmapMode !== "None" || showIcons || showAvatars || showHandles)) {
         engagementData = this.getPostEngagementBatch(allItems).map((engagement) => {
           const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
           return { engagement, score };
         });
-        displayItems.forEach((item, i) => {
-          const actualIndex = displayIndices[i];
-          if (engagementData[actualIndex]?.score > maxScore) {
-            maxScore = engagementData[actualIndex].score;
-          }
-        });
       }
+      const heatLevelOf = this.buildFeedMapHeatLevels(heatmapMode, engagementData, displayIndices);
+      if (this.feedMapWrapper) {
+        this.feedMapWrapper.toggleClass("feed-map-has-heat", isAdvancedStyle && heatmapMode !== "None");
+      }
+      this.updateNewPostsBoundary(allItems, displayItems, displayIndices);
       segments.each((i, segment) => {
         const $segment = $(segment);
         $segment.empty();
@@ -74832,7 +75111,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         const isRead = $(item).hasClass("item-read");
         const isCurrent = i === currentDisplayIndex;
         $segment.removeClass(
-          "feed-map-segment-read feed-map-segment-current feed-map-segment-ratioed feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8"
+          "feed-map-segment-read feed-map-segment-current feed-map-segment-ratioed " + HEAT_CLASSES
         );
         $segment.find(".feed-map-segment-icon, .feed-map-segment-progress").remove();
         if (isRead) {
@@ -74844,7 +75123,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (engagementData[actualIndex]?.engagement?.isRatioed) {
           $segment.addClass("feed-map-segment-ratioed");
         } else if (heatmapMode !== "None" && engagementData[actualIndex]) {
-          const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
+          const heatLevel = heatLevelOf(engagementData[actualIndex].score);
           if (heatLevel > 0) {
             $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
           }
@@ -74880,8 +75159,9 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         }
       }
       this.updateViewportIndicator(indicator, displayItems);
+      this.renderNewPostsDivider(indicator, total);
       if (this.feedMapZoom && isAdvancedStyle) {
-        this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, total, displayItems, displayIndices);
+        this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, heatLevelOf, total, displayItems, displayIndices);
       }
       this.updateFeedMapLabels();
       const position = currentDisplayIndex >= 0 ? currentDisplayIndex + 1 : 0;
@@ -75134,12 +75414,135 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
     /**
-     * Get heat level (1-8) for a score relative to all scores
+     * Build the score -> heat level function for one feed map render, ranking
+     * only the displayed items (see createHeatLevelFn() in feedMapUtils.js).
+     * The result is also kept on this.feedMapHeatLevels so zoom panning
+     * (updateFeedMapZoomDirect) colors segments on the same scale as the main map.
+     *
+     * @param {string} heatmapMode - feedMapHeatmap setting ('None' turns heat off)
+     * @param {Array<{score: number}>} engagementData - Indexed by actual item index
+     * @param {number[]} displayIndices - Actual item index of each displayed item
+     * @returns {(score: number) => number} Heat level, 0 to HEAT_LEVELS
      */
-    getHeatLevel(score, maxScore) {
-      if (maxScore === 0 || score === 0) return 0;
-      const normalized = score / maxScore;
-      return Math.min(8, Math.max(1, Math.ceil(normalized * 8)));
+    buildFeedMapHeatLevels(heatmapMode, engagementData, displayIndices) {
+      const scores = heatmapMode !== "None" ? displayIndices.map((i) => engagementData[i]?.score) : [];
+      const heatLevelOf = createHeatLevelFn(scores);
+      this.feedMapHeatLevels = { heatmapMode, heatLevelOf };
+      return heatLevelOf;
+    }
+    /**
+     * Key that identifies the feed being shown, for the new-posts anchors: the
+     * page path plus the selected feed tab (Following, Discover, a profile's
+     * Posts/Replies/Media tab, ...).
+     */
+    feedKeyForNewPosts() {
+      const tab = $('div[role="tablist"] [aria-selected="true"]').first().text().trim();
+      return `${window.location.pathname}|${tab}`;
+    }
+    /**
+     * Stable ID for a feed item, for the new-posts anchors: the path of its post
+     * link (/profile/<handle>/post/<rkey>), or null if it has none.
+     */
+    feedItemKey(item) {
+      const url = this.urlForItem(item);
+      return url ? url.replace(/^https:\/\/bsky\.app/, "") : null;
+    }
+    readFeedAnchors() {
+      try {
+        const parsed = JSON.parse(GM_getValue(FEED_ANCHORS_KEY, "{}"));
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+    writeFeedAnchor(feedKey, postKey) {
+      try {
+        const anchors = this.readFeedAnchors();
+        anchors[feedKey] = { post: postKey, at: Date.now() };
+        const keys = Object.keys(anchors);
+        if (keys.length > FEED_ANCHORS_MAX) {
+          keys.sort((a, b) => (anchors[a]?.at || 0) - (anchors[b]?.at || 0)).slice(0, keys.length - FEED_ANCHORS_MAX).forEach((k) => delete anchors[k]);
+        }
+        GM_setValue(FEED_ANCHORS_KEY, JSON.stringify(anchors));
+      } catch (e) {
+        console.warn("[bsky-navigator] Could not save feed anchor:", e);
+      }
+    }
+    /**
+     * Work out where the posts that are new since the user last looked at this
+     * feed end, for the feed map's new-posts divider.
+     *
+     * "Last looked" has two sources, and the later one wins:
+     * - Opening the feed: the newest post of this feed (by feed key) the last
+     *   time it was shown, kept in GM storage under FEED_ANCHORS_KEY. The current
+     *   newest post is written back right away, so the next visit compares
+     *   against this one.
+     * - Loading newer posts while on the feed (the "New posts" pill, u, or a
+     *   Bluesky refresh): when a post that was never in this view appears as the
+     *   newest one, the previous newest post becomes the anchor.
+     * Read-state tracking is not involved.
+     *
+     * Sets this._newPosts = { boundaryItem, newItems: Set, newCount, index } or
+     * null, and returns it.
+     *
+     * @param {Element[]} allItems - All feed items, in display order (filtered ones too)
+     * @param {Element[]} displayItems - Items that get a map segment
+     * @param {number[]} displayIndices - Index into allItems of each displayed item
+     */
+    updateNewPostsBoundary(allItems, displayItems, displayIndices) {
+      if (this.config.get("feedMapNewPostsMarker") === false || this._newPostsPaused || !allItems.length) {
+        this._newPosts = null;
+        return null;
+      }
+      const reversed = !!this.state.feedSortReverse;
+      const allKeys = allItems.map((item) => this.feedItemKey(item));
+      const feedKey = this.feedKeyForNewPosts();
+      const newest = newestPostId(allKeys, reversed);
+      if (this._newPostsView?.feedKey !== feedKey) {
+        const stored = this.readFeedAnchors()[feedKey];
+        this._newPostsView = {
+          feedKey,
+          anchor: stored?.post || null,
+          newest: null,
+          known: /* @__PURE__ */ new Set()
+        };
+      }
+      const view = this._newPostsView;
+      if (newest && newest !== view.newest) {
+        if (view.newest && !view.known.has(newest)) view.anchor = view.newest;
+        view.newest = newest;
+        this.writeFeedAnchor(feedKey, newest);
+      }
+      allKeys.forEach((k) => k && view.known.add(k));
+      const boundary = findNewPostsBoundary(allKeys, displayIndices, view.anchor, reversed);
+      if (!boundary) {
+        this._newPosts = null;
+        return null;
+      }
+      const newItems = reversed ? displayItems.slice(boundary.index) : displayItems.slice(0, boundary.index);
+      this._newPosts = {
+        index: boundary.index,
+        newCount: boundary.newCount,
+        boundaryItem: displayItems[boundary.index],
+        newItems: new Set(newItems)
+      };
+      return this._newPosts;
+    }
+    /**
+     * Draw (or remove) the new-posts divider on the main feed map.
+     */
+    renderNewPostsDivider(indicator, total) {
+      let divider = indicator.children(".feed-map-new-divider");
+      const newPosts = this._newPosts;
+      if (!newPosts || !(total > 1)) {
+        divider.remove();
+        return;
+      }
+      if (!divider.length) {
+        divider = $('<div class="feed-map-new-divider" aria-hidden="true"></div>');
+        indicator.append(divider);
+      }
+      divider.css("left", `calc(${newPosts.index / total * 100}% - 2px)`);
     }
     /**
      * Get icon/emoji for post content type
@@ -75313,7 +75716,6 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const showTimestamps = isAdvancedStyle ? this.config.get("feedMapTimestamps") !== false : false;
       const showHandles = isAdvancedStyle ? this.config.get("feedMapHandles") !== false : false;
       const showRuleColors = isAdvancedStyle && this.config.get("ruleColorCoding");
-      let maxScore = 0;
       const windowEngagement = [];
       for (let i = 0; i < zoomWindowSize; i++) {
         const displayIndex = windowStart + i;
@@ -75321,14 +75723,25 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         if (item && (heatmapMode !== "None" || showIcons || showAvatars || showHandles)) {
           const engagement = this.getPostEngagement(item);
           const score = heatmapMode !== "None" ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
-          if (score > maxScore) maxScore = score;
           windowEngagement[i] = { engagement, score };
         } else {
           windowEngagement[i] = null;
         }
       }
+      let heatLevelOf = null;
+      if (heatmapMode !== "None") {
+        if (this.feedMapHeatLevels?.heatmapMode === heatmapMode) {
+          heatLevelOf = this.feedMapHeatLevels.heatLevelOf;
+        } else {
+          const scores = this.getPostEngagementBatch(displayItems).map(
+            (engagement) => this.calculateEngagementScore(engagement, heatmapMode)
+          );
+          heatLevelOf = createHeatLevelFn(scores);
+          this.feedMapHeatLevels = { heatmapMode, heatLevelOf };
+        }
+      }
       const segments = zoomInner.find(".feed-map-segment");
-      const segmentOptions = { heatmapMode, maxScore, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
+      const segmentOptions = { heatmapMode, heatLevelOf, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
       segments.each((i, segment) => {
         const displayIndex = windowStart + i;
         const item = displayItems[displayIndex];
@@ -75336,7 +75749,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           item,
           hasItem: displayIndex >= 0 && displayIndex < total && item,
           isCurrent: displayIndex === currentIndex,
-          engData: windowEngagement[i]
+          engData: windowEngagement[i],
+          isNewBoundary: !!item && i > 0 && item === this._newPosts?.boundaryItem
         }, segmentOptions);
       });
       this.updateFeedMapZoomLabels(windowStart, windowEnd, displayItems);
@@ -75349,7 +75763,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     /**
      * Update the feed map zoom showing posts around the current selection
      */
-    updateFeedMapZoom(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayTotal, displayItems, displayIndices) {
+    updateFeedMapZoom(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, heatLevelOf, displayTotal, displayItems, displayIndices) {
       const zoomIndicator = this.feedMapZoom;
       const zoomInner = this.feedMapZoomInner;
       if (!zoomIndicator || !zoomInner) return;
@@ -75426,7 +75840,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       this.zoomWindowStart = windowStart;
       const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
-      const segmentOptions = { heatmapMode, maxScore, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
+      const segmentOptions = { heatmapMode, heatLevelOf, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
       segments.each((i, segment) => {
         const displayIndex = windowStart + i;
         const item = displayItems[displayIndex];
@@ -75435,7 +75849,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           item,
           hasItem: displayIndex >= 0 && displayIndex < total && item,
           isCurrent: displayIndex === currentIndex,
-          engData: engagementData[actualIndex]
+          engData: engagementData[actualIndex],
+          isNewBoundary: !!item && i > 0 && item === this._newPosts?.boundaryItem
         }, segmentOptions);
       });
       zoomIndicator.css("--feed-map-icon-display", "flex");
@@ -75607,6 +76022,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           </div>
           <div class="feed-map-tooltip-author"></div>
           <div class="feed-map-tooltip-content"></div>
+          <div class="feed-map-tooltip-heat"></div>
           <div class="feed-map-tooltip-engagement"></div>
         </div>
       `);
@@ -75658,12 +76074,20 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       } else {
         avatarImg.hide();
       }
+      const isNew = !!this._newPosts?.newItems.has(item);
       tooltip.find(".feed-map-tooltip-handle").text(`@${handle2}`);
-      tooltip.find(".feed-map-tooltip-time").text(relativeTime ? ` \xB7 ${relativeTime}` : "");
+      tooltip.find(".feed-map-tooltip-time").text((relativeTime ? ` \xB7 ${relativeTime}` : "") + (isNew ? " \xB7 new since you last looked" : ""));
       tooltip.find(".feed-map-tooltip-author").text(displayName || handle2);
       tooltip.find(".feed-map-tooltip-content").text(truncatedText || "(no text)");
       const engagementHtml = this.buildEngagementHtml(engagement);
       tooltip.find(".feed-map-tooltip-engagement").html(engagementHtml);
+      const heatHtml = this.buildHeatHtml(engagement);
+      tooltip.find(".feed-map-tooltip-heat").html(heatHtml).toggle(!!heatHtml);
+      const themePattern = /feed-map-theme-\S+/g;
+      const wrapperTheme = (this.feedMapWrapper?.attr("class") || "").match(themePattern);
+      const themeClass = wrapperTheme ? wrapperTheme[0] : getFeedMapConfig(this.config).themeClass;
+      tooltip.removeClass((_i, cls) => (cls.match(themePattern) || []).join(" "));
+      tooltip.addClass(themeClass);
       tooltip.removeClass("feed-map-tooltip-read feed-map-tooltip-ratioed");
       if (isRead) tooltip.addClass("feed-map-tooltip-read");
       if (engagement?.isRatioed) tooltip.addClass("feed-map-tooltip-ratioed");
@@ -75734,6 +76158,38 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       return format(date, "M/d");
     }
     /**
+     * Build HTML for the tooltip's heat row: the post's engagement score for the
+     * current heatmap mode and its rank band in this feed (e.g. "top 20%"), with
+     * a swatch of the color the map gives it. Empty when the heatmap is off.
+     */
+    buildHeatHtml(engagement) {
+      const isAdvanced = (this.config.get("feedMapStyle") || "Advanced") === "Advanced";
+      const heatmapMode = isAdvanced ? this.config.get("feedMapHeatmap") || "None" : "None";
+      if (heatmapMode === "None" || !engagement) return "";
+      const score = this.calculateEngagementScore(engagement, heatmapMode);
+      const ranking = this.feedMapHeatLevels?.heatmapMode === heatmapMode ? this.feedMapHeatLevels.heatLevelOf : null;
+      const rank = ranking?.rankOf ? ranking.rankOf(score) : null;
+      const perHour = (value) => {
+        if (!Number.isFinite(value)) return "?";
+        if (value >= 100) return this.formatCount(Math.round(value));
+        return value >= 10 ? value.toFixed(0) : value.toFixed(1);
+      };
+      let scoreText;
+      if (heatmapMode === "Engagement Rate") {
+        scoreText = `${perHour(score)} interactions/hour`;
+      } else if (heatmapMode === "Weighted Engagement") {
+        scoreText = `weighted score ${perHour(score)}/hour`;
+      } else {
+        scoreText = `${this.formatCount(score || 0)} interactions`;
+      }
+      const band = formatRankBand(rank);
+      const level = rank?.level || 0;
+      const swatchClass = engagement.isRatioed ? "feed-map-segment-ratioed" : level ? `feed-map-segment-heat-${level}` : "";
+      const levelText = engagement.isRatioed ? "ratioed" : level ? `heat ${level}/${HEAT_LEVELS}` : "no heat";
+      const rankText = band ? ` \xB7 ${band}` : " \xB7 no engagement yet";
+      return `<span class="feed-map-tooltip-heat-swatch ${swatchClass}" aria-hidden="true"></span><span title="Rank among the posts in this feed">${this.escapeHtml(`${scoreText}${rankText} \xB7 ${levelText}`)}</span>`;
+    }
+    /**
      * Build HTML for engagement stats row
      */
     buildEngagementHtml(engagement) {
@@ -75741,7 +76197,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const items = [];
       items.push(`
       <span class="feed-map-tooltip-stat">
-        <img src="${this.INDICATOR_IMAGES.filter[0]}" alt="likes" class="feed-map-tooltip-icon">
+        <img src="${this.INDICATOR_IMAGES.contentLike}" alt="likes" class="feed-map-tooltip-icon">
         <span>${this.formatCount(engagement.likes)}</span>
       </span>
     `);

@@ -12,7 +12,18 @@ import {
   attachFeedMapToHandler,
   setupFeedMapHandlers,
   renderZoomSegment,
+  createHeatLevelFn,
+  formatRankBand,
+  findNewPostsBoundary,
+  newestPostId,
+  HEAT_CLASSES,
+  HEAT_LEVELS,
 } from './feedMapUtils.js';
+
+/** GM storage key for the per-feed "newest post you had seen" anchors. */
+const FEED_ANCHORS_KEY = 'bluesky_navigator_feed_anchors';
+/** Most feeds to keep anchors for; the least recently updated ones are dropped. */
+const FEED_ANCHORS_MAX = 50;
 
 const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
 
@@ -36,6 +47,7 @@ export class FeedItemHandler extends ItemHandler {
     contentReply: icons.reply,
     contentPost: icons.comment,
     contentThread: icons.spoolOfThread,
+    contentLike: icons.heart,
   };
 
   constructor(name, config, state, api, selector) {
@@ -102,8 +114,13 @@ export class FeedItemHandler extends ItemHandler {
       this.feedMapZoom.find('.feed-map-segment-zoom').remove();
     }
 
+    // Until the new tab's posts are loaded, the old tab's posts would be read
+    // as the new tab's newest post; hold the new-posts divider until then
+    this._newPostsPaused = true;
+
     // Delay to let Bluesky update the DOM with new feed items
     setTimeout(() => {
+      this._newPostsPaused = false;
       this.loadItems();
       this.updateScrollPosition(true);
     }, 200);
@@ -1062,20 +1079,14 @@ export class FeedItemHandler extends ItemHandler {
 
           // Recalculate engagement data for ALL items
           let engagementData = [];
-          let maxScore = 0;
           if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons || showAvatars || showHandles)) {
             engagementData = this.getPostEngagementBatch(allItems).map((engagement) => {
               const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
               return { engagement, score };
             });
-            // Calculate maxScore only from displayed items (excludes unrolled thread duplicates)
-            displayItems.forEach((item, i) => {
-              const actualIndex = displayIndices[i];
-              if (engagementData[actualIndex]?.score > maxScore) {
-                maxScore = engagementData[actualIndex].score;
-              }
-            });
           }
+          // Rank heat only among displayed items (excludes unrolled thread duplicates)
+          const heatLevelOf = this.buildFeedMapHeatLevels(heatmapMode, engagementData, displayIndices);
 
           // Find current item's position in displayItems by element comparison
           const selectedElement = this.items[this.index];
@@ -1083,7 +1094,7 @@ export class FeedItemHandler extends ItemHandler {
 
           // Only show feed map zoom in Advanced mode
           if (isAdvancedStyle) {
-            this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayItems.length, displayItems, displayIndices);
+            this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, heatLevelOf, displayItems.length, displayItems, displayIndices);
           } else {
             // Hide zoom elements in Basic mode
             if (this.feedMapZoomContainer) this.feedMapZoomContainer.hide();
@@ -2213,22 +2224,24 @@ export class FeedItemHandler extends ItemHandler {
 
     // Calculate engagement data for ALL items (indexed by actual item index for feed map zoom)
     let engagementData = [];
-    let maxScore = 0;
 
     if (isAdvancedStyle && (heatmapMode !== 'None' || showIcons || showAvatars || showHandles)) {
       engagementData = this.getPostEngagementBatch(allItems).map((engagement) => {
         const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
         return { engagement, score };
       });
-      // Calculate maxScore only from displayed items (excludes unrolled thread duplicates)
-      // This prevents heatmap colors from shifting when viewing unrolled threads
-      displayItems.forEach((item, i) => {
-        const actualIndex = displayIndices[i];
-        if (engagementData[actualIndex]?.score > maxScore) {
-          maxScore = engagementData[actualIndex].score;
-        }
-      });
     }
+    // Rank heat only among displayed items (excludes unrolled thread duplicates).
+    // This prevents heatmap colors from shifting when viewing unrolled threads.
+    const heatLevelOf = this.buildFeedMapHeatLevels(heatmapMode, engagementData, displayIndices);
+
+    // The heat legend shows only while heat colors are on
+    if (this.feedMapWrapper) {
+      this.feedMapWrapper.toggleClass('feed-map-has-heat', isAdvancedStyle && heatmapMode !== 'None');
+    }
+
+    // Where the posts that are new since the user last looked end
+    this.updateNewPostsBoundary(allItems, displayItems, displayIndices);
 
     // Update segment states
     segments.each((i, segment) => {
@@ -2252,9 +2265,7 @@ export class FeedItemHandler extends ItemHandler {
 
       // Remove all state classes
       $segment.removeClass(
-        'feed-map-segment-read feed-map-segment-current feed-map-segment-ratioed ' +
-        'feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 ' +
-        'feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8'
+        'feed-map-segment-read feed-map-segment-current feed-map-segment-ratioed ' + HEAT_CLASSES
       );
 
       // Clear existing icon and progress bar
@@ -2275,7 +2286,7 @@ export class FeedItemHandler extends ItemHandler {
       if (engagementData[actualIndex]?.engagement?.isRatioed) {
         $segment.addClass('feed-map-segment-ratioed');
       } else if (heatmapMode !== 'None' && engagementData[actualIndex]) {
-        const heatLevel = this.getHeatLevel(engagementData[actualIndex].score, maxScore);
+        const heatLevel = heatLevelOf(engagementData[actualIndex].score);
         if (heatLevel > 0) {
           $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
         }
@@ -2324,9 +2335,12 @@ export class FeedItemHandler extends ItemHandler {
     // Update viewport indicator position
     this.updateViewportIndicator(indicator, displayItems);
 
+    // New-posts divider on the main map
+    this.renderNewPostsDivider(indicator, total);
+
     // Update feed map zoom if present and in Advanced mode
     if (this.feedMapZoom && isAdvancedStyle) {
-      this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, total, displayItems, displayIndices);
+      this.updateFeedMapZoom(currentDisplayIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, heatLevelOf, total, displayItems, displayIndices);
     }
 
     // Update date labels
@@ -2657,12 +2671,156 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   /**
-   * Get heat level (1-8) for a score relative to all scores
+   * Build the score -> heat level function for one feed map render, ranking
+   * only the displayed items (see createHeatLevelFn() in feedMapUtils.js).
+   * The result is also kept on this.feedMapHeatLevels so zoom panning
+   * (updateFeedMapZoomDirect) colors segments on the same scale as the main map.
+   *
+   * @param {string} heatmapMode - feedMapHeatmap setting ('None' turns heat off)
+   * @param {Array<{score: number}>} engagementData - Indexed by actual item index
+   * @param {number[]} displayIndices - Actual item index of each displayed item
+   * @returns {(score: number) => number} Heat level, 0 to HEAT_LEVELS
    */
-  getHeatLevel(score, maxScore) {
-    if (maxScore === 0 || score === 0) return 0;
-    const normalized = score / maxScore;
-    return Math.min(8, Math.max(1, Math.ceil(normalized * 8)));
+  buildFeedMapHeatLevels(heatmapMode, engagementData, displayIndices) {
+    const scores = heatmapMode !== 'None' ? displayIndices.map((i) => engagementData[i]?.score) : [];
+    const heatLevelOf = createHeatLevelFn(scores);
+    this.feedMapHeatLevels = { heatmapMode, heatLevelOf };
+    return heatLevelOf;
+  }
+
+  /**
+   * Key that identifies the feed being shown, for the new-posts anchors: the
+   * page path plus the selected feed tab (Following, Discover, a profile's
+   * Posts/Replies/Media tab, ...).
+   */
+  feedKeyForNewPosts() {
+    const tab = $('div[role="tablist"] [aria-selected="true"]').first().text().trim();
+    return `${window.location.pathname}|${tab}`;
+  }
+
+  /**
+   * Stable ID for a feed item, for the new-posts anchors: the path of its post
+   * link (/profile/<handle>/post/<rkey>), or null if it has none.
+   */
+  feedItemKey(item) {
+    const url = this.urlForItem(item);
+    return url ? url.replace(/^https:\/\/bsky\.app/, '') : null;
+  }
+
+  readFeedAnchors() {
+    try {
+      const parsed = JSON.parse(GM_getValue(FEED_ANCHORS_KEY, '{}'));
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  writeFeedAnchor(feedKey, postKey) {
+    try {
+      const anchors = this.readFeedAnchors();
+      anchors[feedKey] = { post: postKey, at: Date.now() };
+      const keys = Object.keys(anchors);
+      if (keys.length > FEED_ANCHORS_MAX) {
+        keys
+          .sort((a, b) => (anchors[a]?.at || 0) - (anchors[b]?.at || 0))
+          .slice(0, keys.length - FEED_ANCHORS_MAX)
+          .forEach((k) => delete anchors[k]);
+      }
+      GM_setValue(FEED_ANCHORS_KEY, JSON.stringify(anchors));
+    } catch (e) {
+      console.warn('[bsky-navigator] Could not save feed anchor:', e);
+    }
+  }
+
+  /**
+   * Work out where the posts that are new since the user last looked at this
+   * feed end, for the feed map's new-posts divider.
+   *
+   * "Last looked" has two sources, and the later one wins:
+   * - Opening the feed: the newest post of this feed (by feed key) the last
+   *   time it was shown, kept in GM storage under FEED_ANCHORS_KEY. The current
+   *   newest post is written back right away, so the next visit compares
+   *   against this one.
+   * - Loading newer posts while on the feed (the "New posts" pill, u, or a
+   *   Bluesky refresh): when a post that was never in this view appears as the
+   *   newest one, the previous newest post becomes the anchor.
+   * Read-state tracking is not involved.
+   *
+   * Sets this._newPosts = { boundaryItem, newItems: Set, newCount, index } or
+   * null, and returns it.
+   *
+   * @param {Element[]} allItems - All feed items, in display order (filtered ones too)
+   * @param {Element[]} displayItems - Items that get a map segment
+   * @param {number[]} displayIndices - Index into allItems of each displayed item
+   */
+  updateNewPostsBoundary(allItems, displayItems, displayIndices) {
+    if (
+      this.config.get('feedMapNewPostsMarker') === false ||
+      this._newPostsPaused ||
+      !allItems.length
+    ) {
+      this._newPosts = null;
+      return null;
+    }
+    const reversed = !!this.state.feedSortReverse;
+    const allKeys = allItems.map((item) => this.feedItemKey(item));
+    const feedKey = this.feedKeyForNewPosts();
+    const newest = newestPostId(allKeys, reversed);
+
+    if (this._newPostsView?.feedKey !== feedKey) {
+      // A different feed (or the first render): start from the stored anchor
+      const stored = this.readFeedAnchors()[feedKey];
+      this._newPostsView = {
+        feedKey,
+        anchor: stored?.post || null,
+        newest: null,
+        known: new Set(),
+      };
+    }
+    const view = this._newPostsView;
+    if (newest && newest !== view.newest) {
+      // Newer posts arrived on top of what this view already showed
+      if (view.newest && !view.known.has(newest)) view.anchor = view.newest;
+      view.newest = newest;
+      this.writeFeedAnchor(feedKey, newest);
+    }
+    allKeys.forEach((k) => k && view.known.add(k));
+
+    const boundary = findNewPostsBoundary(allKeys, displayIndices, view.anchor, reversed);
+    if (!boundary) {
+      this._newPosts = null;
+      return null;
+    }
+    const newItems = reversed
+      ? displayItems.slice(boundary.index)
+      : displayItems.slice(0, boundary.index);
+    this._newPosts = {
+      index: boundary.index,
+      newCount: boundary.newCount,
+      boundaryItem: displayItems[boundary.index],
+      newItems: new Set(newItems),
+    };
+    return this._newPosts;
+  }
+
+  /**
+   * Draw (or remove) the new-posts divider on the main feed map.
+   */
+  renderNewPostsDivider(indicator, total) {
+    let divider = indicator.children('.feed-map-new-divider');
+    const newPosts = this._newPosts;
+    if (!newPosts || !(total > 1)) {
+      divider.remove();
+      return;
+    }
+    if (!divider.length) {
+      divider = $('<div class="feed-map-new-divider" aria-hidden="true"></div>');
+      indicator.append(divider);
+    }
+    // Segments share the width equally; each one's 2px border-right is the gap
+    // to the next, so the divider fills the gap before segment `index`
+    divider.css('left', `calc(${(newPosts.index / total) * 100}% - 2px)`);
   }
 
   /**
@@ -2916,7 +3074,6 @@ export class FeedItemHandler extends ItemHandler {
     const showRuleColors = isAdvancedStyle && this.config.get('ruleColorCoding');
 
     // Calculate engagement data for visible window
-    let maxScore = 0;
     const windowEngagement = [];
     for (let i = 0; i < zoomWindowSize; i++) {
       const displayIndex = windowStart + i;
@@ -2924,16 +3081,31 @@ export class FeedItemHandler extends ItemHandler {
       if (item && (heatmapMode !== 'None' || showIcons || showAvatars || showHandles)) {
         const engagement = this.getPostEngagement(item);
         const score = heatmapMode !== 'None' ? this.calculateEngagementScore(engagement, heatmapMode) : 0;
-        if (score > maxScore) maxScore = score;
         windowEngagement[i] = { engagement, score };
       } else {
         windowEngagement[i] = null;
       }
     }
 
+    // Heat levels rank the whole displayed feed, not just this window, so panning
+    // keeps the main map's colors. Reuse the last full render's ranking; rebuild
+    // it from all displayed items only if there is none for this heatmap mode.
+    let heatLevelOf = null;
+    if (heatmapMode !== 'None') {
+      if (this.feedMapHeatLevels?.heatmapMode === heatmapMode) {
+        heatLevelOf = this.feedMapHeatLevels.heatLevelOf;
+      } else {
+        const scores = this.getPostEngagementBatch(displayItems).map((engagement) =>
+          this.calculateEngagementScore(engagement, heatmapMode)
+        );
+        heatLevelOf = createHeatLevelFn(scores);
+        this.feedMapHeatLevels = { heatmapMode, heatLevelOf };
+      }
+    }
+
     // Update segment content
     const segments = zoomInner.find('.feed-map-segment');
-    const segmentOptions = { heatmapMode, maxScore, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
+    const segmentOptions = { heatmapMode, heatLevelOf, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
     segments.each((i, segment) => {
       const displayIndex = windowStart + i;
       const item = displayItems[displayIndex];
@@ -2942,6 +3114,7 @@ export class FeedItemHandler extends ItemHandler {
         hasItem: displayIndex >= 0 && displayIndex < total && item,
         isCurrent: displayIndex === currentIndex,
         engData: windowEngagement[i],
+        isNewBoundary: !!item && i > 0 && item === this._newPosts?.boundaryItem,
       }, segmentOptions);
     });
 
@@ -2961,7 +3134,7 @@ export class FeedItemHandler extends ItemHandler {
   /**
    * Update the feed map zoom showing posts around the current selection
    */
-  updateFeedMapZoom(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, maxScore, displayTotal, displayItems, displayIndices) {
+  updateFeedMapZoom(currentIndex, engagementData, heatmapMode, showIcons, showAvatars, avatarScale, showTimestamps, showHandles, showRuleColors, heatLevelOf, displayTotal, displayItems, displayIndices) {
     const zoomIndicator = this.feedMapZoom;
     const zoomInner = this.feedMapZoomInner;
     if (!zoomIndicator || !zoomInner) return;
@@ -3074,7 +3247,7 @@ export class FeedItemHandler extends ItemHandler {
     // Update segment states
     const windowEnd = Math.min(total - 1, windowStart + zoomWindowSize - 1);
 
-    const segmentOptions = { heatmapMode, maxScore, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
+    const segmentOptions = { heatmapMode, heatLevelOf, showIcons, showAvatars, avatarScale, showHandles, showTimestamps, showRuleColors };
     segments.each((i, segment) => {
       const displayIndex = windowStart + i;
       // Use displayItems passed from caller (already filtered)
@@ -3086,6 +3259,7 @@ export class FeedItemHandler extends ItemHandler {
         hasItem: displayIndex >= 0 && displayIndex < total && item,
         isCurrent: displayIndex === currentIndex,
         engData: engagementData[actualIndex],
+        isNewBoundary: !!item && i > 0 && item === this._newPosts?.boundaryItem,
       }, segmentOptions);
     });
 
@@ -3333,6 +3507,7 @@ export class FeedItemHandler extends ItemHandler {
           </div>
           <div class="feed-map-tooltip-author"></div>
           <div class="feed-map-tooltip-content"></div>
+          <div class="feed-map-tooltip-heat"></div>
           <div class="feed-map-tooltip-engagement"></div>
         </div>
       `);
@@ -3407,14 +3582,27 @@ export class FeedItemHandler extends ItemHandler {
     }
 
     // Update tooltip content
+    const isNew = !!this._newPosts?.newItems.has(item);
     tooltip.find('.feed-map-tooltip-handle').text(`@${handle}`);
-    tooltip.find('.feed-map-tooltip-time').text(relativeTime ? ` · ${relativeTime}` : '');
+    tooltip
+      .find('.feed-map-tooltip-time')
+      .text((relativeTime ? ` · ${relativeTime}` : '') + (isNew ? ' · new since you last looked' : ''));
     tooltip.find('.feed-map-tooltip-author').text(displayName || handle);
     tooltip.find('.feed-map-tooltip-content').text(truncatedText || '(no text)');
 
     // Build engagement row
     const engagementHtml = this.buildEngagementHtml(engagement);
     tooltip.find('.feed-map-tooltip-engagement').html(engagementHtml);
+
+    // Heat row: the score behind the color and where it ranks in this feed.
+    // The swatch takes the map's color theme from the theme class.
+    const heatHtml = this.buildHeatHtml(engagement);
+    tooltip.find('.feed-map-tooltip-heat').html(heatHtml).toggle(!!heatHtml);
+    const themePattern = /feed-map-theme-\S+/g;
+    const wrapperTheme = (this.feedMapWrapper?.attr('class') || '').match(themePattern);
+    const themeClass = wrapperTheme ? wrapperTheme[0] : getFeedMapConfig(this.config).themeClass;
+    tooltip.removeClass((_i, cls) => (cls.match(themePattern) || []).join(' '));
+    tooltip.addClass(themeClass);
 
     // Apply state classes
     tooltip.removeClass('feed-map-tooltip-read feed-map-tooltip-ratioed');
@@ -3507,6 +3695,50 @@ export class FeedItemHandler extends ItemHandler {
   }
 
   /**
+   * Build HTML for the tooltip's heat row: the post's engagement score for the
+   * current heatmap mode and its rank band in this feed (e.g. "top 20%"), with
+   * a swatch of the color the map gives it. Empty when the heatmap is off.
+   */
+  buildHeatHtml(engagement) {
+    const isAdvanced = (this.config.get('feedMapStyle') || 'Advanced') === 'Advanced';
+    const heatmapMode = isAdvanced ? this.config.get('feedMapHeatmap') || 'None' : 'None';
+    if (heatmapMode === 'None' || !engagement) return '';
+
+    const score = this.calculateEngagementScore(engagement, heatmapMode);
+    const ranking =
+      this.feedMapHeatLevels?.heatmapMode === heatmapMode ? this.feedMapHeatLevels.heatLevelOf : null;
+    const rank = ranking?.rankOf ? ranking.rankOf(score) : null;
+
+    const perHour = (value) => {
+      if (!Number.isFinite(value)) return '?';
+      if (value >= 100) return this.formatCount(Math.round(value));
+      return value >= 10 ? value.toFixed(0) : value.toFixed(1);
+    };
+    let scoreText;
+    if (heatmapMode === 'Engagement Rate') {
+      scoreText = `${perHour(score)} interactions/hour`;
+    } else if (heatmapMode === 'Weighted Engagement') {
+      scoreText = `weighted score ${perHour(score)}/hour`;
+    } else {
+      scoreText = `${this.formatCount(score || 0)} interactions`;
+    }
+
+    const band = formatRankBand(rank);
+    const level = rank?.level || 0;
+    const swatchClass = engagement.isRatioed
+      ? 'feed-map-segment-ratioed'
+      : level
+        ? `feed-map-segment-heat-${level}`
+        : '';
+    const levelText = engagement.isRatioed ? 'ratioed' : level ? `heat ${level}/${HEAT_LEVELS}` : 'no heat';
+    const rankText = band ? ` · ${band}` : ' · no engagement yet';
+    return (
+      `<span class="feed-map-tooltip-heat-swatch ${swatchClass}" aria-hidden="true"></span>` +
+      `<span title="Rank among the posts in this feed">${this.escapeHtml(`${scoreText}${rankText} · ${levelText}`)}</span>`
+    );
+  }
+
+  /**
    * Build HTML for engagement stats row
    */
   buildEngagementHtml(engagement) {
@@ -3517,7 +3749,7 @@ export class FeedItemHandler extends ItemHandler {
     // Likes
     items.push(`
       <span class="feed-map-tooltip-stat">
-        <img src="${this.INDICATOR_IMAGES.filter[0]}" alt="likes" class="feed-map-tooltip-icon">
+        <img src="${this.INDICATOR_IMAGES.contentLike}" alt="likes" class="feed-map-tooltip-icon">
         <span>${this.formatCount(engagement.likes)}</span>
       </span>
     `);

@@ -2493,14 +2493,27 @@ div.item-banner {
   overflow: visible;
 }
 
-/* Basic style - simple thin indicator */
+/* Basic style - simple indicator (12px: 1.5x the old 8px, in the same
+   proportion as Advanced's 12px -> 16px) */
 .feed-map-basic .feed-map-position-indicator {
-  height: calc(8px * var(--indicator-scale, 1));
+  height: calc(12px * var(--indicator-scale, 1));
 }
 
 /* Advanced style - main indicator is compact overview */
 .feed-map-advanced .feed-map-position-indicator {
-  height: calc(12px * var(--indicator-scale, 1));
+  height: calc(16px * var(--indicator-scale, 1));
+}
+
+/* Main bar: room under it for the visible-range rail (2px gap + 3px rail),
+   and no clipping, so the rail, the zoom bracket and the new-posts divider can
+   sit outside the segments. The padding is on the container so the date
+   labels stay centered on the bar. */
+.feed-map-wrapper > .feed-map-container:not(.feed-map-zoom-container) {
+  padding-bottom: calc(5px * var(--indicator-scale, 1));
+}
+
+.feed-map-wrapper > .feed-map-container:not(.feed-map-zoom-container) .feed-map-position-indicator {
+  overflow: visible;
 }
 
 /* Advanced style - zoom indicator auto-scales to fit content */
@@ -2519,24 +2532,54 @@ div.item-banner {
   margin: 0 -1px -1px -1px;
 }
 
+/* Feed map color tokens. Light values here; Dim and Dark override them on
+   html[data-bsky-nav-theme] (see "Feed map dark palettes" below).
+   --fm-ink / --fm-halo: zoom-row text color and the outline drawn around it.
+   --fm-hatch: stripe color of the read-state hatch.
+   --fm-current / --fm-current-halo: current-selection ring and the 1px inner
+   line of the opposite tone, so one of the two always contrasts the fill. */
+.feed-map-wrapper {
+  --fm-ink: #000000; /* pure black: heat-2, the last dark-ink level, is a mid tone */
+  --fm-halo: rgba(255, 255, 255, 0.85);
+  --fm-hatch: rgba(0, 0, 0, 0.32);
+  --fm-current: #3b82f6;
+  --fm-current-halo: #111827;
+  /* Visible-range rail under the main bar (on the page background) */
+  --fm-rail: #4b5563;
+  /* New-posts divider: violet, apart from every ramp, ring and ratioed color */
+  --fm-new: #6d28d9;
+  --fm-new-halo: #ffffff;
+}
+
+/* Deep cells (light palettes): switch to light ink and a light hatch.
+   Every theme's ramp uses the same luminance per level, so the switch is at
+   the same level everywhere: heat-2 measures 7.5:1 with dark ink and heat-3
+   4.9:1 with white (4.3:1 with dark ink). Ratioed sits between heat-2 and
+   heat-3 in lightness and measures 5.6:1 with dark ink, so it keeps the dark
+   ink. */
+.feed-map-wrapper .feed-map-segment-heat-3,
+.feed-map-wrapper .feed-map-segment-heat-4,
+.feed-map-wrapper .feed-map-segment-heat-5 {
+  --fm-ink: #ffffff;
+  --fm-halo: rgba(0, 0, 0, 0.75);
+  --fm-hatch: rgba(255, 255, 255, 0.4);
+}
+
 /* Individual post segment */
 .feed-map-segment {
   height: 100%;
   flex: 1;
   background-color: transparent;
-  border-right: 2px solid white;
+  border-right: 2px solid var(--bsky-nav-bg, white);
   box-sizing: border-box;
   transition: background-color var(--transition-duration, 150ms) ease;
 }
 
 /* Basic mode needs visible segment colors for read/unread to work.
-   Default uses gray background with brightness filter. Themes override unread color. */
+   Default uses a gray background; themes override the unread color. Read
+   segments get the hatch below, so the fill color stays the same. */
 .feed-map-basic .feed-map-segment {
   background-color: #9ca3af; /* Default unread: medium gray */
-}
-
-.feed-map-basic .feed-map-segment-read {
-  filter: brightness(0.6);
 }
 
 /* Basic mode theme colors - unread segments use theme's light color */
@@ -2550,20 +2593,99 @@ div.item-banner {
 }
 
 /* Segment states */
+/* Read: a diagonal hatch painted over the background color, so heat and
+   ratioed colors stay readable and read shows even on transparent (no heat)
+   segments. No filter, so the zoom-row text and the current ring keep full
+   strength. */
 .feed-map-segment-read {
-  filter: brightness(0.6);
+  filter: none;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--fm-hatch) 0 2px,
+    transparent 2px 5px
+  );
 }
 
+/* Zoom row: mute only the avatar on read posts; text stays at full contrast */
+.feed-map-segment-zoom.feed-map-segment-read .feed-map-segment-avatar,
+.feed-map-segment-zoom.feed-map-segment-read .feed-map-segment-reposter-avatar {
+  opacity: 0.55;
+}
+
+/* Current: colored 2px ring plus a 1px inner line of the opposite tone.
+   Drawn on a pseudo-element over the padding box so the ring is even on all
+   sides (the segment's border-right is the gap to its neighbor). */
 .feed-map-segment-current {
-  outline: 2px solid #3b82f6;
-  outline-offset: -1px;
   z-index: var(--z-base);
 }
 
-/* Filtered posts - grayed out in feed map */
-.feed-map-segment-filtered {
-  opacity: 0.25;
-  filter: grayscale(1);
+.feed-map-segment-current::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: var(--fm-current-width, 2px) solid var(--fm-current);
+  box-shadow: inset 0 0 0 1px var(--fm-current-halo);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Ratioed: besides its color, a corner notch (top right) so it does not rely
+   on hue alone. It uses the cell's ink color, which is picked for contrast
+   with the ratioed fill. Inside the current ring, it moves in past the ring. */
+.feed-map-segment-ratioed::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: calc(7px * var(--indicator-scale, 1));
+  height: calc(7px * var(--indicator-scale, 1));
+  background-color: var(--fm-ink);
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.feed-map-segment-zoom.feed-map-segment-ratioed::before {
+  width: calc(12px * var(--indicator-scale, 1));
+  height: calc(12px * var(--indicator-scale, 1));
+}
+
+.feed-map-segment-current.feed-map-segment-ratioed::before {
+  top: calc(var(--fm-current-width, 2px) + 1px);
+  right: calc(var(--fm-current-width, 2px) + 1px);
+}
+
+/* New-posts divider (main map): fills the 2px gap before the first post that
+   is not new, with a light halo and a small cap above the bar. Stays inside
+   the bar's height below, so it never meets the range rail. */
+.feed-map-new-divider {
+  position: absolute;
+  top: calc(-4px * var(--indicator-scale, 1));
+  bottom: 0;
+  width: 2px;
+  background-color: var(--fm-new);
+  box-shadow: 0 0 0 1px var(--fm-new-halo);
+  pointer-events: none;
+  z-index: var(--z-raised);
+}
+
+.feed-map-new-divider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 8px;
+  height: calc(4px * var(--indicator-scale, 1));
+  background-color: var(--fm-new);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+/* Zoom row: the divider runs down the leading edge of the first older post */
+.feed-map-segment-zoom.feed-map-segment-new-boundary {
+  box-shadow:
+    inset 3px 0 0 var(--fm-new),
+    inset 5px 0 0 var(--fm-new-halo);
 }
 
 /* ========================================
@@ -2572,66 +2694,61 @@ div.item-banner {
 
 /* Ratioed posts - distinctive styling for posts with more replies than likes */
 .feed-map-segment-ratioed {
-  background-color: #ef4444 !important; /* Default red */
+  background-color: #e74493 !important; /* Default (campfire): pink, apart from the amber ramp */
 }
 
 /* === CAMPFIRE THEME (amber/orange) === */
-/* Unread: light amber, Read: dimmed (via filter), Current: orange outline */
+/* Unread: light amber, Read: hatched, Current: orange outline */
 .feed-map-theme-campfire .feed-map-position-indicator { background-color: #fffbeb; }
-.feed-map-theme-campfire .feed-map-segment-current { outline-color: #f59e0b !important; }
-.feed-map-theme-campfire .feed-map-segment-ratioed { background-color: #ef4444 !important; }
+.feed-map-wrapper.feed-map-theme-campfire { --fm-current: #f59e0b; }
+.feed-map-theme-campfire .feed-map-segment-ratioed { background-color: #e74493 !important; }
 
-/* Heatmap intensity levels (engagement-based) - Default theme */
-.feed-map-segment-heat-1 { background-color: #fef3c7; } /* lightest - low engagement */
-.feed-map-segment-heat-2 { background-color: #fde68a; }
-.feed-map-segment-heat-3 { background-color: #fcd34d; }
-.feed-map-segment-heat-4 { background-color: #fbbf24; }
-.feed-map-segment-heat-5 { background-color: #f59e0b; }
-.feed-map-segment-heat-6 { background-color: #d97706; }
-.feed-map-segment-heat-7 { background-color: #b45309; }
-.feed-map-segment-heat-8 { background-color: #92400e; } /* darkest - high engagement */
+/* Heatmap ramps. Levels come from createHeatLevelFn() in feedMapUtils.js
+   (rank based: each of the 5 levels holds about a fifth of the posts). Each
+   ramp was built in OKLCH: the hue drifts along the ramp for identity, and
+   the lightness is set so every theme hits the same luminance per level,
+   spaced evenly in contrast (about 1.75:1 between neighbors in light
+   palettes; in dark ones 1.67:1 from heat-1 to heat-2, then about 1.53:1, so
+   heat-2 is light enough for dark ink). Heat-1 stays at least 1.3:1 from the
+   empty track. Default theme uses the campfire ramp. */
+.feed-map-segment-heat-1 { background-color: #e4cb6b; } /* low engagement */
+.feed-map-segment-heat-2 { background-color: #ca9001; }
+.feed-map-segment-heat-3 { background-color: #a46102; }
+.feed-map-segment-heat-4 { background-color: #7d3803; }
+.feed-map-segment-heat-5 { background-color: #4f0f01; } /* high engagement */
 
 /* === OCEAN THEME (blue/teal) === */
-/* Unread: light sky, Read: dimmed (via filter), Current: yellow outline (contrasts with blue) */
+/* Unread: light sky, Read: hatched, Current: yellow outline (contrasts with blue) */
 .feed-map-theme-ocean .feed-map-position-indicator { background-color: #e0f2fe; }
-.feed-map-theme-ocean .feed-map-segment-current { outline-color: #eab308 !important; }
-.feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #f97316 !important; }
-.feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #e0f2fe; }
-.feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #bae6fd; }
-.feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #7dd3fc; }
-.feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #38bdf8; }
-.feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #0ea5e9; }
-.feed-map-theme-ocean .feed-map-segment-heat-6 { background-color: #0284c7; }
-.feed-map-theme-ocean .feed-map-segment-heat-7 { background-color: #0369a1; }
-.feed-map-theme-ocean .feed-map-segment-heat-8 { background-color: #075985; }
+.feed-map-wrapper.feed-map-theme-ocean { --fm-current: #eab308; }
+.feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #f1453f !important; }
+.feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #9ed5e3; }
+.feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #27a6d3; }
+.feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #0677af; }
+.feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #024d8e; }
+.feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #081f68; }
 
 /* === FOREST THEME (green) === */
-/* Unread: light green, Read: dimmed (via filter), Current: lime outline */
+/* Unread: light green, Read: hatched, Current: lime outline */
 .feed-map-theme-forest .feed-map-position-indicator { background-color: #dcfce7; }
-.feed-map-theme-forest .feed-map-segment-current { outline-color: #84cc16 !important; }
-.feed-map-theme-forest .feed-map-segment-ratioed { background-color: #ea580c !important; }
-.feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #dcfce7; }
-.feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #bbf7d0; }
-.feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #86efac; }
-.feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #4ade80; }
-.feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #22c55e; }
-.feed-map-theme-forest .feed-map-segment-heat-6 { background-color: #16a34a; }
-.feed-map-theme-forest .feed-map-segment-heat-7 { background-color: #15803d; }
-.feed-map-theme-forest .feed-map-segment-heat-8 { background-color: #166534; }
+.feed-map-wrapper.feed-map-theme-forest { --fm-current: #84cc16; }
+.feed-map-theme-forest .feed-map-segment-ratioed { background-color: #f1453f !important; }
+.feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #b8d77f; }
+.feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #66ab37; }
+.feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #058323; }
+.feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #035830; }
+.feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #022d1e; }
 
 /* === MONOCHROME THEME (grayscale) === */
-/* Unread: light gray, Read: dimmed (via filter), Current: dark outline */
+/* Unread: light gray, Read: hatched, Current: dark outline */
 .feed-map-theme-monochrome .feed-map-position-indicator { background-color: #e5e7eb; }
-.feed-map-theme-monochrome .feed-map-segment-current { outline-color: #1f2937 !important; }
-.feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #dc2626 !important; }
-.feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #f3f4f6; }
-.feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #e5e7eb; }
-.feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #d1d5db; }
-.feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #9ca3af; }
-.feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #6b7280; }
-.feed-map-theme-monochrome .feed-map-segment-heat-6 { background-color: #4b5563; }
-.feed-map-theme-monochrome .feed-map-segment-heat-7 { background-color: #374151; }
-.feed-map-theme-monochrome .feed-map-segment-heat-8 { background-color: #1f2937; }
+.feed-map-wrapper.feed-map-theme-monochrome { --fm-current: #1f2937; --fm-current-halo: #ffffff; }
+.feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #f1453f !important; }
+.feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #c9ccd2; }
+.feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #969ba2; }
+.feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #6c717a; }
+.feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #464d57; }
+.feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #212732; }
 
 /* Content type icons in segments */
 .feed-map-segment-icon {
@@ -2840,11 +2957,15 @@ div.item-banner {
   width: auto;
 }
 
-/* Relative time in zoom segments */
+/* Relative time in zoom segments. Ink and halo come from the --fm-* tokens,
+   which flip to light ink on deep cells (and invert in Dim / Dark). */
 .feed-map-segment-time {
-  font-size: calc(8px * var(--indicator-scale, 1));
+  font-size: calc(10px * var(--indicator-scale, 1));
   line-height: 1;
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--fm-ink);
+  text-shadow:
+    0 0 2px var(--fm-halo),
+    0 0 2px var(--fm-halo);
   pointer-events: none;
   flex-shrink: 0;
 }
@@ -2853,7 +2974,7 @@ div.item-banner {
 .feed-map-segment-handle {
   font-family: ui-monospace, monospace;
   line-height: 1.2;
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--fm-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
@@ -2872,27 +2993,26 @@ div.item-banner {
   text-overflow: ellipsis;
   max-width: 100%;
   text-shadow:
-    -1px -1px 0 rgba(255, 255, 255, 0.8),
-    1px -1px 0 rgba(255, 255, 255, 0.8),
-    -1px 1px 0 rgba(255, 255, 255, 0.8),
-    1px 1px 0 rgba(255, 255, 255, 0.8),
-    0 0 3px rgba(255, 255, 255, 0.6);
+    -1px -1px 0 var(--fm-halo),
+    1px -1px 0 var(--fm-halo),
+    -1px 1px 0 var(--fm-halo),
+    1px 1px 0 var(--fm-halo),
+    0 0 3px var(--fm-halo);
 }
 
 .feed-map-segment-handle-domain {
-  font-size: calc(7px * var(--indicator-scale, 1));
-  opacity: 0.7;
+  /* 10px in the cell's ink color (no opacity), so it gets the same contrast
+     as the handle and time */
+  font-size: calc(10px * var(--indicator-scale, 1));
+  color: var(--fm-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
   text-shadow:
-    -1px -1px 0 rgba(255, 255, 255, 0.6),
-    1px -1px 0 rgba(255, 255, 255, 0.6),
-    -1px 1px 0 rgba(255, 255, 255, 0.6),
-    1px 1px 0 rgba(255, 255, 255, 0.6);
+    0 0 2px var(--fm-halo),
+    0 0 2px var(--fm-halo);
 }
-
 
 /* Empty segments (no corresponding item) */
 .feed-map-segment-empty {
@@ -2917,14 +3037,74 @@ div.item-banner {
   z-index: var(--z-base);
 }
 
-/* Zoom indicator connector */
+/* Zoom indicator connector. Toolbar order is main bar, connector, zoom row:
+   the connector starts right under the range rail. flex-shrink: 0 keeps it
+   from being squeezed when the toolbar limits the wrapper's height. */
 .feed-map-connector {
   display: block;
   width: 100%;
   height: calc(20px * var(--indicator-scale, 1));
   position: relative;
   overflow: visible;
-  margin-top: calc(-2px * var(--indicator-scale, 1));
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+/* Heat legend, in the connector row over the end label column (the connector
+   curves never reach that corner). Shown only while the heatmap is on. */
+.feed-map-legend {
+  display: none;
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  align-items: flex-end;
+  gap: 1px;
+  font-size: 8px;
+  line-height: 1;
+  color: #4b5563;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.feed-map-advanced.feed-map-has-heat .feed-map-legend {
+  display: flex;
+}
+
+.feed-map-legend-text:first-child {
+  margin-right: 2px;
+}
+
+.feed-map-legend-text:last-child {
+  margin-left: 2px;
+}
+
+/* Swatches step up in height as well as color, so less -> more reads at a glance */
+.feed-map-legend-swatch {
+  width: 4px;
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.feed-map-legend-swatch:nth-child(2) { height: 4px; }
+.feed-map-legend-swatch:nth-child(3) { height: 5px; }
+.feed-map-legend-swatch:nth-child(4) { height: 6px; }
+.feed-map-legend-swatch:nth-child(5) { height: 7px; }
+.feed-map-legend-swatch:nth-child(6) { height: 8px; }
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-legend {
+  color: #9ca3af;
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-legend-swatch {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+/* Narrow layouts: no room to spare, the tooltip carries the same information */
+@media only screen and (max-width: 800px) {
+  .feed-map-advanced.feed-map-has-heat .feed-map-legend {
+    display: none;
+  }
 }
 
 .feed-map-connector-svg {
@@ -2941,10 +3121,8 @@ div.item-banner {
   fill: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  .feed-map-connector-path {
-    stroke: rgba(200, 200, 200, 0.8);
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-connector-path {
+  stroke: rgba(200, 200, 200, 0.8);
 }
 
 /* Zoom indicator container - inherits from .feed-map-container */
@@ -2982,11 +3160,12 @@ div.item-banner {
   overflow: visible;
 }
 
-/* Zoom highlight on main indicator showing zoomed region - bracket style */
+/* Zoom highlight on main indicator showing zoomed region - bracket style.
+   From 3px above the bar to 1px below it, clear of the range rail (2px below). */
 .feed-map-position-zoom-highlight {
   position: absolute;
-  top: -4px;
-  height: calc(100% + 8px);
+  top: calc(-3px * var(--indicator-scale, 1));
+  height: calc(100% + 4px * var(--indicator-scale, 1));
   background-color: transparent;
   pointer-events: none;
   box-sizing: border-box;
@@ -3052,63 +3231,62 @@ div.item-banner {
   opacity: 0.8;
 }
 
-@media (prefers-color-scheme: dark) {
-  /* Dark mode: use dark outline instead of white, keep colors but brighten */
-  .feed-map-icon-stack img[alt="text"] {
-    filter: brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(800%) hue-rotate(200deg) brightness(110%)
-      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
-  }
-
-  .feed-map-icon-stack img[alt="image"] {
-    filter: brightness(0) saturate(100%) invert(70%) sepia(60%) saturate(500%) hue-rotate(80deg) brightness(110%)
-      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
-  }
-
-  .feed-map-icon-stack img[alt="video"] {
-    filter: brightness(0) saturate(100%) invert(50%) sepia(100%) saturate(1500%) hue-rotate(350deg) brightness(110%)
-      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
-  }
-
-  .feed-map-icon-stack img[alt="embed"] {
-    filter: brightness(0) saturate(100%) invert(55%) sepia(80%) saturate(600%) hue-rotate(250deg) brightness(110%)
-      drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
-  }
-
-
-  /* Post type icons */
-  .feed-map-icon-stack img[alt="post"],
-  .feed-map-icon-stack img[alt="reply"],
-  .feed-map-icon-stack img[alt="repost"],
-  .feed-map-icon-stack img[alt="thread"] {
-    filter: invert(1) drop-shadow(0 0 1px rgba(0,0,0,0.8));
-    opacity: 0.8;
-  }
-
-  .feed-map-position-indicator-zoom {
-    border-color: rgba(255, 255, 255, 0.2);
-  }
-
-  .feed-map-position-zoom-highlight::before {
-    border-left-color: rgba(255, 255, 255, 0.8);
-    border-top-color: rgba(255, 255, 255, 0.8);
-    border-bottom-color: rgba(255, 255, 255, 0.8);
-  }
-
-  .feed-map-position-zoom-highlight::after {
-    border-right-color: rgba(255, 255, 255, 0.8);
-    border-top-color: rgba(255, 255, 255, 0.8);
-    border-bottom-color: rgba(255, 255, 255, 0.8);
-  }
+/* Dark palettes (Dim / Dark): dark icon outline instead of white, keep colors but brighten */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="text"] {
+  filter: brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(800%) hue-rotate(200deg) brightness(110%)
+    drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
 }
 
-/* Viewport indicator overlay */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="image"] {
+  filter: brightness(0) saturate(100%) invert(70%) sepia(60%) saturate(500%) hue-rotate(80deg) brightness(110%)
+    drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="video"] {
+  filter: brightness(0) saturate(100%) invert(50%) sepia(100%) saturate(1500%) hue-rotate(350deg) brightness(110%)
+    drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="embed"] {
+  filter: brightness(0) saturate(100%) invert(55%) sepia(80%) saturate(600%) hue-rotate(250deg) brightness(110%)
+    drop-shadow(0 0 1px rgba(0,0,0,0.8)) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+}
+
+/* Post type icons */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="post"],
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="reply"],
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="repost"],
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-icon-stack img[alt="thread"] {
+  filter: invert(1) drop-shadow(0 0 1px rgba(0,0,0,0.8));
+  opacity: 0.8;
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-position-indicator-zoom {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-position-zoom-highlight::before {
+  border-left-color: rgba(255, 255, 255, 0.8);
+  border-top-color: rgba(255, 255, 255, 0.8);
+  border-bottom-color: rgba(255, 255, 255, 0.8);
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-position-zoom-highlight::after {
+  border-right-color: rgba(255, 255, 255, 0.8);
+  border-top-color: rgba(255, 255, 255, 0.8);
+  border-bottom-color: rgba(255, 255, 255, 0.8);
+}
+
+/* Visible-range rail: a 3px bar 2px under the main bar (in the container's
+   padding), so it never covers the current ring, the zoom bracket or the
+   segments. left/width are set by updateViewportIndicator(). */
 .feed-map-viewport-indicator {
   position: absolute;
-  top: -1px;
-  height: calc(100% + 2px);
-  background-color: rgba(255, 255, 255, 0.2);
-  border: 2px solid rgba(0, 0, 0, 0.35);
-  border-radius: 2px;
+  top: calc(100% + 2px * var(--indicator-scale, 1));
+  height: calc(3px * var(--indicator-scale, 1));
+  background-color: var(--fm-rail);
+  border: 0;
+  border-radius: calc(1.5px * var(--indicator-scale, 1));
   pointer-events: none;
   transition: left var(--transition-duration, 100ms) ease-out,
               width var(--transition-duration, 100ms) ease-out;
@@ -3153,7 +3331,8 @@ div.item-banner {
 .feed-map-wrapper-statusbar .feed-map-connector {
   height: calc(16px * var(--indicator-scale, 1));
   margin-top: calc(-2px * var(--indicator-scale, 1));
-  margin-bottom: calc(-2px * var(--indicator-scale, 1));
+  /* Ends where the bracket starts (3px above the bar), so the curves meet it */
+  margin-bottom: calc(-3px * var(--indicator-scale, 1));
 }
 
 .feed-map-wrapper-statusbar .feed-map-connector .feed-map-connector-path {
@@ -3223,147 +3402,136 @@ div#statusBar.has-feed-map {
   order: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  .feed-map-position-indicator {
-    background-color: #374151;
-  }
+/* ==========================================================================
+   Feed map dark palettes (Dim and Dark)
+   Keyed on the Bluesky theme mirrored into html[data-bsky-nav-theme] (see
+   theme.js), not on the OS color scheme, so the map always matches the page.
+   ========================================================================== */
 
-  .feed-map-empty {
-    color: #6b7280;
-    background: repeating-linear-gradient(
-      -45deg,
-      transparent,
-      transparent 4px,
-      rgba(107, 114, 128, 0.2) 4px,
-      rgba(107, 114, 128, 0.2) 8px
-    );
-  }
-
-  .feed-map-segment {
-    border-right-color: #374151;
-  }
-
-  .feed-map-segment-read {
-    filter: brightness(0.5);
-  }
-
-  .feed-map-segment-time {
-    color: rgba(255, 255, 255, 0.5);
-    text-shadow: 0 0 2px rgba(0, 0, 0, 0.8), 0 0 2px rgba(0, 0, 0, 0.8);
-  }
-
-  .feed-map-segment-handle {
-    color: rgba(255, 255, 255, 0.9);
-  }
-
-  .feed-map-segment-handle-name {
-    text-shadow:
-      -1px -1px 0 rgba(0, 0, 0, 0.8),
-      1px -1px 0 rgba(0, 0, 0, 0.8),
-      -1px 1px 0 rgba(0, 0, 0, 0.8),
-      1px 1px 0 rgba(0, 0, 0, 0.8),
-      0 0 3px rgba(0, 0, 0, 0.6);
-  }
-
-  .feed-map-segment-handle-domain {
-    text-shadow:
-      -1px -1px 0 rgba(0, 0, 0, 0.6),
-      1px -1px 0 rgba(0, 0, 0, 0.6),
-      -1px 1px 0 rgba(0, 0, 0, 0.6),
-      1px 1px 0 rgba(0, 0, 0, 0.6);
-  }
-
-  /* Basic mode dark: theme colors with brightness filter for read */
-  .feed-map-basic .feed-map-segment { background-color: #4b5563; }
-  .feed-map-basic.feed-map-theme-ocean .feed-map-segment { background-color: #0e7490; } /* cyan-700 */
-  .feed-map-basic.feed-map-theme-campfire .feed-map-segment { background-color: #b45309; } /* amber-700 */
-  .feed-map-basic.feed-map-theme-forest .feed-map-segment { background-color: #15803d; } /* green-700 */
-  .feed-map-basic.feed-map-theme-monochrome .feed-map-segment { background-color: #6b7280; } /* gray-500 */
-
-  .feed-map-segment-current {
-    outline-color: #60a5fa;
-  }
-
-  .feed-map-viewport-indicator {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-color: rgba(255, 255, 255, 0.7);
-  }
-
-  .feed-map-label {
-    color: #9ca3af;
-  }
-
-  /* Dark mode ratioed - brighter for visibility */
-  .feed-map-segment-ratioed {
-    background-color: #f87171 !important; /* red-400 */
-  }
-
-  /* === DARK MODE: CAMPFIRE THEME === */
-  .feed-map-theme-campfire .feed-map-position-indicator { background-color: #451a03; }
-  .feed-map-theme-campfire .feed-map-segment-current { outline-color: #fbbf24 !important; }
-  .feed-map-theme-campfire .feed-map-segment-ratioed { background-color: #f87171 !important; }
-  .feed-map-segment-heat-1 { background-color: #1e3a5f; }
-  .feed-map-segment-heat-2 { background-color: #1e4976; }
-  .feed-map-segment-heat-3 { background-color: #1d5a8d; }
-  .feed-map-segment-heat-4 { background-color: #1c6ba4; }
-  .feed-map-segment-heat-5 { background-color: #1b7cbb; }
-  .feed-map-segment-heat-6 { background-color: #1a8dd2; }
-  .feed-map-segment-heat-7 { background-color: #199ee9; }
-  .feed-map-segment-heat-8 { background-color: #18afff; }
-
-  /* === DARK MODE: OCEAN THEME === */
-  .feed-map-theme-ocean .feed-map-position-indicator { background-color: #164e63; }
-  .feed-map-theme-ocean .feed-map-segment-current { outline-color: #facc15 !important; }
-  .feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #fb923c !important; }
-  .feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #164e63; }
-  .feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #155e75; }
-  .feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #0e7490; }
-  .feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #0891b2; }
-  .feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #06b6d4; }
-  .feed-map-theme-ocean .feed-map-segment-heat-6 { background-color: #22d3ee; }
-  .feed-map-theme-ocean .feed-map-segment-heat-7 { background-color: #67e8f9; }
-  .feed-map-theme-ocean .feed-map-segment-heat-8 { background-color: #a5f3fc; }
-
-  /* === DARK MODE: FOREST THEME === */
-  .feed-map-theme-forest .feed-map-position-indicator { background-color: #14532d; }
-  .feed-map-theme-forest .feed-map-segment-current { outline-color: #a3e635 !important; }
-  .feed-map-theme-forest .feed-map-segment-ratioed { background-color: #fb923c !important; }
-  .feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #14532d; }
-  .feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #166534; }
-  .feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #15803d; }
-  .feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #16a34a; }
-  .feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #22c55e; }
-  .feed-map-theme-forest .feed-map-segment-heat-6 { background-color: #4ade80; }
-  .feed-map-theme-forest .feed-map-segment-heat-7 { background-color: #86efac; }
-  .feed-map-theme-forest .feed-map-segment-heat-8 { background-color: #bbf7d0; }
-
-  /* === DARK MODE: MONOCHROME THEME === */
-  .feed-map-theme-monochrome .feed-map-position-indicator { background-color: #374151; }
-  .feed-map-theme-monochrome .feed-map-segment-current { outline-color: #f9fafb !important; }
-  .feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #ef4444 !important; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #1f2937; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #374151; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #4b5563; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #6b7280; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #9ca3af; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-6 { background-color: #d1d5db; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-7 { background-color: #e5e7eb; }
-  .feed-map-theme-monochrome .feed-map-segment-heat-8 { background-color: #f3f4f6; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper {
+  --fm-ink: #ffffff;
+  --fm-halo: rgba(0, 0, 0, 0.8);
+  --fm-hatch: rgba(255, 255, 255, 0.32);
+  --fm-current: #60a5fa;
+  /* Dark ring outlines are light, so the inner line is dark */
+  --fm-current-halo: #000000;
+  --fm-rail: #d1d5db;
+  --fm-new: #c4b5fd;
+  --fm-new-halo: #000000;
 }
+
+/* Pale cells in dark palettes (heat-2 and up; the dark ramps share one
+   luminance per level): dark ink and a dark hatch. Heat-1 measures 7.0:1
+   with white ink, heat-2 5.0:1 with dark ink (4.2:1 with white). Ratioed is
+   a deep red/magenta between heat-1 and heat-2 in lightness and measures
+   5.4:1 with white, so it keeps the light ink. */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper .feed-map-segment-heat-2,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper .feed-map-segment-heat-3,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper .feed-map-segment-heat-4,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper .feed-map-segment-heat-5 {
+  --fm-ink: #000000; /* pure black: heat-2 is a mid tone */
+  --fm-halo: rgba(255, 255, 255, 0.75);
+  --fm-hatch: rgba(0, 0, 0, 0.4);
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-position-indicator {
+  background-color: #374151;
+}
+
+/* Dim: a lighter, bluish track that matches Bluesky's Dim surfaces */
+html[data-bsky-nav-theme="dim"] .feed-map-position-indicator {
+  background-color: #2c3a4e;
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-empty {
+  color: #6b7280;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(107, 114, 128, 0.2) 4px,
+    rgba(107, 114, 128, 0.2) 8px
+  );
+}
+
+/* Basic mode dark: theme colors; read segments get the light hatch */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-basic .feed-map-segment { background-color: #4b5563; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-basic.feed-map-theme-ocean .feed-map-segment { background-color: #0e7490; } /* cyan-700 */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-basic.feed-map-theme-campfire .feed-map-segment { background-color: #b45309; } /* amber-700 */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-basic.feed-map-theme-forest .feed-map-segment { background-color: #15803d; } /* green-700 */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-basic.feed-map-theme-monochrome .feed-map-segment { background-color: #6b7280; } /* gray-500 */
+
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-label {
+  color: #9ca3af;
+}
+
+/* Dark mode ratioed: a deep red at the luminance midway between heat-1 and
+   heat-2 (about 1.3:1 from each, 2:1 from heat-3), so beyond its hue it
+   also differs in lightness from its nearest levels */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-segment-ratioed {
+  background-color: #d01c21 !important;
+}
+
+/* === DARK MODE: CAMPFIRE THEME (amber ramp, dark to light; also the Default theme) === */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-campfire .feed-map-position-indicator { background-color: #451a03; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper.feed-map-theme-campfire { --fm-current: #fbbf24; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-ratioed { background-color: #aa34b3 !important; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-heat-1 { background-color: #8b4534; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-heat-2 { background-color: #c2611d; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-heat-3 { background-color: #e08709; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-heat-4 { background-color: #fbb51a; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) :is(.feed-map-theme-campfire, .feed-map-theme-default) .feed-map-segment-heat-5 { background-color: #ffedad; }
+
+/* === DARK MODE: OCEAN THEME === */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-position-indicator { background-color: #164e63; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper.feed-map-theme-ocean { --fm-current: #facc15; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-ratioed { background-color: #d01c21 !important; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-heat-1 { background-color: #265d87; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-heat-2 { background-color: #0f84b4; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-heat-3 { background-color: #07aad1; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-heat-4 { background-color: #4dd2e9; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-ocean .feed-map-segment-heat-5 { background-color: #adfbff; }
+
+/* === DARK MODE: FOREST THEME === */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-position-indicator { background-color: #14532d; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper.feed-map-theme-forest { --fm-current: #a3e635; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-ratioed { background-color: #d01c21 !important; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-heat-1 { background-color: #066642; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-heat-2 { background-color: #278d4c; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-heat-3 { background-color: #51b04c; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-heat-4 { background-color: #90d45f; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-forest .feed-map-segment-heat-5 { background-color: #d8f99f; }
+
+/* === DARK MODE: MONOCHROME THEME === */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-position-indicator { background-color: #374151; }
+html[data-bsky-nav-theme="dim"] .feed-map-theme-monochrome .feed-map-position-indicator { background-color: #2c3a4e; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-wrapper.feed-map-theme-monochrome { --fm-current: #f9fafb; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-ratioed { background-color: #d01c21 !important; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-heat-1 { background-color: #535a65; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-heat-2 { background-color: #767c86; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-heat-3 { background-color: #989da5; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-heat-4 { background-color: #bec2c8; }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-theme-monochrome .feed-map-segment-heat-5 { background-color: #ebeef2; }
+
 
 @media (prefers-contrast: more) {
   .feed-map-position-indicator {
-    height: 4px;
     background-color: #9ca3af;
   }
 
+  /* Denser hatch for read segments */
   .feed-map-segment-read {
-    filter: brightness(0.4);
+    filter: none;
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--fm-hatch) 0 3px,
+      transparent 3px 5px
+    );
   }
 
-  .feed-map-segment-current {
-    outline: 3px solid #1d4ed8;
-    outline-offset: -1px;
+  .feed-map-wrapper {
+    --fm-current-width: 3px;
   }
 }
 
@@ -3395,7 +3563,7 @@ div#statusBar.has-feed-map {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #6b7280;
+  color: #4b5563;
   margin-bottom: 2px;
 }
 
@@ -3413,11 +3581,11 @@ div#statusBar.has-feed-map {
 }
 
 .feed-map-tooltip-handle {
-  color: #9ca3af;
+  color: #4b5563; /* 7.6:1 on white */
 }
 
 .feed-map-tooltip-time {
-  color: #9ca3af;
+  color: #4b5563;
 }
 
 .feed-map-tooltip-author {
@@ -3465,11 +3633,29 @@ div#statusBar.has-feed-map {
   margin-left: auto;
 }
 
-/* Read post styling - only when visible */
-.feed-map-tooltip.visible.feed-map-tooltip-read {
-  opacity: 0.85;
+/* Heat row: score for the heatmap mode, rank band in this feed, and a swatch
+   of the post's map color (the tooltip carries the map's theme class) */
+.feed-map-tooltip-heat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #374151;
+  margin-bottom: 6px;
 }
 
+.feed-map-tooltip-heat-swatch {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+/* Read post styling - only when visible. Muted text only; the tooltip stays
+   fully opaque so the map does not show through it. */
 .feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-author,
 .feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-content {
   color: #6b7280;
@@ -3484,51 +3670,59 @@ div#statusBar.has-feed-map {
   border-top: 1px solid #fecaca;
 }
 
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-  .feed-map-tooltip {
-    background: #1f2937;
-    border-color: #374151;
-    color: #f3f4f6;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  }
+/* Dark palettes (Dim / Dark) */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip {
+  background: #1f2937;
+  border-color: #374151;
+  color: #f3f4f6;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
 
-  .feed-map-tooltip-header {
-    color: #9ca3af;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-header {
+  color: #9ca3af;
+}
 
-  .feed-map-tooltip-handle,
-  .feed-map-tooltip-time {
-    color: #6b7280;
-  }
+/* 5.8:1 on the #1f2937 tooltip (was #6b7280, 2.57:1) */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-handle,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-time {
+  color: #9ca3af;
+}
 
-  .feed-map-tooltip-author {
-    color: #f9fafb;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-heat {
+  color: #d1d5db;
+}
 
-  .feed-map-tooltip-content {
-    color: #d1d5db;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-heat-swatch {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
 
-  .feed-map-tooltip-engagement {
-    color: #9ca3af;
-    border-top-color: #374151;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-author {
+  color: #f9fafb;
+}
 
-  .feed-map-tooltip-icon,
-  .feed-map-tooltip-media-icon {
-    filter: invert(1);
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-content {
+  color: #d1d5db;
+}
 
-  .feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-author,
-  .feed-map-tooltip.feed-map-tooltip-read .feed-map-tooltip-content {
-    color: #9ca3af;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-engagement {
+  color: #9ca3af;
+  border-top-color: #374151;
+}
 
-  .feed-map-tooltip.feed-map-tooltip-ratioed .feed-map-tooltip-engagement {
-    background-color: #450a0a;
-    border-top-color: #7f1d1d;
-  }
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-icon,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip-media-icon {
+  filter: invert(1);
+}
+
+/* Same selector shape as the light rule (with .visible) so this one wins */
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-author,
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip.visible.feed-map-tooltip-read .feed-map-tooltip-content {
+  color: #9ca3af;
+}
+
+html:is([data-bsky-nav-theme="dim"], [data-bsky-nav-theme="dark"]) .feed-map-tooltip.feed-map-tooltip-ratioed .feed-map-tooltip-engagement {
+  background-color: #450a0a;
+  border-top-color: #7f1d1d;
 }
 
 /* ==========================================================================

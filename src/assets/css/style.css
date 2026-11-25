@@ -707,6 +707,11 @@ div.loading-indicator-forward {
     display: none !important;
 }
 
+/* A "View full thread" row whose thread is filtered out around it (viewFullThread.js) */
+.bsky-navigator-vft-hidden {
+    display: none !important;
+}
+
 /* Hide parent containers of filtered items to remove leftover borders */
 div:has(> .item.filtered),
 div:has(> div > .item.filtered) {

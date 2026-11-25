@@ -22,6 +22,13 @@ import {
   markRepliesFetched,
   needsFetch,
 } from '../sidecarDrill.js';
+import {
+  VFT_ROW_CLASS,
+  VFT_SORT_INDEX_ATTR,
+  postIdFromViewFullThreadHref,
+  resolveViewFullThreadOwners,
+  viewFullThreadLink,
+} from './viewFullThread.js';
 import { GestureHandler } from '../components/GestureHandler.js';
 import { BottomSheet } from '../components/BottomSheet.js';
 import { PostViewModal } from '../components/PostViewModal.js';
@@ -1801,57 +1808,16 @@ export class ItemHandler extends Handler {
         // Collect all post IDs in this thread (root + all unrolled replies)
         const threadPostIds = new Set([rootPostId, ...unrolledIds]);
 
-        // Get the thread containing the unrolled item - we must NOT hide this one
-        const unrolledThread = $(item).closest('.thread')[0];
-
-        // Find and hide ALL "View full thread" elements in the feed that link to any post in this thread
-        $('div.thread').each(function () {
-          const threadEl = $(this);
-
-          // Skip the thread containing our unrolled content
-          if (this === unrolledThread) return;
-
-          // Skip if already hidden
-          if (threadEl.hasClass('unrolled-view-full-thread-hidden')) return;
-
-          // Look for items with and without feedItem-by- testid
-          // Also detect saved page items by aria-label or post UI elements
-          const items = threadEl.find('[role="link"]');
-          const realPosts = items.filter(function () {
-            const $item = $(this);
-            const testId = $item.attr('data-testid') || '';
-            const ariaLabel = $item.attr('aria-label') || '';
-            const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
-            return testId.startsWith('feedItem-by-') ||
-                   testId.startsWith('postThreadItem-by-') ||
-                   ariaLabel.startsWith('Post by ') ||
-                   hasPostUI;
-          });
-          const viewFullThreadItems = items.filter(function () {
-            const $item = $(this);
-            const testId = $item.attr('data-testid') || '';
-            const ariaLabel = $item.attr('aria-label') || '';
-            const hasPostUI = $item.find('[data-testid="postText"], [data-testid="likeBtn"]').length > 0;
-            return !testId.startsWith('feedItem-by-') &&
-                   !testId.startsWith('postThreadItem-by-') &&
-                   !ariaLabel.startsWith('Post by ') &&
-                   !hasPostUI;
-          });
-
-          // Only hide threads that ONLY contain "View full thread" (no real posts)
-          if (viewFullThreadItems.length > 0 && realPosts.length === 0) {
-            // Check if any link in this thread points to one of our thread's posts
-            const links = threadEl.find('a[href*="/post/"]');
-            const matchesThread = links.toArray().some((link) => {
-              const href = $(link).attr('href');
-              const linkPostId = href?.split('/post/')[1]?.split('?')[0];
-              return linkPostId && threadPostIds.has(linkPostId);
-            });
-
-            if (matchesThread) {
-              threadEl.addClass('unrolled-view-full-thread-hidden');
-              // CSS rule handles hiding with !important
-            }
+        // Hide every "View full thread" row that links to a post of this thread. These
+        // rows are list siblings of the post rows, never .thread (see viewFullThread.js);
+        // collectFeedRows() tags them when the feed loads.
+        $(`.${VFT_ROW_CLASS}`).each(function () {
+          if (this.classList.contains('unrolled-view-full-thread-hidden')) return;
+          const href = viewFullThreadLink(this)?.getAttribute('href');
+          const linkPostId = postIdFromViewFullThreadHref(href);
+          if (linkPostId && threadPostIds.has(linkPostId)) {
+            // CSS rule handles hiding with !important
+            this.classList.add('unrolled-view-full-thread-hidden');
           }
         });
       }
@@ -4541,6 +4507,74 @@ export class ItemHandler extends Handler {
       max = Math.max(max, ...values);
       i = j - 1;
     }
+  }
+
+  /**
+   * Describe the children of the feed list as row descriptors (see viewFullThread.js),
+   * in DOM order: post rows (.thread), "View full thread" rows and Bluesky's other rows.
+   * Each "View full thread" row is tagged with VFT_ROW_CLASS, matched to the root post
+   * row of its thread (`owner`) and stamped with that thread's sort index, which keeps
+   * the match stable when a root post appears twice.
+   */
+  collectFeedRows(parentEl) {
+    const SORT_ATTR = 'data-bsky-navigator-sort-index';
+    const rows = [];
+    const posts = [];
+    const vfts = [];
+    for (const el of parentEl.children) {
+      if (el.classList.contains('thread')) {
+        const row = {
+          kind: 'post',
+          node: el,
+          sortIndex: parseFloat(el.getAttribute(SORT_ATTR)),
+          itemIndex: parseInt($(el).find('.item').attr('data-bsky-navigator-item-index')),
+          first: el.classList.contains('thread-first'),
+          last: el.classList.contains('thread-last'),
+          postId: null,
+          // Only .filtered counts: _doLoadItemsInner() also sets an inline display:none
+          // on rows with no visible posts, but never clears it (the .thread:has() rule
+          // in style.css overrides it once a post shows again), so it goes stale
+          hidden: el.classList.contains('filtered'),
+        };
+        rows.push(row);
+        posts.push(row);
+        continue;
+      }
+      const link = viewFullThreadLink(el);
+      if (link) {
+        const stamped = parseFloat(el.getAttribute(VFT_SORT_INDEX_ATTR));
+        const row = {
+          kind: 'vft',
+          node: el,
+          postId: postIdFromViewFullThreadHref(link.getAttribute('href')),
+          stampedSortIndex: Number.isNaN(stamped) ? null : stamped,
+          owner: null,
+        };
+        rows.push(row);
+        vfts.push(row);
+      } else {
+        rows.push({ kind: 'other', node: el });
+      }
+    }
+    if (vfts.length) {
+      // Post ids are only needed to match roots, so look them up only when needed
+      for (const row of posts) {
+        if (!row.first) continue;
+        const item = $(row.node).children().children('.item').first();
+        if (item.length) row.postId = this.postIdForItem(item) || null;
+      }
+      const owners = resolveViewFullThreadOwners(rows);
+      for (const v of vfts) {
+        v.owner = owners.get(v) || null;
+        v.node.classList.add(VFT_ROW_CLASS);
+        if (v.owner && !Number.isNaN(v.owner.sortIndex)) {
+          v.node.setAttribute(VFT_SORT_INDEX_ATTR, v.owner.sortIndex);
+        } else {
+          v.node.removeAttribute(VFT_SORT_INDEX_ATTR);
+        }
+      }
+    }
+    return { rows, posts, vfts };
   }
 
   onPopupAdd() {
@@ -8190,9 +8224,10 @@ export class ItemHandler extends Handler {
       } catch (e) {
         // Ignore - elements may have been removed
       }
-      // Show any hidden "View full thread" elements
+      // Show any hidden "View full thread" elements (hidden by the class alone; no
+      // jQuery show(), whose inline display would override Bluesky's row layout)
       try {
-        $('.unrolled-view-full-thread-hidden').removeClass('unrolled-view-full-thread-hidden').show();
+        $('.unrolled-view-full-thread-hidden').removeClass('unrolled-view-full-thread-hidden');
       } catch (e) {
         // Ignore - elements may have been removed
       }

@@ -190,12 +190,18 @@ const CONFIG_SCHEMA = {
         default: 'Instant',
         help: 'Show post preview on hover instantly or after a short delay',
       },
+      feedMapNewPostsMarker: {
+        label: 'Mark new posts',
+        type: 'checkbox',
+        default: true,
+        help: 'Draw a divider on the feed map where the posts that are new since you last looked at this feed end',
+      },
       feedMapHeatmap: {
         label: 'Heatmap mode',
         type: 'select',
         options: ['None', 'Engagement Rate', 'Raw Engagement', 'Weighted Engagement'],
         default: 'None',
-        help: 'Color intensity based on post engagement metrics',
+        help: 'Color intensity ranks each post against the rest of the feed by engagement (5 levels)',
         showWhen: { feedMapStyle: 'Advanced' },
       },
       feedMapIcons: {
@@ -3067,6 +3073,7 @@ export class ConfigModal {
 
       case 'feedMapHeatmap':
       case 'feedMapZoom':
+      case 'feedMapNewPostsMarker':
         // Dispatch event for handler to update indicator
         document.dispatchEvent(new CustomEvent('feedMapSettingChanged', {
           detail: { setting: name, value }

@@ -1,6 +1,158 @@
 // feedMapUtils.js - Shared utilities for feed map creation across handlers
 /* global $ */
 
+/** Number of heat levels; .feed-map-segment-heat-1 through -5 in style.css. */
+export const HEAT_LEVELS = 5;
+
+/** Space-separated list of every heat class, for jQuery removeClass(). */
+export const HEAT_CLASSES = Array.from(
+  { length: HEAT_LEVELS },
+  (_, i) => `feed-map-segment-heat-${i + 1}`
+).join(' ');
+
+/**
+ * Build a score -> heat level function for one feed map render.
+ *
+ * Levels are rank based (quantiles): the positive finite scores in `scores` are
+ * sorted, and a post's level comes from its percentile rank, so each of the
+ * HEAT_LEVELS levels holds about 1/HEAT_LEVELS of the posts no matter how
+ * heavy-tailed the engagement is. Build it once per render from the displayed
+ * posts, then call the returned function per segment (O(log n) each).
+ *
+ * Rules:
+ * - Scores that are not positive (0, negative, NaN from a bad timestamp) get
+ *   level 0 (no heat) and are left out of the ranking.
+ * - Ties use the mid-rank: every post with the same score gets the same level,
+ *   placed at the middle of the span its tie block covers.
+ * - The highest score (and anything tied with it) always gets the top level.
+ * - With fewer posts than levels, levels are filled top down without gaps
+ *   (1 post -> 5; 3 posts -> 3, 4, 5), so a short feed is not drawn as cold.
+ *   This works as a floor: a post with k higher-scoring posts above it is never
+ *   below level HEAT_LEVELS - k.
+ * - A score outside the ranked population (or Infinity) is placed by where it
+ *   would fall in the sorted scores, clamped to 1..HEAT_LEVELS.
+ *
+ * @param {Iterable<number>} scores - Engagement scores of the displayed posts
+ * @returns {(score: number) => number} Maps a score to 0 or 1..HEAT_LEVELS
+ */
+export function createHeatLevelFn(scores) {
+  const sorted = [];
+  for (const score of scores) {
+    if (score > 0 && Number.isFinite(score)) sorted.push(score);
+  }
+  sorted.sort((a, b) => a - b);
+  const n = sorted.length;
+
+  // First index i with sorted[i] > score (or >= score when strict is false)
+  const bound = (score, strict) => {
+    let lo = 0;
+    let hi = n;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (strict ? sorted[mid] <= score : sorted[mid] < score) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+
+  const levelOf = (score) => {
+    if (!(score > 0) || n === 0) return 0;
+    const below = bound(score, false); // posts with a lower score
+    const atOrBelow = bound(score, true); // posts with a lower or equal score
+    const midRank = (below + atOrBelow) / 2 / n; // 0..1
+    const quantileLevel = Math.floor(midRank * HEAT_LEVELS) + 1;
+    const topDownLevel = HEAT_LEVELS - (n - atOrBelow);
+    return Math.min(HEAT_LEVELS, Math.max(1, quantileLevel, topDownLevel));
+  };
+
+  /**
+   * Where a score ranks in the same population, for the hover tooltip.
+   * Returns null for scores that get no heat (see the rules above).
+   * - atOrAbove: share of ranked posts scoring at least this much (0..1]
+   * - atOrBelow: share of ranked posts scoring at most this much (0..1]
+   */
+  levelOf.rankOf = (score) => {
+    if (!(score > 0) || n === 0) return null;
+    const below = Math.min(bound(score, false), n - 1);
+    const atOrBelow = Math.max(bound(score, true), 1);
+    return {
+      level: levelOf(score),
+      atOrAbove: (n - below) / n,
+      atOrBelow: atOrBelow / n,
+      n,
+    };
+  };
+
+  return levelOf;
+}
+
+/**
+ * Short label for a post's rank band, e.g. "top 5%" or "bottom 30%".
+ * Uses the side of the feed the post is on, rounding the share up so the very
+ * top post of 40 reads "top 3%" rather than "top 0%".
+ *
+ * @param {{atOrAbove: number, atOrBelow: number, n: number} | null} rank - From rankOf()
+ * @returns {string} Label, or '' when there is no rank
+ */
+export function formatRankBand(rank) {
+  if (!rank || !(rank.n > 0)) return '';
+  const pct = (share) => Math.min(100, Math.max(1, Math.ceil(share * 100 - 1e-9)));
+  if (rank.n === 1) return 'only post with engagement';
+  if (rank.atOrAbove >= 1 && rank.atOrBelow >= 1) return 'tied with every post';
+  if (rank.atOrAbove <= 0.5) return `top ${pct(rank.atOrAbove)}%`;
+  return `bottom ${pct(rank.atOrBelow)}%`;
+}
+
+/**
+ * Find the boundary between posts that are new since the user last looked at a
+ * feed and the posts they had already seen.
+ *
+ * The "anchor" is the newest post of the feed (the top post in Bluesky's feed
+ * order) at the time the user last looked: when they last opened this feed, or
+ * the top post just before they loaded newer posts. Every post newer than the
+ * anchor in feed order is new. Display order is feed order, or its reverse when
+ * the feed is sorted oldest first.
+ *
+ * Posts hidden by filters still count for finding the anchor, so a filtered
+ * anchor still places the boundary among the posts that are shown.
+ *
+ * @param {Array<string|null>} allPostIds - Post ID of every feed item, in display order
+ * @param {number[]} displayIndices - Index into allPostIds of each displayed item, ascending
+ * @param {string|null} anchorPostId - Newest post the user had already seen
+ * @param {boolean} [reversed=false] - True when the display is oldest first
+ * @returns {{index: number, newCount: number} | null} The divider goes on the
+ *   leading edge of displayed segment `index` (between index - 1 and index).
+ *   null when the anchor is not loaded, or when no shown post (or every shown
+ *   post) is new, since then there is nothing to divide.
+ */
+export function findNewPostsBoundary(allPostIds, displayIndices, anchorPostId, reversed = false) {
+  if (!anchorPostId || !allPostIds || !displayIndices) return null;
+  const anchorIndex = allPostIds.indexOf(anchorPostId);
+  if (anchorIndex < 0) return null;
+  const total = displayIndices.length;
+  // Displayed items that come before the divider: the new ones (newest first),
+  // or the anchor and everything older (oldest first)
+  const before = reversed
+    ? displayIndices.filter((i) => i <= anchorIndex).length
+    : displayIndices.filter((i) => i < anchorIndex).length;
+  if (before === 0 || before === total) return null;
+  return { index: before, newCount: reversed ? total - before : before };
+}
+
+/**
+ * Index (into allPostIds) of the newest post in feed order: the first item, or
+ * the last one when the display is oldest first. Skips items without a post ID.
+ *
+ * @param {Array<string|null>} allPostIds - Post IDs in display order
+ * @param {boolean} [reversed=false] - True when the display is oldest first
+ * @returns {string|null} Post ID, or null if there is none
+ */
+export function newestPostId(allPostIds, reversed = false) {
+  if (!allPostIds || !allPostIds.length) return null;
+  const ids = reversed ? [...allPostIds].reverse() : allPostIds;
+  return ids.find((id) => !!id) || null;
+}
+
 /**
  * Extract feed map configuration from config object.
  * This pattern was duplicated 4+ times across handlers.
@@ -86,6 +238,21 @@ export function createFeedMapElements(feedMapConfig, options = {}) {
     </svg>
   </div>`);
 
+  // Heat legend. It sits in the connector row over the end label column: the
+  // connector curves always run between the label columns, so that corner is
+  // free. CSS shows it only when the heatmap is on (.feed-map-has-heat).
+  const legendLabel = 'Engagement heat, ranked within this feed: less to more';
+  const legendSwatches = Array.from(
+    { length: HEAT_LEVELS },
+    (_, i) => `<span class="feed-map-legend-swatch feed-map-segment-heat-${i + 1}"></span>`
+  ).join('');
+  const legend = $(
+    `<div class="feed-map-legend" role="img" aria-label="${legendLabel}" title="${legendLabel}">` +
+      `<span class="feed-map-legend-text" aria-hidden="true">less</span>${legendSwatches}` +
+      `<span class="feed-map-legend-text" aria-hidden="true">more</span></div>`
+  );
+  connector.append(legend);
+
   // Create zoom container and elements
   const zoomContainer = $(`<div class="${zoomContainerClass}"></div>`);
   const zoomLabelStart = $(`<span class="feed-map-label feed-map-label-start"></span>`);
@@ -124,6 +291,7 @@ export function createFeedMapElements(feedMapConfig, options = {}) {
     zoom,
     zoomInner,
     zoomHighlight,
+    legend,
   };
 }
 
@@ -187,8 +355,8 @@ export function setupFeedMap(handler, config, options = {}) {
 
 const ZOOM_SEGMENT_STATE_CLASSES =
   'feed-map-segment-read feed-map-segment-current feed-map-segment-empty feed-map-segment-ratioed ' +
-  'feed-map-segment-heat-1 feed-map-segment-heat-2 feed-map-segment-heat-3 feed-map-segment-heat-4 ' +
-  'feed-map-segment-heat-5 feed-map-segment-heat-6 feed-map-segment-heat-7 feed-map-segment-heat-8';
+  'feed-map-segment-new-boundary ' +
+  HEAT_CLASSES;
 
 /**
  * Render one feed map zoom segment (state classes, icon, avatar, handle, time, thread progress).
@@ -196,15 +364,16 @@ const ZOOM_SEGMENT_STATE_CLASSES =
  *
  * @param {object} handler - FeedItemHandler instance (for engagement/rule/format helpers)
  * @param {jQuery} $segment - Zoom segment element to render into
- * @param {object} segmentState - { item, hasItem, isCurrent, engData } for this segment
- * @param {object} options - { heatmapMode, maxScore, showIcons, showAvatars, avatarScale,
+ * @param {object} segmentState - { item, hasItem, isCurrent, engData, isNewBoundary } for
+ *   this segment (isNewBoundary: the new-posts divider runs along its leading edge)
+ * @param {object} options - { heatmapMode, heatLevelOf, showIcons, showAvatars, avatarScale,
  *   showHandles, showTimestamps, showRuleColors }
  */
 export function renderZoomSegment(handler, $segment, segmentState, options) {
-  const { item, hasItem, isCurrent, engData } = segmentState;
+  const { item, hasItem, isCurrent, engData, isNewBoundary } = segmentState;
   const {
     heatmapMode,
-    maxScore,
+    heatLevelOf,
     showIcons,
     showAvatars,
     avatarScale,
@@ -245,11 +414,16 @@ export function renderZoomSegment(handler, $segment, segmentState, options) {
     $segment.addClass('feed-map-segment-current');
   }
 
+  // First post on the far side of the new-posts divider (see findNewPostsBoundary)
+  if (isNewBoundary) {
+    $segment.addClass('feed-map-segment-new-boundary');
+  }
+
   // Apply background color: ratioed takes precedence, then heatmap
   if (engData?.engagement?.isRatioed) {
     $segment.addClass('feed-map-segment-ratioed');
-  } else if (heatmapMode !== 'None' && engData) {
-    const heatLevel = handler.getHeatLevel(engData.score, maxScore);
+  } else if (heatmapMode !== 'None' && engData && heatLevelOf) {
+    const heatLevel = heatLevelOf(engData.score);
     if (heatLevel > 0) {
       $segment.addClass(`feed-map-segment-heat-${heatLevel}`);
     }

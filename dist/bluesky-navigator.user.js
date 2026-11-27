@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.33+675.f5e448d7
+// @version     1.0.34+676.577b4442
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -65222,6 +65222,24 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       likeCount: formatter.format(post2.likeCount)
     };
   }
+  const TOLERANCE = 2;
+  function planUnrolledPostScroll(m) {
+    const padding = m.padding || 0;
+    const maxScroll = Math.max(0, m.scrollHeight - m.clientHeight);
+    const wanted = m.scrollTop + (m.postTop - m.containerTop) - padding;
+    const containerScrollTop = Math.round(Math.min(Math.max(wanted, 0), maxScroll));
+    const postTop = m.postTop - (containerScrollTop - m.scrollTop);
+    const itemFullyVisible = m.itemTop >= m.viewTop - TOLERANCE && m.itemBottom <= m.viewBottom + TOLERANCE;
+    if (itemFullyVisible) return { containerScrollTop, pageDelta: 0 };
+    let pageDelta = m.itemTop - m.viewTop;
+    const viewHeight = m.viewBottom - m.viewTop;
+    const minVisible = Math.min(m.postHeight, viewHeight / 2);
+    if (postTop - pageDelta > m.viewBottom - minVisible) {
+      pageDelta = postTop - m.viewTop;
+    }
+    if (Math.abs(pageDelta) <= TOLERANCE) pageDelta = 0;
+    return { containerScrollTop, pageDelta: Math.round(pageDelta) };
+  }
   function sortReplyPosts(posts, sortOrder) {
     return [...posts].sort((a, b) => {
       switch (sortOrder) {
@@ -66789,6 +66807,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       this._index = newIndex;
       this._threadIndex = null;
       this._replyIndex = null;
+      this._threadEntry = null;
       this.sidecarNavList = null;
       this.threadNavList = null;
       this.postId = this.postIdForItem($(item));
@@ -66859,9 +66878,9 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       const toolbarHeight = this.getToolbarHeight();
       const posts = this.getUnrolledThreadPosts();
       if (posts.length > 0 && post2 === posts[0]) {
-        const scrollContainer = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
-        if (scrollContainer) {
-          scrollContainer.scrollTop = 0;
+        const scrollContainer2 = $(this.selectedItem).find('div[data-testid="contentHider-post"]').first().parent()[0];
+        if (scrollContainer2) {
+          scrollContainer2.scrollTop = 0;
         }
         const container = this.selectedItem?.[0];
         if (container) {
@@ -66873,11 +66892,41 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         }
         return;
       }
-      post2.style.scrollMarginTop = `${toolbarHeight}px`;
-      post2.scrollIntoView({
-        behavior: this.config.get("enableSmoothScrolling") ? "smooth" : "instant",
-        block: "start"
+      const behavior = this.config.get("enableSmoothScrolling") ? "smooth" : "instant";
+      const scrollContainer = posts.length > 0 ? posts[0].parentElement : null;
+      const item = this.selectedItem?.[0];
+      if (!scrollContainer || !item || !scrollContainer.contains(post2)) {
+        post2.style.scrollMarginTop = `${toolbarHeight}px`;
+        post2.scrollIntoView({ behavior, block: "start" });
+        return;
+      }
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const postRect = post2.getBoundingClientRect();
+      const itemRect = item.getBoundingClientRect();
+      const { containerScrollTop, pageDelta } = planUnrolledPostScroll({
+        scrollTop: scrollContainer.scrollTop,
+        scrollHeight: scrollContainer.scrollHeight,
+        clientHeight: scrollContainer.clientHeight,
+        containerTop: containerRect.top,
+        postTop: postRect.top,
+        postHeight: postRect.height,
+        itemTop: itemRect.top,
+        itemBottom: itemRect.bottom,
+        viewTop: toolbarHeight,
+        viewBottom: window.innerHeight - this.getStatusBarHeight(),
+        // Leave the container's top padding above the post, where post 1 sits
+        padding: parseFloat(window.getComputedStyle(scrollContainer).paddingTop) || 0
       });
+      if (containerScrollTop !== Math.round(scrollContainer.scrollTop)) {
+        scrollContainer.scrollTo({ top: containerScrollTop, behavior });
+      }
+      if (pageDelta) {
+        this.ignoreMouseMovement = true;
+        window.scrollBy({ top: pageDelta, behavior });
+        setTimeout(() => {
+          this.ignoreMouseMovement = false;
+        }, 500);
+      }
     }
     /**
      * Scroll a thread element into view within its container.
@@ -67104,6 +67153,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         }
         this._threadIndex = null;
         this.setIndex(this.index - 1, false, false);
+        this.markThreadEntry(-1);
         if (!this.isElementFullyVisible(this.selectedItem)) {
           this.scrollElementIntoView(this.selectedItem[0], -1);
         }
@@ -67117,6 +67167,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         }
         this._threadIndex = null;
         this.setIndex(this.index + 1, false, false);
+        this.markThreadEntry(1);
         if (!this.isElementFullyVisible(this.selectedItem)) {
           this.scrollElementIntoView(this.selectedItem[0], 1);
         }
@@ -67817,10 +67868,30 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         const currentItem = item;
         requestAnimationFrame(() => {
           if (this.selectedItem?.[0] !== currentItem[0]) return;
-          this._threadIndex = 0;
+          if (this._threadIndex != null) {
+            this.getThreadNavList().updateSelection();
+            return;
+          }
+          const entry = this._threadEntry?.item === currentItem[0] ? this._threadEntry.direction : 0;
+          this._threadEntry = null;
+          const postSelection = this.config.get("unrolledPostSelection");
+          const index = postSelection && entry < 0 ? this.unrolledReplies.length : 0;
+          this._threadIndex = index;
           $(this.selectedItem).addClass("item-selection-child-focused");
           $(this.selectedItem).removeClass("item-selection-active");
-          this.getThreadNavList().updateSelection();
+          const navList = this.getThreadNavList();
+          navList.setIndexSilent(index);
+          navList.updateSelection();
+          const scrollContainer = parent[0];
+          if (postSelection && entry && scrollContainer) {
+            scrollContainer.scrollTop = entry < 0 ? scrollContainer.scrollHeight : 0;
+          }
+          if (postSelection) this.updateInfoIndicator();
+          if (index > 0) {
+            if (this.isFixedSidecar() && $("#fixed-sidecar-panel").hasClass("visible")) {
+              this.updateSidecarConnector();
+            }
+          }
         });
         const rootPostId = thread.post.uri?.split("/").slice(-1)[0];
         if (rootPostId) {
@@ -68923,10 +68994,22 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       el = this.getFitScroller(el);
       el.scrollTop = direction > 0 ? 0 : el.scrollHeight;
     }
+    /**
+     * Remember that the just-selected post was entered with j (1) or k (-1), so if it is
+     * an unrolled thread, unrollThread() selects the post at that end. Any other selection
+     * clears it (_onMainItemSelected).
+     */
+    markThreadEntry(direction) {
+      const item = this.selectedItem?.[0];
+      this._threadEntry = item ? { item, direction } : null;
+    }
     jumpToPrev(mark) {
       const before = this.index;
       this.setIndex(this.index - 1, mark, true);
-      if (this.index !== before) this.resetItemInnerScroll(this.selectedItem?.[0], -1);
+      if (this.index !== before) {
+        this.resetItemInnerScroll(this.selectedItem?.[0], -1);
+        this.markThreadEntry(-1);
+      }
       return true;
     }
     jumpToNext(mark) {
@@ -68938,7 +69021,10 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         } else {
           const before = this.index;
           this.setIndex(this.index + 1, mark, true);
-          if (this.index !== before) this.resetItemInnerScroll(this.selectedItem?.[0], 1);
+          if (this.index !== before) {
+            this.resetItemInnerScroll(this.selectedItem?.[0], 1);
+            this.markThreadEntry(1);
+          }
         }
       } else {
         const next = $(this.selectedItem).parent().parent().parent().next();

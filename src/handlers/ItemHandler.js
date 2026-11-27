@@ -16,6 +16,7 @@ import {
   isInVisibleArea,
 } from '../fitPosts.js';
 import { formatPost, urlForPost } from './postFormatting.js';
+import { planUnrolledPostScroll } from './unrollScroll.js';
 import {
   getLevelReplies,
   hasChildReplies,
@@ -430,6 +431,7 @@ export class ItemHandler extends Handler {
     this._index = newIndex;
     this._threadIndex = null;
     this._replyIndex = null;
+    this._threadEntry = null;
     this.sidecarNavList = null;
     this.threadNavList = null;
     this.postId = this.postIdForItem($(item));
@@ -552,12 +554,45 @@ export class ItemHandler extends Handler {
       return;
     }
 
-    // For other posts, scroll the post itself into view
-    post.style.scrollMarginTop = `${toolbarHeight}px`;
-    post.scrollIntoView({
-      behavior: this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant',
-      block: 'start',
+    // For other posts, scroll the unroll container to the post. Not post.scrollIntoView():
+    // that also scrolls the page so the post lands at the toolbar line, which slides the
+    // item's header under the toolbar and, with "Fit posts to screen", lifts the box's
+    // bottom off the status bar. The page only scrolls when the item isn't fully in view.
+    const behavior = this.config.get('enableSmoothScrolling') ? 'smooth' : 'instant';
+    const scrollContainer = posts.length > 0 ? posts[0].parentElement : null;
+    const item = this.selectedItem?.[0];
+    if (!scrollContainer || !item || !scrollContainer.contains(post)) {
+      post.style.scrollMarginTop = `${toolbarHeight}px`;
+      post.scrollIntoView({ behavior, block: 'start' });
+      return;
+    }
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const postRect = post.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    const { containerScrollTop, pageDelta } = planUnrolledPostScroll({
+      scrollTop: scrollContainer.scrollTop,
+      scrollHeight: scrollContainer.scrollHeight,
+      clientHeight: scrollContainer.clientHeight,
+      containerTop: containerRect.top,
+      postTop: postRect.top,
+      postHeight: postRect.height,
+      itemTop: itemRect.top,
+      itemBottom: itemRect.bottom,
+      viewTop: toolbarHeight,
+      viewBottom: window.innerHeight - this.getStatusBarHeight(),
+      // Leave the container's top padding above the post, where post 1 sits
+      padding: parseFloat(window.getComputedStyle(scrollContainer).paddingTop) || 0,
     });
+    if (containerScrollTop !== Math.round(scrollContainer.scrollTop)) {
+      scrollContainer.scrollTo({ top: containerScrollTop, behavior });
+    }
+    if (pageDelta) {
+      this.ignoreMouseMovement = true;
+      window.scrollBy({ top: pageDelta, behavior });
+      setTimeout(() => {
+        this.ignoreMouseMovement = false;
+      }, 500);
+    }
   }
 
   /**
@@ -852,6 +887,7 @@ export class ItemHandler extends Handler {
       this._threadIndex = null;
       // Navigate to previous main post
       this.setIndex(this.index - 1, false, false);
+      this.markThreadEntry(-1);
       if (!this.isElementFullyVisible(this.selectedItem)) {
         this.scrollElementIntoView(this.selectedItem[0], -1);
       }
@@ -868,6 +904,7 @@ export class ItemHandler extends Handler {
       this._threadIndex = null;
       // Navigate to next main post
       this.setIndex(this.index + 1, false, false);
+      this.markThreadEntry(1);
       if (!this.isElementFullyVisible(this.selectedItem)) {
         this.scrollElementIntoView(this.selectedItem[0], 1);
       }
@@ -1789,16 +1826,43 @@ export class ItemHandler extends Handler {
           return true;
         })
       );
-      // Show focus on first post without scrolling
+      // Show focus on the first post without scrolling the page, or, with "Unrolled post
+      // selection" on and the thread entered moving up (k), on the last post with the
+      // thread scrolled to its end, so the selection matches what's shown
       // Use requestAnimationFrame to ensure DOM is fully rendered before applying styles
       // Also verify item is still selected (could have changed during async operations)
       const currentItem = item;
       requestAnimationFrame(() => {
         if (this.selectedItem?.[0] !== currentItem[0]) return; // Selection changed during async
-        this._threadIndex = 0;
+        if (this._threadIndex != null) {
+          // Already focused (an earlier unroll of this selection, or the reader has moved
+          // since): keep the place, just restore the highlight the re-render dropped
+          this.getThreadNavList().updateSelection();
+          return;
+        }
+        const entry = this._threadEntry?.item === currentItem[0] ? this._threadEntry.direction : 0;
+        this._threadEntry = null;
+        const postSelection = this.config.get('unrolledPostSelection');
+        const index = postSelection && entry < 0 ? this.unrolledReplies.length : 0;
+        this._threadIndex = index;
         $(this.selectedItem).addClass('item-selection-child-focused');
         $(this.selectedItem).removeClass('item-selection-active');
-        this.getThreadNavList().updateSelection();
+        const navList = this.getThreadNavList();
+        navList.setIndexSilent(index);
+        navList.updateSelection();
+        // Entered with j/k: start at the end the reader is coming from, as
+        // resetItemInnerScroll() does for a capped post (that only runs with "Fit posts to
+        // screen" on, and the unroll above may have re-rendered the thread since)
+        const scrollContainer = parent[0];
+        if (postSelection && entry && scrollContainer) {
+          scrollContainer.scrollTop = entry < 0 ? scrollContainer.scrollHeight : 0;
+        }
+        if (postSelection) this.updateInfoIndicator();
+        if (index > 0) {
+          if (this.isFixedSidecar() && $('#fixed-sidecar-panel').hasClass('visible')) {
+            this.updateSidecarConnector();
+          }
+        }
       });
 
       // Hide "View full thread" element that follows unrolled threads (it's redundant)
@@ -3203,10 +3267,23 @@ export class ItemHandler extends Handler {
     el.scrollTop = direction > 0 ? 0 : el.scrollHeight;
   }
 
+  /**
+   * Remember that the just-selected post was entered with j (1) or k (-1), so if it is
+   * an unrolled thread, unrollThread() selects the post at that end. Any other selection
+   * clears it (_onMainItemSelected).
+   */
+  markThreadEntry(direction) {
+    const item = this.selectedItem?.[0];
+    this._threadEntry = item ? { item, direction } : null;
+  }
+
   jumpToPrev(mark) {
     const before = this.index;
     this.setIndex(this.index - 1, mark, true);
-    if (this.index !== before) this.resetItemInnerScroll(this.selectedItem?.[0], -1);
+    if (this.index !== before) {
+      this.resetItemInnerScroll(this.selectedItem?.[0], -1);
+      this.markThreadEntry(-1);
+    }
     return true;
   }
 
@@ -3220,7 +3297,10 @@ export class ItemHandler extends Handler {
       } else {
         const before = this.index;
         this.setIndex(this.index + 1, mark, true);
-        if (this.index !== before) this.resetItemInnerScroll(this.selectedItem?.[0], 1);
+        if (this.index !== before) {
+          this.resetItemInnerScroll(this.selectedItem?.[0], 1);
+          this.markThreadEntry(1);
+        }
       }
     } else {
       const next = $(this.selectedItem).parent().parent().parent().next();

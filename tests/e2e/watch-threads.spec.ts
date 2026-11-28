@@ -134,8 +134,12 @@ test.describe('Watch Threads', () => {
   }) => {
     const feedPage = new FeedPage(page);
     const currentPost = await feedPage.getCurrentPost();
-    const index = await selectionIndex(page);
-    const item = page.locator(`.item[data-bsky-navigator-item-index="${index}"]`);
+    // Tag the post itself: item indexes are reassigned only on visible posts, so
+    // after hide-read toggles, another post can end up sharing this one's index
+    await page
+      .locator('.item-selection-active')
+      .evaluate((el) => el.setAttribute('data-test-watch-target', ''));
+    const item = page.locator('.item[data-test-watch-target]');
     const bell = currentPost.locator(BELL);
 
     await feedPage.pressKey('w');

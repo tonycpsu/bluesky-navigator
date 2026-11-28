@@ -219,11 +219,19 @@ export class BlueskyAPI {
     }
   }
 
-  async getThread(uri) {
+  /**
+   * Fetch a post thread.
+   * @param {string} uri - AT URI of the post
+   * @param {{depth?: number, parentHeight?: number}} [options] - Passed through only when given
+   */
+  async getThread(uri, { depth, parentHeight } = {}) {
     this.checkRateLimit();
 
     try {
-      const res = await this.agent.getPostThread({ uri: uri });
+      const params = { uri: uri };
+      if (depth !== undefined) params.depth = depth;
+      if (parentHeight !== undefined) params.parentHeight = parentHeight;
+      const res = await this.agent.getPostThread(params);
       const { thread } = res.data;
       return thread;
     } catch (error) {

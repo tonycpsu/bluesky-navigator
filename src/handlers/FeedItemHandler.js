@@ -6,6 +6,8 @@ import { ItemHandler } from './ItemHandler.js';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import icons from '../icons.js';
 import { LAYOUT_CHANGED_EVENT } from '../components/LeftSidebar.js';
+import { watchService, WATCH_CHANGED_EVENT } from '../watch/WatchService.js';
+import { hiddenAsRead } from '../watch/watchRecords.js';
 import {
   VFT_HIDDEN_CLASS,
   orderFeedRows,
@@ -931,6 +933,17 @@ export class FeedItemHandler extends ItemHandler {
     this._timeoutClearedHandler = () => this.filterItems();
     window.addEventListener('bsky-nav-timeout-cleared', this._timeoutClearedHandler);
 
+    // Re-filter (debounced) when watches change, so hide-read honors unseen replies
+    this._watchChangedFilterHandler = () => {
+      if (!this.state.feedHideRead || !this.watchChangeAffectsFeed()) return;
+      clearTimeout(this._watchRefilterTimeout);
+      this._watchRefilterTimeout = setTimeout(() => {
+        this._watchRefilterTimeout = null;
+        this.filterItems();
+      }, 200);
+    };
+    document.addEventListener(WATCH_CHANGED_EVENT, this._watchChangedFilterHandler);
+
     // Re-scan DOM for items when reactivating (e.g., after navigating back from post detail)
     // This ensures this.items array is fresh and not holding stale DOM references
     // Priority: in-memory saved values (from deactivate) > persisted state (from page reload)
@@ -978,6 +991,14 @@ export class FeedItemHandler extends ItemHandler {
       window.removeEventListener('bsky-nav-timeout-cleared', this._timeoutClearedHandler);
       this._timeoutClearedHandler = null;
     }
+
+    // Remove watch-changed re-filter listener and pending timer
+    if (this._watchChangedFilterHandler) {
+      document.removeEventListener(WATCH_CHANGED_EVENT, this._watchChangedFilterHandler);
+      this._watchChangedFilterHandler = null;
+    }
+    clearTimeout(this._watchRefilterTimeout);
+    this._watchRefilterTimeout = null;
 
     // Disconnect any pending toolbar observer
     if (this._toolbarObserver) {
@@ -1561,7 +1582,8 @@ export class FeedItemHandler extends ItemHandler {
     // Don't hide read items when viewing a single post (post view)
     if (this.state.feedHideRead && this.name !== 'post') {
       const postId = this.postIdForItem($item);
-      if (postId && this.state.seen[postId]) {
+      // A watched post with unseen new replies stays visible even when read
+      if (postId && this.hiddenAsReadNow(postId)) {
         return false;
       }
     }
@@ -1859,6 +1881,34 @@ export class FeedItemHandler extends ItemHandler {
     $('.filter-highlight').contents().unwrap();
   }
 
+  /**
+   * Whether hide-read hides this post for being read (watched posts with unseen replies stay).
+   * @param {string} postId
+   * @returns {boolean}
+   */
+  hiddenAsReadNow(postId) {
+    return hiddenAsRead(
+      this.state.seen[postId],
+      this.config.get('watchThreads'),
+      watchService.unseenCountFor(postId)
+    );
+  }
+
+  /**
+   * Whether a watch change would flip the hidden state of any loaded read item.
+   * @returns {boolean}
+   */
+  watchChangeAffectsFeed() {
+    return $('.item')
+      .toArray()
+      .some((item) => {
+        if ($(item).parents('.item').length) return false;
+        const postId = this.postIdForItem($(item));
+        if (!postId || !this.state.seen[postId]) return false;
+        return this.hiddenAsReadNow(postId) !== $(item).hasClass('filtered');
+      });
+  }
+
   filterThread(thread) {
     // Only consider direct child items, not items nested in embedded posts
     const items = $(thread).find('> div > .item');
@@ -1964,7 +2014,10 @@ export class FeedItemHandler extends ItemHandler {
 
     // Force rebuild feed map to reflect filter changes
     this.updateScrollPosition(true);
-    if (hideRead && wasSelectedRead) {
+    // Only move the selection when the previously selected post was filtered out (or gone);
+    // a read watched post that stayed visible keeps it
+    const selectionSurvived = oldSelected?.isConnected && !$(oldSelected).hasClass('filtered');
+    if (hideRead && wasSelectedRead && !selectionSurvived) {
       const selected = this.selectedItem;
       if (selected[0] !== oldSelected && selected.length && !selected.hasClass('item-read')) {
         // The read post was filtered out and setItems() already moved the selection to

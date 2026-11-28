@@ -312,6 +312,21 @@ const CONFIG_SCHEMA = {
         help: 'Show most recent notification as new (for testing)',
         showWhen: { toastNotifications: true },
       },
+      watchThreads: {
+        label: 'Watch threads',
+        type: 'checkbox',
+        default: true,
+        help: 'Show a bell on posts to follow their threads for new replies',
+      },
+      watchCheckInterval: {
+        label: 'Check watched threads every (minutes)',
+        type: 'number',
+        default: 3,
+        min: 1,
+        max: 60,
+        help: 'How often to check watched threads for new replies (needs the app-password login)',
+        showWhen: { watchThreads: true },
+      },
     },
   },
   Clearsky: {

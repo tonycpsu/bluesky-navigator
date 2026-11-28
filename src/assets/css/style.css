@@ -6556,6 +6556,11 @@ body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-
   color: var(--bsky-nav-quote);
 }
 
+.bsky-nav-toast-icon.watch {
+  background: color-mix(in srgb, var(--bsky-nav-accent) 15%, transparent);
+  color: var(--bsky-nav-accent);
+}
+
 /* Light only: these pure icon colors fall below 3:1 on their 15% tint, so use the text-weight tokens */
 html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-nav-toast-icon.like {
   color: var(--bsky-nav-like-text);
@@ -7015,4 +7020,383 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
   .bsky-nav-left-nav-toggle.collapsed .bsky-nav-left-nav-toggle-chevron {
     transform: rotate(180deg);
   }
+}
+
+/* Watch threads */
+.bsky-nav-watch-wrap {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  position: relative;
+}
+
+.bsky-nav-watch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 5px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--bsky-nav-text-medium);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--transition-duration) var(--bsky-nav-ease);
+}
+
+.bsky-nav-watch-btn:hover {
+  background-color: var(--bsky-nav-bg-muted);
+}
+
+.bsky-nav-watch-btn:focus-visible {
+  outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent);
+  outline-offset: 1px;
+}
+
+.bsky-nav-watch-btn.bsky-nav-watch-btn-watched {
+  color: var(--bsky-nav-accent);
+}
+
+.bsky-nav-watch-icon,
+.bsky-nav-watch-icon svg {
+  display: block;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.bsky-nav-watch-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background-color: var(--bsky-nav-accent);
+  color: var(--bsky-nav-on-accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.bsky-nav-watch-count[hidden] {
+  display: none;
+}
+
+/* Watched tab on /notifications. Our tab copies Bluesky's pill tabs: Bluesky draws each
+   pill's border, its sliding highlight and its label as overlays beside the (invisible)
+   tab, so ours draws all three itself. Colors measured on bsky.app: the unselected label
+   has no token of ours, and in Dim and Dark the selected pill is inverted (light fill). */
+html {
+  --bsky-nav-watched-tab-text: #232E3E;
+  --bsky-nav-watched-tab-selected-bg: var(--bsky-nav-bg-muted);
+  --bsky-nav-watched-tab-selected-text: var(--bsky-nav-text);
+}
+
+html[data-bsky-nav-theme="dim"],
+html[data-bsky-nav-theme="dark"] {
+  --bsky-nav-watched-tab-text: #E2E7EE;
+  --bsky-nav-watched-tab-selected-bg: var(--bsky-nav-text);
+  --bsky-nav-watched-tab-selected-text: var(--bsky-nav-bg);
+}
+
+html[data-bsky-nav-theme="dark"] {
+  --bsky-nav-watched-tab-text: #DCE2EA;
+}
+
+.bsky-nav-watched-tab-wrap {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.bsky-nav-watched-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
+  border: 1px solid var(--bsky-nav-border);
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--bsky-nav-bg) 90%, transparent);
+  color: var(--bsky-nav-watched-tab-text);
+  font-family: var(--bsky-nav-font-family);
+  font-size: var(--bsky-nav-font-sm);
+  font-weight: 500;
+  line-height: 17px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--transition-duration) var(--bsky-nav-ease);
+}
+
+.bsky-nav-watched-tab:hover {
+  background-color: var(--bsky-nav-bg-subtle);
+}
+
+.bsky-nav-watched-tab:focus-visible {
+  outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent);
+  outline-offset: 1px;
+}
+
+.bsky-nav-watched-tab[aria-selected="true"] {
+  border-color: var(--bsky-nav-watched-tab-selected-bg);
+  background-color: var(--bsky-nav-watched-tab-selected-bg);
+  color: var(--bsky-nav-watched-tab-selected-text);
+}
+
+/* The count overlaps the pill's bottom-right corner rather than widening it: at the usual
+   600px column, Bluesky's five tabs leave just enough room for a plain "Watched" pill, and
+   anything wider makes the tab bar scroll under Bluesky's arrow buttons. It stays inside the
+   tab row's bottom padding, since the scrolling row clips anything outside it. */
+.bsky-nav-watched-tab-count {
+  position: absolute;
+  right: -4px;
+  bottom: -6px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--bsky-nav-bg);
+  background-color: var(--bsky-nav-accent);
+  color: var(--bsky-nav-on-accent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.bsky-nav-watched-tab-count[hidden] {
+  display: none;
+}
+
+/* While the Watched tab is open (WatchedTab.js marks Bluesky's nodes with data attributes):
+   Bluesky's highlight is hidden, every label (the selected one included) takes the
+   unselected color, and its list makes way for our panel */
+[data-bsky-nav-watched-active] [data-bsky-nav-watched="highlight"] {
+  visibility: hidden !important;
+}
+
+[data-bsky-nav-watched-active] [data-bsky-nav-watched="label"] > * {
+  color: var(--bsky-nav-watched-tab-text) !important;
+}
+
+[data-bsky-nav-watched-active] [data-bsky-nav-watched="list"] {
+  display: none !important;
+}
+
+.bsky-nav-watched-panel {
+  display: none;
+}
+
+[data-bsky-nav-watched-active] .bsky-nav-watched-panel {
+  display: block;
+}
+
+.bsky-nav-watched-panel {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 600px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding-bottom: 40px;
+  color: var(--bsky-nav-text);
+  font-family: var(--bsky-nav-font-family);
+  font-size: var(--bsky-nav-font-md);
+}
+
+.bsky-nav-watched-notice,
+.bsky-nav-watched-empty {
+  margin: 12px 16px;
+  color: var(--bsky-nav-text-medium);
+  line-height: 1.45;
+}
+
+.bsky-nav-watched-notice {
+  padding: 10px 12px;
+  border: 1px solid var(--bsky-nav-border);
+  border-radius: var(--bsky-nav-radius-md);
+  background-color: var(--bsky-nav-bg-subtle);
+  font-size: var(--bsky-nav-font-sm);
+}
+
+.bsky-nav-watched-empty {
+  margin-top: 32px;
+  text-align: center;
+}
+
+.bsky-nav-watched-list,
+.bsky-nav-watched-replies {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bsky-nav-watched-entry {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--bsky-nav-border);
+}
+
+.bsky-nav-watched-entry-unseen {
+  box-shadow: inset 3px 0 0 var(--bsky-nav-accent);
+}
+
+.bsky-nav-watched-entry-link,
+.bsky-nav-watched-reply-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.bsky-nav-watched-entry-link:focus-visible,
+.bsky-nav-watched-reply-link:focus-visible {
+  outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent);
+  outline-offset: 2px;
+  border-radius: var(--bsky-nav-radius-sm);
+}
+
+.bsky-nav-watched-author {
+  display: block;
+  color: var(--bsky-nav-text-medium);
+  font-size: var(--bsky-nav-font-sm);
+  font-weight: 600;
+}
+
+.bsky-nav-watched-snippet {
+  display: block;
+  margin-top: 2px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.bsky-nav-watched-entry-link:hover .bsky-nav-watched-snippet {
+  text-decoration: underline;
+}
+
+.bsky-nav-watched-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--bsky-nav-text-low);
+  font-size: var(--bsky-nav-font-xs);
+}
+
+.bsky-nav-watched-unavailable {
+  color: var(--bsky-nav-negative-text);
+  font-weight: 600;
+}
+
+.bsky-nav-watched-entry-unavailable .bsky-nav-watched-snippet {
+  color: var(--bsky-nav-text-medium);
+}
+
+.bsky-nav-watched-replies {
+  margin-top: 8px;
+  border-left: 2px solid var(--bsky-nav-border-strong);
+}
+
+.bsky-nav-watched-reply-link {
+  padding: 6px 10px;
+  border-radius: 0 var(--bsky-nav-radius-sm) var(--bsky-nav-radius-sm) 0;
+}
+
+.bsky-nav-watched-reply-link:hover {
+  background-color: var(--bsky-nav-bg-muted);
+}
+
+.bsky-nav-watched-reply-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--bsky-nav-font-sm);
+}
+
+.bsky-nav-watched-reply-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bsky-nav-watched-reply-handle {
+  min-width: 0;
+  color: var(--bsky-nav-text-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bsky-nav-watched-reply-time {
+  flex-shrink: 0;
+  color: var(--bsky-nav-text-low);
+}
+
+.bsky-nav-watched-reply-text {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--bsky-nav-font-sm);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.bsky-nav-watched-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bsky-nav-watched-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--bsky-nav-border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--bsky-nav-text);
+  font: inherit;
+  font-size: var(--bsky-nav-font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-duration) var(--bsky-nav-ease);
+}
+
+.bsky-nav-watched-btn:hover {
+  background-color: var(--bsky-nav-bg-muted);
+}
+
+.bsky-nav-watched-btn:focus-visible {
+  outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent);
+  outline-offset: 1px;
+}
+
+/* Unseen watched replies on the Notifications nav link. Outlined, and at the 24px icon's
+   bottom-right: Bluesky's filled unread badge ends 15px down its top-right, and the label
+   starts 8px to the right, so ours sits below the one, right-aligned with it, and grows left,
+   away from the label. */
+.bsky-nav-watch-nav-badge {
+  position: absolute;
+  z-index: 20;
+  top: 14px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border: 2px solid var(--bsky-nav-accent);
+  border-radius: 999px;
+  background-color: var(--bsky-nav-bg, #fff);
+  color: var(--bsky-nav-accent);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.bsky-nav-watch-nav-badge[hidden] {
+  display: none;
 }

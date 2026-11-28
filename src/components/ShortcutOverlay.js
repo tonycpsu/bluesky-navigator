@@ -23,6 +23,7 @@ const SHORTCUTS = {
       { keys: ['Alt+,'], description: 'Settings' },
       { keys: ['Alt+.'], description: 'Extension preferences' },
       { keys: ['Alt+B'], description: 'Collapse/expand left sidebar' },
+      { keys: ['W'], description: 'Watched threads' },
     ],
   },
   Navigation: {
@@ -61,6 +62,7 @@ const SHORTCUTS = {
       { keys: ['!'], description: 'Timeout author' },
       { keys: ['s'], description: 'Save/Unsave post' },
       { keys: ['S'], description: 'Share menu' },
+      { keys: ['w'], description: 'Watch/unwatch thread for new replies' },
       { keys: ['i'], description: 'Open first link' },
       { keys: ['m'], description: 'Toggle media/video' },
       { keys: ['c'], description: 'Screenshot to clipboard' },

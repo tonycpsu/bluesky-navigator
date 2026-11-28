@@ -3,6 +3,7 @@
 import { ShortcutOverlay } from '../components/ShortcutOverlay.js';
 import { TOGGLE_LEFT_SIDEBAR_EVENT } from '../components/LeftSidebar.js';
 import { isUserTyping, isModalOpen } from '../utils.js';
+import { OPEN_WATCHED_TAB_EVENT } from '../watch/WatchService.js';
 
 /**
  * Base handler class that provides keyboard binding and global navigation shortcuts.
@@ -96,6 +97,9 @@ export class Handler {
       } else if (event.key === '?') {
         event.preventDefault();
         this.shortcutOverlay.toggle(this.name);
+      } else if (event.key === 'W' && !event.ctrlKey && this.config.get('watchThreads')) {
+        event.preventDefault();
+        document.dispatchEvent(new window.CustomEvent(OPEN_WATCHED_TAB_EVENT));
       }
     }
   }

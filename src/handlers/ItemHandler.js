@@ -36,6 +36,18 @@ import { PostViewModal } from '../components/PostViewModal.js';
 import { NavigableList } from '../utils/NavigableList.js';
 import icons from '../icons.js';
 import { isDarkTheme, getThemeBackground } from '../theme.js';
+import { watchService, WATCH_CHANGED_EVENT } from '../watch/WatchService.js';
+import { WATCH_LIMIT_MESSAGE } from '../watch/watchCopy.js';
+import {
+  WATCH_BUTTON_CLASS,
+  ensureWatchButton,
+  findWatchButton,
+  installWatchButtonClicks,
+  refreshWatchButtons,
+  removeWatchButtons,
+  showWatchButtonNotice,
+  watchInfoFromButton,
+} from '../watch/watchButton.js';
 
 const { waitForElement, announceToScreenReader, getAnimationDuration } = utils;
 
@@ -256,6 +268,22 @@ export class ItemHandler extends Handler {
     $(document).on('wheel', this.onWheel);
     $(document).on('scrollend', this.onScrollEnd);
 
+    installWatchButtonClicks((info, button) => this.toggleWatch(info, button));
+    this.onWatchChanged = () => {
+      // The "Watch threads" setting may have just changed: drop every bell, or give the
+      // loaded items theirs now instead of one by one as they are restyled. Hidden (read)
+      // items count too, since a refilter can show them without restyling them.
+      if (!this.config.get('watchThreads')) {
+        removeWatchButtons();
+        return;
+      }
+      $('.item')
+        .filter((_, el) => !$(el).parents('.item').length)
+        .each((_, el) => this.applyWatchButton(el));
+      refreshWatchButtons();
+    };
+    document.addEventListener(WATCH_CHANGED_EVENT, this.onWatchChanged);
+
     super.activate();
   }
 
@@ -332,6 +360,10 @@ export class ItemHandler extends Handler {
     $(document).off('scroll', this.onScroll);
     $(document).off('wheel', this.onWheel);
     $(document).off('scrollend', this.onScrollEnd);
+    if (this.onWatchChanged) {
+      document.removeEventListener(WATCH_CHANGED_EVENT, this.onWatchChanged);
+      this.onWatchChanged = null;
+    }
     super.deactivate();
   }
 
@@ -2564,6 +2596,11 @@ export class ItemHandler extends Handler {
 
       case 'F':
         this.showFollowConfirmation(item, false);
+        break;
+
+      case 'w':
+        if (!this.config.get('watchThreads')) return false;
+        this.toggleWatchForSelection();
         break;
 
       default:
@@ -7505,6 +7542,118 @@ export class ItemHandler extends Handler {
     this.applyReadStatus(element);
     this.applyBlockStatus(element);
     this.applyRuleColorStyling(element);
+    this.applyWatchButton(element);
+  }
+
+  // ===========================================================================
+  // Watched Threads
+  // ===========================================================================
+
+  /**
+   * What the watch service needs to know about a post element (feed item, post page
+   * post, unrolled sub-post or sidecar reply).
+   * @param {jQuery|HTMLElement} item
+   * @returns {object|null} WatchInfo, or null when the element has no post link
+   */
+  watchInfoForItem(item) {
+    const $item = $(item);
+    if (!$item.length) return null;
+    const href = this.urlForItem($item);
+    if (!href) return null;
+    let path;
+    try {
+      path = new URL(href, window.location.origin).pathname;
+    } catch {
+      return null;
+    }
+    const match = /^\/profile\/([^/]+)\/post\/([^/?#]+)/.exec(path);
+    if (!match) return null;
+    const author = match[1];
+    const postId = this.postIdForItem($item);
+    if (!postId) return null;
+    const authorIsDid = author.startsWith('did:');
+    // didFromItem reads the first profile link, which on a repost is the reposter's. A
+    // missing DID is resolved later; a wrong one would point the watch at another post.
+    const reposted = $item.find('a[aria-label^="Reposted by"]').length > 0;
+    const text = $item.find('div[data-testid="postText"], .sidecar-post-content').first().text();
+    return {
+      postId,
+      url: `/profile/${author}/post/${postId}`,
+      authorDid: authorIsDid ? author : reposted ? null : this.didFromItem($item),
+      authorHandle: this.getAuthorHandle($item) || (authorIsDid ? null : author),
+      snippet: Array.from($.trim(text)).slice(0, 100).join(''),
+    };
+  }
+
+  /**
+   * The post `w` acts on: the focused sidecar reply while the sidecar shows it, else the
+   * focused unrolled sub-post, else the selected item (same order as handleLikeAction).
+   * @returns {jQuery}
+   */
+  watchTargetItem() {
+    if (
+      this.config.get('showReplySidecar') &&
+      this.replyIndex != null &&
+      this.selectedReply.is(':visible')
+    ) {
+      return this.selectedReply;
+    }
+    if (this.threadIndex) return this.selectedPost;
+    return this.selectedItem;
+  }
+
+  /** Add, update or remove the watch bell in an item's action row. */
+  applyWatchButton(element) {
+    const el = $(element)[0];
+    if (!el) return;
+    if (!this.config.get('watchThreads')) {
+      removeWatchButtons(el);
+      return;
+    }
+    // applyItemStyle runs on every hover, selection and read change; while the bell still
+    // belongs to this post, only bring it up to date
+    const existing = findWatchButton(el);
+    if (existing && existing.dataset.postId === this.postIdForItem(el)) {
+      refreshWatchButtons(existing);
+      return;
+    }
+    const info = this.watchInfoForItem(el);
+    if (!info) return;
+    const button = ensureWatchButton(el, info);
+    if (button) refreshWatchButtons(button);
+  }
+
+  /**
+   * Watch or stop watching a post, then say what happened.
+   * @param {object} info WatchInfo
+   * @param {HTMLElement|null} button the bell that was used, if any
+   */
+  toggleWatch(info, button) {
+    if (!info || !info.postId) return;
+    const result = watchService.toggle(info);
+    if (!result.ok) {
+      if (result.reason === 'limit') {
+        announceToScreenReader(WATCH_LIMIT_MESSAGE);
+        if (button) showWatchButtonNotice(button, WATCH_LIMIT_MESSAGE);
+      }
+      return;
+    }
+    refreshWatchButtons();
+    if (button && !this.isElementInViewport(button)) this.showActionFeedback(button);
+    announceToScreenReader(
+      result.watched ? 'Watching thread for new replies' : 'Stopped watching thread'
+    );
+  }
+
+  /** `w`: watch or stop watching the focused post. */
+  toggleWatchForSelection() {
+    const target = this.watchTargetItem();
+    if (!target || !target.length) return;
+    const isSubPost = target[0] !== this.selectedItem[0];
+    // Unrolled sub-posts and sidecar replies have no bell of their own
+    const button = isSubPost ? null : target.find(`.${WATCH_BUTTON_CLASS}`)[0] || null;
+    const info = this.watchInfoForItem(target) || (button ? watchInfoFromButton(button) : null);
+    this.toggleWatch(info, button);
   }
 
   /**

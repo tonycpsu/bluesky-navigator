@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        bluesky-navigator
 // @description Adds Vim-like navigation, read/unread post-tracking, and other features to Bluesky
-// @version     1.0.34+676.577b4442
+// @version     1.0.37+679.6fea2c67
 // @author      https://bsky.app/profile/tonyc.org
 // @namespace   https://tonyc.org/
 // @match       https://bsky.app/*
@@ -189,7 +189,7 @@
   function isValidTimestamp(timestamp) {
     return typeof timestamp === "string" && ISO_TIMESTAMP_RE.test(timestamp) && !isNaN(Date.parse(timestamp));
   }
-  function timeOf(timestamp) {
+  function timeOf$1(timestamp) {
     const t = timestamp ? Date.parse(timestamp) : NaN;
     return isNaN(t) ? 0 : t;
   }
@@ -231,7 +231,7 @@
         { local: true, read: false, ts: localRemoved[postId] },
         { local: false, read: false, ts: remoteRemoved[postId] }
       ].filter((c) => c.ts);
-      candidates.sort((a, b) => timeOf(b.ts) - timeOf(a.ts));
+      candidates.sort((a, b) => timeOf$1(b.ts) - timeOf$1(a.ts));
       const winner = candidates[0];
       if (winner.read) {
         seen[postId] = winner.ts;
@@ -830,7 +830,7 @@
       }
       if (this.state.seenRemoved) {
         const cutoff = Date.now() - SEEN_TOMBSTONE_TTL;
-        const live = Object.entries(this.state.seenRemoved).filter(([, ts]) => timeOf(ts) >= cutoff);
+        const live = Object.entries(this.state.seenRemoved).filter(([, ts]) => timeOf$1(ts) >= cutoff);
         this.state.seenRemoved = this.keepMostRecentValues(Object.fromEntries(live), this.maxEntries);
       }
     }
@@ -45275,10 +45275,18 @@ if (cid) {
         return null;
       }
     }
-    async getThread(uri) {
+    /**
+     * Fetch a post thread.
+     * @param {string} uri - AT URI of the post
+     * @param {{depth?: number, parentHeight?: number}} [options] - Passed through only when given
+     */
+    async getThread(uri, { depth, parentHeight } = {}) {
       this.checkRateLimit();
       try {
-        const res = await this.agent.getPostThread({ uri });
+        const params = { uri };
+        if (depth !== void 0) params.depth = depth;
+        if (parentHeight !== void 0) params.parentHeight = parentHeight;
+        const res = await this.agent.getPostThread(params);
         const { thread } = res.data;
         return thread;
       } catch (error) {
@@ -45655,8 +45663,8 @@ if (cid) {
   function observeVisibilityChange$1($element, callback) {
     const target2 = $element[0];
     const observer = new MutationObserver(() => {
-      const isVisible = $element.is(":visible");
-      callback(isVisible);
+      const isVisible2 = $element.is(":visible");
+      callback(isVisible2);
     });
     observer.observe(target2, {
       attributes: true,
@@ -46048,6 +46056,21 @@ if (cid) {
           default: false,
           help: "Show most recent notification as new (for testing)",
           showWhen: { toastNotifications: true }
+        },
+        watchThreads: {
+          label: "Watch threads",
+          type: "checkbox",
+          default: true,
+          help: "Show a bell on posts to follow their threads for new replies"
+        },
+        watchCheckInterval: {
+          label: "Check watched threads every (minutes)",
+          type: "number",
+          default: 3,
+          min: 1,
+          max: 60,
+          help: "How often to check watched threads for new replies (needs the app-password login)",
+          showWhen: { watchThreads: true }
         }
       }
     },
@@ -55488,6 +55511,11 @@ body.bsky-nav-fit-posts .item:not(.item .item):not(.bsky-nav-fit-capture) [data-
   color: var(--bsky-nav-quote);
 }
 
+.bsky-nav-toast-icon.watch {
+  background: color-mix(in srgb, var(--bsky-nav-accent) 15%, transparent);
+  color: var(--bsky-nav-accent);
+}
+
 /* Light only: these pure icon colors fall below 3:1 on their 15% tint, so use the text-weight tokens */
 html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-nav-toast-icon.like {
   color: var(--bsky-nav-like-text);
@@ -55948,6 +55976,385 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
     transform: rotate(180deg);
   }
 }
+
+/* Watch threads */
+.bsky-nav-watch-wrap {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  position: relative;
+}
+
+.bsky-nav-watch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 5px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--bsky-nav-text-medium);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--transition-duration) var(--bsky-nav-ease);
+}
+
+.bsky-nav-watch-btn:hover {
+  background-color: var(--bsky-nav-bg-muted);
+}
+
+.bsky-nav-watch-btn:focus-visible {
+  outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent);
+  outline-offset: 1px;
+}
+
+.bsky-nav-watch-btn.bsky-nav-watch-btn-watched {
+  color: var(--bsky-nav-accent);
+}
+
+.bsky-nav-watch-icon,
+.bsky-nav-watch-icon svg {
+  display: block;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.bsky-nav-watch-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background-color: var(--bsky-nav-accent);
+  color: var(--bsky-nav-on-accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.bsky-nav-watch-count[hidden] {
+  display: none;
+}
+
+/* Watched tab on /notifications. Our tab copies Bluesky's pill tabs: Bluesky draws each
+   pill's border, its sliding highlight and its label as overlays beside the (invisible)
+   tab, so ours draws all three itself. Colors measured on bsky.app: the unselected label
+   has no token of ours, and in Dim and Dark the selected pill is inverted (light fill). */
+html {
+  --bsky-nav-watched-tab-text: #232E3E;
+  --bsky-nav-watched-tab-selected-bg: var(--bsky-nav-bg-muted);
+  --bsky-nav-watched-tab-selected-text: var(--bsky-nav-text);
+}
+
+html[data-bsky-nav-theme="dim"],
+html[data-bsky-nav-theme="dark"] {
+  --bsky-nav-watched-tab-text: #E2E7EE;
+  --bsky-nav-watched-tab-selected-bg: var(--bsky-nav-text);
+  --bsky-nav-watched-tab-selected-text: var(--bsky-nav-bg);
+}
+
+html[data-bsky-nav-theme="dark"] {
+  --bsky-nav-watched-tab-text: #DCE2EA;
+}
+
+.bsky-nav-watched-tab-wrap {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+}
+
+.bsky-nav-watched-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
+  border: 1px solid var(--bsky-nav-border);
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--bsky-nav-bg) 90%, transparent);
+  color: var(--bsky-nav-watched-tab-text);
+  font-family: var(--bsky-nav-font-family);
+  font-size: var(--bsky-nav-font-sm);
+  font-weight: 500;
+  line-height: 17px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--transition-duration) var(--bsky-nav-ease);
+}
+
+.bsky-nav-watched-tab:hover {
+  background-color: var(--bsky-nav-bg-subtle);
+}
+
+.bsky-nav-watched-tab:focus-visible {
+  outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent);
+  outline-offset: 1px;
+}
+
+.bsky-nav-watched-tab[aria-selected="true"] {
+  border-color: var(--bsky-nav-watched-tab-selected-bg);
+  background-color: var(--bsky-nav-watched-tab-selected-bg);
+  color: var(--bsky-nav-watched-tab-selected-text);
+}
+
+/* The count overlaps the pill's bottom-right corner rather than widening it: at the usual
+   600px column, Bluesky's five tabs leave just enough room for a plain "Watched" pill, and
+   anything wider makes the tab bar scroll under Bluesky's arrow buttons. It stays inside the
+   tab row's bottom padding, since the scrolling row clips anything outside it. */
+.bsky-nav-watched-tab-count {
+  position: absolute;
+  right: -4px;
+  bottom: -6px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--bsky-nav-bg);
+  background-color: var(--bsky-nav-accent);
+  color: var(--bsky-nav-on-accent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.bsky-nav-watched-tab-count[hidden] {
+  display: none;
+}
+
+/* While the Watched tab is open (WatchedTab.js marks Bluesky's nodes with data attributes):
+   Bluesky's highlight is hidden, every label (the selected one included) takes the
+   unselected color, and its list makes way for our panel */
+[data-bsky-nav-watched-active] [data-bsky-nav-watched="highlight"] {
+  visibility: hidden !important;
+}
+
+[data-bsky-nav-watched-active] [data-bsky-nav-watched="label"] > * {
+  color: var(--bsky-nav-watched-tab-text) !important;
+}
+
+[data-bsky-nav-watched-active] [data-bsky-nav-watched="list"] {
+  display: none !important;
+}
+
+.bsky-nav-watched-panel {
+  display: none;
+}
+
+[data-bsky-nav-watched-active] .bsky-nav-watched-panel {
+  display: block;
+}
+
+.bsky-nav-watched-panel {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 600px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding-bottom: 40px;
+  color: var(--bsky-nav-text);
+  font-family: var(--bsky-nav-font-family);
+  font-size: var(--bsky-nav-font-md);
+}
+
+.bsky-nav-watched-notice,
+.bsky-nav-watched-empty {
+  margin: 12px 16px;
+  color: var(--bsky-nav-text-medium);
+  line-height: 1.45;
+}
+
+.bsky-nav-watched-notice {
+  padding: 10px 12px;
+  border: 1px solid var(--bsky-nav-border);
+  border-radius: var(--bsky-nav-radius-md);
+  background-color: var(--bsky-nav-bg-subtle);
+  font-size: var(--bsky-nav-font-sm);
+}
+
+.bsky-nav-watched-empty {
+  margin-top: 32px;
+  text-align: center;
+}
+
+.bsky-nav-watched-list,
+.bsky-nav-watched-replies {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bsky-nav-watched-entry {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--bsky-nav-border);
+}
+
+.bsky-nav-watched-entry-unseen {
+  box-shadow: inset 3px 0 0 var(--bsky-nav-accent);
+}
+
+.bsky-nav-watched-entry-link,
+.bsky-nav-watched-reply-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.bsky-nav-watched-entry-link:focus-visible,
+.bsky-nav-watched-reply-link:focus-visible {
+  outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent);
+  outline-offset: 2px;
+  border-radius: var(--bsky-nav-radius-sm);
+}
+
+.bsky-nav-watched-author {
+  display: block;
+  color: var(--bsky-nav-text-medium);
+  font-size: var(--bsky-nav-font-sm);
+  font-weight: 600;
+}
+
+.bsky-nav-watched-snippet {
+  display: block;
+  margin-top: 2px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.bsky-nav-watched-entry-link:hover .bsky-nav-watched-snippet {
+  text-decoration: underline;
+}
+
+.bsky-nav-watched-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--bsky-nav-text-low);
+  font-size: var(--bsky-nav-font-xs);
+}
+
+.bsky-nav-watched-unavailable {
+  color: var(--bsky-nav-negative-text);
+  font-weight: 600;
+}
+
+.bsky-nav-watched-entry-unavailable .bsky-nav-watched-snippet {
+  color: var(--bsky-nav-text-medium);
+}
+
+.bsky-nav-watched-replies {
+  margin-top: 8px;
+  border-left: 2px solid var(--bsky-nav-border-strong);
+}
+
+.bsky-nav-watched-reply-link {
+  padding: 6px 10px;
+  border-radius: 0 var(--bsky-nav-radius-sm) var(--bsky-nav-radius-sm) 0;
+}
+
+.bsky-nav-watched-reply-link:hover {
+  background-color: var(--bsky-nav-bg-muted);
+}
+
+.bsky-nav-watched-reply-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--bsky-nav-font-sm);
+}
+
+.bsky-nav-watched-reply-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bsky-nav-watched-reply-handle {
+  min-width: 0;
+  color: var(--bsky-nav-text-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bsky-nav-watched-reply-time {
+  flex-shrink: 0;
+  color: var(--bsky-nav-text-low);
+}
+
+.bsky-nav-watched-reply-text {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--bsky-nav-font-sm);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.bsky-nav-watched-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bsky-nav-watched-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--bsky-nav-border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--bsky-nav-text);
+  font: inherit;
+  font-size: var(--bsky-nav-font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-duration) var(--bsky-nav-ease);
+}
+
+.bsky-nav-watched-btn:hover {
+  background-color: var(--bsky-nav-bg-muted);
+}
+
+.bsky-nav-watched-btn:focus-visible {
+  outline: var(--bsky-nav-ring-width) solid var(--bsky-nav-accent);
+  outline-offset: 1px;
+}
+
+/* Unseen watched replies on the Notifications nav link. Outlined, and at the 24px icon's
+   bottom-right: Bluesky's filled unread badge ends 15px down its top-right, and the label
+   starts 8px to the right, so ours sits below the one, right-aligned with it, and grows left,
+   away from the label. */
+.bsky-nav-watch-nav-badge {
+  position: absolute;
+  z-index: 20;
+  top: 14px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border: 2px solid var(--bsky-nav-accent);
+  border-radius: 999px;
+  background-color: var(--bsky-nav-bg, #fff);
+  color: var(--bsky-nav-accent);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.bsky-nav-watch-nav-badge[hidden] {
+  display: none;
+}
 `;
   const sidecarTemplatesHtml = `<script id="sidecar-replies-template" type="text/x-handlebars-template">
   {{#if this.postId}}
@@ -56196,7 +56603,8 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         { keys: ["Alt+P"], description: "Profile" },
         { keys: ["Alt+,"], description: "Settings" },
         { keys: ["Alt+."], description: "Extension preferences" },
-        { keys: ["Alt+B"], description: "Collapse/expand left sidebar" }
+        { keys: ["Alt+B"], description: "Collapse/expand left sidebar" },
+        { keys: ["W"], description: "Watched threads" }
       ]
     },
     Navigation: {
@@ -56237,6 +56645,7 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         { keys: ["!"], description: "Timeout author" },
         { keys: ["s"], description: "Save/Unsave post" },
         { keys: ["S"], description: "Share menu" },
+        { keys: ["w"], description: "Watch/unwatch thread for new replies" },
         { keys: ["i"], description: "Open first link" },
         { keys: ["m"], description: "Toggle media/video" },
         { keys: ["c"], description: "Screenshot to clipboard" },
@@ -56822,6 +57231,872 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       return "";
     }
   }
+  const THREAD_DEPTH = 50;
+  const TEXT_LIMIT = 100;
+  function classifyThread(thread) {
+    if (!thread) return "notFound";
+    const type = typeof thread.$type === "string" ? thread.$type : "";
+    if (thread.notFound || type.endsWith("#notFoundPost")) return "notFound";
+    if (thread.blocked || type.endsWith("#blockedPost")) return "blocked";
+    return thread.post ? "ok" : "notFound";
+  }
+  function isNotFoundError(error) {
+    if (!error) return false;
+    return error.error === "NotFound" || /not found/i.test(error.message || "");
+  }
+  function collectReplies(thread) {
+    const found = /* @__PURE__ */ new Map();
+    const stack = [...thread?.replies || []];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      const post2 = node?.post;
+      if (!post2) continue;
+      if (!found.has(post2.uri)) {
+        found.set(post2.uri, {
+          uri: post2.uri,
+          rkey: post2.uri.split("/").pop(),
+          authorDid: post2.author?.did,
+          authorHandle: post2.author?.handle,
+          authorName: post2.author?.displayName,
+          authorAvatar: post2.author?.avatar,
+          // Cut by code points so an emoji's surrogate pair is never split
+          text: Array.from(post2.record?.text || "").slice(0, TEXT_LIMIT).join(""),
+          indexedAt: post2.indexedAt
+        });
+      }
+      if (node.replies) stack.push(...node.replies);
+    }
+    return [...found.values()].sort(
+      (a, b) => a.indexedAt < b.indexedAt ? -1 : a.indexedAt > b.indexedAt ? 1 : 0
+    );
+  }
+  function findNewReplies(replies, record2, selfDid) {
+    const known = new Set(record2.known || []);
+    const newReplies = [];
+    const ownNew = [];
+    for (const reply of replies) {
+      if (known.has(reply.uri)) continue;
+      if (record2.knownBefore && reply.indexedAt <= record2.knownBefore) continue;
+      (reply.authorDid === selfDid ? ownNew : newReplies).push(reply);
+    }
+    return { newReplies, ownNew };
+  }
+  function atUriForWatch(record2) {
+    if (record2.uri) return record2.uri;
+    if (record2.authorDid) return `at://${record2.authorDid}/app.bsky.feed.post/${record2.postId}`;
+    return null;
+  }
+  const MAX_WATCHES = 50;
+  const MAX_KNOWN_REPLIES = 2e3;
+  const WATCH_EXPIRY_MS = 30 * 24 * 60 * 60 * 1e3;
+  const WATCH_TOMBSTONE_TTL_MS = 30 * 24 * 60 * 60 * 1e3;
+  function timeOf(timestamp) {
+    const t = timestamp ? Date.parse(timestamp) : NaN;
+    return isNaN(t) ? 0 : t;
+  }
+  function laterOf(a, b) {
+    if (!a) return b || null;
+    if (!b) return a;
+    return timeOf(b) > timeOf(a) ? b : a;
+  }
+  function knows(record2, reply) {
+    if ((record2.known || []).includes(reply.uri)) return true;
+    return Boolean(record2.knownBefore && reply.indexedAt <= record2.knownBefore);
+  }
+  function sameMembers(a, b) {
+    if (a.length !== b.length) return false;
+    const set = new Set(b);
+    return a.every((uri) => set.has(uri));
+  }
+  function byIndexedAt(a, b) {
+    return a.indexedAt < b.indexedAt ? -1 : a.indexedAt > b.indexedAt ? 1 : 0;
+  }
+  function tombstone(record2, removedAt, watchedAt = record2.watchedAt) {
+    return {
+      postId: record2.postId,
+      url: record2.url,
+      uri: record2.uri ?? null,
+      authorDid: record2.authorDid ?? null,
+      authorHandle: record2.authorHandle ?? null,
+      snippet: record2.snippet ?? "",
+      watchedAt,
+      updatedAt: removedAt,
+      lastActivityAt: record2.lastActivityAt,
+      removedAt,
+      baselined: false,
+      knownBefore: null,
+      known: [],
+      unseen: [],
+      unavailable: false
+    };
+  }
+  function stableJson(value) {
+    if (value === void 0) return "undefined";
+    if (value === null || typeof value !== "object") return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+    const keys = Object.keys(value).filter((k) => value[k] !== void 0).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableJson(value[k])}`).join(",")}}`;
+  }
+  function comparable(record2) {
+    if (!record2 || typeof record2 !== "object") return stableJson(record2);
+    const byUri = (x, y) => x.uri < y.uri ? -1 : x.uri > y.uri ? 1 : 0;
+    return stableJson({
+      ...record2,
+      known: record2.known ? [...new Set(record2.known)].sort() : record2.known,
+      unseen: record2.unseen ? [...record2.unseen].sort(byUri) : record2.unseen
+    });
+  }
+  function createWatch(info, nowIso) {
+    return {
+      postId: info.postId,
+      url: info.url,
+      uri: atUriForWatch(info),
+      authorDid: info.authorDid ?? null,
+      authorHandle: info.authorHandle ?? null,
+      snippet: info.snippet ?? "",
+      watchedAt: nowIso,
+      updatedAt: nowIso,
+      lastActivityAt: nowIso,
+      removedAt: null,
+      baselined: false,
+      knownBefore: null,
+      known: [],
+      unseen: [],
+      unavailable: false
+    };
+  }
+  function isLive(record2) {
+    return Boolean(record2) && !record2.removedAt;
+  }
+  function liveWatches(map) {
+    return Object.values(map || {}).filter(isLive);
+  }
+  function canAddWatch(map) {
+    return liveWatches(map).length < MAX_WATCHES;
+  }
+  function applyCheck(record2, replies, { nowIso, selfDid }) {
+    let known;
+    let unseen = record2.unseen || [];
+    let lastActivityAt = record2.lastActivityAt;
+    let newReplies = [];
+    let changed = false;
+    if (!record2.baselined) {
+      known = [...new Set(replies.map((r) => r.uri))];
+      changed = true;
+    } else {
+      const found = findNewReplies(replies, record2, selfDid);
+      newReplies = found.newReplies;
+      const added = [...newReplies, ...found.ownNew].map((r) => r.uri);
+      known = [...record2.known || [], ...added];
+      if (added.length > 0) changed = true;
+      if (newReplies.length > 0) {
+        unseen = [...unseen, ...newReplies].slice(-200);
+        lastActivityAt = nowIso;
+      }
+    }
+    let knownBefore = record2.knownBefore ?? null;
+    if (known.length > MAX_KNOWN_REPLIES && replies.length > 0) {
+      for (const r of replies) knownBefore = laterOf(knownBefore, r.indexedAt);
+      const fetched = new Set(replies.map((r) => r.uri));
+      known = [
+        ...known.filter((uri) => !fetched.has(uri)),
+        ...replies.filter((r) => r.indexedAt > knownBefore).map((r) => r.uri)
+      ];
+      if (knownBefore !== (record2.knownBefore ?? null) || !sameMembers(known, record2.known || [])) {
+        changed = true;
+      }
+    }
+    return {
+      record: {
+        ...record2,
+        baselined: true,
+        known,
+        knownBefore,
+        unseen,
+        lastActivityAt,
+        updatedAt: changed ? nowIso : record2.updatedAt
+      },
+      newReplies
+    };
+  }
+  function markUnavailable(record2, nowIso) {
+    return { ...record2, unavailable: true, updatedAt: nowIso };
+  }
+  function markWatchSeen(record2, nowIso) {
+    return { ...record2, unseen: [], updatedAt: nowIso };
+  }
+  function removeWatch(record2, nowIso) {
+    return tombstone(record2, nowIso);
+  }
+  function mergeWatch(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    const epoch = laterOf(a.watchedAt, b.watchedAt);
+    const removed = laterOf(a.removedAt, b.removedAt);
+    if (removed && timeOf(removed) >= timeOf(epoch)) {
+      const source = a.removedAt === removed ? a : b;
+      return tombstone(source, removed, epoch);
+    }
+    const copies = [a, b].filter((c) => !removed || timeOf(c.watchedAt) > timeOf(removed));
+    if (copies.length === 1) return copies[0];
+    const newer = timeOf(b.updatedAt) > timeOf(a.updatedAt) ? b : a;
+    const older = newer === a ? b : a;
+    const known = [.../* @__PURE__ */ new Set([...a.known || [], ...b.known || []])];
+    const byUri = /* @__PURE__ */ new Map();
+    for (const r of [...a.unseen || [], ...b.unseen || []]) {
+      if (!byUri.has(r.uri)) byUri.set(r.uri, r);
+    }
+    const unseen = [...byUri.values()].filter(
+      (r) => !copies.some((c) => knows(c, r) && !(c.unseen || []).some((u) => u.uri === r.uri))
+    ).sort(byIndexedAt).slice(-200);
+    return {
+      postId: newer.postId ?? older.postId,
+      url: newer.url ?? older.url,
+      uri: a.uri || b.uri || null,
+      authorDid: newer.authorDid ?? older.authorDid ?? null,
+      authorHandle: newer.authorHandle ?? older.authorHandle ?? null,
+      snippet: newer.snippet ?? older.snippet ?? "",
+      watchedAt: epoch,
+      updatedAt: laterOf(a.updatedAt, b.updatedAt),
+      lastActivityAt: laterOf(a.lastActivityAt, b.lastActivityAt),
+      removedAt: null,
+      baselined: Boolean(a.baselined || b.baselined),
+      knownBefore: laterOf(a.knownBefore, b.knownBefore),
+      known,
+      unseen,
+      unavailable: Boolean(a.unavailable || b.unavailable)
+    };
+  }
+  function mergeWatchMaps(a, b) {
+    const result = {};
+    const ids = /* @__PURE__ */ new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+    for (const id of ids) result[id] = mergeWatch(a?.[id], b?.[id]);
+    return result;
+  }
+  function changedIds(before, after) {
+    const changed = /* @__PURE__ */ new Set();
+    const ids = /* @__PURE__ */ new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+    for (const id of ids) {
+      if (comparable(before?.[id]) !== comparable(after?.[id])) changed.add(id);
+    }
+    return changed;
+  }
+  function pruneWatches(map, nowMs) {
+    const nowIso = new Date(nowMs).toISOString();
+    const result = {};
+    for (const [id, record2] of Object.entries(map || {})) {
+      if (isLive(record2)) {
+        result[id] = nowMs - timeOf(record2.lastActivityAt) > WATCH_EXPIRY_MS ? tombstone(record2, nowIso) : record2;
+      } else if (nowMs - timeOf(record2.removedAt) <= WATCH_TOMBSTONE_TTL_MS) {
+        result[id] = record2;
+      }
+    }
+    const live = liveWatches(result).sort(
+      (x, y) => timeOf(y.lastActivityAt) - timeOf(x.lastActivityAt)
+    );
+    for (const record2 of live.slice(MAX_WATCHES)) {
+      result[record2.postId] = tombstone(record2, nowIso);
+    }
+    return result;
+  }
+  function unseenTotal(map) {
+    return liveWatches(map).reduce((sum, r) => sum + (r.unseen || []).length, 0);
+  }
+  function unseenCountFor(map, postId) {
+    const record2 = map?.[postId];
+    return isLive(record2) ? (record2.unseen || []).length : 0;
+  }
+  function newestUnseenTime(record2) {
+    return Math.max(...record2.unseen.map((r) => timeOf(r.indexedAt)));
+  }
+  function sortForList(map) {
+    const live = liveWatches(map);
+    const withUnseen = live.filter((r) => (r.unseen || []).length > 0).sort((x, y) => newestUnseenTime(y) - newestUnseenTime(x));
+    const rest = live.filter((r) => !(r.unseen || []).length).sort((x, y) => timeOf(y.lastActivityAt) - timeOf(x.lastActivityAt));
+    return [...withUnseen, ...rest];
+  }
+  function hiddenAsRead(isRead, watchEnabled, unseenCount) {
+    return Boolean(isRead) && !(watchEnabled && unseenCount > 0);
+  }
+  const MAX_ROUND_TOASTS = 5;
+  const WATCHED_TAB_URL = "/notifications#watched";
+  const WATCH_LIMIT_MESSAGE = "You can watch up to 50 threads. Stop watching one first.";
+  const NEEDS_LOGIN_MESSAGE = "Checking for new replies needs the app-password login in settings.";
+  function relativeTime(iso, nowMs) {
+    const diffMs = nowMs - Date.parse(iso);
+    if (isNaN(diffMs)) return "";
+    const diffMins = Math.floor(diffMs / 6e4);
+    const diffHours = Math.floor(diffMs / 36e5);
+    const diffDays = Math.floor(diffMs / 864e5);
+    if (diffMins < 1) return "now";
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    return `${diffDays}d`;
+  }
+  const INVALID_HANDLE = "handle.invalid";
+  function profileSegment(handle2, did2) {
+    return handle2 && handle2 !== INVALID_HANDLE ? handle2 : did2 || handle2 || "";
+  }
+  function replyUrl(reply) {
+    return `/profile/${profileSegment(reply.authorHandle, reply.authorDid)}/post/${reply.rkey}`;
+  }
+  function postIdFromPath(pathname) {
+    const match2 = /^\/profile\/[^/]+\/post\/([^/?#]+)/.exec(pathname || "");
+    return match2 ? match2[1] : null;
+  }
+  function newestOf(replies) {
+    return replies.reduce((best, r) => r.indexedAt > best.indexedAt ? r : best, replies[0]);
+  }
+  function buildWatchToast(record2, newReplies, nowMs) {
+    const newest = newestOf(newReplies);
+    const base3 = {
+      type: "watch",
+      kind: "watch",
+      postId: record2.postId,
+      replyUris: newReplies.map((r) => r.uri),
+      preview: newest.text,
+      time: relativeTime(newest.indexedAt, nowMs),
+      indexedAt: newest.indexedAt
+    };
+    if (newReplies.length === 1) {
+      return {
+        ...base3,
+        url: replyUrl(newest),
+        author: newest.authorName || newest.authorHandle,
+        handle: newest.authorHandle,
+        avatar: newest.authorAvatar,
+        action: "replied in a thread you're watching"
+      };
+    }
+    return {
+      ...base3,
+      url: record2.url,
+      author: `${newReplies.length} new replies`,
+      handle: null,
+      avatar: "",
+      action: "in a thread you're watching"
+    };
+  }
+  function planRoundToasts(results, nowMs) {
+    const withReplies = results.filter((r) => r.newReplies.length > 0).map((r) => ({ ...r, newestAt: newestOf(r.newReplies).indexedAt })).sort((a, b) => a.newestAt < b.newestAt ? 1 : a.newestAt > b.newestAt ? -1 : 0);
+    if (withReplies.length <= MAX_ROUND_TOASTS) {
+      return withReplies.map((r) => buildWatchToast(r.record, r.newReplies, nowMs));
+    }
+    const shown = withReplies.slice(0, MAX_ROUND_TOASTS - 1);
+    const rest = withReplies.slice(MAX_ROUND_TOASTS - 1);
+    const restNewest = rest[0].newestAt;
+    const summary = {
+      type: "watch",
+      kind: "watch",
+      postId: null,
+      url: WATCHED_TAB_URL,
+      replyUris: [],
+      author: `${rest.length} more watched threads`,
+      handle: null,
+      avatar: "",
+      action: "have new replies",
+      preview: "",
+      time: relativeTime(restNewest, nowMs),
+      indexedAt: restNewest
+    };
+    return [...shown.map((r) => buildWatchToast(r.record, r.newReplies, nowMs)), summary];
+  }
+  function watchButtonLabel({ watched, unseen, hasApi }) {
+    const label = watched ? "Stop watching" : "Watch for new replies";
+    let title = label;
+    if (unseen > 0) title += ` \xB7 ${unseen} new ${unseen === 1 ? "reply" : "replies"}`;
+    if (!hasApi) title += ` (${NEEDS_LOGIN_MESSAGE})`;
+    return { label, title };
+  }
+  function navBadgeContent(count) {
+    const n = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+    return {
+      hidden: n === 0,
+      text: n === 0 ? "" : n > 99 ? "99+" : String(n),
+      label: `${n} unseen watched replies`
+    };
+  }
+  const DEFAULT_INTERVAL_MS = 18e4;
+  const CHECK_GAP_MS = 2e3;
+  const MIN_ROUND_SPACING_MS = 6e4;
+  function validIntervalMs(ms) {
+    return Number.isFinite(ms) && ms >= MIN_ROUND_SPACING_MS ? ms : DEFAULT_INTERVAL_MS;
+  }
+  const REAL_TIMERS = {
+    setTimeout: (fn, ms) => setTimeout(fn, ms),
+    clearTimeout: (id) => clearTimeout(id),
+    now: () => Date.now()
+  };
+  const REAL_VISIBILITY = {
+    isHidden: () => typeof document !== "undefined" && document.hidden,
+    onChange: (cb) => {
+      document.addEventListener("visibilitychange", cb);
+      return () => document.removeEventListener("visibilitychange", cb);
+    }
+  };
+  class WatchPoller {
+    constructor({
+      api,
+      getWatches,
+      resolveUri,
+      onResult,
+      onRoundDone,
+      intervalMs = DEFAULT_INTERVAL_MS,
+      timers = REAL_TIMERS,
+      visibility = REAL_VISIBILITY
+    }) {
+      this.api = api;
+      this.getWatches = getWatches;
+      this.resolveUri = resolveUri;
+      this.onResult = onResult;
+      this.onRoundDone = onRoundDone;
+      this.intervalMs = validIntervalMs(intervalMs);
+      this.timers = timers;
+      this.visibility = visibility;
+      this.started = false;
+      this.running = false;
+      this.timerId = null;
+      this.unsubscribe = null;
+      this.stopRequested = false;
+      this.sleeper = null;
+      this.lastRoundStartedAt = -Infinity;
+    }
+    start() {
+      if (!this.api || this.started) return;
+      this.started = true;
+      this.stopRequested = false;
+      this.unsubscribe = this.visibility.onChange(() => this._onVisibilityChange());
+      this._tick();
+    }
+    stop() {
+      this.started = false;
+      this.stopRequested = true;
+      this._clearTimer();
+      if (this.sleeper) {
+        this.timers.clearTimeout(this.sleeper.id);
+        this.sleeper.resolve();
+        this.sleeper = null;
+      }
+      if (this.unsubscribe) {
+        this.unsubscribe();
+        this.unsubscribe = null;
+      }
+    }
+    setIntervalMs(ms) {
+      this.intervalMs = validIntervalMs(ms);
+      if (this.started && !this.visibility.isHidden()) this._schedule();
+    }
+    async runRound() {
+      if (this.visibility.isHidden()) return { checked: 0, skipped: "hidden" };
+      if (this.running) return { checked: 0, skipped: "busy" };
+      if (this.api.isRateLimited()) return { checked: 0, skipped: "rateLimited" };
+      this.running = true;
+      try {
+        if (!await this._ensureLogin()) return { checked: 0, skipped: "login" };
+        this.lastRoundStartedAt = this.timers.now();
+        let checked = 0;
+        try {
+          const watches = this.getWatches().filter((w) => !w.unavailable);
+          for (let i = 0; i < watches.length; i++) {
+            if (this.stopRequested || this.visibility.isHidden() || this.api.isRateLimited()) break;
+            const outcome = await this._checkOne(watches[i]);
+            if (outcome === "stop") break;
+            if (outcome === "done") checked++;
+            if (i < watches.length - 1) await this._sleep(CHECK_GAP_MS);
+            if (this.stopRequested) break;
+          }
+        } catch (error) {
+          console.warn("Watch round failed:", error);
+        }
+        try {
+          this.onRoundDone?.();
+        } catch (error) {
+          console.warn("Watch onRoundDone failed:", error);
+        }
+        return { checked };
+      } finally {
+        this.running = false;
+      }
+    }
+    async checkNow(postId) {
+      const record2 = this.getWatches().find((w) => w.postId === postId);
+      if (!record2) return;
+      if (this.api.isRateLimited()) return;
+      if (!await this._ensureLogin()) return;
+      await this._checkOne(record2);
+    }
+    async _ensureLogin() {
+      if (this.api.agent?.session) return true;
+      try {
+        await this.api.login();
+      } catch (error) {
+        console.warn("Watch login failed:", error);
+        return false;
+      }
+      return !!this.api.agent?.session;
+    }
+    /** @returns {Promise<'done' | 'skip' | 'stop'>} */
+    async _checkOne(record2) {
+      let result;
+      try {
+        const uri = await this.resolveUri(record2);
+        if (!uri) return "skip";
+        const thread = await this.api.getThread(uri, { depth: THREAD_DEPTH, parentHeight: 0 });
+        const status = classifyThread(thread);
+        result = status === "ok" ? { status, replies: collectReplies(thread) } : { status };
+      } catch (error) {
+        if (error?.status === 429 || error?.isRateLimitCooldown) return "stop";
+        if (!isNotFoundError(error)) {
+          console.warn("Watch check failed:", record2.postId, error);
+          return "skip";
+        }
+        result = { status: "notFound" };
+      }
+      try {
+        this.onResult(record2.postId, result);
+      } catch (error) {
+        console.warn("Watch onResult failed:", record2.postId, error);
+      }
+      return "done";
+    }
+    _sleep(ms) {
+      return new Promise((resolve) => {
+        const done = () => {
+          this.sleeper = null;
+          resolve();
+        };
+        this.sleeper = { id: this.timers.setTimeout(done, ms), resolve: done };
+      });
+    }
+    _clearTimer() {
+      if (this.timerId !== null) {
+        this.timers.clearTimeout(this.timerId);
+        this.timerId = null;
+      }
+    }
+    _schedule() {
+      this._clearTimer();
+      this.timerId = this.timers.setTimeout(() => {
+        this.timerId = null;
+        this._tick();
+      }, this.intervalMs);
+    }
+    async _tick() {
+      let skipped;
+      try {
+        ({ skipped } = await this.runRound());
+      } catch (error) {
+        console.warn("Watch round failed:", error);
+      }
+      if (this.started && skipped !== "hidden") this._schedule();
+    }
+    _onVisibilityChange() {
+      if (!this.started) return;
+      if (this.visibility.isHidden()) {
+        this._clearTimer();
+      } else if (this.timers.now() - this.lastRoundStartedAt >= MIN_ROUND_SPACING_MS) {
+        this._clearTimer();
+        this._tick();
+      } else {
+        this._schedule();
+      }
+    }
+  }
+  const WATCH_CHANGED_EVENT = "bsky-nav-watch-changed";
+  const OPEN_WATCHED_TAB_EVENT = "bsky-nav-open-watched-tab";
+  function defaultTimers() {
+    return {
+      setTimeout: (fn, ms) => setTimeout(fn, ms),
+      clearTimeout: (id) => clearTimeout(id),
+      now: () => Date.now()
+    };
+  }
+  function defaultVisibility() {
+    return {
+      isHidden: () => document.visibilityState === "hidden",
+      onChange: (cb) => {
+        document.addEventListener("visibilitychange", cb);
+        return () => document.removeEventListener("visibilitychange", cb);
+      }
+    };
+  }
+  class WatchService {
+    constructor() {
+      this.store = null;
+      this.api = void 0;
+      this.enabled = false;
+      this.intervalMs = DEFAULT_INTERVAL_MS;
+      this.showToasts = () => {
+      };
+      this.selfDid = () => null;
+      this.notify = () => {
+      };
+      this.createPoller = (opts) => new WatchPoller(opts);
+      this.now = () => Date.now();
+      this.timers = void 0;
+      this.visibility = void 0;
+      this.map = {};
+      this.poller = null;
+      this.roundResults = [];
+      this.checkingNow = /* @__PURE__ */ new Set();
+      this.stopVisibility = null;
+    }
+    /**
+     * Load the watch map and, when enabled with an API, start polling.
+     * @param {object} options
+     * @param {object} options.store WatchStore
+     * @param {object} [options.api] BlueskyAPI, or undefined without the app-password login
+     * @param {boolean} options.enabled
+     * @param {number} [options.intervalMs]
+     * @param {(toasts: object[]) => void} [options.showToasts]
+     * @param {() => string|null} [options.selfDid]
+     * @param {() => void} [options.notify] dispatches WATCH_CHANGED_EVENT
+     * @param {(opts: object) => object} [options.createPoller] defaults to `new WatchPoller`
+     * @param {() => number} [options.now]
+     * @param {object} [options.timers] for the default poller; real timers when omitted
+     * @param {object} [options.visibility] for the default poller; page visibility when omitted
+     */
+    init({
+      store,
+      api,
+      enabled,
+      intervalMs,
+      showToasts,
+      selfDid,
+      notify,
+      createPoller,
+      now,
+      timers,
+      visibility
+    }) {
+      this.store = store;
+      this.api = api;
+      this.enabled = Boolean(enabled);
+      if (intervalMs) this.intervalMs = intervalMs;
+      if (showToasts) this.showToasts = showToasts;
+      if (selfDid) this.selfDid = selfDid;
+      if (notify) this.notify = notify;
+      if (createPoller) this.createPoller = createPoller;
+      if (now) this.now = now;
+      this.timers = timers;
+      this.visibility = visibility;
+      this.map = store.load();
+      this._watchVisibility();
+      if (this.enabled) this._ensurePoller()?.start();
+    }
+    // Queries
+    isEnabled() {
+      return this.enabled;
+    }
+    hasApi() {
+      return Boolean(this.api);
+    }
+    isWatched(postId) {
+      return isLive(this.map[postId]);
+    }
+    getWatch(postId) {
+      return this.map[postId];
+    }
+    getWatches() {
+      return sortForList(this.map);
+    }
+    unseenTotal() {
+      return unseenTotal(this.map);
+    }
+    unseenCountFor(postId) {
+      return unseenCountFor(this.map, postId);
+    }
+    // Actions
+    /**
+     * Start watching a post and take its baseline right away.
+     * @param {object} info WatchInfo
+     * @returns {{ok: true} | {ok: false, reason: 'limit' | 'disabled'}}
+     */
+    watch(info) {
+      if (!this.enabled) return { ok: false, reason: "disabled" };
+      this.map = mergeWatchMaps(this.store.load(), this.map);
+      if (this.isWatched(info.postId)) return { ok: true };
+      if (!canAddWatch(this.map)) return { ok: false, reason: "limit" };
+      const removedMs = Date.parse(this.map[info.postId]?.removedAt ?? "");
+      const watchedMs = isNaN(removedMs) ? this.now() : Math.max(this.now(), removedMs + 1);
+      this.map = {
+        ...this.map,
+        [info.postId]: createWatch(info, new Date(watchedMs).toISOString())
+      };
+      this._commit();
+      if (!this.isWatched(info.postId)) return { ok: false, reason: "limit" };
+      this._checkNow(info.postId);
+      return { ok: true };
+    }
+    /** Stop watching a post (leaves a tombstone so the removal syncs). */
+    unwatch(postId) {
+      this._refresh();
+      const record2 = this.map[postId];
+      if (!isLive(record2)) return;
+      this.map = { ...this.map, [postId]: removeWatch(record2, this._nowIso()) };
+      this._commit();
+    }
+    /**
+     * Watch the post if it isn't watched, else stop watching it.
+     * @param {object} info WatchInfo
+     * @returns {{ok: boolean, watched: boolean, reason?: string}}
+     */
+    toggle(info) {
+      if (this.isWatched(info.postId)) {
+        this.unwatch(info.postId);
+        return { ok: true, watched: false };
+      }
+      const { ok, reason } = this.watch(info);
+      return { ok, watched: ok, reason };
+    }
+    /** Mark every unseen reply of a watch as seen. */
+    markSeen(postId) {
+      this._refresh();
+      const record2 = this.map[postId];
+      if (!isLive(record2) || !(record2.unseen || []).length) return;
+      this.map = { ...this.map, [postId]: markWatchSeen(record2, this._nowIso()) };
+      this._commit();
+    }
+    /** Apply settings: stop polling when disabled, else (re)start with the new interval. */
+    applyConfig({ enabled, intervalMs }) {
+      this.enabled = Boolean(enabled);
+      if (intervalMs) this.intervalMs = intervalMs;
+      if (!this.enabled) {
+        this.poller?.stop();
+        this.roundResults = [];
+        return;
+      }
+      const poller = this._ensurePoller();
+      if (!poller) return;
+      poller.setIntervalMs(this.intervalMs);
+      poller.start();
+    }
+    /**
+     * The poller's onResult: apply one check result and save it. New replies of an already
+     * baselined watch are toasted when the round ends. A result that changes nothing is not
+     * saved, so a quiet round doesn't rewrite storage or redraw the UI.
+     * @param {string} postId
+     * @param {{status: string, replies?: object[]}} result
+     */
+    handleResult(postId, result) {
+      this._refresh();
+      const record2 = this.map[postId];
+      if (!isLive(record2)) return;
+      const nowIso = this._nowIso();
+      if (result.status === "notFound" || result.status === "blocked") {
+        if (record2.unavailable) return;
+        this.map = { ...this.map, [postId]: markUnavailable(record2, nowIso) };
+        this._commit();
+        return;
+      }
+      if (result.status !== "ok") return;
+      const wasBaselined = record2.baselined;
+      const checked = applyCheck(record2, result.replies || [], {
+        nowIso,
+        selfDid: this.selfDid()
+      });
+      const unchanged = wasBaselined && checked.newReplies.length === 0 && checked.record.updatedAt === record2.updatedAt;
+      if (unchanged) return;
+      this.map = { ...this.map, [postId]: checked.record };
+      this._commit();
+      if (wasBaselined && checked.newReplies.length > 0 && !this.checkingNow.has(postId)) {
+        this.roundResults.push(checked);
+      }
+    }
+    /** The poller's onRoundDone: show this round's toasts once, then clear them. */
+    handleRoundDone() {
+      let results = this.roundResults;
+      this.roundResults = [];
+      if (!this.enabled || results.length === 0) return;
+      this._refresh();
+      results = results.filter((r) => isLive(this.map[r.record.postId]));
+      const toasts = planRoundToasts(results, this.now());
+      if (toasts.length > 0) this.showToasts(toasts);
+    }
+    /** Merge the remote watch table into local storage and adopt the result. */
+    async startSync() {
+      const merged = await this.store.syncRemote();
+      if (merged) {
+        this.map = mergeWatchMaps(merged, this.store.load());
+        this.notify();
+      }
+    }
+    /**
+     * The at:// URI to poll for a watch, resolving the author's handle when the DID is unknown.
+     * @param {object} record WatchRecord
+     * @returns {Promise<string|null>}
+     */
+    async resolveUri(record2) {
+      const known = atUriForWatch(record2);
+      if (known) return known;
+      if (!record2.authorHandle || !this.api) return null;
+      const did2 = await this.api.resolveHandleToDid(record2.authorHandle);
+      if (!did2) return null;
+      const uri = atUriForWatch({ ...record2, authorDid: did2 });
+      const current = this.map[record2.postId];
+      if (isLive(current)) {
+        this.map = {
+          ...this.map,
+          [record2.postId]: {
+            ...current,
+            uri,
+            authorDid: current.authorDid ?? did2,
+            updatedAt: this._nowIso()
+          }
+        };
+        this._commit();
+      }
+      return uri;
+    }
+    // Internals
+    _nowIso() {
+      return new Date(this.now()).toISOString();
+    }
+    _commit() {
+      this.map = this.store.save(this.map);
+      this.notify();
+    }
+    /** Pick up what other tabs saved since this tab last read storage. */
+    _refresh() {
+      this.map = mergeWatchMaps(this.store.load(), this.map);
+    }
+    /**
+     * Reload from storage when the page becomes visible, so the badge, the Watched tab and
+     * the feed are current before the poller's catch-up round. Subscribes once.
+     */
+    _watchVisibility() {
+      if (this.stopVisibility) return;
+      const visibility = this.visibility ?? (typeof document === "undefined" ? null : defaultVisibility());
+      if (!visibility) return;
+      this.stopVisibility = visibility.onChange(() => {
+        if (visibility.isHidden() || !this.store) return;
+        this._refresh();
+        this.notify();
+      });
+    }
+    /** Create the poller if there is an API to poll with; returns it or null. */
+    _ensurePoller() {
+      if (this.poller || !this.api) return this.poller;
+      this.poller = this.createPoller({
+        api: this.api,
+        getWatches: () => liveWatches(this.map),
+        resolveUri: (record2) => this.resolveUri(record2),
+        onResult: (postId, result) => this.handleResult(postId, result),
+        onRoundDone: () => this.handleRoundDone(),
+        intervalMs: this.intervalMs,
+        timers: this.timers ?? defaultTimers(),
+        visibility: this.visibility ?? defaultVisibility()
+      });
+      return this.poller;
+    }
+    /** Check one watch outside a round; its result never toasts. */
+    _checkNow(postId) {
+      if (!this.poller || !this.api) return;
+      this.checkingNow.add(postId);
+      Promise.resolve(this.poller.checkNow(postId)).catch((error) => console.warn("Watch check failed:", postId, error)).finally(() => this.checkingNow.delete(postId));
+    }
+  }
+  const watchService = new WatchService();
   class Handler {
     constructor(name, config2, state2, api) {
       this.name = name;
@@ -56898,6 +58173,9 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
         } else if (event.key === "?") {
           event.preventDefault();
           this.shortcutOverlay.toggle(this.name);
+        } else if (event.key === "W" && !event.ctrlKey && this.config.get("watchThreads")) {
+          event.preventDefault();
+          document.dispatchEvent(new window.CustomEvent(OPEN_WATCHED_TAB_EVENT));
         }
       }
     }
@@ -66497,6 +67775,143 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
     const value = window.getComputedStyle(document.documentElement).getPropertyValue("--bsky-nav-bg").trim();
     return value || "#FFFFFF";
   }
+  const WATCH_BUTTON_CLASS = "bsky-nav-watch-btn";
+  const WRAP_CLASS = "bsky-nav-watch-wrap";
+  const COUNT_CLASS = "bsky-nav-watch-count";
+  const ICON_CLASS = "bsky-nav-watch-icon";
+  const WATCHED_CLASS = "bsky-nav-watch-btn-watched";
+  const NOTICE_MS = 4e3;
+  const BELL_PATH = "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9Z";
+  const CLAPPER_PATH = "M10.3 21a1.94 1.94 0 0 0 3.4 0";
+  const OUTLINE_BELL_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${BELL_PATH}"></path><path d="${CLAPPER_PATH}"></path></svg>`;
+  const FILLED_BELL_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="${BELL_PATH}" fill="currentColor"></path><path d="${CLAPPER_PATH}"></path></svg>`;
+  const notices = /* @__PURE__ */ new WeakMap();
+  let clicksInstalled = false;
+  let currentOnToggle = null;
+  function watchInfoFromButton(button) {
+    const ds = button.dataset;
+    return {
+      postId: ds.postId,
+      url: ds.postUrl,
+      authorDid: ds.authorDid || null,
+      authorHandle: ds.authorHandle || null,
+      snippet: ds.snippet || ""
+    };
+  }
+  function setInfo(button, info) {
+    button.dataset.postId = info.postId;
+    button.dataset.postUrl = info.url;
+    button.dataset.authorDid = info.authorDid || "";
+    button.dataset.authorHandle = info.authorHandle || "";
+    button.dataset.snippet = info.snippet || "";
+  }
+  function createButton() {
+    const wrap = document.createElement("div");
+    wrap.className = WRAP_CLASS;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = WATCH_BUTTON_CLASS;
+    button.setAttribute("aria-pressed", "false");
+    const icon = document.createElement("span");
+    icon.className = ICON_CLASS;
+    icon.innerHTML = OUTLINE_BELL_SVG;
+    const count = document.createElement("span");
+    count.className = COUNT_CLASS;
+    count.hidden = true;
+    button.append(icon, count);
+    wrap.append(button);
+    return { wrap, button };
+  }
+  function ensureWatchButton(itemEl, info) {
+    if (!itemEl || !info) return null;
+    const group = actionGroup(itemEl);
+    if (!group) return null;
+    let button = bellInGroup(group);
+    if (!button) {
+      const created = createButton();
+      group.append(created.wrap);
+      button = created.button;
+    }
+    setInfo(button, info);
+    return button;
+  }
+  function actionGroup(itemEl) {
+    const dropdown = itemEl.querySelector('button[data-testid="postDropdownBtn"]');
+    return dropdown?.parentElement?.parentElement ?? null;
+  }
+  function bellInGroup(group) {
+    return group.querySelector(`:scope > .${WRAP_CLASS} > .${WATCH_BUTTON_CLASS}`);
+  }
+  function findWatchButton(itemEl) {
+    const group = itemEl ? actionGroup(itemEl) : null;
+    return group ? bellInGroup(group) : null;
+  }
+  function refreshOne(button) {
+    const postId = button.dataset.postId;
+    const watched = watchService.isWatched(postId);
+    const unseen = watched ? watchService.unseenCountFor(postId) : 0;
+    const { title } = watchButtonLabel({ watched, unseen, hasApi: watchService.hasApi() });
+    const spoken = watchButtonLabel({ watched, unseen, hasApi: true }).title;
+    if (button.classList.contains(WATCHED_CLASS) !== watched) {
+      button.classList.toggle(WATCHED_CLASS, watched);
+      const icon = button.querySelector(`.${ICON_CLASS}`);
+      if (icon) icon.innerHTML = watched ? FILLED_BELL_SVG : OUTLINE_BELL_SVG;
+    }
+    button.setAttribute("aria-pressed", String(watched));
+    button.setAttribute("aria-label", spoken);
+    button.title = notices.get(button)?.message ?? title;
+    const count = button.querySelector(`.${COUNT_CLASS}`);
+    if (count) {
+      count.textContent = unseen > 99 ? "99+" : unseen > 0 ? String(unseen) : "";
+      count.hidden = unseen === 0;
+    }
+  }
+  function bellsIn(root) {
+    const bells = [...root.querySelectorAll(`.${WATCH_BUTTON_CLASS}`)];
+    if (root.classList?.contains(WATCH_BUTTON_CLASS)) bells.push(root);
+    return bells;
+  }
+  function refreshWatchButtons(root = document) {
+    for (const button of bellsIn(root)) refreshOne(button);
+  }
+  function removeWatchButtons(root = document) {
+    for (const wrap of root.querySelectorAll(`.${WRAP_CLASS}`)) wrap.remove();
+  }
+  function showWatchButtonNotice(button, message2) {
+    const previous = notices.get(button);
+    if (previous) clearTimeout(previous.timer);
+    const timer = setTimeout(() => {
+      notices.delete(button);
+      refreshOne(button);
+    }, NOTICE_MS);
+    notices.set(button, { message: message2, timer });
+    refreshOne(button);
+  }
+  function onBellEvent(event) {
+    const button = bellFromTarget(event.target);
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.type === "click" && currentOnToggle) {
+      currentOnToggle(watchInfoFromButton(button), button);
+    }
+  }
+  function bellFromTarget(target2) {
+    return typeof target2?.closest === "function" ? target2.closest(`.${WATCH_BUTTON_CLASS}`) : null;
+  }
+  function onBellKeydown(event) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (bellFromTarget(event.target)) event.stopPropagation();
+  }
+  function installWatchButtonClicks(onToggle) {
+    currentOnToggle = onToggle;
+    if (clicksInstalled) return;
+    clicksInstalled = true;
+    for (const type of ["pointerdown", "mousedown", "click"]) {
+      document.addEventListener(type, onBellEvent, true);
+    }
+    window.addEventListener("keydown", onBellKeydown, true);
+  }
   const { waitForElement: waitForElement$2, announceToScreenReader: announceToScreenReader$1, getAnimationDuration } = utils$1;
   const PENDING_REPLY_KEY = "bsky-nav-pending-reply";
   const PENDING_REPLY_TTL_MS = 1e4;
@@ -66656,6 +68071,16 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       $(document).on("scroll", this.onScroll);
       $(document).on("wheel", this.onWheel);
       $(document).on("scrollend", this.onScrollEnd);
+      installWatchButtonClicks((info, button) => this.toggleWatch(info, button));
+      this.onWatchChanged = () => {
+        if (!this.config.get("watchThreads")) {
+          removeWatchButtons();
+          return;
+        }
+        $(".item").filter((_, el) => !$(el).parents(".item").length).each((_, el) => this.applyWatchButton(el));
+        refreshWatchButtons();
+      };
+      document.addEventListener(WATCH_CHANGED_EVENT, this.onWatchChanged);
       super.activate();
     }
     onScrollEnd() {
@@ -66718,6 +68143,10 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
       $(document).off("scroll", this.onScroll);
       $(document).off("wheel", this.onWheel);
       $(document).off("scrollend", this.onScrollEnd);
+      if (this.onWatchChanged) {
+        document.removeEventListener(WATCH_CHANGED_EVENT, this.onWatchChanged);
+        this.onWatchChanged = null;
+      }
       super.deactivate();
     }
     // ===========================================================================
@@ -68423,6 +69852,10 @@ html:not([data-bsky-nav-theme="dim"]):not([data-bsky-nav-theme="dark"]) .bsky-na
           break;
         case "F":
           this.showFollowConfirmation(item, false);
+          break;
+        case "w":
+          if (!this.config.get("watchThreads")) return false;
+          this.toggleWatchForSelection();
           break;
         default:
           if (!isNaN(parseInt(event.key))) {
@@ -72261,6 +73694,103 @@ ${rule}`;
       this.applyReadStatus(element);
       this.applyBlockStatus(element);
       this.applyRuleColorStyling(element);
+      this.applyWatchButton(element);
+    }
+    // ===========================================================================
+    // Watched Threads
+    // ===========================================================================
+    /**
+     * What the watch service needs to know about a post element (feed item, post page
+     * post, unrolled sub-post or sidecar reply).
+     * @param {jQuery|HTMLElement} item
+     * @returns {object|null} WatchInfo, or null when the element has no post link
+     */
+    watchInfoForItem(item) {
+      const $item = $(item);
+      if (!$item.length) return null;
+      const href = this.urlForItem($item);
+      if (!href) return null;
+      let path;
+      try {
+        path = new URL(href, window.location.origin).pathname;
+      } catch {
+        return null;
+      }
+      const match2 = /^\/profile\/([^/]+)\/post\/([^/?#]+)/.exec(path);
+      if (!match2) return null;
+      const author = match2[1];
+      const postId = this.postIdForItem($item);
+      if (!postId) return null;
+      const authorIsDid = author.startsWith("did:");
+      const reposted = $item.find('a[aria-label^="Reposted by"]').length > 0;
+      const text = $item.find('div[data-testid="postText"], .sidecar-post-content').first().text();
+      return {
+        postId,
+        url: `/profile/${author}/post/${postId}`,
+        authorDid: authorIsDid ? author : reposted ? null : this.didFromItem($item),
+        authorHandle: this.getAuthorHandle($item) || (authorIsDid ? null : author),
+        snippet: Array.from($.trim(text)).slice(0, 100).join("")
+      };
+    }
+    /**
+     * The post `w` acts on: the focused sidecar reply while the sidecar shows it, else the
+     * focused unrolled sub-post, else the selected item (same order as handleLikeAction).
+     * @returns {jQuery}
+     */
+    watchTargetItem() {
+      if (this.config.get("showReplySidecar") && this.replyIndex != null && this.selectedReply.is(":visible")) {
+        return this.selectedReply;
+      }
+      if (this.threadIndex) return this.selectedPost;
+      return this.selectedItem;
+    }
+    /** Add, update or remove the watch bell in an item's action row. */
+    applyWatchButton(element) {
+      const el = $(element)[0];
+      if (!el) return;
+      if (!this.config.get("watchThreads")) {
+        removeWatchButtons(el);
+        return;
+      }
+      const existing = findWatchButton(el);
+      if (existing && existing.dataset.postId === this.postIdForItem(el)) {
+        refreshWatchButtons(existing);
+        return;
+      }
+      const info = this.watchInfoForItem(el);
+      if (!info) return;
+      const button = ensureWatchButton(el, info);
+      if (button) refreshWatchButtons(button);
+    }
+    /**
+     * Watch or stop watching a post, then say what happened.
+     * @param {object} info WatchInfo
+     * @param {HTMLElement|null} button the bell that was used, if any
+     */
+    toggleWatch(info, button) {
+      if (!info || !info.postId) return;
+      const result = watchService.toggle(info);
+      if (!result.ok) {
+        if (result.reason === "limit") {
+          announceToScreenReader$1(WATCH_LIMIT_MESSAGE);
+          if (button) showWatchButtonNotice(button, WATCH_LIMIT_MESSAGE);
+        }
+        return;
+      }
+      refreshWatchButtons();
+      if (button && !this.isElementInViewport(button)) this.showActionFeedback(button);
+      announceToScreenReader$1(
+        result.watched ? "Watching thread for new replies" : "Stopped watching thread"
+      );
+    }
+    /** `w`: watch or stop watching the focused post. */
+    toggleWatchForSelection() {
+      const target2 = this.watchTargetItem();
+      if (!target2 || !target2.length) return;
+      const isSubPost = target2[0] !== this.selectedItem[0];
+      const button = isSubPost ? null : target2.find(`.${WATCH_BUTTON_CLASS}`)[0] || null;
+      const info = this.watchInfoForItem(target2) || (button ? watchInfoFromButton(button) : null);
+      this.toggleWatch(info, button);
     }
     /**
      * formatPost() with the user's timestamp format applied, so footer timestamps
@@ -73638,7 +75168,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     if (showTimestamps) {
       const timestamp = handler.getTimestampForItem(item);
       if (timestamp) {
-        const relativeTime = handler.formatRelativeTime(timestamp);
+        const relativeTime2 = handler.formatRelativeTime(timestamp);
         let timeStyle = "";
         if (showRuleColors) {
           const categoryIndex = handler.getFilterCategoryIndexForContent(item);
@@ -73647,7 +75177,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
             timeStyle = ` style="background-color: ${color}55; border: 1px solid ${color}88; border-radius: 3px; padding: 0 2px;"`;
           }
         }
-        $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime}</span>`);
+        $segment.append(`<span class="feed-map-segment-time"${timeStyle}>${relativeTime2}</span>`);
       }
     }
     if (engData?.engagement?.unrolledCount > 0) {
@@ -74314,6 +75844,15 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }, 60 * 1e3);
       this._timeoutClearedHandler = () => this.filterItems();
       window.addEventListener("bsky-nav-timeout-cleared", this._timeoutClearedHandler);
+      this._watchChangedFilterHandler = () => {
+        if (!this.state.feedHideRead || !this.watchChangeAffectsFeed()) return;
+        clearTimeout(this._watchRefilterTimeout);
+        this._watchRefilterTimeout = setTimeout(() => {
+          this._watchRefilterTimeout = null;
+          this.filterItems();
+        }, 200);
+      };
+      document.addEventListener(WATCH_CHANGED_EVENT, this._watchChangedFilterHandler);
       const postId = this._savedPostId ?? this.state.focusedPostId;
       const index = this._savedIndex ?? this.state.focusedIndex;
       this.loadItems({ postId, index });
@@ -74344,6 +75883,12 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         window.removeEventListener("bsky-nav-timeout-cleared", this._timeoutClearedHandler);
         this._timeoutClearedHandler = null;
       }
+      if (this._watchChangedFilterHandler) {
+        document.removeEventListener(WATCH_CHANGED_EVENT, this._watchChangedFilterHandler);
+        this._watchChangedFilterHandler = null;
+      }
+      clearTimeout(this._watchRefilterTimeout);
+      this._watchRefilterTimeout = null;
       if (this._toolbarObserver) {
         this._toolbarObserver.disconnect();
         this._toolbarObserver = null;
@@ -74804,7 +76349,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       if (this.state.feedHideRead && this.name !== "post") {
         const postId = this.postIdForItem($item);
-        if (postId && this.state.seen[postId]) {
+        if (postId && this.hiddenAsReadNow(postId)) {
           return false;
         }
       }
@@ -75041,6 +76586,30 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     clearAllHighlights() {
       $(".filter-highlight").contents().unwrap();
     }
+    /**
+     * Whether hide-read hides this post for being read (watched posts with unseen replies stay).
+     * @param {string} postId
+     * @returns {boolean}
+     */
+    hiddenAsReadNow(postId) {
+      return hiddenAsRead(
+        this.state.seen[postId],
+        this.config.get("watchThreads"),
+        watchService.unseenCountFor(postId)
+      );
+    }
+    /**
+     * Whether a watch change would flip the hidden state of any loaded read item.
+     * @returns {boolean}
+     */
+    watchChangeAffectsFeed() {
+      return $(".item").toArray().some((item) => {
+        if ($(item).parents(".item").length) return false;
+        const postId = this.postIdForItem($(item));
+        if (!postId || !this.state.seen[postId]) return false;
+        return this.hiddenAsReadNow(postId) !== $(item).hasClass("filtered");
+      });
+    }
     filterThread(thread) {
       const items = $(thread).find("> div > .item");
       const filteredItems = items.filter(".filtered");
@@ -75110,7 +76679,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.setItems(newItems);
       this.updateInfoIndicator();
       this.updateScrollPosition(true);
-      if (hideRead && wasSelectedRead) {
+      const selectionSurvived = oldSelected?.isConnected && !$(oldSelected).hasClass("filtered");
+      if (hideRead && wasSelectedRead && !selectionSurvived) {
         const selected = this.selectedItem;
         if (selected[0] !== oldSelected && selected.length && !selected.hasClass("item-read")) {
           this._expandPromise = this.expandItem(selected);
@@ -76288,7 +77858,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const engagement = this.getPostEngagement(item);
       const postText = $item.find('div[data-testid="postText"]').text() || "";
       const isRead = $item.hasClass("item-read");
-      const relativeTime = timestamp ? this.formatRelativeTime(timestamp) : "";
+      const relativeTime2 = timestamp ? this.formatRelativeTime(timestamp) : "";
       const truncatedText = postText.length > 150 ? postText.substring(0, 150).trim() + "..." : postText;
       const avatarImg = tooltip.find(".feed-map-tooltip-avatar");
       if (this.config.get("feedMapAvatars") !== false && engagement?.avatarUrl) {
@@ -76298,7 +77868,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       const isNew = !!this._newPosts?.newItems.has(item);
       tooltip.find(".feed-map-tooltip-handle").text(`@${handle2}`);
-      tooltip.find(".feed-map-tooltip-time").text((relativeTime ? ` \xB7 ${relativeTime}` : "") + (isNew ? " \xB7 new since you last looked" : ""));
+      tooltip.find(".feed-map-tooltip-time").text((relativeTime2 ? ` \xB7 ${relativeTime2}` : "") + (isNew ? " \xB7 new since you last looked" : ""));
       tooltip.find(".feed-map-tooltip-author").text(displayName || handle2);
       tooltip.find(".feed-map-tooltip-content").text(truncatedText || "(no text)");
       const engagementHtml = this.buildEngagementHtml(engagement);
@@ -77830,6 +79400,818 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       this.handler = null;
     }
   }
+  function watchRecordId(postId) {
+    return `watch:${postId.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+  }
+  function wellFormed(text) {
+    if (typeof text.toWellFormed === "function") return text.toWellFormed();
+    return text.replace(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+      "\uFFFD"
+    );
+  }
+  function recordJson(record2) {
+    return JSON.stringify(
+      record2,
+      (key, value) => typeof value === "string" ? wellFormed(value) : value
+    );
+  }
+  const TIMESTAMP_FIELDS = ["watchedAt", "updatedAt", "lastActivityAt", "removedAt", "knownBefore"];
+  function normalizeTime(value) {
+    if (typeof value !== "string") return value;
+    const t = Date.parse(value);
+    return isNaN(t) ? value : new Date(t).toISOString();
+  }
+  function isValidRecord(record2) {
+    return Boolean(record2) && isValidPostId(record2.postId) && isValidTimestamp(record2.watchedAt) && isValidTimestamp(record2.updatedAt) && (record2.removedAt == null || isValidTimestamp(record2.removedAt));
+  }
+  function buildWatchUpsertStatements(records) {
+    const statements = [];
+    const skipped = [];
+    for (const record2 of records) {
+      if (!isValidRecord(record2)) {
+        skipped.push(record2?.postId);
+        continue;
+      }
+      statements.push(`UPSERT ${watchRecordId(record2.postId)} CONTENT ${recordJson(record2)};`);
+    }
+    return { statements, skipped };
+  }
+  function buildWatchSelectQuery(postIds) {
+    if (postIds === void 0) return "SELECT * FROM watch;";
+    const ids = postIds.filter(isValidPostId).map(watchRecordId);
+    return ids.length > 0 ? `SELECT * FROM ${ids.join(", ")};` : null;
+  }
+  function parseWatchRows(rows) {
+    const map = {};
+    for (const row of rows || []) {
+      if (!row || !isValidPostId(row.postId)) continue;
+      const { id, ...record2 } = row;
+      const parsed = {
+        ...record2,
+        known: Array.isArray(record2.known) ? record2.known : [],
+        unseen: Array.isArray(record2.unseen) ? record2.unseen.map(
+          (r) => r && typeof r === "object" ? { ...r, indexedAt: normalizeTime(r.indexedAt) } : r
+        ) : []
+      };
+      for (const field of TIMESTAMP_FIELDS) {
+        if (field in parsed) parsed[field] = normalizeTime(parsed[field]);
+      }
+      map[record2.postId] = parsed;
+    }
+    return map;
+  }
+  function buildWatchCleanupQuery(nowMs) {
+    const cutoff = new Date(nowMs - WATCH_TOMBSTONE_TTL_MS).toISOString();
+    return `DELETE watch WHERE removedAt != NONE AND removedAt != NULL AND removedAt < "${cutoff}";`;
+  }
+  const WATCHES_GM_KEY = "bluesky_navigator_watches";
+  const REMOTE_PUSH_DELAY_MS = 5e3;
+  const UPSERT_CHUNK_SIZE = 10;
+  const STORAGE_VERSION = 1;
+  function isPlainObject(value) {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+  class WatchStore {
+    /**
+     * @param {object} options
+     * @param {(key: string, fallback: any) => any} options.getValue GM_getValue
+     * @param {(key: string, value: string) => void} options.setValue GM_setValue
+     * @param {{enabled: boolean, queryAll: (q: string) => Promise<object[]>,
+     *   exec: (q: string) => Promise<any>}|null} options.remote
+     * @param {{setTimeout: Function, clearTimeout: Function, now: () => number}} options.timers
+     */
+    constructor({ getValue, setValue, remote, timers }) {
+      this.getValue = getValue;
+      this.setValue = setValue;
+      this.remote = remote;
+      this.timers = timers;
+      this.pending = /* @__PURE__ */ new Set();
+      this.pushTimer = null;
+      this.remoteFailed = false;
+      this.syncing = false;
+    }
+    get remoteActive() {
+      return Boolean(this.remote?.enabled) && !this.remoteFailed;
+    }
+    /**
+     * Read the watch map from GM storage. Unreadable or wrong-shaped values load as {}.
+     * @returns {object} WatchMap
+     */
+    load() {
+      let parsed;
+      try {
+        parsed = JSON.parse(this.getValue(WATCHES_GM_KEY, "{}"));
+      } catch {
+        return {};
+      }
+      if (!isPlainObject(parsed) || parsed.version !== STORAGE_VERSION) return {};
+      if (!isPlainObject(parsed.watches)) return {};
+      const watches = {};
+      for (const [id, record2] of Object.entries(parsed.watches)) {
+        if (isPlainObject(record2)) watches[id] = record2;
+      }
+      return watches;
+    }
+    /** Re-read GM storage, merge `map` into it, prune and write it back. */
+    writeMerged(map) {
+      const stored = this.load();
+      const merged = pruneWatches(mergeWatchMaps(stored, map), this.timers.now());
+      this.setValue(WATCHES_GM_KEY, JSON.stringify({ version: STORAGE_VERSION, watches: merged }));
+      return { stored, merged };
+    }
+    /**
+     * Merge a watch map into what is stored (another tab may have written since we read),
+     * write it and queue the changed records for a debounced remote push.
+     * @param {object} map WatchMap
+     * @returns {object} the merged WatchMap
+     */
+    save(map) {
+      const { stored, merged } = this.writeMerged(map);
+      if (this.remoteActive) {
+        for (const id of changedIds(stored, merged)) {
+          if (merged[id]) this.pending.add(id);
+        }
+        if (this.pending.size > 0) this.schedulePush();
+      }
+      return merged;
+    }
+    schedulePush() {
+      if (this.pushTimer != null) this.timers.clearTimeout(this.pushTimer);
+      this.pushTimer = this.timers.setTimeout(() => {
+        this.pushTimer = null;
+        return this.pushPending();
+      }, REMOTE_PUSH_DELAY_MS);
+    }
+    /**
+     * Upsert records in chunks of UPSERT_CHUNK_SIZE, one exec each, so one bad record can only
+     * fail its own chunk.
+     * @returns {Promise<string[]>} the ids of the chunks that failed
+     */
+    async upsertInChunks(records) {
+      const { statements, skipped } = buildWatchUpsertStatements(records);
+      if (skipped.length > 0) console.warn("[WatchStore] Skipped invalid watch records:", skipped);
+      const skippedSet = new Set(skipped);
+      const ids = records.map((r) => r.postId).filter((id) => !skippedSet.has(id));
+      const failed = [];
+      for (let i = 0; i < statements.length; i += UPSERT_CHUNK_SIZE) {
+        const chunkIds = ids.slice(i, i + UPSERT_CHUNK_SIZE);
+        try {
+          await this.remote.exec(statements.slice(i, i + UPSERT_CHUNK_SIZE).join(" "));
+        } catch (error) {
+          console.error("[WatchStore] Failed to push watches to remote:", chunkIds, error);
+          failed.push(...chunkIds);
+        }
+      }
+      return failed;
+    }
+    /**
+     * Merge the remote table into local storage, push the records the remote copy lacks and
+     * delete old remote tombstones. If the remote table can't be loaded, remote pushes stop for
+     * the session; a failed push or cleanup only re-queues the ids. Pushes wait until this
+     * settles.
+     * @returns {Promise<object|null>} the merged WatchMap, or null if remote is off or failed
+     */
+    async syncRemote() {
+      if (!this.remoteActive) return null;
+      this.syncing = true;
+      let remoteMap;
+      try {
+        remoteMap = parseWatchRows(await this.remote.queryAll(buildWatchSelectQuery()));
+      } catch (error) {
+        console.error("[WatchStore] Failed to load watches from remote:", error);
+        this.remoteFailed = true;
+        this.syncing = false;
+        this.pending.clear();
+        if (this.pushTimer != null) this.timers.clearTimeout(this.pushTimer);
+        this.pushTimer = null;
+        return null;
+      }
+      try {
+        const { merged } = this.writeMerged(remoteMap);
+        const toPush = [...changedIds(remoteMap, merged)].filter((id) => merged[id]);
+        const failed = await this.upsertInChunks(toPush.map((id) => merged[id]));
+        for (const id of failed) this.pending.add(id);
+        try {
+          await this.remote.exec(buildWatchCleanupQuery(this.timers.now()));
+        } catch (error) {
+          console.error("[WatchStore] Failed to clean up remote watch tombstones:", error);
+        }
+        return merged;
+      } catch (error) {
+        console.error("[WatchStore] Failed to merge remote watches into local storage:", error);
+        return null;
+      } finally {
+        this.syncing = false;
+        if (this.pending.size > 0) this.schedulePush();
+      }
+    }
+    /**
+     * Push the queued records: read their remote rows, merge, upsert the merged records and
+     * write them back locally. Ids whose push fails stay queued for the next push. Does nothing
+     * while syncRemote is in flight.
+     * @returns {Promise<void>}
+     */
+    async pushPending() {
+      if (!this.remoteActive || this.syncing || this.pending.size === 0) return;
+      const ids = [...this.pending];
+      this.pending.clear();
+      let merged;
+      try {
+        const query = buildWatchSelectQuery(ids);
+        if (!query) return;
+        const remoteMap = parseWatchRows(await this.remote.queryAll(query));
+        const local = this.load();
+        merged = {};
+        for (const id of ids) {
+          if (local[id]) merged[id] = mergeWatch(local[id], remoteMap[id]);
+        }
+        const toPush = [...changedIds(remoteMap, merged)].filter((id) => merged[id]);
+        const failed = await this.upsertInChunks(toPush.map((id) => merged[id]));
+        for (const id of failed) this.pending.add(id);
+      } catch (error) {
+        console.error("[WatchStore] Failed to read watches from remote:", error);
+        for (const id of ids) this.pending.add(id);
+        return;
+      }
+      this.writeMerged(merged);
+    }
+  }
+  const WATCHED_EMPTY_MESSAGE = "No watched threads. Press w on a post, or click its bell, to watch it for new replies.";
+  const SAFE_PATH_BASE = "https://bsky.app";
+  const SAFE_PATH_RE = /^\/(?![/\\])[^\s\\\u0000-\u001f\u007f]*$/;
+  function safeAppPath(path) {
+    if (typeof path !== "string" || !SAFE_PATH_RE.test(path)) return "#";
+    try {
+      return new URL(path, SAFE_PATH_BASE).origin === SAFE_PATH_BASE ? path : "#";
+    } catch {
+      return "#";
+    }
+  }
+  function buildWatchedEntries(watches, nowMs) {
+    return watches.map((record2) => ({
+      postId: record2.postId,
+      href: safeAppPath(record2.url),
+      author: record2.authorHandle ? `@${record2.authorHandle}` : record2.authorDid || "",
+      snippet: record2.snippet || "",
+      watchedLabel: `Watched ${relativeTime(record2.watchedAt, nowMs)}`,
+      unavailable: Boolean(record2.unavailable),
+      replies: (record2.unseen || []).map((reply) => ({
+        href: safeAppPath(replyUrl(reply)),
+        name: reply.authorName || reply.authorHandle || "",
+        handle: reply.authorHandle ? `@${reply.authorHandle}` : "",
+        text: reply.text || "",
+        time: relativeTime(reply.indexedAt, nowMs)
+      }))
+    }));
+  }
+  function replyHtml(reply) {
+    return `
+      <li class="bsky-nav-watched-reply">
+        <a class="bsky-nav-watched-reply-link" href="${escapeHtml(reply.href)}">
+          <span class="bsky-nav-watched-reply-head">
+            <span class="bsky-nav-watched-reply-name">${escapeHtml(reply.name)}</span>
+            <span class="bsky-nav-watched-reply-handle">${escapeHtml(reply.handle)}</span>
+            <span class="bsky-nav-watched-reply-time">${escapeHtml(reply.time)}</span>
+          </span>
+          <span class="bsky-nav-watched-reply-text">${escapeHtml(reply.text)}</span>
+        </a>
+      </li>`;
+  }
+  function entryHtml(entry) {
+    const hasUnseen = entry.replies.length > 0;
+    const classes = ["bsky-nav-watched-entry"];
+    if (hasUnseen) classes.push("bsky-nav-watched-entry-unseen");
+    if (entry.unavailable) classes.push("bsky-nav-watched-entry-unavailable");
+    const unavailable = entry.unavailable ? '<span class="bsky-nav-watched-unavailable">Post unavailable</span>' : "";
+    const replies = hasUnseen ? `<ul class="bsky-nav-watched-replies">${entry.replies.map(replyHtml).join("")}</ul>` : "";
+    const markSeen = hasUnseen ? '<button type="button" class="bsky-nav-watched-btn" data-watched-action="mark-seen">Mark seen</button>' : "";
+    return `
+  <li class="${classes.join(" ")}" data-post-id="${escapeHtml(entry.postId)}">
+    <a class="bsky-nav-watched-entry-link" href="${escapeHtml(entry.href)}">
+      <span class="bsky-nav-watched-author">${escapeHtml(entry.author)}</span>
+      <span class="bsky-nav-watched-snippet">${escapeHtml(entry.snippet)}</span>
+    </a>
+    <div class="bsky-nav-watched-meta">
+      <span class="bsky-nav-watched-since">${escapeHtml(entry.watchedLabel)}</span>
+      ${unavailable}
+    </div>
+    ${replies}
+    <div class="bsky-nav-watched-actions">
+      ${markSeen}
+      <button type="button" class="bsky-nav-watched-btn" data-watched-action="unwatch">Stop watching</button>
+    </div>
+  </li>`;
+  }
+  function watchedPanelHtml({ entries, hasApi }) {
+    const notice = hasApi ? "" : `<p class="bsky-nav-watched-notice">${escapeHtml(NEEDS_LOGIN_MESSAGE)}</p>`;
+    if (entries.length === 0) {
+      return `${notice}<p class="bsky-nav-watched-empty">${escapeHtml(WATCHED_EMPTY_MESSAGE)}</p>`;
+    }
+    return `${notice}<ul class="bsky-nav-watched-list">${entries.map(entryHtml).join("")}</ul>`;
+  }
+  const NOTIF_SELECTORS = {
+    /** The notifications screen root. */
+    screen: '[data-testid="notificationsScreen"]',
+    /** Bluesky's tab bar inside the screen. */
+    tablist: '[role="tablist"]',
+    /** One of Bluesky's tabs (its parent is the tab's wrapper, whose parent is the tab row). */
+    tab: '[role="tab"]',
+    /** In the tab row: the sliding selected-tab highlight (not a tab wrapper, label or pill). */
+    highlight: ':scope > :not([aria-hidden="true"]):not(:has([role="tab"])):has(> *)',
+    /** In the tab row: the visible tab labels, one per tab, in tab order. */
+    labels: ':scope > [aria-hidden="true"]',
+    /** Bluesky's notification lists (one page per tab); our panel replaces it. */
+    list: '[data-testid="notificationsPagerView"]',
+    /** The left-nav link to the notifications page. */
+    navLink: 'a[aria-label="Notifications"]'
+  };
+  const NOTIFICATIONS_PATH = "/notifications";
+  const WATCHED_HASH = "#watched";
+  const PENDING_OPEN_TIMEOUT_MS = 5e3;
+  const PENDING_OPEN_POLL_MS = 100;
+  const LEAVE_CHECK_MS = 500;
+  const ACTIVE_ATTR = "data-bsky-nav-watched-active";
+  const MARK_ATTR = "data-bsky-nav-watched";
+  const MARK_HIGHLIGHT = "highlight";
+  const MARK_LABEL = "label";
+  const MARK_LIST = "list";
+  const TAB_WRAP_CLASS = "bsky-nav-watched-tab-wrap";
+  const TAB_CLASS = "bsky-nav-watched-tab";
+  const PANEL_CLASS = "bsky-nav-watched-panel";
+  function isVisible(el) {
+    return el.getClientRects().length > 0;
+  }
+  function safeQuery(root, selector, all = false) {
+    try {
+      return all ? [...root.querySelectorAll(selector)] : root.querySelector(selector);
+    } catch {
+      return all ? [] : null;
+    }
+  }
+  class WatchedTab {
+    /**
+     * @param {object} options
+     * @param {object} options.service the WatchService
+     * @param {object} options.config ConfigWrapper
+     */
+    constructor({ service: service2, config: config2 }) {
+      this.service = service2;
+      this.config = config2;
+      this.started = false;
+      this.active = false;
+      this.pendingOpen = false;
+      this.screen = null;
+      this.screenObserver = null;
+      this.screenWatcher = null;
+      this.ensureFrame = null;
+      this.renderFrame = null;
+      this.pendingTimer = null;
+      this.leaveTimer = null;
+      this.focusAfterRender = null;
+      this.tabWrapEl = null;
+      this.tabEl = null;
+      this.panelEl = null;
+      this.renderedPanel = null;
+      this.renderedHtml = null;
+      this._onWatchChanged = () => this._scheduleRender();
+      this._onOpen = () => this.open();
+      this._onHashChange = () => {
+        if (this._onNotificationsPage() && window.location.hash === WATCHED_HASH) this.activate();
+      };
+      this._onPopState = () => {
+        if (!this._onNotificationsPage()) {
+          this.deactivate();
+        } else if (window.location.hash === WATCHED_HASH && !this.active) {
+          this.pendingOpen = true;
+          this._ensure();
+        }
+      };
+      this._onDocClick = (event) => this._maybeLeaveForBlueskyTab(event);
+      this._onDocKeydown = (event) => {
+        if (event.key === "Enter" || event.key === " ") this._maybeLeaveForBlueskyTab(event);
+      };
+    }
+    /** Start watching for the notifications screen and listening for open requests. */
+    start() {
+      if (this.started) return;
+      this.started = true;
+      if (this._onNotificationsPage() && window.location.hash === WATCHED_HASH) {
+        this.pendingOpen = true;
+      }
+      document.addEventListener(WATCH_CHANGED_EVENT, this._onWatchChanged);
+      document.addEventListener(OPEN_WATCHED_TAB_EVENT, this._onOpen);
+      window.addEventListener("hashchange", this._onHashChange);
+      window.addEventListener("popstate", this._onPopState);
+      document.addEventListener("click", this._onDocClick, true);
+      document.addEventListener("keydown", this._onDocKeydown, true);
+      this.screenWatcher = waitForElement$3(
+        NOTIF_SELECTORS.screen,
+        (screen) => this._attachScreen(screen),
+        (screen) => this._detachScreen(screen)
+      );
+    }
+    /** Stop everything and remove the tab and panel, restoring Bluesky's view. */
+    stop() {
+      if (!this.started) return;
+      this.deactivate();
+      this.started = false;
+      this.pendingOpen = false;
+      document.removeEventListener(WATCH_CHANGED_EVENT, this._onWatchChanged);
+      document.removeEventListener(OPEN_WATCHED_TAB_EVENT, this._onOpen);
+      window.removeEventListener("hashchange", this._onHashChange);
+      window.removeEventListener("popstate", this._onPopState);
+      document.removeEventListener("click", this._onDocClick, true);
+      document.removeEventListener("keydown", this._onDocKeydown, true);
+      this.screenWatcher?.disconnect();
+      this.screenWatcher = null;
+      this.screenObserver?.disconnect();
+      this.screenObserver = null;
+      if (this.ensureFrame) window.cancelAnimationFrame(this.ensureFrame);
+      if (this.renderFrame) window.cancelAnimationFrame(this.renderFrame);
+      this.ensureFrame = null;
+      this.renderFrame = null;
+      this._clearPendingTimer();
+      this.tabWrapEl?.remove();
+      this.panelEl?.remove();
+      this.tabWrapEl = null;
+      this.tabEl = null;
+      this.panelEl = null;
+      this.screen = null;
+    }
+    /**
+     * Open the Watched tab: here if this is the notifications page, else go there first.
+     */
+    open() {
+      if (this._onNotificationsPage() && this.screen) {
+        this.activate();
+        return;
+      }
+      this.pendingOpen = true;
+      const link = document.querySelector(NOTIF_SELECTORS.navLink);
+      if (!link) {
+        window.location.href = WATCHED_TAB_URL;
+        return;
+      }
+      link.click();
+      this._clearPendingTimer();
+      const startedAt = Date.now();
+      this.pendingTimer = window.setInterval(() => {
+        if (!this.pendingOpen || Date.now() - startedAt > PENDING_OPEN_TIMEOUT_MS) {
+          this.pendingOpen = false;
+          this._clearPendingTimer();
+          return;
+        }
+        this._ensure();
+      }, PENDING_OPEN_POLL_MS);
+    }
+    /** Show the Watched list in place of Bluesky's notifications list. */
+    activate() {
+      this.pendingOpen = false;
+      if (!this.screen || !this._ensure()) {
+        this.pendingOpen = true;
+        return;
+      }
+      this._clearPendingTimer();
+      this.active = true;
+      this._markBluesky();
+      this.tabEl.setAttribute("aria-selected", "true");
+      window.requestAnimationFrame(() => {
+        if (this.active) this.tabEl?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+      });
+      this._startLeaveCheck();
+      this._updatePanelOffset();
+      this.render();
+      if (window.location.hash !== WATCHED_HASH) {
+        window.history.replaceState(window.history.state, "", WATCHED_TAB_URL);
+      }
+    }
+    /** Restore Bluesky's own view and drop the #watched hash. */
+    deactivate() {
+      this.pendingOpen = false;
+      this._clearPendingTimer();
+      this._stopLeaveCheck();
+      if (!this.active) return;
+      this.active = false;
+      this._unmarkBluesky();
+      this.tabEl?.setAttribute("aria-selected", "false");
+      if (this._onNotificationsPage() && window.location.hash === WATCHED_HASH) {
+        const { pathname, search } = window.location;
+        window.history.replaceState(window.history.state, "", pathname + search);
+      }
+    }
+    /** Redraw the tab's count pill and, if open, the list. */
+    render() {
+      if (this.renderFrame) {
+        window.cancelAnimationFrame(this.renderFrame);
+        this.renderFrame = null;
+      }
+      this._renderCount();
+      if (!this.panelEl || !this.active) return;
+      const entries = buildWatchedEntries(this.service.getWatches(), Date.now());
+      const html = watchedPanelHtml({ entries, hasApi: this.service.hasApi() });
+      if (this.renderedPanel === this.panelEl && this.renderedHtml === html) {
+        this.focusAfterRender = null;
+        return;
+      }
+      this.panelEl.innerHTML = html;
+      this.renderedPanel = this.panelEl;
+      this.renderedHtml = html;
+      this._restoreFocus();
+    }
+    // Internals
+    _onNotificationsPage() {
+      return window.location.pathname === NOTIFICATIONS_PATH;
+    }
+    _clearPendingTimer() {
+      if (this.pendingTimer) window.clearInterval(this.pendingTimer);
+      this.pendingTimer = null;
+    }
+    /** Close the view once Bluesky navigates away from /notifications. */
+    _startLeaveCheck() {
+      if (this.leaveTimer) return;
+      this.leaveTimer = window.setInterval(() => {
+        if (!this._onNotificationsPage()) this.deactivate();
+        else this._updatePanelOffset();
+      }, LEAVE_CHECK_MS);
+    }
+    _stopLeaveCheck() {
+      if (this.leaveTimer) window.clearInterval(this.leaveTimer);
+      this.leaveTimer = null;
+    }
+    /**
+     * After Mark seen / Stop watching re-renders the list, put focus somewhere sensible:
+     * the same entry's next button, else the entry now at that position (or the last one),
+     * else the panel itself.
+     */
+    _restoreFocus() {
+      const target2 = this.focusAfterRender;
+      this.focusAfterRender = null;
+      if (!target2 || !this.panelEl) return;
+      const entries = [...this.panelEl.querySelectorAll("[data-post-id]")];
+      const same = entries.find((el2) => el2.getAttribute("data-post-id") === target2.postId);
+      let el = same?.querySelector('[data-watched-action="unwatch"]');
+      if (!el && entries.length > 0) {
+        const next = entries[Math.min(target2.index, entries.length - 1)];
+        el = next.querySelector("[data-watched-action]");
+      }
+      (el || this.panelEl).focus();
+    }
+    /**
+     * Render after the current event finishes. A link's click marks its watch seen, which
+     * re-renders the list; replacing the link mid-click would cancel its navigation.
+     */
+    _scheduleRender() {
+      if (this.renderFrame) return;
+      this.renderFrame = window.requestAnimationFrame(() => {
+        this.renderFrame = null;
+        this.render();
+      });
+    }
+    _attachScreen(screen) {
+      if (this.screen === screen) return;
+      this.screenObserver?.disconnect();
+      this.screen = screen;
+      this.screenObserver = new MutationObserver(() => {
+        if (this.ensureFrame) return;
+        this.ensureFrame = window.requestAnimationFrame(() => {
+          this.ensureFrame = null;
+          this._ensure();
+        });
+      });
+      this.screenObserver.observe(screen, { childList: true, subtree: true });
+      this._ensure();
+    }
+    _detachScreen(screen) {
+      if (this.screen !== screen) return;
+      this.screenObserver?.disconnect();
+      this.screenObserver = null;
+      this._unmarkBluesky();
+      this.screen = null;
+      this.active = false;
+      const other = [...document.querySelectorAll(NOTIF_SELECTORS.screen)].find(
+        (el) => el !== screen
+      );
+      if (other) this._attachScreen(other);
+    }
+    /** Bluesky's tabs in the tab bar, without ours. */
+    _blueskyTabs(tablist) {
+      return [...tablist.querySelectorAll(NOTIF_SELECTORS.tab)].filter((t) => t !== this.tabEl);
+    }
+    /** The row holding Bluesky's tab wrappers and their overlays. */
+    _tabRow(tabs) {
+      return tabs[0].parentElement?.parentElement ?? null;
+    }
+    /**
+     * Make sure the tab and panel are in the screen; insert them if React dropped them.
+     * Activates a pending open once everything is in place.
+     * @returns {boolean} whether the tab is in place
+     */
+    _ensure() {
+      const screen = this.screen;
+      if (!screen) return false;
+      const tablist = screen.querySelector(NOTIF_SELECTORS.tablist);
+      const tabs = tablist ? this._blueskyTabs(tablist) : [];
+      if (!tablist || tabs.length === 0 || !this._insert(tabs)) return false;
+      if (this.active) this._markBluesky();
+      if (this.pendingOpen && this._onNotificationsPage() && isVisible(screen)) {
+        if (this.active) {
+          this.pendingOpen = false;
+          this._clearPendingTimer();
+        } else {
+          this.activate();
+        }
+      }
+      return true;
+    }
+    /**
+     * Put our tab right after Bluesky's last tab wrapper (before the overlays, which Bluesky
+     * places by measured offsets, so they stay aligned) and our panel right after the list.
+     * @returns {boolean} whether the tab is in place
+     */
+    _insert(tabs) {
+      const row = this._tabRow(tabs);
+      if (!row) return false;
+      if (!this.tabWrapEl) this._createTab();
+      if (!this.panelEl) this.panelEl = this._createPanel();
+      const lastWrapper = tabs[tabs.length - 1].parentElement;
+      if (this.tabWrapEl.parentElement !== row || this.tabWrapEl.previousElementSibling !== lastWrapper) {
+        row.insertBefore(this.tabWrapEl, lastWrapper.nextSibling);
+        this._renderCount();
+      }
+      const list2 = this.screen.querySelector(NOTIF_SELECTORS.list);
+      if (list2 && list2.nextElementSibling !== this.panelEl) {
+        list2.after(this.panelEl);
+        if (this.active) this.render();
+      }
+      return true;
+    }
+    /**
+     * While Watched is open: hide Bluesky's list and its sliding highlight, and show every tab
+     * label in the unselected color (without the highlight, the selected label's own color can
+     * be dark on a dark page).
+     */
+    _markBluesky() {
+      const screen = this.screen;
+      const tablist = screen?.querySelector(NOTIF_SELECTORS.tablist);
+      if (!tablist) return;
+      const mark = (el, role) => {
+        if (el && el.getAttribute(MARK_ATTR) !== role) el.setAttribute(MARK_ATTR, role);
+      };
+      if (!screen.hasAttribute(ACTIVE_ATTR)) screen.setAttribute(ACTIVE_ATTR, "");
+      mark(screen.querySelector(NOTIF_SELECTORS.list), MARK_LIST);
+      const tabs = this._blueskyTabs(tablist);
+      const row = tabs.length ? this._tabRow(tabs) : null;
+      if (row) {
+        mark(safeQuery(row, NOTIF_SELECTORS.highlight), MARK_HIGHLIGHT);
+        for (const label of safeQuery(row, NOTIF_SELECTORS.labels, true)) mark(label, MARK_LABEL);
+      }
+    }
+    /**
+     * Bluesky's header is fixed and its lists pad their top by its height; so does our panel.
+     * Measured on activate and on the leave-check tick, not on every mutation frame.
+     */
+    _updatePanelOffset() {
+      const tablist = this.screen?.querySelector(NOTIF_SELECTORS.tablist);
+      if (!this.panelEl || !tablist) return;
+      const header = this._fixedHeader(tablist);
+      const pad = header ? `${Math.round(header.getBoundingClientRect().height)}px` : "";
+      if (this.panelEl.style.paddingTop !== pad) this.panelEl.style.paddingTop = pad;
+    }
+    /** Undo everything `_markBluesky` did to Bluesky's nodes. */
+    _unmarkBluesky() {
+      const screen = this.screen;
+      if (!screen) return;
+      screen.removeAttribute(ACTIVE_ATTR);
+      screen.querySelectorAll(`[${MARK_ATTR}]`).forEach((el) => el.removeAttribute(MARK_ATTR));
+    }
+    /** The fixed header that holds the tab bar, if any. */
+    _fixedHeader(tablist) {
+      for (let el = tablist.parentElement; el && el !== this.screen; el = el.parentElement) {
+        if (window.getComputedStyle(el).position === "fixed") return el;
+      }
+      return null;
+    }
+    _createTab() {
+      const wrap = document.createElement("div");
+      wrap.className = TAB_WRAP_CLASS;
+      const tab = document.createElement("div");
+      tab.className = TAB_CLASS;
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("tabindex", "0");
+      tab.setAttribute("aria-selected", "false");
+      tab.innerHTML = '<span class="bsky-nav-watched-tab-label">Watched</span><span class="bsky-nav-watched-tab-count" hidden></span>';
+      tab.addEventListener("click", () => this.activate());
+      tab.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          this.activate();
+        }
+      });
+      wrap.appendChild(tab);
+      this.tabWrapEl = wrap;
+      this.tabEl = tab;
+    }
+    _createPanel() {
+      const panel = document.createElement("div");
+      panel.className = PANEL_CLASS;
+      panel.setAttribute("role", "tabpanel");
+      panel.setAttribute("aria-label", "Watched threads");
+      panel.setAttribute("tabindex", "-1");
+      panel.addEventListener("click", (event) => this._onPanelClick(event));
+      panel.addEventListener("auxclick", (event) => {
+        if (event.button === 1) this._onPanelClick(event);
+      });
+      return panel;
+    }
+    _onPanelClick(event) {
+      const entry = event.target.closest("[data-post-id]");
+      if (!entry || !this.panelEl.contains(entry)) return;
+      const postId = entry.getAttribute("data-post-id");
+      const button = event.target.closest("[data-watched-action]");
+      if (button) {
+        const action = button.getAttribute("data-watched-action");
+        const entries = [...this.panelEl.querySelectorAll("[data-post-id]")];
+        this.focusAfterRender = { postId, index: entries.indexOf(entry) };
+        if (action === "mark-seen") this.service.markSeen(postId);
+        else if (action === "unwatch") this.service.unwatch(postId);
+        return;
+      }
+      if (event.target.closest("a[href]")) this.service.markSeen(postId);
+    }
+    _renderCount() {
+      const pill = this.tabEl?.querySelector(".bsky-nav-watched-tab-count");
+      if (!pill) return;
+      const total = this.service.unseenTotal();
+      pill.textContent = total > 0 ? String(total) : "";
+      pill.hidden = total === 0;
+      this.tabEl.setAttribute(
+        "aria-label",
+        total > 0 ? `Watched, ${total} new ${total === 1 ? "reply" : "replies"}` : "Watched"
+      );
+    }
+    /** A click or Enter on one of Bluesky's tabs leaves the Watched view; Bluesky handles the rest. */
+    _maybeLeaveForBlueskyTab(event) {
+      if (!this.active || !this.screen) return;
+      const tab = event.target.closest?.(NOTIF_SELECTORS.tab);
+      if (!tab || tab === this.tabEl || this.tabEl?.contains(tab)) return;
+      if (!tab.closest(NOTIF_SELECTORS.tablist) || !this.screen.contains(tab)) return;
+      this.deactivate();
+    }
+  }
+  const NAV_NOTIFICATIONS_SELECTOR = 'a[aria-label="Notifications"]';
+  const NAV_BADGE_CLASS = "bsky-nav-watch-nav-badge";
+  const NAV_ICON_SELECTOR = ":scope > * > svg";
+  function iconWrapper(link) {
+    const wrapper = link.querySelector(NAV_ICON_SELECTOR)?.parentElement;
+    if (wrapper) return wrapper;
+    return window.getComputedStyle(link).position === "static" ? null : link;
+  }
+  function renderNavBadge(link, count) {
+    const wrapper = iconWrapper(link);
+    const badges = link.querySelectorAll(`.${NAV_BADGE_CLASS}`);
+    if (!wrapper) {
+      for (const badge2 of badges) badge2.remove();
+      return;
+    }
+    let badge = [...badges].find((b) => b.parentElement === wrapper);
+    for (const extra of badges) if (extra !== badge) extra.remove();
+    const content = navBadgeContent(count);
+    if (!badge) {
+      if (content.hidden) return;
+      badge = document.createElement("span");
+      badge.className = NAV_BADGE_CLASS;
+      wrapper.appendChild(badge);
+    }
+    badge.hidden = content.hidden;
+    if (badge.textContent !== content.text) badge.textContent = content.text;
+    if (badge.getAttribute("aria-label") !== content.label) {
+      badge.setAttribute("aria-label", content.label);
+    }
+  }
+  function startWatchBadge(service2) {
+    const renderAll = () => {
+      const count = service2.unseenTotal();
+      for (const link of document.querySelectorAll(NAV_NOTIFICATIONS_SELECTOR)) {
+        renderNavBadge(link, count);
+      }
+    };
+    const watcher2 = waitForElement$3(
+      `${NAV_NOTIFICATIONS_SELECTOR}, .${NAV_BADGE_CLASS}`,
+      (el) => {
+        if (el.matches(NAV_NOTIFICATIONS_SELECTOR)) renderNavBadge(el, service2.unseenTotal());
+      },
+      (el) => {
+        if (el.classList.contains(NAV_BADGE_CLASS)) renderAll();
+      }
+    );
+    document.addEventListener(WATCH_CHANGED_EVENT, renderAll);
+    return () => {
+      watcher2.disconnect();
+      document.removeEventListener(WATCH_CHANGED_EVENT, renderAll);
+      for (const badge of document.querySelectorAll(`.${NAV_BADGE_CLASS}`)) badge.remove();
+    };
+  }
   const { waitForElement, observeVisibilityChange } = utils$1;
   GM_addStyle(style);
   startThemeWatcher();
@@ -78013,6 +80395,20 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         handler.updateScrollPosition?.();
       }
     }
+    function watchIntervalMs(config2) {
+      const minutes = Number(config2.get("watchCheckInterval")) || 3;
+      return Math.min(60, Math.max(1, minutes)) * 6e4;
+    }
+    let watchedTab = null;
+    let stopWatchBadge = null;
+    function syncWatchBadge() {
+      const on = !!config.get("watchThreads");
+      if (on && !stopWatchBadge) stopWatchBadge = startWatchBadge(watchService);
+      else if (!on && stopWatchBadge) {
+        stopWatchBadge();
+        stopWatchBadge = null;
+      }
+    }
     function onConfigSave() {
       const savedRulesConfig = config.get("rulesConfig");
       if (state.rulesConfig !== savedRulesConfig) {
@@ -78021,6 +80417,16 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       state.stateManager.saveStateImmediately(true, true);
       state.stateManager.updateBlockList(config.get("clearskyEnabled"));
       updateRightSidebarClass();
+      watchService.applyConfig({
+        enabled: config.get("watchThreads"),
+        intervalMs: watchIntervalMs(config)
+      });
+      document.dispatchEvent(new window.CustomEvent(WATCH_CHANGED_EVENT));
+      if (watchedTab) {
+        if (config.get("watchThreads")) watchedTab.start();
+        else watchedTab.stop();
+      }
+      syncWatchBadge();
       updateContentWidth();
       if (config.get("toastNotifications")) {
         createToastContainer();
@@ -78226,7 +80632,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       toasts.forEach((toast) => {
         removeToast($(toast), false);
       });
-      if (toastApi) {
+      const onlyWatchToasts = toasts.length > 0 && toasts.every((toast) => toast.getAttribute("data-toast-kind") === "watch");
+      if (toastApi && !onlyWatchToasts) {
         try {
           await toastApi.markNotificationsSeen();
           lastSeenAt = /* @__PURE__ */ new Date();
@@ -78344,7 +80751,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         reply: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M20.002 7a2 2 0 0 0-2-2h-12a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2a1 1 0 0 1 1 1v1.918l3.375-2.7a1 1 0 0 1 .625-.218h5a2 2 0 0 0 2-2V7Zm2 8a4 4 0 0 1-4 4h-4.648l-4.727 3.781A1.001 1.001 0 0 1 7.002 22v-3h-1a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4h12a4 4 0 0 1 4 4v8Z"></path></svg>',
         follow: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM6 8a6 6 0 1 1 12 0A6 6 0 0 1 6 8Zm2 10a3 3 0 0 0-3 3 1 1 0 1 1-2 0 5 5 0 0 1 5-5h8a5 5 0 0 1 5 5 1 1 0 1 1-2 0 3 3 0 0 0-3-3H8Z"></path></svg>',
         mention: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4a8 8 0 1 0 4.906 14.32 1 1 0 0 1 1.218 1.588A10 10 0 1 1 22 12v1.5a3.5 3.5 0 0 1-6.063 2.395A5 5 0 1 1 17 12v1.5a1.5 1.5 0 0 0 3 0V12a8 8 0 0 0-8-8Zm3 8a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z"></path></svg>',
-        quote: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 7H6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Zm10 0h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Z"></path></svg>'
+        quote: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 7H6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Zm10 0h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Z"></path></svg>',
+        watch: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7v3.586l-1.707 1.707A1 1 0 0 0 4 16h16a1 1 0 0 0 .707-1.707L19 12.586V9a7 7 0 0 0-7-7Zm-3 16a3 3 0 0 0 6 0H9Z"></path></svg>'
       };
       const durationValues = [1, 2, 3, 4, 5, 10, 15, 30, 60, 300, Infinity];
       const sliderPos = config.get("toastDuration") ?? 4;
@@ -78352,7 +80760,7 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       const duration = durationSeconds === Infinity ? null : durationSeconds * 1e3;
       const esc = escapeHtml;
       const $toast = $(`
-      <div class="bsky-nav-toast" data-indexed-at="${esc(notification2.indexedAt)}">
+      <div class="bsky-nav-toast" data-indexed-at="${esc(notification2.indexedAt)}" data-toast-kind="${esc(notification2.kind || "")}">
         <div class="bsky-nav-toast-icon ${esc(notification2.type)}">
           ${iconSvgs[notification2.type] || ""}
         </div>
@@ -78371,7 +80779,11 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
     `);
       $toast.on("click", (e) => {
         if (!$(e.target).is(".bsky-nav-toast-close")) {
-          window.location.href = "/notifications";
+          if (notification2.onClick) {
+            notification2.onClick();
+          } else {
+            window.location.href = "/notifications";
+          }
           removeToast($toast, true);
         }
       });
@@ -78386,7 +80798,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
     }
     function removeToast($toast, markAsRead = false) {
-      if (markAsRead && toastApi) {
+      const isWatchToast = $toast[0]?.getAttribute("data-toast-kind") === "watch";
+      if (markAsRead && toastApi && !isWatchToast) {
         const toastEl = $toast[0];
         const indexedAt = toastEl?.getAttribute("data-indexed-at");
         if (indexedAt && indexedAt.length > 0) {
@@ -78545,6 +80958,49 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
         listCache = new ListCache(api);
       }
       state.listCache = listCache;
+      const stateManager2 = state.stateManager;
+      const remote = stateManager2.config.stateSyncEnabled && !stateManager2.remoteStateLoadFailed ? {
+        enabled: true,
+        queryAll: (query) => stateManager2.executeRemoteQueryAll(query),
+        exec: (query) => stateManager2.postRemoteQuery(query)
+      } : null;
+      const watchStore = new WatchStore({
+        getValue: GM_getValue,
+        setValue: GM_setValue,
+        remote,
+        timers: {
+          setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+          clearTimeout: (id) => window.clearTimeout(id),
+          now: () => Date.now()
+        }
+      });
+      watchService.init({
+        store: watchStore,
+        api,
+        enabled: config.get("watchThreads"),
+        intervalMs: watchIntervalMs(config),
+        selfDid: () => api?.agent?.session?.did ?? null,
+        // Clicking a watch toast marks that thread's replies seen; dismissing it doesn't
+        showToasts: (toasts) => {
+          for (const t of toasts) {
+            showToast2({
+              ...t,
+              onClick: () => {
+                if (t.postId) watchService.markSeen(t.postId);
+                const path = safeAppPath(t.url);
+                if (path !== "#") window.location.href = path;
+              }
+            });
+          }
+        },
+        notify: () => document.dispatchEvent(new window.CustomEvent(WATCH_CHANGED_EVENT))
+      });
+      watchService.startSync().catch((error) => {
+        console.error("Failed to sync watched threads:", error);
+      });
+      watchedTab = new WatchedTab({ service: watchService, config });
+      if (config.get("watchThreads")) watchedTab.start();
+      syncWatchBadge();
       state.mobileView = window.innerWidth <= 800;
       handlers = {
         feed: new FeedItemHandler("feed", config, state, api, constants.FEED_ITEM_SELECTOR),
@@ -78829,8 +81285,8 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
       }
       waitForElement(constants.SCREEN_SELECTOR, (element) => {
         updateScreen(getScreenFromElement(element));
-        observeVisibilityChange($(element), (isVisible) => {
-          if (isVisible) {
+        observeVisibilityChange($(element), (isVisible2) => {
+          if (isVisible2) {
             updateScreen(getScreenFromElement(element));
           }
         });
@@ -78861,6 +81317,10 @@ ${this.itemStats.oldest ? `${format(this.itemStats.oldest, "yyyy-MM-dd hh:mmaaa"
           constants.MESSAGES_PATH_REGEX.test(window.location.pathname)
         );
         if (urlChanged) leftSidebar?.scheduleApply();
+        if (urlChanged) {
+          const watchedPostId = postIdFromPath(window.location.pathname);
+          if (watchedPostId) watchService.markSeen(watchedPostId);
+        }
         let matched = false;
         for (const [name, handler] of Object.entries(handlers)) {
           if (name === "input" || name === "default") continue;

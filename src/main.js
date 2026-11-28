@@ -30,6 +30,12 @@ import SavedUIAdapter from './components/ui-adapters/SavedUIAdapter.js';
 import LeftSidebar from './components/LeftSidebar.js';
 import { startThemeWatcher } from './theme.js';
 import { setFitPostsEnabled } from './fitPosts.js';
+import { watchService, WATCH_CHANGED_EVENT } from './watch/WatchService.js';
+import { WatchStore } from './watch/WatchStore.js';
+import { postIdFromPath } from './watch/watchCopy.js';
+import { WatchedTab } from './watch/WatchedTab.js';
+import { startWatchBadge } from './watch/watchBadge.js';
+import { safeAppPath } from './watch/watchedList.js';
 
 GM_addStyle(style);
 startThemeWatcher();
@@ -307,6 +313,30 @@ function getScreenFromElement(element) {
     }
   }
 
+  /**
+   * The watched-thread check interval in ms. ConfigModal stores number inputs as raw strings
+   * without enforcing min/max, so clamp to 1-60 minutes (default 3).
+   */
+  function watchIntervalMs(config) {
+    const minutes = Number(config.get('watchCheckInterval')) || 3;
+    return Math.min(60, Math.max(1, minutes)) * 60000;
+  }
+
+  // The Watched tab on /notifications; created in onStateInit
+  let watchedTab = null;
+  // Stops the unseen-replies badge on the Notifications nav link, or null when it is off
+  let stopWatchBadge = null;
+
+  /** Show the nav badge when watching is on, remove it when off. */
+  function syncWatchBadge() {
+    const on = !!config.get('watchThreads');
+    if (on && !stopWatchBadge) stopWatchBadge = startWatchBadge(watchService);
+    else if (!on && stopWatchBadge) {
+      stopWatchBadge();
+      stopWatchBadge = null;
+    }
+  }
+
   function onConfigSave() {
     // config is the editing source of truth for rules; state.rulesConfig carries them
     // through remote sync and is copied back into config on load, so keep it in step
@@ -319,6 +349,17 @@ function getScreenFromElement(element) {
     // Fetch Clearsky block lists if just enabled (no-op if disabled or cache is fresh)
     state.stateManager.updateBlockList(config.get('clearskyEnabled'));
     updateRightSidebarClass();
+    watchService.applyConfig({
+      enabled: config.get('watchThreads'),
+      intervalMs: watchIntervalMs(config),
+    });
+    // Bells and the hide-read exemption follow the "Watch threads" setting on loaded items
+    document.dispatchEvent(new window.CustomEvent(WATCH_CHANGED_EVENT));
+    if (watchedTab) {
+      if (config.get('watchThreads')) watchedTab.start();
+      else watchedTab.stop();
+    }
+    syncWatchBadge();
     // Update content width dynamically
     // (also re-applies the left sidebar mode against the new width)
     updateContentWidth();
@@ -598,8 +639,13 @@ function getScreenFromElement(element) {
       removeToast($(toast), false);
     });
 
+    // Watch toasts are not Bluesky notifications: if they were all that was showing,
+    // leave the notifications unread
+    const onlyWatchToasts =
+      toasts.length > 0 && toasts.every((toast) => toast.getAttribute('data-toast-kind') === 'watch');
+
     // Mark ALL notifications as read at API level (uses current timestamp)
-    if (toastApi) {
+    if (toastApi && !onlyWatchToasts) {
       try {
         await toastApi.markNotificationsSeen();
         // Update local lastSeenAt to current time
@@ -756,6 +802,7 @@ function getScreenFromElement(element) {
       follow: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM6 8a6 6 0 1 1 12 0A6 6 0 0 1 6 8Zm2 10a3 3 0 0 0-3 3 1 1 0 1 1-2 0 5 5 0 0 1 5-5h8a5 5 0 0 1 5 5 1 1 0 1 1-2 0 3 3 0 0 0-3-3H8Z"></path></svg>',
       mention: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 4a8 8 0 1 0 4.906 14.32 1 1 0 0 1 1.218 1.588A10 10 0 1 1 22 12v1.5a3.5 3.5 0 0 1-6.063 2.395A5 5 0 1 1 17 12v1.5a1.5 1.5 0 0 0 3 0V12a8 8 0 0 0-8-8Zm3 8a3 3 0 1 0-6 0 3 3 0 0 0 6 0Z"></path></svg>',
       quote: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 7H6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Zm10 0h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2v2a2 2 0 0 1-2 2 1 1 0 1 0 0 2 4 4 0 0 0 4-4V9a2 2 0 0 0-2-2Z"></path></svg>',
+      watch: '<svg fill="none" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7v3.586l-1.707 1.707A1 1 0 0 0 4 16h16a1 1 0 0 0 .707-1.707L19 12.586V9a7 7 0 0 0-7-7Zm-3 16a3 3 0 0 0 6 0H9Z"></path></svg>',
     };
 
     // Slider position maps to actual seconds: 1, 2, 3, 4, 5, 10, 15, 30, 60, 300, Infinity
@@ -767,7 +814,7 @@ function getScreenFromElement(element) {
 
     const esc = utils.escapeHtml;
     const $toast = $(`
-      <div class="bsky-nav-toast" data-indexed-at="${esc(notification.indexedAt)}">
+      <div class="bsky-nav-toast" data-indexed-at="${esc(notification.indexedAt)}" data-toast-kind="${esc(notification.kind || '')}">
         <div class="bsky-nav-toast-icon ${esc(notification.type)}">
           ${iconSvgs[notification.type] || ''}
         </div>
@@ -785,10 +832,14 @@ function getScreenFromElement(element) {
       </div>
     `);
 
-    // Click to navigate to notifications page
+    // Click runs the toast's own action if it has one, else opens the notifications page
     $toast.on('click', (e) => {
       if (!$(e.target).is('.bsky-nav-toast-close')) {
-        window.location.href = '/notifications';
+        if (notification.onClick) {
+          notification.onClick();
+        } else {
+          window.location.href = '/notifications';
+        }
         removeToast($toast, true);
       }
     });
@@ -817,7 +868,9 @@ function getScreenFromElement(element) {
    * @param {boolean} markAsRead - Whether to mark notifications as read up to this toast's time
    */
   function removeToast($toast, markAsRead = false) {
-    if (markAsRead && toastApi) {
+    // Watch toasts are not Bluesky notifications, so they never mark those seen
+    const isWatchToast = $toast[0]?.getAttribute('data-toast-kind') === 'watch';
+    if (markAsRead && toastApi && !isWatchToast) {
       // Use native DOM to get the raw attribute value
       const toastEl = $toast[0];
       const indexedAt = toastEl?.getAttribute('data-indexed-at');
@@ -1064,6 +1117,57 @@ function getScreenFromElement(element) {
 
     // Store in state for access by handlers
     state.listCache = listCache;
+
+    // Watched threads. Handlers read watchService when they activate, so set it up first.
+    // Remote watch sync rides on state sync, but never after the remote state failed to
+    // load (state.init only calls onStateInit once that load has settled)
+    const stateManager = state.stateManager;
+    const remote =
+      stateManager.config.stateSyncEnabled && !stateManager.remoteStateLoadFailed
+        ? {
+            enabled: true,
+            queryAll: (query) => stateManager.executeRemoteQueryAll(query),
+            exec: (query) => stateManager.postRemoteQuery(query),
+          }
+        : null;
+    const watchStore = new WatchStore({
+      getValue: GM_getValue,
+      setValue: GM_setValue,
+      remote,
+      timers: {
+        setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+        clearTimeout: (id) => window.clearTimeout(id),
+        now: () => Date.now(),
+      },
+    });
+    watchService.init({
+      store: watchStore,
+      api,
+      enabled: config.get('watchThreads'),
+      intervalMs: watchIntervalMs(config),
+      selfDid: () => api?.agent?.session?.did ?? null,
+      // Clicking a watch toast marks that thread's replies seen; dismissing it doesn't
+      showToasts: (toasts) => {
+        for (const t of toasts) {
+          showToast({
+            ...t,
+            onClick: () => {
+              if (t.postId) watchService.markSeen(t.postId);
+              // Toast URLs come from watch records, which remote sync can deliver
+              const path = safeAppPath(t.url);
+              if (path !== '#') window.location.href = path;
+            },
+          });
+        }
+      },
+      notify: () => document.dispatchEvent(new window.CustomEvent(WATCH_CHANGED_EVENT)),
+    });
+    watchService.startSync().catch((error) => {
+      console.error('Failed to sync watched threads:', error);
+    });
+    watchedTab = new WatchedTab({ service: watchService, config });
+    if (config.get('watchThreads')) watchedTab.start();
+    syncWatchBadge();
 
     // Initialize mobileView early so handlers can use it in their constructors
     state.mobileView = window.innerWidth <= 800;
@@ -1452,6 +1556,12 @@ function getScreenFromElement(element) {
 
       // Some screens (e.g. Messages) use a different nav width
       if (urlChanged) leftSidebar?.scheduleApply();
+
+      // Opening a watched post's page marks its new replies seen
+      if (urlChanged) {
+        const watchedPostId = postIdFromPath(window.location.pathname);
+        if (watchedPostId) watchService.markSeen(watchedPostId);
+      }
 
       let matched = false;
       // Check URL-based handlers (exclude 'input', which is focus-based, and 'default', the fallback)

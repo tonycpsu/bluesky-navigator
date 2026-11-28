@@ -171,12 +171,11 @@ test.describe("Post Navigation", () => {
   test("post gets marked as read when navigated", async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
 
-    // Navigate through several posts
-    for (let i = 0; i < 5; i++) {
+    // Move down until a post is marked read (check element exists, may be filtered).
+    // A tall first post takes several presses, because j scrolls through it before moving on.
+    await expect(async () => {
       await feedPage.nextPost();
-    }
-
-    // Wait for read status to be applied (check element exists, may be filtered)
-    await expect(page.locator(".item-read").first()).toBeAttached();
+      await expect(page.locator(".item-read").first()).toBeAttached({ timeout: 1000 });
+    }).toPass({ timeout: 20000 });
   });
 });

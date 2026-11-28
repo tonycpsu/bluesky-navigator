@@ -69,7 +69,7 @@ element.style.setProperty('scroll-margin-top', '50px', 'important');
 ```
 
 ### Remote State Sync
-Remote sync (SurrealDB, `src/StateManager.js`) stores two things:
+Remote sync (SurrealDB, `src/StateManager.js`) stores three things:
 - `state:current` - the whole state minus `filter`, `seen`/`seenRemoved` and non-serializable
   objects. Last-writer-wins by `lastUpdated`: on load the newer copy is used, keeping only the
   local `filter` (device/session-only). `timeouts`, `rulesConfig`, `focusedPostId` etc. sync.
@@ -77,6 +77,11 @@ Remote sync (SurrealDB, `src/StateManager.js`) stores two things:
 - `seen:<postId>` records - merged per post. Marking a post unread records a tombstone
   (`state.seenRemoved` locally; `timestamp` unset + `removed` set remotely) so the newest
   read/unread mark wins across devices. `state.seen` only ever holds read posts.
+- `watch:<postId>` records - watched threads (`src/watch/WatchStore.js`, `watchRemote.js`),
+  merged per post with `mergeWatch`. Stopping a watch leaves a tombstone (`removedAt` set);
+  remote tombstones are deleted after 30 days. Local saves re-read and merge the GM value
+  (`bluesky_navigator_watches`) so tabs don't clobber each other; remote pushes are
+  read-merge-write, debounced 5 s, and skipped for the session if the initial sync fails.
 
 ```javascript
 // Filter is the only field preserved locally when remote state:current is newer

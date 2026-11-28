@@ -97,13 +97,12 @@ test.describe("Hide Read Toggle", () => {
   test('double-quote key toggles hide read mode', async ({ authenticatedPage: page }) => {
     const feedPage = new FeedPage(page);
 
-    // First mark some posts as read
-    for (let i = 0; i < 3; i++) {
+    // Move down until a post is marked read. A tall first post takes several presses,
+    // because j scrolls through it before moving on.
+    await expect(async () => {
       await feedPage.nextPost();
-    }
-
-    // Wait for read status to be applied
-    await expect(page.locator(".item-read").first()).toBeAttached({ timeout: 5000 });
+      await expect(page.locator(".item-read").first()).toBeAttached({ timeout: 1000 });
+    }).toPass({ timeout: 20000 });
 
     // Press " to toggle hide read ON
     await feedPage.pressKey('Shift+"');

@@ -61,3 +61,38 @@ page or using the `Meta/Alt+.` keyboard shortcut):
 To enable state sync, check the `Enable State Sync` box in the config, then
 click the `Save` button. Reload, and if all goes well, the script state should
 be loaded from and saved to the remote database.
+
+## Watched threads
+
+When state sync is enabled, watched threads (see "Watch threads" in the
+settings) sync through a `watch` table, one record per watched post:
+`watch:<postId>`, where `<postId>` is the post's record key with `-` and any
+other character outside `[a-zA-Z0-9_]` replaced by `_` (the same mapping as
+the `seen` table). Each record holds:
+
+| Field | Meaning |
+| --- | --- |
+| `postId` | The post's record key (the unmapped original) |
+| `url` | `/profile/<handle or did>/post/<rkey>` |
+| `uri` | The post's `at://` URI, or null until it is resolved |
+| `authorDid`, `authorHandle` | The post's author, when known |
+| `snippet` | Up to 100 characters of the post's text |
+| `watchedAt`, `updatedAt`, `lastActivityAt` | ISO timestamps |
+| `removedAt` | ISO timestamp, or null; set means the watch was stopped |
+| `baselined` | False until the first successful check of the thread |
+| `knownBefore` | ISO timestamp, or null; replies indexed at or before it count as known |
+| `known` | Reply URIs already known, oldest first |
+| `unseen` | New replies not yet marked seen, oldest first (up to 200) |
+| `unavailable` | True once the post is not found or blocked; it is no longer checked |
+
+Stopping a watch leaves a tombstone (`removedAt` set) instead of deleting the
+record, so the removal reaches other devices. Tombstones older than 30 days are
+deleted: locally whenever watches are saved, and remotely on page load.
+
+Records are merged per post, never overwritten: on page load the whole table is
+merged with the local copy, and each save reads the remote rows for the changed
+posts, merges them and writes the result back (debounced 5 seconds). A newer
+tombstone wins over an older watch, `known` replies are combined, and a reply
+marked seen on one device stays seen on the others. If the remote can't be
+loaded at startup, watches work locally and nothing is pushed for the rest of
+the session.
